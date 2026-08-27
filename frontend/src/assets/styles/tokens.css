@@ -1,0 +1,44 @@
+/*
+ * デザイントークン。
+ * Manus モックの配色・余白が判明したら、この値だけを差し替えれば全体に反映される。
+ * 個々のコンポーネントで色や余白を直値で書かないこと。
+ */
+:root {
+  /* color */
+  --color-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-border: #e2e5ea;
+  --color-text: #1c2430;
+  --color-text-muted: #6b7684;
+  --color-primary: #1667d1;
+  --color-primary-hover: #1256ae;
+  --color-primary-contrast: #ffffff;
+  --color-success: #128a5c;
+  --color-danger: #c0392b;
+  --color-warning: #b8860b;
+
+  /* 売買方向（米国株注文ドメイン） */
+  --color-buy: #128a5c;
+  --color-sell: #c0392b;
+
+  /* spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* typography */
+  --font-family-base: 'Helvetica Neue', Arial, 'Hiragino Sans', 'Noto Sans JP', Meiryo, sans-serif;
+  --font-family-numeric: 'SF Mono', Consolas, 'Roboto Mono', monospace;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 22px;
+
+  /* other */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --shadow-card: 0 1px 3px rgba(28, 36, 48, 0.08);
+}

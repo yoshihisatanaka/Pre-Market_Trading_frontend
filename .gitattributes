@@ -1,0 +1,15 @@
+# ソースは Linux コンテナ内(Vite/Node/Playwright)で読まれるため、改行は常に LF に固定する。
+# Windows の Git 既定(core.autocrlf=true)のまま運用すると作業ツリーが CRLF になり、
+# Prettier の endOfLine:lf が全ファイルで警告を出す。
+* text=auto eol=lf
+
+# バイナリは変換しない
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.xlsx binary

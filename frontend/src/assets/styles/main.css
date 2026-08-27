@@ -1,0 +1,21 @@
+/*
+ * グローバルスタイルの唯一のエントリ。main.js から1回だけ import する。
+ * コンポーネント固有のスタイルは各 .vue の <style scoped> に書くこと。
+ *
+ * Manus モックが Tailwind だった場合は、この行の先頭に
+ *   @import 'tailwindcss';
+ * を追加する（詳細は docs/coding-standards.md「Tailwind を後から有効化する手順」）。
+ */
+@import './tokens.css';
+@import './reset.css';
+
+#app {
+  min-height: 100%;
+}
+
+/* 数値は等幅で桁を揃える（株価・数量・金額に使う） */
+.numeric {
+  font-family: var(--font-family-numeric);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

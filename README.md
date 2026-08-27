@@ -40,12 +40,45 @@ docker compose up frontend
 | Lint | `docker compose run --rm frontend npm run lint` |
 | 自動整形 | `docker compose run --rm frontend npm run format` |
 | 単体テスト | `docker compose run --rm frontend npm run test:unit` |
-| E2E テスト | `docker compose run --rm e2e npx playwright test`（`frontend` 起動中に実行） |
+| E2E テスト | `docker compose run --rm e2e npx playwright test`（`frontend` は自動で起動する） |
+| E2E レポート閲覧 | 下記「E2E テスト結果の見かた」を参照 |
 | 本番ビルド確認 | `docker compose run --rm frontend npm run build` |
 | 依存の追加 | `docker compose run --rm frontend npm i <package>` |
 
 > `npm` をホストで直接叩かないこと。Node が入っていないため動作せず、
 > 仮に入れても `node_modules` は named volume 側にあるためコンテナ内と一致しない。
+
+## E2E テスト結果の見かた
+
+`docker compose run --rm e2e npx playwright test` を実行すると、結果は3か所に出る。
+
+### 1. ターミナル（list レポーター）
+
+成功/失敗と失敗理由がその場に出る。**まずはこれを読む。**
+
+### 2. HTML レポート（`frontend/playwright-report/index.html`）
+
+毎回上書き生成される。1ファイルに全データが埋め込まれているので、**そのままブラウザで開けばよい**。
+
+```powershell
+Start-Process .\frontend\playwright-report\index.html
+```
+
+失敗時はスクリーンショット等が `playwright-report/data/` に出るため、
+それらも表示したい場合はローカルサーバー経由で開く（トレースの閲覧にも必要）。
+
+```powershell
+docker compose run --rm -p 9323:9323 e2e npx playwright show-report --host 0.0.0.0 playwright-report
+```
+
+→ http://localhost:9323 で開く。終了は `Ctrl+C`。
+
+### 3. 失敗時の生データ（`frontend/test-results/`）
+
+テストごとのディレクトリに `test-failed-1.png`（スクリーンショット）と
+`error-context.md`（失敗時点のページ構造）が出る。原因調査はこれが速い。
+
+> `playwright-report/` と `test-results/` は毎回上書きされ、`.gitignore` で除外済み。
 
 ## API モックについて
 

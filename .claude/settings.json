@@ -1,0 +1,63 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose run --rm frontend npm run lint)",
+      "Bash(docker compose run --rm frontend npm run lint:fix)",
+      "Bash(docker compose run --rm frontend npm run format)",
+      "Bash(docker compose run --rm frontend npm run format:check)",
+      "Bash(docker compose run --rm frontend npm run test:unit)",
+      "Bash(docker compose run --rm frontend npm run build)",
+      "Bash(docker compose run --rm e2e npx playwright test *)",
+      "Bash(docker compose run --rm e2e npx playwright test)",
+      "Bash(docker compose up -d frontend)",
+      "Bash(docker compose restart frontend)",
+      "Bash(docker compose down)",
+      "Bash(docker compose ps *)",
+      "Bash(docker compose ps)",
+      "Bash(docker compose logs *)",
+      "Bash(docker info *)",
+      "Bash(git status *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git diff)",
+      "Bash(git log *)",
+      "Bash(git log)",
+      "PowerShell(docker compose run --rm frontend npm run lint)",
+      "PowerShell(docker compose run --rm frontend npm run lint:fix)",
+      "PowerShell(docker compose run --rm frontend npm run format)",
+      "PowerShell(docker compose run --rm frontend npm run format:check)",
+      "PowerShell(docker compose run --rm frontend npm run test:unit)",
+      "PowerShell(docker compose run --rm frontend npm run build)",
+      "PowerShell(docker compose run --rm e2e npx playwright test *)",
+      "PowerShell(docker compose run --rm e2e npx playwright test)",
+      "PowerShell(docker compose up -d frontend)",
+      "PowerShell(docker compose restart frontend)",
+      "PowerShell(docker compose down)",
+      "PowerShell(docker compose ps *)",
+      "PowerShell(docker compose ps)",
+      "PowerShell(docker compose logs *)",
+      "PowerShell(docker info *)",
+      "PowerShell(git status *)",
+      "PowerShell(git status)",
+      "PowerShell(git diff *)",
+      "PowerShell(git diff)",
+      "PowerShell(git log *)",
+      "PowerShell(git log)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/lint-on-stop.sh\"",
+            "timeout": 180,
+            "statusMessage": "ESLint を実行中（docker compose run frontend npm run lint）"
+          }
+        ]
+      }
+    ]
+  }
+}

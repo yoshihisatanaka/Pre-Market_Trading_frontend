@@ -41,6 +41,72 @@ export default [
     },
   },
 
+  // ---- レイヤ規約の機械検査（docs/coding-standards.md「2. レイヤ規約」）----
+  //   views / components  →  stores / composables  →  api  →  (HTTP)
+  //
+  // src/api/ 以外で axios を直接使わせない
+  {
+    files: ['src/**/*.{js,vue}'],
+    ignores: ['src/api/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'axios',
+              message:
+                'axios は src/api/ の中でだけ使えます。src/api/client.js の apiClient を経由してください。',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // views / components から api 層を直接呼ばせない（store か composable を経由する）
+  {
+    files: ['src/views/**/*.{js,vue}', 'src/components/**/*.{js,vue}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'axios',
+              message:
+                'axios は src/api/ の中でだけ使えます。src/api/client.js の apiClient を経由してください。',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@/api/*', '@/api', '**/api/*', '**/api'],
+              message:
+                'view / component から api 層を直接 import しないでください。stores/ か composables/ を経由します。',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // api 層は上位レイヤ（stores / views / components）に依存しない
+  {
+    files: ['src/api/**/*.js'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/stores/*', '@/views/*', '@/components/*', '@/composables/*'],
+              message:
+                'api 層から上位レイヤ（stores / views / components / composables）を import できません。',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // テストコードは制約を緩める
   {
     files: ['**/*.spec.js', 'vitest.setup.js'],

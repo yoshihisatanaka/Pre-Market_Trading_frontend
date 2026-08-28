@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { orderListResponse } from '../src/mocks/fixtures/orders'
+import { mockApi } from './helpers/mockApi'
 
-// dev サーバ側で MSW が起動しているため、E2E は追加のモック設定なしでモック応答を受け取る。
+// dev サーバ側で MSW が起動しているため、既定ではフィクスチャの応答が返る。
+// シナリオ別に応答を変えたいときは mockApi() を page.goto() より前に呼ぶ。
 test.describe('注文一覧', () => {
   test('MSW のモックデータが一覧に表示される', async ({ page }) => {
     await page.goto('/')
@@ -16,5 +18,26 @@ test.describe('注文一覧', () => {
     await expect(firstRow).toContainText('AAPL')
     await expect(firstRow).toContainText('$227.52')
     await expect(firstRow).toContainText('約定済')
+  })
+
+  test('API がエラーを返したときエラー表示と再試行ボタンが出る', async ({ page }) => {
+    await mockApi(page, [
+      { path: '*/api/orders', status: 500, body: { message: 'サーバーでエラーが発生しました。' } },
+    ])
+    await page.goto('/')
+
+    const error = page.getByTestId('orders-error')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText('サーバーでエラーが発生しました。')
+    await expect(error.getByRole('button', { name: '再試行' })).toBeVisible()
+    await expect(page.getByTestId('orders-table')).toHaveCount(0)
+  })
+
+  test('注文が 0 件のとき空状態が表示される', async ({ page }) => {
+    await mockApi(page, [{ path: '*/api/orders', body: { items: [], total: 0 } }])
+    await page.goto('/')
+
+    await expect(page.getByTestId('orders-empty')).toBeVisible()
+    await expect(page.getByTestId('data-table-row')).toHaveCount(0)
   })
 })

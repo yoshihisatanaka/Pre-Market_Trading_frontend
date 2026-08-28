@@ -14,6 +14,8 @@
    docker compose run --rm frontend npm run lint
    docker compose run --rm frontend npm run test:unit
    ```
+   lint はターン終了時の Stop フック（`.claude/hooks/lint-on-stop.sh`）でも自動実行され、失敗すると差し戻される。
+   ただし **unit / E2E は自動では走らない**。画面を追加・変更したら E2E（`docker compose run --rm e2e npx playwright test`）も手動で回す。
 
 ## レイヤ規約（違反しやすいので再掲）
 
@@ -63,6 +65,8 @@ views / components  →  stores  →  api  →  (HTTP)
 - 単体テスト: 対象ファイルの隣に `*.spec.js`。MSW(node) が `vitest.setup.js` で自動起動する
 - 個別のレスポンス差し替えは `server.use()`（`afterEach` で自動リセット）
 - E2E: `frontend/e2e/*.spec.js`。要素特定は `data-testid` か `getByRole` を使い、CSS クラスに依存しない
+- E2E でエラー応答などを再現するときは `e2e/helpers/mockApi.js` の `mockApi()` を `page.goto()` の前に呼ぶ。`page.route()` は MSW と併用できない
+- レイヤ規約（axios 直接利用、view→api 直接 import）は ESLint がエラーにする。エラーが出たら迂回せず設計を直す
 - **新しい画面を追加したら E2E を最低1本足す**
 
 ## 現在の状況

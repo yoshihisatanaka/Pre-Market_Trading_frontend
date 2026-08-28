@@ -47,6 +47,14 @@ views / components  →  stores  →  api  →  (HTTP)
 
 この規約により、**実 API 差し替え時の変更は `src/api/` 内に閉じる。**
 
+上記は ESLint の `no-restricted-imports` で機械検査される（[eslint.config.js](../frontend/eslint.config.js) の「レイヤ規約の機械検査」ブロック）。
+
+| 違反 | 検出される場所 |
+|---|---|
+| `src/api/` 以外で `import axios` | `src/**` 全体 |
+| `views/` / `components/` から `@/api/*` を import | `src/views/**`, `src/components/**` |
+| `api/` から `stores` / `views` / `components` / `composables` を import | `src/api/**` |
+
 ### 非同期処理
 
 `loading` / `error` の管理は [`useAsync`](../frontend/src/composables/useAsync.js) を使い、各所で try-catch を書かない。
@@ -117,7 +125,13 @@ docker compose run --rm frontend npm i -D tailwindcss @tailwindcss/vite
 
 - 単体テストは MSW(node) 経由で API を解決する。`vitest.setup.js` が自動で起動・リセットする
 - 個別のテストでレスポンスを変えたい時は `server.use()` で上書きする（`afterEach` で自動的に戻る）
+- 単体テストの見本:
+  - 汎用部品（props / slots の入出力のみ）: [DataTable.spec.js](../frontend/src/components/ui/DataTable.spec.js)
+  - 画面（実 Pinia + MSW で4状態を検証）: [OrderListView.spec.js](../frontend/src/views/OrderListView.spec.js)
 - E2E の要素特定は `data-testid` か `getByRole` を使う。CSS クラス名に依存しない
+- E2E でシナリオ別に API 応答を変えるときは [e2e/helpers/mockApi.js](../frontend/e2e/helpers/mockApi.js) の `mockApi()` を **`page.goto()` より前に**呼ぶ
+  （見本: [e2e/orders.spec.js](../frontend/e2e/orders.spec.js)）。
+  **`page.route()` は使えない** — MSW がページ内で fetch を横取りするため、リクエストがネットワークに出ない
 - E2E はコンテナ間通信（`http://frontend:5173`）のため secure context にならず、
   MSW は Service Worker ではなく fallback mode で動作する（コンソールに `(fallback mode)` と出るが正常）。
   開発者がブラウザで開く `http://localhost:5173` は secure context なので通常の Service Worker モードになる

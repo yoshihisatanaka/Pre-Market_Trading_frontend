@@ -13,6 +13,7 @@
    ```
    docker compose run --rm frontend npm run lint
    docker compose run --rm frontend npm run test:unit
+   docker compose run --rm frontend npm run check:scenarios
    ```
    lint はターン終了時の Stop フック（`.claude/hooks/lint-on-stop.sh`）でも自動実行され、失敗すると差し戻される。
    ただし **unit / E2E は自動では走らない**。画面を追加・変更したら E2E（`docker compose run --rm e2e npx playwright test`）も手動で回す。
@@ -45,6 +46,7 @@ views / components  →  stores  →  api  →  (HTTP)
 | `frontend/src/utils/` | 純関数（整形・計算） |
 | `frontend/src/mocks/` | MSW ハンドラ / フィクスチャ |
 | `docs/api/` | API 仕様書原本と `openapi.yaml`（仕様の正） |
+| `docs/e2e/` | 画面ごとの E2E シナリオ（受け入れ条件）。ID をテスト名に付けて対応づける |
 | `docs/mock/` | Manus 出力の画面モック原本（編集しない） |
 
 ## Vue の書き方
@@ -68,7 +70,8 @@ views / components  →  stores  →  api  →  (HTTP)
 - E2E: `frontend/e2e/*.spec.js`。要素特定は `data-testid` か `getByRole` を使い、CSS クラスに依存しない
 - E2E でエラー応答などを再現するときは `e2e/helpers/mockApi.js` の `mockApi()` を `page.goto()` の前に呼ぶ。`page.route()` は MSW と併用できない
 - レイヤ規約（axios 直接利用、view→api 直接 import）は ESLint がエラーにする。エラーが出たら迂回せず設計を直す
-- **新しい画面を追加したら E2E を最低1本足す**
+- **E2E は `docs/e2e/<画面>.md` のシナリオが先。** タイトル先頭に ID を付ける（`test('[OL-01] …')`）。
+  シナリオが無い画面は先に文書を書き、テストを書いたら状態を `実装済` に更新して `check:scenarios` を通す
 
 ## 現在の状況
 

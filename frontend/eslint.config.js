@@ -18,7 +18,7 @@ export default [
   ...pluginVue.configs['flat/recommended'],
 
   {
-    files: ['**/*.{js,vue}'],
+    files: ['**/*.{js,mjs,vue}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -107,9 +107,9 @@ export default [
     },
   },
 
-  // テストコードは制約を緩める
+  // テストコードと CLI スクリプトは制約を緩める
   {
-    files: ['**/*.spec.js', 'vitest.setup.js'],
+    files: ['**/*.spec.js', 'vitest.setup.js', 'scripts/**/*.{js,mjs}'],
     rules: {
       'no-console': 'off',
     },

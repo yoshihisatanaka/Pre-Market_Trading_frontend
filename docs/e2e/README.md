@@ -52,7 +52,7 @@
 docker compose run --rm frontend npm run check:scenarios
 ```
 
-`docs/e2e/*.md` の ID と `frontend/e2e/**/*.spec.js` のタイトルを突き合わせ、
+`docs/e2e/*.md` の ID と `frontend/e2e/**/*.spec.js` のタイトルを突き合わせ（単体テストは [docs/unit/](../unit/README.md) と `src/**/*.spec.js` を同時に検査）、
 「実装済なのにテストが無い」「文書に無い ID がテストにある」「ID の重複」を error にする。
 コードを書き終えたら lint / unit と一緒に必ず通す。
 

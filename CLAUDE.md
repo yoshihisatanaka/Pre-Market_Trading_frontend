@@ -47,6 +47,7 @@ views / components  →  stores  →  api  →  (HTTP)
 | `frontend/src/mocks/` | MSW ハンドラ / フィクスチャ |
 | `docs/api/` | API 仕様書原本と `openapi.yaml`（仕様の正） |
 | `docs/e2e/` | 画面ごとの E2E シナリオ（受け入れ条件）。ID をテスト名に付けて対応づける |
+| `docs/unit/` | テスト対象ファイルごとの単体テストシナリオ。同じ形式・同じチェック |
 | `docs/mock/` | Manus 出力の画面モック原本（編集しない） |
 
 ## Vue の書き方
@@ -66,6 +67,7 @@ views / components  →  stores  →  api  →  (HTTP)
 ## テスト
 
 - 単体テスト: 対象ファイルの隣に `*.spec.js`。MSW(node) が `vitest.setup.js` で自動起動する
+- **単体テストも `docs/unit/<対象>.md` のシナリオが先。** `it('[OST-01] …')` のようにタイトル先頭に ID を付ける（略号は 3 文字）
 - 個別のレスポンス差し替えは `server.use()`（`afterEach` で自動リセット）
 - E2E: `frontend/e2e/*.spec.js`。要素特定は `data-testid` か `getByRole` を使い、CSS クラスに依存しない
 - E2E でエラー応答などを再現するときは `e2e/helpers/mockApi.js` の `mockApi()` を `page.goto()` の前に呼ぶ。`page.route()` は MSW と併用できない

@@ -18,8 +18,9 @@ function mountView() {
   })
 }
 
+// シナリオ: docs/unit/views-order-list-view.md
 describe('OrderListView', () => {
-  it('取得中はローディングを表示する', async () => {
+  it('[OLV-01] 取得中はローディングを表示する', async () => {
     const wrapper = mountView()
     // onMounted で loading=true になった直後の再描画だけ待つ（API 応答はまだ返っていない）
     await nextTick()
@@ -28,7 +29,7 @@ describe('OrderListView', () => {
     expect(wrapper.find('[data-testid="orders-table"]').exists()).toBe(false)
   })
 
-  it('取得成功時はフィクスチャの件数分の行を表示する', async () => {
+  it('[OLV-02] 取得成功時はフィクスチャの件数分の行を表示する', async () => {
     const wrapper = mountView()
     await flushPromises()
 
@@ -44,7 +45,7 @@ describe('OrderListView', () => {
     expect(firstRow).toContain('約定済')
   })
 
-  it('API がエラーを返したときはメッセージと再試行ボタンを表示する', async () => {
+  it('[OLV-03] API がエラーを返したときはメッセージと再試行ボタンを表示する', async () => {
     server.use(
       http.get('*/api/orders', () =>
         HttpResponse.json({ message: 'サーバーでエラーが発生しました。' }, { status: 500 }),
@@ -60,7 +61,7 @@ describe('OrderListView', () => {
     expect(wrapper.find('[data-testid="orders-table"]').exists()).toBe(false)
   })
 
-  it('注文が 0 件のときは空状態を表示する', async () => {
+  it('[OLV-04] 注文が 0 件のときは空状態を表示する', async () => {
     server.use(http.get('*/api/orders', () => HttpResponse.json({ items: [], total: 0 })))
     const wrapper = mountView()
     await flushPromises()
@@ -69,7 +70,7 @@ describe('OrderListView', () => {
     expect(wrapper.find('[data-testid="orders-table"]').exists()).toBe(false)
   })
 
-  it('再読み込みボタンで再取得する', async () => {
+  it('[OLV-05] 再読み込みボタンで再取得する', async () => {
     server.use(
       http.get('*/api/orders', () => HttpResponse.json({ items: [], total: 0 }), { once: true }),
     )

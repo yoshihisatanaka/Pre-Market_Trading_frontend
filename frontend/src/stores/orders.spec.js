@@ -9,7 +9,8 @@ describe('useOrdersStore', () => {
     setActivePinia(createPinia())
   })
 
-  it('MSW のモック応答をアプリ内モデル(camelCase)に変換して保持する', async () => {
+  // シナリオ: docs/unit/stores-orders.md
+  it('[OST-01] MSW のモック応答をアプリ内モデル(camelCase)に変換して保持する', async () => {
     const store = useOrdersStore()
 
     await store.load()
@@ -27,7 +28,7 @@ describe('useOrdersStore', () => {
     })
   })
 
-  it('API がエラーを返したとき error に ApiError が入り items は空のままになる', async () => {
+  it('[OST-02] API がエラーを返したとき error に ApiError が入り items は空のままになる', async () => {
     server.use(
       http.get('*/api/orders', () =>
         HttpResponse.json({ message: 'サーバーでエラーが発生しました。' }, { status: 500 }),
@@ -44,7 +45,7 @@ describe('useOrdersStore', () => {
     expect(store.error.message).toBe('サーバーでエラーが発生しました。')
   })
 
-  it('空配列が返ったとき isEmpty が true になる', async () => {
+  it('[OST-03] 空配列が返ったとき isEmpty が true になる', async () => {
     server.use(http.get('*/api/orders', () => HttpResponse.json({ items: [], total: 0 })))
     const store = useOrdersStore()
 

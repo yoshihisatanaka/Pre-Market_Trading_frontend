@@ -11,8 +11,9 @@ services:
       - ./frontend:/app
       # ホスト(Windows)の node_modules とバインドが衝突しないよう named volume で上書きする
       - frontend_node_modules:/app/node_modules
-      # E2E シナリオ文書（npm run check:scenarios が読む）
+      # シナリオ文書（npm run check:scenarios が読む）
       - ./docs/e2e:/docs/e2e:ro
+      - ./docs/unit:/docs/unit:ro
     # VITE_* は Vite 自身が frontend/.env から読み込むため、ここでは渡さない。
     # compose の environment: を併記すると env_file より優先され、
     # frontend/.env での切り替え（VITE_ENABLE_MSW など）が効かなくなる。
@@ -27,6 +28,7 @@ services:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
       - ./docs/e2e:/docs/e2e:ro
+      - ./docs/unit:/docs/unit:ro
     environment:
       - E2E_BASE_URL=http://frontend:5173
     depends_on:

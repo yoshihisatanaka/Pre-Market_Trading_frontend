@@ -42,7 +42,7 @@ docker compose up frontend
 | 単体テスト | `docker compose run --rm frontend npm run test:unit` |
 | E2E テスト | `docker compose run --rm e2e npx playwright test`（`frontend` は自動で起動する） |
 | E2E レポート閲覧 | 下記「E2E テスト結果の見かた」を参照 |
-| E2E シナリオ対応チェック | `docker compose run --rm frontend npm run check:scenarios`（[docs/e2e/](docs/e2e/README.md)） |
+| シナリオ対応チェック（E2E / 単体） | `docker compose run --rm frontend npm run check:scenarios`（[docs/e2e/](docs/e2e/README.md), [docs/unit/](docs/unit/README.md)） |
 | 本番ビルド確認 | `docker compose run --rm frontend npm run build` |
 | 依存の追加 | `docker compose run --rm frontend npm i <package>` |
 | API 仕様の lint | `docker compose run --rm redocly lint openapi.yaml` |

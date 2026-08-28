@@ -125,9 +125,11 @@ docker compose run --rm frontend npm i -D tailwindcss @tailwindcss/vite
 
 - 単体テストは MSW(node) 経由で API を解決する。`vitest.setup.js` が自動で起動・リセットする
 - 個別のテストでレスポンスを変えたい時は `server.use()` で上書きする（`afterEach` で自動的に戻る）
-- 単体テストの見本:
-  - 汎用部品（props / slots の入出力のみ）: [DataTable.spec.js](../frontend/src/components/ui/DataTable.spec.js)
-  - 画面（実 Pinia + MSW で4状態を検証）: [OrderListView.spec.js](../frontend/src/views/OrderListView.spec.js)
+- **単体テストも先に [docs/unit/<対象>.md](unit/README.md) にシナリオを書く。** `it('[OST-01] …')` のようにタイトル先頭に ID を付ける
+- 単体テストの見本（シナリオ文書 ↔ テスト）:
+  - ストア: [docs/unit/stores-orders.md](unit/stores-orders.md) ↔ [orders.spec.js](../frontend/src/stores/orders.spec.js)
+  - 汎用部品（props / slots の入出力のみ）: [docs/unit/components-ui-data-table.md](unit/components-ui-data-table.md) ↔ [DataTable.spec.js](../frontend/src/components/ui/DataTable.spec.js)
+  - 画面（実 Pinia + MSW で4状態を検証）: [docs/unit/views-order-list-view.md](unit/views-order-list-view.md) ↔ [OrderListView.spec.js](../frontend/src/views/OrderListView.spec.js)
 - E2E の要素特定は `data-testid` か `getByRole` を使う。CSS クラス名に依存しない
 - E2E でシナリオ別に API 応答を変えるときは [e2e/helpers/mockApi.js](../frontend/e2e/helpers/mockApi.js) の `mockApi()` を **`page.goto()` より前に**呼ぶ
   （見本: [e2e/orders.spec.js](../frontend/e2e/orders.spec.js)）。
@@ -136,7 +138,7 @@ docker compose run --rm frontend npm i -D tailwindcss @tailwindcss/vite
   MSW は Service Worker ではなく fallback mode で動作する（コンソールに `(fallback mode)` と出るが正常）。
   開発者がブラウザで開く `http://localhost:5173` は secure context なので通常の Service Worker モードになる
 - **新しい画面を追加するときは、先に [docs/e2e/<画面>.md](e2e/README.md) にシナリオを書く。**
-  E2E のタイトル先頭にシナリオ ID（`[OL-01]`）を付け、`docker compose run --rm frontend npm run check:scenarios` で対応漏れが無いことを確認する。
+  E2E のタイトル先頭にシナリオ ID（`[OL-01]`）を付け、`docker compose run --rm frontend npm run check:scenarios` で対応漏れが無いことを確認する（単体テストも同じコマンドで検査される）。
   レビュー担当が居ないため、シナリオ文書 + E2E が回帰検知の主手段になる
 
 ---

@@ -15,8 +15,9 @@ const rows = [
   { id: 'r2', symbol: 'MSFT', quantity: 5 },
 ]
 
+// シナリオ: docs/unit/components-ui-data-table.md
 describe('DataTable', () => {
-  it('columns のヘッダと rows の行を描画する', () => {
+  it('[DTB-01] columns のヘッダと rows の行を描画する', () => {
     const wrapper = mount(DataTable, { props: { columns, rows } })
 
     expect(wrapper.findAll('th').map((th) => th.text())).toEqual(['ティッカー', '数量'])
@@ -24,7 +25,7 @@ describe('DataTable', () => {
     expect(wrapper.text()).toContain('AAPL')
   })
 
-  it('numeric 列のセルに numeric クラスが付く', () => {
+  it('[DTB-02] numeric 列のセルに numeric クラスが付く', () => {
     const wrapper = mount(DataTable, { props: { columns, rows } })
 
     const firstRowCells = wrapper.find('[data-testid="data-table-row"]').findAll('td')
@@ -32,7 +33,7 @@ describe('DataTable', () => {
     expect(firstRowCells[1].classes()).toContain('numeric')
   })
 
-  it('cell-<key> スロットでセルの表示を差し替えられる', () => {
+  it('[DTB-03] cell-<key> スロットでセルの表示を差し替えられる', () => {
     const wrapper = mount(DataTable, {
       props: { columns, rows },
       slots: {
@@ -44,7 +45,7 @@ describe('DataTable', () => {
     expect(wrapper.text()).toContain('5 株')
   })
 
-  it('rowKey で行のキーに使うプロパティを変えられる', () => {
+  it('[DTB-04] rowKey で行のキーに使うプロパティを変えられる', () => {
     const wrapper = mount(DataTable, {
       props: { columns, rows: [{ code: 'x', symbol: 'NVDA', quantity: 1 }], rowKey: 'code' },
     })

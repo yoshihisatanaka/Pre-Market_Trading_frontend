@@ -29,6 +29,17 @@ services:
     depends_on:
       - frontend
 
+  # OpenAPI の lint / HTML ドキュメント生成（ホストに Node が無いため公式イメージを使う）
+  # run 専用: docker compose run --rm redocly lint openapi.yaml
+  #           docker compose run --rm redocly build-docs openapi.yaml -o openapi.html
+  redocly:
+    image: redocly/cli:2.49.0
+    working_dir: /spec
+    volumes:
+      - ./docs/api:/spec
+    profiles:
+      - tools # `docker compose up` では起動しない
+
   # バックエンドは別メンバ管轄。構成が決まったらここに backend サービスを追加する。
   # frontend の Vite proxy は既に http://backend:8000 を向いている。
 

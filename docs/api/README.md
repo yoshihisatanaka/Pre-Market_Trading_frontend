@@ -6,6 +6,8 @@
 |---|---|
 | （このディレクトリ直下） | バックエンドから受領した仕様書の**原本**をそのまま置く（Excel / Markdown / PDF 等） |
 | `openapi.yaml` | 原本を AI で変換した OpenAPI 3.1 仕様。**これを唯一の正とする** |
+| `openapi.html` | `openapi.yaml` から Redocly で生成した閲覧用 HTML。**生成物なのでコミットしない**（再生成方法は CONVERSION.md） |
+| `redocly.yaml` | Redocly CLI（lint / HTML 生成）の設定 |
 
 ## 手順
 

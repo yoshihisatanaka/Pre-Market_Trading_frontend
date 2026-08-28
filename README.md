@@ -44,6 +44,8 @@ docker compose up frontend
 | E2E レポート閲覧 | 下記「E2E テスト結果の見かた」を参照 |
 | 本番ビルド確認 | `docker compose run --rm frontend npm run build` |
 | 依存の追加 | `docker compose run --rm frontend npm i <package>` |
+| API 仕様の lint | `docker compose run --rm redocly lint openapi.yaml` |
+| API ドキュメント生成 | `docker compose run --rm redocly build-docs openapi.yaml -o openapi.html` → `docs/api/openapi.html` |
 
 > `npm` をホストで直接叩かないこと。Node が入っていないため動作せず、
 > 仮に入れても `node_modules` は named volume 側にあるためコンテナ内と一致しない。

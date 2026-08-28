@@ -21,7 +21,25 @@
 にあり、出力条件（OpenAPI 3.1 / `servers: /api` / 命名規則 / `example` 必須 / `x-todo` の扱いなど）はそこで管理する。
 条件を変えたいときは SKILL.md を直す。
 
-実行すると `docs/api/openapi.yaml` が生成され、`x-todo` の一覧とチェックリストの自己点検結果が報告される。
+実行すると次が自動で行われる。
+
+1. `docs/api/openapi.yaml` を生成
+2. `redocly lint` で検証（error があれば修正して再実行）
+3. `redocly build-docs` で `docs/api/openapi.html` を生成（コミットしない・`.gitignore` 済み）
+4. lint 結果・`x-todo` 一覧・チェックリスト自己点検を報告
+
+### 再生成だけしたいとき（`openapi.yaml` を手で直した後など）
+
+Redocly CLI は Docker の `redocly` サービスで動く（作業ディレクトリは `docs/api/`）。
+
+```powershell
+docker compose run --rm redocly lint openapi.yaml
+docker compose run --rm redocly build-docs openapi.yaml -o openapi.html
+# 編集しながらライブ表示したいとき → http://localhost:8080
+docker compose run --rm -p 8080:8080 redocly preview-docs openapi.yaml -h 0.0.0.0
+```
+
+lint のルールは [redocly.yaml](redocly.yaml) で調整する。
 
 ## 2. 変換後チェックリスト
 

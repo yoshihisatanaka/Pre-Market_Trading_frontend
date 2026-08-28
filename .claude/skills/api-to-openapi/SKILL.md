@@ -1,8 +1,8 @@
 ---
 name: api-to-openapi
-description: バックエンドから受領した API 仕様書の原本（docs/api/ 配下の Excel / Markdown / PDF など）を読み、OpenAPI 3.1 の docs/api/openapi.yaml に変換して x-todo 一覧とチェックリスト結果を報告する。「API 仕様書を変換して」「openapi.yaml を作って」「OpenAPI にして」という依頼で使う。
+description: バックエンドから受領した API 仕様書の原本（docs/api/ 配下の Excel / Markdown / PDF など）を読み、OpenAPI 3.1 の docs/api/openapi.yaml に変換し、Redocly CLI で lint と HTML ドキュメント生成（docs/api/openapi.html）を行い、x-todo 一覧とチェックリスト結果を報告する。「API 仕様書を変換して」「openapi.yaml を作って」「OpenAPI にして」「API ドキュメントを生成して」という依頼で使う。
 argument-hint: [仕様書のパス]
-allowed-tools: Read, Write, Edit, Glob, Grep
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(docker compose run --rm redocly *)
 ---
 
 # API 仕様書 → OpenAPI 変換
@@ -42,15 +42,38 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 - エラー応答は `ApiError` スキーマ（`message: string`, `code: string`）に統一し、各操作に 400 / 401 / 403 / 404 / 500 を付ける。原本にエラー仕様が無い場合は `ApiError` に `x-todo: "エラー応答の形式が原本に無いため仮置き"` を付ける。
 - 原本の記述が曖昧・矛盾している箇所は推測で埋めず、該当箇所に `x-todo` を付けて理由を書く。
 
+### 3.5 Redocly CLI で検証し、HTML ドキュメントを生成する
+
+Redocly CLI は Docker の `redocly` サービス（`docker-compose.yml`、作業ディレクトリは `docs/api/`）で実行する。ホストに Node は無い。
+
+1. **lint**
+   ```
+   docker compose run --rm redocly lint openapi.yaml
+   ```
+   - `error` があれば `openapi.yaml` を直して再実行する。error 0 になるまで次に進まない。
+   - `warning` は直さなくてよいが、件数と内容を報告に含める。
+2. **HTML ドキュメント生成**
+   ```
+   docker compose run --rm redocly build-docs openapi.yaml -o openapi.html
+   ```
+   → `docs/api/openapi.html` が生成される（`.gitignore` 済み。コミットしない）。
+3. コマンドが失敗し、原因が Docker の未起動（`docker info` 相当のエラー）である場合は、
+   lint と生成をスキップし、報告に「Docker 起動後に次を手動実行」として上記 2 コマンドを載せる。
+
 ### 4. 報告
 
 変換が終わったら、次の順で報告する。
 
-1. **x-todo 一覧** — `openapi.yaml` を Grep し、行番号と内容を箇条書きにする。0 件ならその旨。
-2. **チェックリスト自己点検** — [checklist.md](checklist.md) を読み、8 項目それぞれについて `OK` / `要確認` / `該当なし` と根拠を表で示す。
-3. **次の手順の案内** — 反映作業は行わず、`docs/api/CONVERSION.md` の「3. フロントエンドへの反映手順」と「4. 既存コードとの照合表」を案内するに留める。仕様の確認が先。
+1. **lint 結果** — error / warning の件数。warning があれば内容を箇条書きにする。スキップした場合はその旨と手動コマンド。
+2. **x-todo 一覧** — `openapi.yaml` を Grep し、行番号と内容を箇条書きにする。0 件ならその旨。
+3. **チェックリスト自己点検** — [checklist.md](checklist.md) を読み、8 項目それぞれについて `OK` / `要確認` / `該当なし` と根拠を表で示す。
+4. **ドキュメントの開き方** — `docs/api/openapi.html` をブラウザで開く（`Start-Process .\docs\api\openapi.html`）。
+   編集しながら見たい場合は `docker compose run --rm -p 8080:8080 redocly preview-docs openapi.yaml -h 0.0.0.0` → http://localhost:8080 。
+5. **次の手順の案内** — 反映作業は行わず、`docs/api/CONVERSION.md` の「3. フロントエンドへの反映手順」と「4. 既存コードとの照合表」を案内するに留める。仕様の確認が先。
 
 ## やらないこと
 
 - `frontend/` 配下のコードは変更しない（fixtures / api / handlers への反映は別作業）。
 - 原本ファイルを編集・移動しない。
+- `docs/api/openapi.html` はコミットしない（`.gitignore` 済み。`openapi.yaml` が唯一の正）。
+- `docker compose run --rm redocly ...` 以外のシェルコマンドは実行しない。

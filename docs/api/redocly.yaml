@@ -1,0 +1,19 @@
+# Redocly CLI の設定（docs/api/ を作業ディレクトリとして実行する）
+#   docker compose run --rm redocly lint openapi.yaml
+#   docker compose run --rm redocly build-docs openapi.yaml -o openapi.html
+extends:
+  - recommended
+
+rules:
+  # $ref の未解決と operationId の欠落は必ずエラーにする（フロントの api/ 関数名の元になる）
+  no-unresolved-refs: error
+  operation-operationId: error
+
+  # 認証方式が未決定のため、security の定義を求めるルールは一時的に無効化する。
+  # 認証方式が決まったら `error` に戻し、securitySchemes を定義すること。
+  security-defined: off
+
+  # 社内システムの API のため license は不要
+  info-license: off
+
+  # x-todo は本プロジェクト独自の拡張。x- プレフィックスは仕様上許容されるため警告は出ない

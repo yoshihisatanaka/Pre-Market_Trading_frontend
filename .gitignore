@@ -10,6 +10,9 @@ frontend/dist/
 .env.*
 !.env.example
 
+# 生成物（docker compose run --rm redocly build-docs で再生成できる）
+docs/api/openapi.html
+
 # test artifacts
 test-results/
 playwright-report/

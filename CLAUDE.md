@@ -28,6 +28,7 @@ views / components  →  stores  →  api  →  (HTTP)
 - **バックエンドのレスポンス形（snake_case 等）を知ってよいのは `src/api/` だけ。**
   そこで camelCase のアプリ内モデルに変換してから外へ返す（参考: `src/api/orders.js` の `toOrder()`）
 - 新しいエンドポイントを使うときは、**先に `src/api/` に関数を1つ追加**してから呼ぶ
+- `docs/api/openapi.yaml` を編集したら `docker compose run --rm redocly lint openapi.yaml` を通す（HTML は `build-docs` で再生成。コミットしない）
 - 非同期は `src/composables/useAsync.js` を使い、各所で try-catch を書かない
 - 画面は **ローディング / エラー / 空 / データあり の4状態**を必ず出し分ける（参考: `src/views/OrderListView.vue`）
 

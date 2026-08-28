@@ -9,11 +9,11 @@
 
 ## 手順
 
-詳細は [CONVERSION.md](CONVERSION.md)（Claude へ渡すプロンプトのテンプレート・チェックリスト・反映手順）を参照。
+詳細は [CONVERSION.md](CONVERSION.md)（`/api-to-openapi` スキルの使い方・チェックリスト・反映手順）を参照。
 
 1. バックエンド担当から仕様書を受領し、このディレクトリに原本を置く
-2. CONVERSION.md のプロンプトで Claude に変換を依頼し、`openapi.yaml` を生成する
-3. CONVERSION.md のチェックリストで原本と突き合わせる
+2. Claude Code で `/api-to-openapi docs/api/<原本>` を実行し、`openapi.yaml` を生成する
+3. 報告されたチェックリスト結果を原本と突き合わせて再確認する
 4. `openapi.yaml` の `example` を [frontend/src/mocks/fixtures/](../../frontend/src/mocks/fixtures/) に反映する
 5. 未実装の API は MSW ハンドラを追加してフロント開発を進める
 

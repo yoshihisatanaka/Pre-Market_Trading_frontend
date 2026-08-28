@@ -8,45 +8,26 @@
 - 変換後の `openapi.yaml` を **唯一の正**とする。原本と食い違ったらバックエンド担当に確認し、**両方を直す**
 - レスポンスのキー名（snake_case など）は **バックエンドの表記のまま**書く。camelCase への変換は `frontend/src/api/` で行う
 
-## 1. Claude へ渡すプロンプト（テンプレート）
+## 1. 変換の実行（Claude Code スキル）
 
-原本を `docs/api/` に置いたうえで、次をそのまま貼る。`<原本ファイル名>` だけ差し替える。
+原本を `docs/api/` に置いたうえで、Claude Code で次を実行する。
 
 ```
-docs/api/<原本ファイル名> を読み、docs/api/openapi.yaml を作成してください。
-
-## 出力条件
-- OpenAPI 3.1 / YAML。`info.title` は "US Stock Order API"
-- `servers` は `- url: /api` の1つだけ（Vite の proxy 前提）
-- パスは原本どおり。原本に無いエンドポイントを推測で足さない
-- `operationId` は 動詞+リソース の lowerCamelCase（例: listOrders, getOrder, createOrder, cancelOrder）
-- スキーマは `components/schemas` に切り出し、名前は PascalCase（例: Order, OrderListResponse, ApiError）
-- プロパティ名は原本の表記（snake_case 等）を **変えない**
-- 各プロパティに `type` と、可能なら `description` を付ける。列挙値は `enum` に列挙する
-- 日時は `type: string, format: date-time`。金額は `type: number`、株数は `type: integer`
-- `required` は原本で必須とされているものだけ。不明なものは required に入れず、`x-todo: "必須かどうか要確認"` を付ける
-- 各レスポンスに **必ず `example` を付ける**（frontend/src/mocks/fixtures/ に流用する）
-- エラー応答は `ApiError` スキーマ（`message: string`, `code: string`）に統一し、400/401/403/404/500 を各操作に付ける。原本に無い場合は `x-todo` で明記する
-- 原本の記述が曖昧・矛盾している箇所は推測で埋めず、該当箇所に `x-todo` を付けて理由を書く
-
-## 出力後
-- `x-todo` の一覧を、ファイル名・行番号つきで箇条書きにして報告してください
+/api-to-openapi docs/api/<原本ファイル名>
 ```
+
+引数を省略すると `docs/api/` 直下の原本を自動で探す。
+プロンプトの実体は [.claude/skills/api-to-openapi/SKILL.md](../../.claude/skills/api-to-openapi/SKILL.md)
+にあり、出力条件（OpenAPI 3.1 / `servers: /api` / 命名規則 / `example` 必須 / `x-todo` の扱いなど）はそこで管理する。
+条件を変えたいときは SKILL.md を直す。
+
+実行すると `docs/api/openapi.yaml` が生成され、`x-todo` の一覧とチェックリストの自己点検結果が報告される。
 
 ## 2. 変換後チェックリスト
 
-Claude の出力を原本と突き合わせ、以下を1つずつ確認する。**すべて ✓ になるまで反映作業に進まない。**
-
-| # | 確認項目 | 見落とすと起きること |
-|---|---|---|
-| 1 | エンドポイントの過不足が無い（原本の一覧と件数が一致） | 実装されない API を呼びに行く |
-| 2 | 必須 / 任意が原本と一致 | 空表示・バリデーション漏れ |
-| 3 | `enum` の値が原本の全パターンを含む（注文状態・売買区分・注文種別など） | 想定外の値で表示が「undefined」になる |
-| 4 | 日時の形式（ISO 8601 か / タイムゾーン付きか / UTC か） | 日付が1日ずれる |
-| 5 | 金額・価格が小数、株数が整数になっている | 端数表示の崩れ |
-| 6 | エラー応答の形（`message` / `code`）が `frontend/src/api/client.js` の想定と一致 | エラーメッセージが表示されない |
-| 7 | 一覧系のページング形式（`items` / `total` / `page` など）が統一されている | 画面ごとに違う処理を書く羽目になる |
-| 8 | `x-todo` がすべて解消済み、または未解決の一覧をバックエンド担当に送付済み | 仕様の食い違いが実装後に発覚 |
+スキルが自己点検した結果を、**人が原本と突き合わせて再確認する**。
+項目は [.claude/skills/api-to-openapi/checklist.md](../../.claude/skills/api-to-openapi/checklist.md)（8 項目）。
+**すべて OK になるまで反映作業に進まない。**
 
 ## 3. フロントエンドへの反映手順
 

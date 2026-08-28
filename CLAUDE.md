@@ -71,7 +71,7 @@ views / components  →  stores  →  api  →  (HTTP)
 
 ## 現在の状況
 
-- API 仕様書は未受領。`docs/api/openapi.yaml` はまだ無い
+- API 仕様書は未受領。`docs/api/openapi.yaml` はまだ無い。受領したら `/api-to-openapi docs/api/<原本>` で変換する
 - Manus の画面モックも未受領。現在の画面は素の CSS + CSS 変数による暫定実装
   （モックが Tailwind だった場合の切替手順は docs/coding-standards.md に記載済み）
 - `OrderListView` は縦串の参考実装。実仕様が来たら差し替える前提

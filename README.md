@@ -41,6 +41,7 @@ docker compose up frontend
 | 自動整形 | `docker compose run --rm frontend npm run format` |
 | 単体テスト | `docker compose run --rm frontend npm run test:unit` |
 | E2E テスト | `docker compose run --rm e2e npx playwright test`（`frontend` は自動で起動する） |
+| E2E（トレース付き） | `docker compose run --rm e2e npm run test:e2e:trace` → 下記「トレースで『実行中』を巻き戻して見る」 |
 | E2E レポート閲覧 | 下記「E2E テスト結果の見かた」を参照 |
 | シナリオ対応チェック（E2E / 単体） | `docker compose run --rm frontend npm run check:scenarios`（[docs/e2e/](docs/e2e/README.md), [docs/unit/](docs/unit/README.md)） |
 | 本番ビルド確認 | `docker compose run --rm frontend npm run build` |
@@ -56,26 +57,47 @@ docker compose up frontend
 
 ## Claude Code から画面を見る（Playwright MCP）
 
-リポジトリ直下の `.mcp.json` に Playwright MCP サーバ（Docker 版）を定義してある。
-Claude Code が実際にブラウザで画面を開き、スナップショットやスクリーンショットを取れる。
+Claude Code が実際にブラウザで画面を開き、スクリーンショットや DOM 構造を取れる。
 E2E のセレクタ調査や、画面の 4 状態（ローディング / エラー / 空 / データあり）の目視確認に使う。
+設定はリポジトリ直下の `.mcp.json`（コミット済み）。
 
-初回だけイメージを取得する:
+### 実行方法
 
 ```powershell
+# 1. 初回だけ: イメージを取得する
 docker pull mcr.microsoft.com/playwright/mcp
+
+# 2. 毎回: frontend を起動しておく（落ちていると MCP から接続できない）
+docker compose up -d frontend
 ```
 
-使うときの条件:
+3. Claude Code に **「注文一覧の画面を見て」** のように日本語で頼む。専用コマンドは無い。
+   初回だけ `.mcp.json` の承認ダイアログが出るので許可する（接続状態は `/mcp` で確認）
 
-- **先に `docker compose up -d frontend` を実行しておく**
-  （MCP コンテナは compose のネットワーク `us-stock-order_default` に参加するため）
-- Claude Code 側では初回利用時に `.mcp.json` の承認ダイアログが出るので許可する。
-  接続状態は `/mcp` で確認できる
-- 接続先は `http://frontend:5173`（`localhost:5173` ではない）
-- Docker 版は headless chromium のみ
+### 確認方法
 
-**E2E テストの代替ではない。** 合否判定は `docker compose run --rm e2e npx playwright test` で行う。
+```powershell
+explorer .\.playwright-mcp
+```
+
+このフォルダに、Claude がやったことが**すべて**出力される。
+
+| ファイル | 中身 |
+|---|---|
+| `session-<時刻>\session.md` | **操作ログ。まずこれを読む。** 操作ごとの引数・実行された Playwright コード（`await page.goto(...)`）・その時点のページ構造 |
+| `page-<時刻>.png` | スクリーンショット |
+| `page-<時刻>.yml` | DOM のアクセシビリティ構造（role / name の木） |
+| `console-<時刻>.log` | ブラウザのコンソール出力 |
+
+`.gitignore` 済みなので、溜まったら中身ごと消してよい。
+
+### 注意
+
+- 接続先は `http://frontend:5173`。`localhost:5173` では届かない（コンテナ間通信のため）
+- headless chromium のみ。**ブラウザ画面をリアルタイムに覗くことはできない**
+  （実行中を追いたいときは下記「トレースで『実行中』を巻き戻して見る」）
+- スクリーンショットは**ファイル名を指定させない**こと。ホスト側パスとして解決され失敗する
+- **E2E テストの代替ではない。** 合否判定は `docker compose run --rm e2e npx playwright test`
 
 ## テスト
 
@@ -168,6 +190,36 @@ docker compose run --rm -p 9323:9323 e2e npx playwright show-report --host 0.0.0
 `error-context.md`（失敗時点のページ構造）が出る。原因調査はこれが速い。
 
 > `playwright-report/` と `test-results/` は毎回上書きされ、`.gitignore` で除外済み。
+
+### トレースで「実行中」を巻き戻して見る
+
+Playwright のトレースビューアを使うと、テスト実行中の各ステップを**タイムライン付きで再生**できる。
+操作ごとの DOM スナップショット・ネットワーク・コンソールが揃うので、
+ブラウザを覗いているのとほぼ同じことが事後にできる。
+
+**注意: 既定ではローカルにトレースは残らない。**
+`playwright.config.js` は `trace: 'on-first-retry'` だが、ローカルは `retries: 0` のため
+リトライが発生せず、トレースが一度も採取されない。見たいときは明示的に `--trace on` を付ける。
+
+```powershell
+# 1. トレース付きで実行（全テスト分の trace.zip が test-results/ に出る）
+docker compose run --rm e2e npm run test:e2e:trace
+
+# 2. HTML レポートをサーバー経由で開く（トレース閲覧にはサーバーが必要）
+docker compose run --rm -p 9323:9323 e2e npx playwright show-report --host 0.0.0.0 playwright-report
+```
+
+→ http://localhost:9323 でテストを開き、**Trace** から再生する。終了は `Ctrl+C`。
+
+単一のトレースを直接開くこともできる:
+
+```powershell
+docker compose run --rm -p 9323:9323 e2e npx playwright show-trace --host 0.0.0.0 --port 9323 `
+  "test-results/orders-注文一覧-OL-01-注文が-3-件あるとき一覧に表示される-chromium/trace.zip"
+```
+
+> Playwright MCP（上記）は headless のため、ブラウザ画面をリアルタイムに覗くことはできない。
+> 「動いているところを見たい」用途はこのトレースビューアで代替する。
 
 ## API モックについて
 

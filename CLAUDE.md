@@ -90,6 +90,11 @@ views / components  →  stores  →  api  →  (HTTP)
 - 接続先は **`http://frontend:5173`**（`localhost:5173` ではない。コンテナ間通信のため）
 - MSW はブラウザ側で動くので、バックエンド未実装のままでも画面はモックデータで描画される
 - Docker 版は **headless chromium のみ**（Firefox / WebKit は使えない）
+- `--save-session` により、全操作のログが `.playwright-mcp/session-<時刻>/session.md` に残る。
+  何を見て何を判断したかは**このファイルで検証できる**（口頭の報告を信用させない）
+- スクリーンショット等の出力先は `.playwright-mcp/`（`/output` にマウント済み・`.gitignore` 済み）。
+  **`filename` は指定しない。** 指定するとホスト側のパスとして解決され、コンテナ内に存在せず
+  `ENOENT` で失敗する。省略すれば自動命名で `.playwright-mcp/` に保存され、画像は応答にも返る
 
 使いどころ:
 
@@ -99,6 +104,10 @@ views / components  →  stores  →  api  →  (HTTP)
 
 **これは E2E の代替ではない。** 合否判定は従来どおり
 `docker compose run --rm e2e npx playwright test` で行う。MCP は探索・調査用。
+
+headless なので**ブラウザ画面をリアルタイムには覗けない**。実行中の様子を追いたいときは
+`docker compose run --rm e2e npm run test:e2e:trace` でトレースを採り、ビューアで再生する
+（既定の `trace: 'on-first-retry'` はローカルの `retries: 0` では採取されない。詳細は README）。
 
 ## 現在の状況
 

@@ -9,7 +9,12 @@
         "--init",
         "--network",
         "us-stock-order_default",
-        "mcr.microsoft.com/playwright/mcp"
+        "-v",
+        "./.playwright-mcp:/output",
+        "mcr.microsoft.com/playwright/mcp",
+        "--output-dir",
+        "/output",
+        "--save-session"
       ]
     }
   }

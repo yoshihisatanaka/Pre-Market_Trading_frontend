@@ -20,6 +20,9 @@ blob-report/
 coverage/
 .vitest/
 
+# Playwright MCP の出力（スクリーンショット等・調査用の一時ファイル）
+.playwright-mcp/
+
 # editor / OS
 .vscode/*
 !.vscode/extensions.json

@@ -75,6 +75,26 @@ views / components  →  stores  →  api  →  (HTTP)
 - **E2E は `docs/e2e/<画面>.md` のシナリオが先。** タイトル先頭に ID を付ける（`test('[OL-01] …')`）。
   シナリオが無い画面は先に文書を書き、テストを書いたら状態を `実装済` に更新して `check:scenarios` を通す
 
+## 画面を実際に見る（Playwright MCP）
+
+`.mcp.json` に Playwright MCP（Docker 版）を定義してある。画面の見た目や DOM を
+**推測せず実物で確認する**ために使う。
+
+- **使う前に `docker compose up -d frontend` が必要。** MCP コンテナは compose の
+  ネットワーク `us-stock-order_default` に参加して動くため、frontend が落ちていると接続できない
+- 接続先は **`http://frontend:5173`**（`localhost:5173` ではない。コンテナ間通信のため）
+- MSW はブラウザ側で動くので、バックエンド未実装のままでも画面はモックデータで描画される
+- Docker 版は **headless chromium のみ**（Firefox / WebKit は使えない）
+
+使いどころ:
+
+- E2E を書く前に、`data-testid` / role が実在するかを実画面のスナップショットで確かめる
+- ローディング / エラー / 空 / データありの4状態が実際に出し分けられているかを目視する
+- Manus の画面モック受領後、`docs/mock/` の原本と Vue 実装を見比べる
+
+**これは E2E の代替ではない。** 合否判定は従来どおり
+`docker compose run --rm e2e npx playwright test` で行う。MCP は探索・調査用。
+
 ## 現在の状況
 
 - API 仕様書は未受領。`docs/api/openapi.yaml` はまだ無い。受領したら `/api-to-openapi docs/api/<原本>` で変換する

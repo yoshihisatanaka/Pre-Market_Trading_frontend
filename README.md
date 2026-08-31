@@ -54,6 +54,29 @@ docker compose up frontend
 > `npm` をホストで直接叩かないこと。Node が入っていないため動作せず、
 > 仮に入れても `node_modules` は named volume 側にあるためコンテナ内と一致しない。
 
+## Claude Code から画面を見る（Playwright MCP）
+
+リポジトリ直下の `.mcp.json` に Playwright MCP サーバ（Docker 版）を定義してある。
+Claude Code が実際にブラウザで画面を開き、スナップショットやスクリーンショットを取れる。
+E2E のセレクタ調査や、画面の 4 状態（ローディング / エラー / 空 / データあり）の目視確認に使う。
+
+初回だけイメージを取得する:
+
+```powershell
+docker pull mcr.microsoft.com/playwright/mcp
+```
+
+使うときの条件:
+
+- **先に `docker compose up -d frontend` を実行しておく**
+  （MCP コンテナは compose のネットワーク `us-stock-order_default` に参加するため）
+- Claude Code 側では初回利用時に `.mcp.json` の承認ダイアログが出るので許可する。
+  接続状態は `/mcp` で確認できる
+- 接続先は `http://frontend:5173`（`localhost:5173` ではない）
+- Docker 版は headless chromium のみ
+
+**E2E テストの代替ではない。** 合否判定は `docker compose run --rm e2e npx playwright test` で行う。
+
 ## テスト
 
 このリポジトリのテストは **「シナリオ文書が先、テストコードは後」** という運用になっている。

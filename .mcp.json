@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--init",
+        "--network",
+        "us-stock-order_default",
+        "mcr.microsoft.com/playwright/mcp"
+      ]
+    }
+  }
+}

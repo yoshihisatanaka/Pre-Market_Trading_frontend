@@ -63,7 +63,7 @@ th {
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-muted);
-  background-color: var(--color-bg);
+  background-color: var(--color-surface-muted);
 }
 
 th.is-numeric {

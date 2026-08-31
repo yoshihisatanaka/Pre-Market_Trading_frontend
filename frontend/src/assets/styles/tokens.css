@@ -1,25 +1,45 @@
 /*
  * デザイントークン。
- * Manus モックの配色・余白が判明したら、この値だけを差し替えれば全体に反映される。
+ * 値は Manus モック（docs/mock/layout/masters-users.html）の CSS から吸い上げたもの。
  * 個々のコンポーネントで色や余白を直値で書かないこと。
  */
 :root {
   /* color */
-  --color-bg: #f6f7f9;
+  --color-bg: #f1f2f4;
   --color-surface: #ffffff;
-  --color-border: #e2e5ea;
-  --color-text: #1c2430;
-  --color-text-muted: #6b7684;
-  --color-primary: #1667d1;
-  --color-primary-hover: #1256ae;
+  --color-surface-muted: #f7fafc; /* テーブルのヘッダ行など、面の中の一段沈んだ背景 */
+  --color-border: #e2e8f0;
+  --color-text: #263443;
+  --color-text-heading: #1f2d3d;
+  --color-text-muted: #718096;
+  --color-link: #2b6cb0; /* primary が濃紺のため、本文中のリンクは別色にする */
+  --color-primary: #182230;
+  --color-primary-hover: #2c3848;
   --color-primary-contrast: #ffffff;
-  --color-success: #128a5c;
-  --color-danger: #c0392b;
-  --color-warning: #b8860b;
+  --color-success: #276749;
+  --color-danger: #e53e3e;
+  --color-warning: #92400e;
 
   /* 売買方向（米国株注文ドメイン） */
   --color-buy: #128a5c;
   --color-sell: #c0392b;
+
+  /* サイドバー（濃色。上の面用トークンとは別系統で持つ） */
+  --color-sidebar-bg: #182230;
+  --color-sidebar-border: #2c3848;
+  --color-sidebar-hover: #2c3848;
+  --color-sidebar-text: #d3dae3;
+  --color-sidebar-text-active: #ffffff;
+  --color-sidebar-section: #aeb9c7;
+
+  /* 市場ステータス（ニューヨーク時間の取引セッション） */
+  --color-market-premarket: #d97706;
+  --color-market-regular: #059669;
+  --color-market-afterhours: #7c3aed;
+  --color-market-closed: #9ca3af;
+
+  /* layout */
+  --layout-sidebar-width: 220px;
 
   /* spacing */
   --space-1: 4px;
@@ -30,15 +50,17 @@
   --space-6: 32px;
 
   /* typography */
-  --font-family-base: 'Helvetica Neue', Arial, 'Hiragino Sans', 'Noto Sans JP', Meiryo, sans-serif;
+  /* Noto Sans JP はモックの指定に合わせる（フォントファイルは同梱しない。無ければ以降にフォールバック） */
+  --font-family-base: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic UI', Meiryo, sans-serif;
   --font-family-numeric: 'SF Mono', Consolas, 'Roboto Mono', monospace;
-  --font-size-sm: 13px;
-  --font-size-md: 15px;
-  --font-size-lg: 18px;
-  --font-size-xl: 22px;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-lg: 15px;
+  --font-size-xl: 17px;
 
   /* other */
-  --radius-sm: 4px;
+  --radius-sm: 6px;
   --radius-md: 8px;
-  --shadow-card: 0 1px 3px rgba(28, 36, 48, 0.08);
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.04);
 }

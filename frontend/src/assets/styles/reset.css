@@ -14,9 +14,11 @@ body {
   margin: 0;
   font-family: var(--font-family-base);
   font-size: var(--font-size-md);
-  line-height: 1.6;
+  line-height: 1.55;
   color: var(--color-text);
   background-color: var(--color-bg);
+  /* 数字を等幅にして表の桁を揃える（モックの font-feature-settings に合わせる） */
+  font-feature-settings: 'tnum' 1;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -60,5 +62,5 @@ table {
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--color-link);
 }

@@ -16,6 +16,13 @@ Vue 公式スタイルガイドの **優先度 A（必須）/ B（強く推奨�
 - `v-if` と `v-for` を同一要素に書かない
 - props はオブジェクト記法で `type` を必ず書き、必須でないものには `default` を書く（`vue/require-default-prop`）
 - スコープの狭いスタイルは `<style scoped>`。グローバルスタイルは `src/assets/styles/` にのみ置く
+- **画面（views）は `<h1>` を持たない。** 画面タイトルは `router/index.js` の `meta.title` を
+  [AppHeader](../frontend/src/components/layout/AppHeader.vue) が表示する（見出しが二重になると E2E の
+  `getByRole('heading')` が曖昧になる）
+- 画面固有のヘッダ操作ボタンは `<Teleport defer to="#topbar-actions">` でヘッダへ差し込む
+  （見本: [OrderListView.vue](../frontend/src/views/OrderListView.vue) の「再読み込み」）。
+  `defer` が必要なのは、初回マウント時点でレイアウトの DOM がまだ document に入っていないため。
+  その画面の単体テストには `global: { stubs: { teleport: true } }` を付ける
 
 ### 配置ルール
 
@@ -24,6 +31,7 @@ Vue 公式スタイルガイドの **優先度 A（必須）/ B（強く推奨�
 | `src/views/` | ルーティングの単位となる画面。`router/index.js` から参照されるもののみ |
 | `src/components/ui/` | ドメイン知識を持たない汎用部品（`BaseButton`, `DataTable` 等） |
 | `src/components/<domain>/` | `orders/` のようにドメイン別に切る。汎用部品に業務ロジックを混ぜないこと |
+| `src/components/layout/` | アプリ共通の骨格（`AppLayout` / `AppSidebar` / `AppHeader`）とメニュー定義 `navigation.js`。画面はここに依存しない |
 | `src/composables/` | 状態を持つ再利用ロジック。`useXxx` の名前にする |
 | `src/api/` | HTTP 通信。**ここだけがバックエンドのレスポンス形を知ってよい** |
 | `src/stores/` | Pinia ストア。`useXxxStore` の名前にし、setup ストア形式で書く |
@@ -100,19 +108,9 @@ views / components  →  stores  →  api  →  (HTTP)
 - Manus のモック HTML/CSS の原本は `docs/mock/` に無加工で保管し、コンポーネント化の際の参照元とする
 - モックの CSS を取り込む時は、共通化できる値を `tokens.css` に吸い上げてから各コンポーネントの `<style scoped>` に配る
 
-### Tailwind を後から有効化する手順
-
-Manus のモックが Tailwind ベースだった場合、以下の3手順で切り替えられる（現時点では未導入）。
-
-```bash
-docker compose run --rm frontend npm i -D tailwindcss @tailwindcss/vite
-```
-
-1. `frontend/vite.config.js` の `plugins` に `tailwindcss()` を追加
-2. `frontend/src/assets/styles/main.css` の先頭に `@import 'tailwindcss';` を1行追加
-3. `tokens.css` の CSS 変数を Tailwind の `@theme` にマッピングする
-
-素の CSS を使っている既存コンポーネントはそのまま共存できるため、一括置換は不要。
+受領した Manus のモックは **素の CSS**（Tailwind ではない）だったため、Tailwind は導入しない。
+`tokens.css` の配色・文字サイズは `docs/mock/layout/masters-users.html` の値に揃えてある。
+モックの余白（6 / 10 / 20px など）は最寄りの `--space-*` に丸め、トークンを増やさない。
 
 ---
 

@@ -14,7 +14,8 @@ import OrderListView from './OrderListView.vue'
  */
 function mountView() {
   return mount(OrderListView, {
-    global: { plugins: [createPinia()] },
+    // teleport を stub して、ヘッダへ差し込むボタンを wrapper 内に描画させる
+    global: { plugins: [createPinia()], stubs: { teleport: true } },
   })
 }
 
@@ -79,7 +80,7 @@ describe('OrderListView', () => {
     expect(wrapper.find('[data-testid="orders-empty"]').exists()).toBe(true)
 
     // 2回目は既定ハンドラ（フィクスチャ3件）に戻る
-    await wrapper.find('button').trigger('click')
+    await wrapper.find('[data-testid="orders-reload"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.findAll('[data-testid="data-table-row"]')).toHaveLength(

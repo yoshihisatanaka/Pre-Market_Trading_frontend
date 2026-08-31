@@ -40,6 +40,7 @@ views / components  →  stores  →  api  →  (HTTP)
 | `frontend/src/views/` | ルーティング単位の画面 |
 | `frontend/src/components/ui/` | ドメイン非依存の汎用部品 |
 | `frontend/src/components/<domain>/` | ドメイン別の部品 |
+| `frontend/src/components/layout/` | 共通の骨格（`AppLayout` / `AppSidebar` / `AppHeader`）とメニュー定義 `navigation.js` |
 | `frontend/src/composables/` | `useXxx` の再利用ロジック |
 | `frontend/src/api/` | HTTP 通信。1エンドポイント = 1関数 |
 | `frontend/src/stores/` | Pinia（setup ストア形式）。`useXxxStore` |
@@ -56,6 +57,10 @@ views / components  →  stores  →  api  →  (HTTP)
 - SFC のファイル名はパスカルケースの複数語（`OrderList.vue`。`Order.vue` は ESLint エラー）
 - props は `type` 必須、非必須なら `default` も必須
 - 色・余白は `src/assets/styles/tokens.css` の CSS 変数を使う。直値で色を書かない
+- **画面は `<h1>` を持たない。** タイトルは `router/index.js` の `meta.title` を `AppHeader` が表示する
+- 画面固有のヘッダ操作ボタンは `<Teleport defer to="#topbar-actions">` で差し込む。
+  その画面の単体テストには `global: { stubs: { teleport: true } }` を付ける
+- サイドメニューに項目を足すときは `src/components/layout/navigation.js` を編集する
 
 ## API モック（MSW）
 
@@ -98,6 +103,9 @@ views / components  →  stores  →  api  →  (HTTP)
 ## 現在の状況
 
 - API 仕様書は未受領。`docs/api/openapi.yaml` はまだ無い。受領したら `/api-to-openapi docs/api/<原本>` で変換する
-- Manus の画面モックも未受領。現在の画面は素の CSS + CSS 変数による暫定実装
-  （モックが Tailwind だった場合の切替手順は docs/coding-standards.md に記載済み）
+- Manus の画面モックは受領済（素の CSS。Tailwind ではないので導入しない）。
+  共通レイアウト部分だけ取り込み済み（原本 `docs/mock/layout/masters-users.html`、`tokens.css` は
+  モックの配色・文字サイズに更新済み）。個別画面はまだ未着手
+- サイドメニューの 14 項目は大半が未実装のため「ページが見つかりません」に落ちる。
+  画面を作ったら `router/index.js` に `navigation.js` と同じ path のルートを足す
 - `OrderListView` は縦串の参考実装。実仕様が来たら差し替える前提

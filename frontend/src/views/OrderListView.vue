@@ -33,12 +33,18 @@ onMounted(() => store.load())
 
 <template>
   <section class="order-list">
-    <header class="order-list__header">
-      <h1 class="order-list__title">注文一覧</h1>
-      <BaseButton variant="secondary" :disabled="loading" @click="store.load()">
+    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む。
+         defer が要る: 初回マウント時点ではレイアウトの DOM がまだ document に入っていない -->
+    <Teleport defer to="#topbar-actions">
+      <BaseButton
+        variant="secondary"
+        data-testid="orders-reload"
+        :disabled="loading"
+        @click="store.load()"
+      >
         再読み込み
       </BaseButton>
-    </header>
+    </Teleport>
 
     <!-- 以降の画面もこの4状態の出し分けを踏襲する -->
     <p v-if="loading" data-testid="orders-loading" class="order-list__status">読み込み中…</p>
@@ -65,17 +71,6 @@ onMounted(() => store.load())
 </template>
 
 <style scoped>
-.order-list__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-4);
-}
-
-.order-list__title {
-  font-size: var(--font-size-xl);
-}
-
 .order-list__status {
   padding: var(--space-5);
   color: var(--color-text-muted);

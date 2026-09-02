@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>外株注文入力 - 米株発注システム</title>
+  <link rel="preload" href="/manus-storage/noto-sans-jp-400_e73573b9.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="/manus-storage/noto-sans-jp-500_8dccbe1e.ttf" as="font" type="font/ttf" crossorigin>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    @font-face { font-family: "Premarket Sans JP"; src: url("/manus-storage/noto-sans-jp-400_e73573b9.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: optional; }
+    @font-face { font-family: "Premarket Sans JP"; src: url("/manus-storage/noto-sans-jp-500_8dccbe1e.ttf") format("truetype"); font-weight: 500; font-style: normal; font-display: optional; }
+    @font-face { font-family: "Premarket Sans JP"; src: url("/manus-storage/noto-sans-jp-600_a3079890.ttf") format("truetype"); font-weight: 600; font-style: normal; font-display: optional; }
+    @font-face { font-family: "Premarket Sans JP"; src: url("/manus-storage/noto-sans-jp-700_7f1440bd.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: optional; }
+    html { font-synthesis: none; }
+    :root { --font-ui: "Premarket Sans JP", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif; }
+    body { font-family: var(--font-ui); font-size: 13px; font-weight: 400; line-height: 1.55; letter-spacing: 0.005em; color: #263443; background: #f1f2f4; font-feature-settings: "tnum" 1; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    button, input, select, textarea { font: inherit; }
+    body *, .ui-numeric, .ui-code, .ui-code-strong, table th, table td, input, select, textarea,
+    .reference-value, .customer-context-reference-value, .symbol-code, .holding-ticker, .two-line-main, .two-line-sub,
+    .pl-amount, .pl-rate, .valuation-cost, .valuation-value, .rate-value, .step-ref, .csv-format-table td {
+      font-family: var(--font-ui) !important;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0;
+    }
+    .ui-code { font-weight: 500; }
+    .ui-code-strong { font-weight: 600; }
+    .ui-numeric { text-align: right; }
+    a { text-decoration: none; color: inherit; }
+
+    /* ===== レイアウト ===== */
+    .app-layout { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ===== サイドバー ===== */
+    .sidebar { width: 220px; background: #182230; display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+    .sidebar-logo { padding: 20px 16px; border-bottom: 1px solid #2c3848; }
+    .sidebar-logo-title { color: #fff; font-weight: 600; font-size: 14px; line-height: 1.35; letter-spacing: 0.01em; }
+    .sidebar-logo-sub { color: #b4bfcd; font-size: 11px; margin-top: 2px; }
+    .sidebar-nav { flex: 1; padding: 16px 12px; }
+    .sidebar-section { font-size: 10px; font-weight: 500; color: #aeb9c7; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 8px; margin-bottom: 6px; margin-top: 16px; }
+    .sidebar-section:first-child { margin-top: 0; }
+    .sidebar-link { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 400; color: #d3dae3; transition: background 0.15s, color 0.15s; cursor: pointer; }
+    .sidebar-link:hover { background: #2c3848; color: #fff; }
+    .sidebar-link.active { background: #2c3848; color: #fff; }
+    .sidebar-link svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .sidebar-user { padding: 16px; border-top: 1px solid #2c3848; }
+    .sidebar-user-row { display: flex; align-items: center; gap: 10px; }
+    .sidebar-avatar { width: 32px; height: 32px; border-radius: 50%; background: #3b4a5e; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+    .sidebar-user-name { color: #fff; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-user-info { color: #b4bfcd; font-size: 11px; }
+    .sidebar-logout { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11px; color: #b4bfcd; transition: color 0.15s; }
+    .sidebar-logout:hover { color: #fff; }
+    .sidebar-logout svg { width: 14px; height: 14px; }
+
+    /* ===== メインコンテンツ ===== */
+    .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #f1f2f4; }
+    .topbar { background: #fff; border-bottom: 1px solid #e2e8f0; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .topbar-title { font-size: 17px; font-weight: 500; color: #1f2d3d; letter-spacing: 0.01em; }
+    .topbar-sub { font-size: 11px; color: #718096; margin-top: 2px; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .market-status { font-size: 12px; font-weight: 500; }
+    .page-content { flex: 1; overflow-y: auto; padding: 24px; }
+
+    /* ===== ログイン画面 ===== */
+    .login-wrap { min-height: 100vh; background: #f1f2f4; display: flex; align-items: center; justify-content: center; }
+    .login-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 40px 36px; width: 100%; max-width: 380px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+    .login-icon { width: 52px; height: 52px; background: #182230; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+    .login-icon svg { width: 26px; height: 26px; color: #fff; }
+    .login-title { text-align: center; font-size: 18px; font-weight: 600; color: #1a202c; margin-bottom: 4px; }
+    .login-sub { text-align: center; font-size: 12px; color: #718096; margin-bottom: 28px; }
+    .login-demo { background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 8px; padding: 12px 14px; margin-top: 20px; font-size: 12px; color: #2b6cb0; }
+    .login-demo strong { font-weight: 600; }
+
+    /* ===== フォーム部品 ===== */
+    .field-label { display: block; font-size: 11px; font-weight: 500; color: #4b5b6c; margin-bottom: 5px; }
+    .required { color: #e53e3e; margin-left: 2px; }
+    .form-input, .form-select { width: 100%; border: 1px solid #cbd5e0; border-radius: 6px; padding: 7px 10px; font-size: 13px; color: #1a202c; background: #fff; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+    .form-input:focus, .form-select:focus { border-color: #182230; box-shadow: 0 0 0 3px rgba(24,34,48,0.16); }
+    .form-group { margin-bottom: 14px; }
+
+    /* ===== ボタン ===== */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: background 0.15s, transform 0.1s; }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: #182230; color: #fff; }
+    .btn-primary:hover { background: #2c3848; }
+    .btn-secondary { background: #fff; color: #4a5568; border: 1px solid #cbd5e0; }
+    .btn-secondary:hover { background: #eef0f2; }
+    .btn-danger { background: #e53e3e; color: #fff; }
+    .btn-danger:hover { background: #c53030; }
+    .btn-success { background: #276749; color: #fff; }
+    .btn-success:hover { background: #22543d; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .btn-full { width: 100%; }
+    .btn svg { width: 15px; height: 15px; }
+
+    /* ===== カード ===== */
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); margin-bottom: 20px; }
+    .card-header { padding: 14px 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; }
+    .card-header-title { font-size: 13px; font-weight: 500; color: #2d3748; }
+    .card-body { padding: 16px 20px; }
+
+    /* ===== テーブル ===== */
+    .table-wrap { overflow-x: auto; }
+    .sticky-table-wrap { max-height: min(62vh, 620px); overflow: auto; position: relative; }
+    .sticky-table thead th { position: sticky; top: 0; z-index: 3; background: #f7fafc !important; background-clip: padding-box; opacity: 1; box-shadow: 0 1px 0 #dce5ed, 0 3px 6px rgba(15,36,58,.05); }
+    .sticky-context-tabs { position: sticky; top: 0; z-index: 4; background: #f1f2f4 !important; padding: 10px 0 1px; opacity: 1; isolation: isolate; box-shadow: 0 1px 0 #dce5ed, 0 3px 6px rgba(15,36,58,.05); }
+    table { width: 100%; border-collapse: collapse; }
+    th { padding: 10px 14px; text-align: center; font-size: 11px; font-weight: 500; color: #59677a; letter-spacing: 0.025em; background: #f7fafc; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e8edf2; white-space: nowrap; }
+    th:last-child { border-right: none; }
+    td { padding: 10px 14px; font-size: 13px; font-weight: 400; line-height: 1.5; color: #2d3748; border-bottom: 1px solid #f0f4f8; border-right: 1px solid #e8edf2; }
+    td:last-child { border-right: none; }
+    tr:hover td { background: #f7fafc; }
+    .td-link { color: #2b6cb0; cursor: pointer; }
+    .td-link:hover { text-decoration: underline; }
+
+    /* ===== バッジ ===== */
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-buy { background: #ebf8ff; color: #2b6cb0; }
+    .badge-sell { background: #fff5f5; color: #c53030; }
+    .badge-success { background: #f0fff4; color: #276749; }
+    .badge-warning { background: #fffbeb; color: #92400e; }
+    .badge-gray { background: #f7fafc; color: #4a5568; }
+    .badge-premarket { background: #fffbeb; color: #92400e; }
+
+    /* ===== アラート ===== */
+    .alert { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 14px; }
+    .alert-error { background: #fff5f5; border: 1px solid #fed7d7; color: #c53030; }
+    .alert-warning { background: #fffbeb; border: 1px solid #fef3c7; color: #92400e; }
+    .alert-success { background: #f0fff4; border: 1px solid #c6f6d5; color: #276749; }
+    .alert-info { background: #ebf8ff; border: 1px solid #bee3f8; color: #2b6cb0; }
+
+    /* ===== グリッド ===== */
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; align-items: end; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    @media (max-width: 900px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } .grid-3 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 600px) { .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; } }
+
+    /* ===== ユーティリティ ===== */
+    .flex { display: flex; }
+    .flex-center { display: flex; align-items: center; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .mb-1 { margin-bottom: 4px; }
+    .mb-2 { margin-bottom: 8px; }
+    .mb-4 { margin-bottom: 16px; }
+    .mb-6 { margin-bottom: 24px; }
+    .mt-2 { margin-top: 8px; }
+    .mt-4 { margin-top: 16px; }
+    .text-sm { font-size: 12px; }
+    .text-xs { font-size: 11px; }
+    .text-gray { color: #718096; }
+    .text-right { text-align: right; }
+    .font-bold { font-weight: 700; }
+    .font-semibold { font-weight: 600; }
+    .w-full { width: 100%; }
+    .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; }
+    .stat-label { font-size: 11px; color: #718096; font-weight: 400; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-value { font-size: 24px; font-weight: 700; color: #1a202c; margin-top: 4px; }
+    .stat-sub { font-size: 12px; color: #718096; margin-top: 2px; }
+    .reference-value, .info-value, .stat-value { font-family: var(--font-ui); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+    .divider { border: none; border-top: 1px solid #e2e8f0; margin: 16px 0; }
+  </style>
+  
+<meta property="og:type" content="website">
+		<meta property="og:url" content="https://uspreorder-vmbhej3k.manus.space/orders/new">
+		<meta property="og:title" content="外株注文入力 - 米株発注システム">
+		<meta property="og:image" content="https://files.manuscdn.com/webdev_screenshots/2026/08/31/hjTmbFvooQ4TCJ9HsXQBCH.png?x-oss-process=image/resize,w_1200/crop,h_630,x_0,y_0">
+		<meta property="og:image:width" content="1200">
+		<meta property="og:image:height" content="630">
+		<meta name="twitter:card" content="summary_large_image">
+		<meta name="twitter:title" content="外株注文入力 - 米株発注システム">
+		<meta name="twitter:image" content="https://files.manuscdn.com/webdev_screenshots/2026/08/31/hjTmbFvooQ4TCJ9HsXQBCH.png?x-oss-process=image/resize,w_1200/crop,h_630,x_0,y_0">
+		<meta name="twitter:image:width" content="1200">
+		<meta name="twitter:image:height" content="630"><link rel="canonical" href="https://uspreorder-vmbhej3k.manus.space/orders/new" /><link rel="manifest" href="/__manus/pwa/manifest.webmanifest" crossorigin="use-credentials" /></head>
+<body>
+<div class="app-layout">
+  <!-- サイドバー -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-title">米株発注システム</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="sidebar-section">顧客</div>
+      <a href="/customers/search" class="sidebar-link ">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        顧客検索
+      </a>
+      <a href="/customers/holdings" class="sidebar-link ">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+        預り検索
+      </a>
+      <div class="sidebar-section">注文</div>
+      <a href="/orders/new" class="sidebar-link active">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        新規注文
+      </a>
+      <a href="/orders/csv/upload" class="sidebar-link ">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        CSV一括注文
+      </a>
+      <a href="/orders/inquiry" class="sidebar-link ">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        注文照会
+      </a>
+      <a href="/orders/dream-status" class="sidebar-link ">
+        Dream登録状況
+      </a>
+      <a href="/executions/" class="sidebar-link ">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        約定照会
+      </a>
+      <div class="sidebar-section">マスタメンテ</div>
+      <a href="/masters/users" class="sidebar-link ">
+        ユーザマスタ
+      </a>
+      <a href="/masters/symbols" class="sidebar-link ">
+        銘柄マスタ
+      </a>
+      <a href="/masters/fx" class="sidebar-link ">
+        為替マスタ
+      </a>
+      <a href="/masters/ca" class="sidebar-link ">
+        CAマスタ
+      </a>
+      <a href="/masters/blocked-dates" class="sidebar-link ">
+        受注不可日マスタ
+      </a>
+      <a href="/masters/market-holidays" class="sidebar-link ">
+        海外休場日マスタ
+      </a>
+      <a href="/masters/balance-adjustments" class="sidebar-link ">
+        残高補正
+      </a>
+    </nav>
+  </aside>
+
+  <!-- メインエリア -->
+  <div class="main-area">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">外株注文入力</div>
+      </div>
+      <div class="topbar-right">
+        <span class="market-status" id="market-status"></span>
+        
+      </div>
+    </header>
+    <main class="page-content">
+      
+
+<style>
+:root {
+  --theme-bg:           #fafafa;
+  --theme-accent:       #4a5568;
+  --theme-accent-light: #e2e8f0;
+  --theme-text:         #1a202c;
+  --theme-muted:        #718096;
+  --theme-line:         #e2e8f0;
+  --theme-btn-active-bg:    #4a5568;
+  --theme-btn-active-color: #ffffff;
+  --theme-btn-active-border:#2d3748;
+}
+.theme-buy {
+  --theme-bg:           #fff8f8;
+  --theme-accent:       #e53e3e;
+  --theme-accent-light: #fed7d7;
+  --theme-line:         #fca5a5;
+  --theme-btn-active-bg:    #e53e3e;
+  --theme-btn-active-color: #ffffff;
+  --theme-btn-active-border:#c53030;
+}
+.theme-sell {
+  --theme-bg:           #f8fbff;
+  --theme-accent:       #3182ce;
+  --theme-accent-light: #bee3f8;
+  --theme-line:         #90cdf4;
+  --theme-btn-active-bg:    #3182ce;
+  --theme-btn-active-color: #ffffff;
+  --theme-btn-active-border:#2b6cb0;
+}
+
+.fsk-form {
+  max-width: 860px;
+  margin: 0;
+  background: var(--theme-bg);
+  border-radius: 12px;
+  padding: 24px 28px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+  transition: background 0.3s ease;
+  border: none;
+}
+.customer-context-bar { background:#fff; border:1px solid #dce5ed; border-radius:10px; padding:0; margin-bottom:16px; box-shadow:0 1px 4px rgba(15,36,58,.04); overflow:hidden; }
+.customer-context-top { display:flex; align-items:stretch; gap:0; padding:14px 20px 14px 32px; }
+.customer-context-identity { min-width:360px; flex:0 0 360px; padding-right:20px; margin-right:20px; border-right:1px solid #e8edf2; display:flex; flex-direction:column; align-items:flex-start; gap:5px; }
+.customer-context-reference { display:flex; align-items:center; gap:10px; margin-bottom:0; padding-left:0; border-left:none; }
+.customer-context-reference-item { display:inline-flex; align-items:baseline; gap:5px; }
+.customer-context-label { color:#718096; font-size:12px; font-weight:500; }
+.customer-context-reference-value { color:#2d3748; font-size:14px; font-weight:500; font-variant-numeric:tabular-nums; }
+.customer-context-divider { width:1px; height:13px; background:#d9e0e7; }
+.customer-context-name { color:#1a202c; font-size:20px; font-weight:500; line-height:1.3; white-space:nowrap; }
+.customer-context-kana { color:#718096; font-size:14px; font-weight:400; margin-left:10px; white-space:nowrap; }
+.customer-context-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:stretch; flex:1; }
+.customer-context-item { display:flex; flex-direction:column; gap:2px; padding:0 14px; border-left:1px solid #e8edf2; }
+.customer-context-item:first-child { border-left:none; }
+.customer-context-value { color:#1a202c; font-size:14px; font-weight:500; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.customer-context-value.restriction { color:#c53030; }
+.customer-context-assets { border-top:1px solid #e1e8ef; background:linear-gradient(90deg,#f8fafc 0%,#fbfcfd 100%); padding:14px 20px 16px; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:0; align-items:center; }
+.customer-context-assets-title { display:none; }
+.customer-context-asset { min-width:0; padding:0 16px; border-left:1px solid #e2e8f0; display:flex; flex-direction:column; gap:4px; }
+.customer-context-asset-label { color:#718096; font-size:11px; font-weight:500; letter-spacing:.02em; white-space:nowrap; }
+.customer-context-asset-value { color:#1f2d3d; font-size:18px; font-weight:600; line-height:1.25; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; }
+.customer-context-asset-value.pl-plus { color:#c53030; }
+.customer-context-asset-value.pl-minus { color:#2b6cb0; }
+@media (max-width:980px) { .customer-context-top { display:block; } .customer-context-identity { min-width:0; padding:0 0 12px; margin:0 0 12px; border-right:none; border-bottom:1px solid #e7edf2; } .customer-context-metrics { grid-template-columns:repeat(4,minmax(0,1fr)); } .customer-context-assets { grid-template-columns:repeat(3,minmax(0,1fr)); row-gap:10px; } }
+@media (max-width:640px) { .customer-context-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:10px; } .customer-context-metrics .customer-context-item:nth-child(odd), .customer-context-asset:nth-child(3n+1) { padding-left:0; border-left:none; } .customer-context-assets { grid-template-columns:1fr 1fr; } }
+.customer-context-tabs { display:flex; gap:0; border-bottom:2px solid #e2e8f0; margin-bottom:16px; }
+.customer-context-tab { padding:8px 18px; color:#718096; font-size:13px; font-weight:500; text-decoration:none; border-bottom:2px solid transparent; margin-bottom:-2px; }
+.customer-context-tab.active { color:#1a3a5c; border-bottom-color:#1a3a5c; }
+/* セクション */
+.fsk-sep {
+  border: none;
+  border-top: 1px solid var(--theme-line);
+  margin: 14px 0;
+  transition: border-color 0.3s;
+}
+
+.fsk-row {
+  display: flex;
+  align-items: stretch;
+  align-items: center;
+  margin-bottom: 10px;
+  min-height: 36px;
+}
+.fsk-row-2 {
+  display: flex;
+  align-items: stretch;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.fsk-label {
+  width: 150px;
+  min-width: 150px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fsk-label2 { display: none; }
+.fsk-required {
+  color: #e53e3e;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.fsk-input {
+  border: none;
+  border-bottom: 2px solid #a0aec0;
+  padding: 4px 6px;
+  font-size: 13px;
+  height: 34px;
+  background: transparent;
+  outline: none;
+  min-width: 0;
+  color: var(--theme-text);
+  transition: border-color 0.2s;
+  border-radius: 0;
+}
+.fsk-input:focus {
+  border-bottom-color: var(--theme-accent);
+  background: transparent;
+}
+.fsk-input::placeholder { color: #a0aec0; font-size: 12px; }
+.fsk-unit { font-size: 13px; margin-left: 8px; color: var(--theme-muted); }
+.market-category-select { width:300px; }
+.execution-detail-toggle { display:flex; align-items:center; gap:10px; }
+.execution-detail-note { color:#718096; font-size:11px; }
+.vwap-options { display:none; margin:0 0 10px 150px; padding:10px 12px; border-left:2px solid #cbd5e1; background:#f8fafc; max-width:510px; }
+.vwap-options.active { display:flex; align-items:flex-end; gap:12px; }
+.vwap-field { display:flex; flex-direction:column; gap:4px; }
+.vwap-field label { color:#718096; font-size:11px; font-weight:500; }
+.vwap-field .fsk-input { width:98px; }
+
+/* トグルボタン */
+.fsk-toggle { display: flex; align-items: center; }
+.fsk-btn {
+  height: 30px;
+  border: 1.5px solid var(--theme-line);
+  background: transparent;
+  color: var(--theme-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  white-space: nowrap;
+  min-width: 70px;
+  user-select: none;
+}
+/* ピル型角丸 */
+/* セグメント型角丸（SBI証券スタイル） */
+.fsk-toggle .fsk-btn:first-child { border-radius: 6px 0 0 6px; }
+.fsk-toggle .fsk-btn:last-child  { border-radius: 0 6px 6px 0; }
+.fsk-toggle .fsk-btn:only-child  { border-radius: 6px; }
+.fsk-toggle .fsk-btn:not(:first-child) { border-left: none; }
+.fsk-btn:hover:not(.is-active) { background: var(--theme-accent-light); color: var(--theme-text); }
+.fsk-btn:active { transform: scale(0.96); }
+.fsk-btn.is-active {
+  background: var(--theme-btn-active-bg);
+  color: var(--theme-btn-active-color);
+  border-color: var(--theme-btn-active-border);
+}
+/* 売買区分：選択時のみ赤/青 */
+.fsk-btn.buy-btn.is-active  { background: #e53e3e !important; color: #fff !important; border-color: #c53030 !important; }
+.fsk-btn.sell-btn.is-active { background: #3182ce !important; color: #fff !important; border-color: #2b6cb0 !important; }
+.trade-toggle { gap: 8px; }
+.trade-toggle .fsk-btn,
+.trade-toggle .fsk-btn:not(:first-child) {
+  border: none;
+  border-radius: 5px;
+  background: #edf0f3;
+  color: #4a5568;
+}
+.trade-toggle .fsk-btn.buy-btn.is-active { background: #e53e3e !important; color: #fff !important; border: none !important; }
+.trade-toggle .fsk-btn.sell-btn.is-active { background: #3182ce !important; color: #fff !important; border: none !important; }
+.customer-bar {
+  background: linear-gradient(135deg, #ebf4ff 0%, #f0fff4 100%);
+  border: none;
+  border-left: 4px solid var(--theme-accent);
+  border-radius: 0 8px 8px 0;
+  padding: 8px 14px;
+  font-size: 12px;
+  margin-bottom: 18px;
+  color: #2c5282;
+  transition: border-color 0.3s;
+}
+.account-name-hint {
+  align-self: center;
+  margin-left: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2b6cb0;
+  min-width: 100px;
+}
+.account-name-hint.not-found { color: #c53030; }
+.submit-area { text-align: center; margin-top: 28px; padding-top: 12px; border-top: 1px solid var(--theme-line); }
+.btn-submit {
+  background: linear-gradient(135deg, var(--theme-btn-active-bg) 0%, var(--theme-btn-active-border) 100%);
+  color: #fff;
+  border: none;
+  padding: 11px 80px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  letter-spacing: 0.05em;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+}
+.btn-submit:hover { opacity: 0.88; }
+.btn-submit:active { transform: scale(0.97); }
+</style>
+
+
+
+<form method="post" action="/orders/new" id="orderForm">
+  
+
+  
+
+  
+
+  <div class="fsk-form" id="fskForm">
+
+    
+
+    <!-- 部店 -->
+    <div class="fsk-row">
+      <div class="fsk-label">部店<span class="fsk-required">●</span></div>
+      <input type="text" name="branch_code" id="branchCode" value="" class="fsk-input" style="width:160px;" required>
+    </div>
+    <!-- 口座番号 -->
+    <div class="fsk-row">
+      <div class="fsk-label">口座番号<span class="fsk-required">●</span></div>
+      <input type="text" name="account_number" id="accountNumber" value="" class="fsk-input" style="width:160px;" required oninput="lookupCustomer()">
+      <span id="accountNameHint" class="account-name-hint"></span>
+    </div>
+
+    <hr class="fsk-sep">
+    <!-- 銘柄コード -->
+    <div class="fsk-row">
+      <div class="fsk-label">銘柄コード<span class="fsk-required">●</span></div>
+      <input type="text" name="symbol" id="symbolInput" value="" class="fsk-input ui-code" style="width:160px;text-transform:uppercase;" required oninput="lookupSymbol()">
+      <input type="hidden" name="stock_name" id="stockNameHidden" value="">
+      <span id="stockNameHint" class="account-name-hint"></span>
+    </div>
+
+    <hr class="fsk-sep">
+    <!-- 売買区分 -->
+    <div class="fsk-row">
+      <div class="fsk-label">売買区分（委託）<span class="fsk-required">●</span></div>
+      <input type="hidden" name="trade_type" id="tradeTypeHidden" value="">
+      <input type="hidden" name="transaction_type" value="委託">
+      <div class="fsk-toggle trade-toggle">
+        <button type="button" class="fsk-btn buy-btn " id="btnBuy" onclick="setTradeType('買')" style="width:80px;">買い</button>
+        <button type="button" class="fsk-btn sell-btn " id="btnSell" onclick="setTradeType('売')" style="width:80px;">売り</button>
+      </div>
+    </div>
+    <!-- 市場区分 -->
+    <div class="fsk-row">
+      <div class="fsk-label">市場区分<span class="fsk-required">●</span></div>
+      <select name="market_category" id="marketCategory" class="fsk-input market-category-select" required>
+        <option value="プレ" selected>プレ</option>
+        <option value="プレ＋レギュラー" >プレ＋レギュラー</option>
+        <option value="プレ＋レギュラー＋アフター" >プレ＋レギュラー＋アフター</option>
+        <option value="レギュラー" >レギュラー</option>
+        <option value="レギュラー＋アフター" >レギュラー＋アフター</option>
+        <option value="アフター" >アフター</option>
+      </select>
+    </div>
+    <!-- 注文数量 -->
+    <div class="fsk-row">
+      <div class="fsk-label">注文数量<span class="fsk-required">●</span></div>
+      <input type="text" name="quantity" value="" class="fsk-input ui-numeric" style="width:120px;" inputmode="numeric" pattern="[0-9,]*" oninput="formatQuantityInput(this)" required>
+      <span class="fsk-unit">株</span>
+    </div>
+    <!-- 価格 -->
+    <div class="fsk-row">
+      <div class="fsk-label">価格<span class="fsk-required">●</span></div>
+      <input type="hidden" name="order_type" id="orderTypeHidden" value="指値">
+      <div class="fsk-toggle">
+        <button type="button" class="fsk-btn " id="pricebtn_market" onclick="setPriceType('成行')" style="width:80px;">成行</button>
+        <button type="button" class="fsk-btn is-active" id="pricebtn_limit" onclick="setPriceType('指値')" style="width:80px;">指値</button>
+      </div>
+      <div id="limitPriceWrap" style="display:flex;align-items:center;margin-left:12px;gap:6px;">
+        <input type="number" name="limit_price" id="limitPriceInput" value="" class="fsk-input ui-numeric" style="width:120px;" placeholder="0.0000" step="0.0001" required>
+        <span class="fsk-unit">USD</span>
+      </div>
+    </div>
+    <hr class="fsk-sep">
+    <!-- 期間指定 -->
+    <div class="fsk-row">
+      <div class="fsk-label">期間指定<span class="fsk-required">●</span></div>
+      <select name="expiry_date" class="fsk-input" style="width:210px;" required>
+        
+        <option value="0901" selected>当日中（9/1）</option>
+        
+        <option value="0902" >1営業日後（9/2）</option>
+        
+        <option value="0903" >2営業日後（9/3）</option>
+        
+        <option value="0907" >3営業日後（9/7）</option>
+        
+        <option value="0908" >4営業日後（9/8）</option>
+        
+        <option value="0909" >5営業日後（9/9）</option>
+        
+        <option value="0910" >6営業日後（9/10）</option>
+        
+        <option value="0911" >7営業日後（9/11）</option>
+        
+        <option value="0914" >8営業日後（9/14）</option>
+        
+        <option value="0915" >9営業日後（9/15）</option>
+        
+        <option value="0916" >10営業日後（9/16）</option>
+        
+        <option value="0917" >11営業日後（9/17）</option>
+        
+        <option value="0918" >12営業日後（9/18）</option>
+        
+        <option value="0921" >13営業日後（9/21）</option>
+        
+        <option value="0922" >14営業日後（9/22）</option>
+        
+      </select>
+    </div>
+    <div class="fsk-row">
+      <div class="fsk-label">注文種別</div>
+      <input type="hidden" name="execution_method" id="executionMethodHidden" value="通常">
+      <div class="fsk-toggle">
+        <button type="button" class="fsk-btn is-active" id="executionbtn_通常" onclick="setExecutionMethod('通常')" style="width:80px;">通常</button>
+        <button type="button" class="fsk-btn " id="executionbtn_VWAP" onclick="setExecutionMethod('VWAP')" style="width:80px;">VWAP</button>
+      </div>
+    </div>
+    <!-- 決済通貨区分 -->
+    <div class="fsk-row">
+      <div class="fsk-label">決済通貨区分<span class="fsk-required">●</span></div>
+      <input type="hidden" name="settlement_currency" id="settlementHidden" value="円決">
+      <div class="fsk-toggle">
+        <button type="button" class="fsk-btn is-active" id="scbtn_円決" onclick="setToggle('settlementHidden','scbtn_',['円決','外決'],'円決')" style="width:80px;">円決</button>
+        <button type="button" class="fsk-btn " id="scbtn_外決" onclick="setToggle('settlementHidden','scbtn_',['円決','外決'],'外決')" style="width:80px;">外決</button>
+      </div>
+    </div>
+    <!-- 証券受渡方法 -->
+    <input type="hidden" name="custody_method" value="他社保管">
+    <!-- 預り売買区分 -->
+    <div class="fsk-row">
+      <div class="fsk-label">預り売買区分</div>
+      <input type="hidden" name="custody_trade_type" id="custodyTradeHidden" value="特定">
+      <div class="fsk-toggle">
+        <button type="button" class="fsk-btn is-active" id="cbtn_特定" onclick="setCustodyType('特定')" style="width:80px;">特定</button>
+        <button type="button" class="fsk-btn " id="cbtn_一般" onclick="setCustodyType('一般')" style="width:80px;">一般</button>
+        <button type="button" class="fsk-btn " id="cbtn_NISA" onclick="setCustodyType('NISA')" style="width:80px;">NISA</button>
+      </div>
+    </div>
+
+    <hr class="fsk-sep">
+    <!-- 勧誘区分 / 受注方法 -->
+    <div style="display:grid;grid-template-columns:150px 200px 65px 150px auto;align-items:center;gap:0;margin-bottom:10px;min-height:36px;">
+      <div class="fsk-label" style="width:auto;">勧誘区分</div>
+      <div style="display:flex;align-items:center;">
+        <input type="hidden" name="solicitation" id="solicitationHidden" value="勧誘あり">
+        <div class="fsk-toggle">
+          <button type="button" class="fsk-btn is-active" id="solbtn_勧誘あり" onclick="setToggle('solicitationHidden','solbtn_',['勧誘あり','勧誘なし'],'勧誘あり')" style="width:80px;">勧誘あり</button>
+          <button type="button" class="fsk-btn " id="solbtn_勧誘なし" onclick="setToggle('solicitationHidden','solbtn_',['勧誘あり','勧誘なし'],'勧誘なし')" style="width:80px;">勧誘なし</button>
+        </div>
+      </div>
+      <div style="width:1px;height:24px;background:#e2e8f0;margin:0 32px;"></div>
+      <div class="fsk-label" style="width:auto;">受注方法</div>
+      <div style="display:flex;align-items:center;">
+        <input type="hidden" name="order_method" id="orderMethodHidden" value="電話他">
+        <div class="fsk-toggle">
+          <button type="button" class="fsk-btn is-active" id="ombtn_電話他" onclick="setToggle('orderMethodHidden','ombtn_',['電話他','対面','FAX'],'電話他')" style="width:80px;">電話他</button>
+          <button type="button" class="fsk-btn " id="ombtn_対面" onclick="setToggle('orderMethodHidden','ombtn_',['電話他','対面','FAX'],'対面')" style="width:80px;">対面</button>
+          <button type="button" class="fsk-btn " id="ombtn_FAX" onclick="setToggle('orderMethodHidden','ombtn_',['電話他','対面','FAX'],'FAX')" style="width:80px;">FAX</button>
+        </div>
+      </div>
+    </div>
+    <!-- 資金性格 / 注文チャネル -->
+    <div style="display:grid;grid-template-columns:150px 200px 65px 150px auto;align-items:center;gap:0;margin-bottom:10px;min-height:36px;">
+      <div class="fsk-label" style="width:auto;">資金性格</div>
+      <div style="display:flex;align-items:center;">
+        <input type="hidden" name="fund_character" id="fundCharHidden" value="余裕資金等">
+        <div class="fsk-toggle">
+          <button type="button" class="fsk-btn is-active" id="fcbtn_余裕資金等" onclick="setToggle('fundCharHidden','fcbtn_',['余裕資金等','生活資金'],'余裕資金等')" style="width:80px;">余裕資金</button>
+          <button type="button" class="fsk-btn " id="fcbtn_生活資金" onclick="setToggle('fundCharHidden','fcbtn_',['余裕資金等','生活資金'],'生活資金')" style="width:80px;">生活資金</button>
+        </div>
+      </div>
+      <div style="width:1px;height:24px;background:#e2e8f0;margin:0 32px;"></div>
+      <div class="fsk-label" style="width:auto;">注文チャネル</div>
+      <div style="display:flex;align-items:center;">
+        <input type="hidden" name="order_channel" id="orderChannelHidden" value="営業店">
+        <div class="fsk-toggle">
+          <button type="button" class="fsk-btn is-active" id="ocbtn_営業店" onclick="setToggle('orderChannelHidden','ocbtn_',['営業店','本部'],'営業店')" style="width:80px;">営業店</button>
+          <button type="button" class="fsk-btn " id="ocbtn_本部" onclick="setToggle('orderChannelHidden','ocbtn_',['営業店','本部'],'本部')" style="width:80px;">本部</button>
+        </div>
+      </div>
+    </div>
+    <!-- 金銭受渡方法 -->
+    <div class="fsk-row">
+      <div class="fsk-label">金銭受渡方法</div>
+      <input type="hidden" name="payment_method" id="paymentMethodHidden" value="当社">
+      <div class="fsk-toggle">
+        <button type="button" class="fsk-btn is-active" id="pmbtn_当社" onclick="setToggle('paymentMethodHidden','pmbtn_',['当社','他社'],'当社')" style="width:80px;">当社</button>
+        <button type="button" class="fsk-btn " id="pmbtn_他社" onclick="setToggle('paymentMethodHidden','pmbtn_',['当社','他社'],'他社')" style="width:80px;">他社</button>
+      </div>
+    </div>
+
+    <hr class="fsk-sep">
+    <!-- 受注日 / 受注時刻 / 受注者 -->
+    <div class="fsk-row-2">
+      <div class="fsk-row" style="margin-bottom:0;">
+        <div class="fsk-label">受注日（MM/DD）</div>
+        <input type="text" name="order_date" value="09/01" class="fsk-input ui-code" style="width:100px;" placeholder="08/25" inputmode="numeric" maxlength="5" oninput="formatOrderDateInput(this)">
+      </div>
+      <div class="fsk-row" style="margin-bottom:0;">
+        <div class="fsk-label">受注時刻（HH:MM）</div>
+        <input type="text" name="order_time" value="00:37" class="fsk-input ui-code" style="width:100px;" placeholder="11:25" inputmode="numeric" maxlength="5" oninput="formatOrderTimeInput(this)">
+      </div>
+      <div class="fsk-row" style="margin-bottom:0;">
+        <div class="fsk-label">受注者</div>
+        <input type="text" name="order_person" value="001" class="fsk-input" style="width:100px;">
+      </div>
+    </div>
+    <!-- 強制区分 -->
+    <div class="fsk-row">
+      <div class="fsk-label">強制区分</div>
+      <div style="display:flex;align-items:center;margin-left:8px;gap:6px;">
+        <input type="checkbox" name="forced_approval" value="1"  style="width:16px;height:16px;">
+        
+      </div>
+    </div>
+
+    <div class="submit-area">
+      <button type="submit" class="btn-submit">送信</button>
+    </div>
+
+  </div>
+</form>
+
+
+<script>
+function setTradeType(val) {
+  document.getElementById('tradeTypeHidden').value = val;
+  var form = document.getElementById('fskForm');
+  form.classList.remove('theme-buy', 'theme-sell');
+  document.getElementById('btnBuy').classList.remove('is-active');
+  document.getElementById('btnSell').classList.remove('is-active');
+  if (val === '買') { form.classList.add('theme-buy');  document.getElementById('btnBuy').classList.add('is-active'); }
+  else if (val === '売') { form.classList.add('theme-sell'); document.getElementById('btnSell').classList.add('is-active'); }
+}
+function setCustodyType(val) {
+  document.getElementById('custodyTradeHidden').value = val;
+  ['特定','一般','NISA'].forEach(function(t){
+    var btn = document.getElementById('cbtn_' + t);
+    if (btn) btn.classList.toggle('is-active', t === val);
+  });
+}
+function setPriceType(val) {
+  document.getElementById('orderTypeHidden').value = val;
+  document.getElementById('pricebtn_market').classList.toggle('is-active', val === '成行');
+  document.getElementById('pricebtn_limit').classList.toggle('is-active', val === '指値');
+  var wrap = document.getElementById('limitPriceWrap');
+  var input = document.getElementById('limitPriceInput');
+  var isLimit = val === '指値';
+  wrap.style.display = isLimit ? 'flex' : 'none';
+  input.required = isLimit;
+  if (!isLimit) input.value = '';
+}
+function setExecutionMethod(val) {
+  document.getElementById('executionMethodHidden').value = val;
+  ['通常', 'VWAP'].forEach(function(method) {
+    document.getElementById('executionbtn_' + method).classList.toggle('is-active', method === val);
+  });
+}
+function setToggle(hiddenId, btnPrefix, options, val) {
+  document.getElementById(hiddenId).value = val;
+  options.forEach(function(o){
+    var btn = document.getElementById(btnPrefix + o);
+    if (btn) btn.classList.toggle('is-active', o === val);
+  });
+}
+function formatQuantityInput(input) {
+  var digits = input.value.replace(/[^0-9]/g, '');
+  input.value = digits ? Number(digits).toLocaleString('en-US') : '';
+}
+function formatOrderDateInput(input) {
+  var digits = input.value.replace(/[^0-9]/g, '').slice(0, 4);
+  input.value = digits.length > 2 ? digits.slice(0, 2) + '/' + digits.slice(2) : digits;
+}
+function formatOrderTimeInput(input) {
+  var digits = input.value.replace(/[^0-9]/g, '').slice(0, 4);
+  input.value = digits.length > 2 ? digits.slice(0, 2) + ':' + digits.slice(2) : digits;
+}
+(function(){
+  var v = document.getElementById('tradeTypeHidden').value;
+  if (v) setTradeType(v);
+  var c = document.getElementById('custodyTradeHidden').value;
+  if (c) setCustodyType(c);
+  var priceType = document.getElementById('orderTypeHidden').value;
+  if (priceType) setPriceType(priceType);
+  var executionMethod = document.getElementById('executionMethodHidden').value;
+  if (executionMethod) setExecutionMethod(executionMethod);
+  // 売買未選択時はデフォルトのis-activeを除去
+  if (!v) {
+    document.getElementById('btnBuy').classList.remove('is-active');
+    document.getElementById('btnSell').classList.remove('is-active');
+  }
+})();
+
+var _lookupTimer = null;
+function lookupCustomer() {
+  clearTimeout(_lookupTimer);
+  var branch  = document.getElementById('branchCode').value.trim();
+  var account = document.getElementById('accountNumber').value.trim();
+  var hint    = document.getElementById('accountNameHint');
+  if (!account) { hint.textContent = ''; hint.className = 'account-name-hint'; return; }
+  _lookupTimer = setTimeout(function() {
+    fetch('/api/customer-lookup?branch=' + encodeURIComponent(branch) + '&account=' + encodeURIComponent(account))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.name) { hint.textContent = d.name; hint.className = 'account-name-hint'; }
+        else { hint.textContent = '該当なし'; hint.className = 'account-name-hint not-found'; }
+      })
+      .catch(function(){ hint.textContent = ''; });
+  }, 400);
+}
+var _symbolTimer = null;
+function lookupSymbol() {
+  clearTimeout(_symbolTimer);
+  var ticker = document.getElementById('symbolInput').value.trim().toUpperCase();
+  var hint   = document.getElementById('stockNameHint');
+  var hidden = document.getElementById('stockNameHidden');
+  if (!ticker) { hint.textContent = ''; hint.className = 'account-name-hint'; hidden.value = ''; return; }
+  _symbolTimer = setTimeout(function() {
+    fetch('/api/symbol-lookup?ticker=' + encodeURIComponent(ticker))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.name) {
+          hint.textContent = d.name;
+          hint.className = 'account-name-hint';
+          hidden.value = d.name;
+        } else {
+          hint.textContent = '銘柄なし';
+          hint.className = 'account-name-hint not-found';
+          hidden.value = '';
+        }
+      })
+      .catch(function(){ hint.textContent = ''; });
+  }, 400);
+}
+</script>
+
+
+    </main>
+  </div>
+</div>
+
+<script>
+  function updateMarketStatus() {
+    var el = document.getElementById('market-status');
+    if (!el) return;
+    var now = new Date();
+    var ny = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    var t = ny.getHours() * 60 + ny.getMinutes();
+    var status, color;
+    if (t >= 240 && t < 570) { status = '● Pre-Market'; color = '#d97706'; }
+    else if (t >= 570 && t < 960) { status = '● Regular'; color = '#059669'; }
+    else if (t >= 960 && t < 1200) { status = '● After-Hours'; color = '#7c3aed'; }
+    else { status = '○ Closed'; color = '#9ca3af'; }
+    el.textContent = status;
+    el.style.color = color;
+  }
+  updateMarketStatus();
+  setInterval(updateMarketStatus, 60000);
+</script>
+
+<script>
+function setTradeType(val) {
+  document.getElementById('tradeTypeHidden').value = val;
+  var form = document.getElementById('fskForm');
+  form.classList.remove('theme-buy', 'theme-sell');
+  document.getElementById('btnBuy').classList.remove('is-active');
+  document.getElementById('btnSell').classList.remove('is-active');
+  if (val === '買') { form.classList.add('theme-buy');  document.getElementById('btnBuy').classList.add('is-active'); }
+  else if (val === '売') { form.classList.add('theme-sell'); document.getElementById('btnSell').classList.add('is-active'); }
+}
+function setCustodyType(val) {
+  document.getElementById('custodyTradeHidden').value = val;
+  ['特定','一般','NISA'].forEach(function(t){
+    var btn = document.getElementById('cbtn_' + t);
+    if (btn) btn.classList.toggle('is-active', t === val);
+  });
+}
+function setPriceType(val) {
+  document.getElementById('orderTypeHidden').value = val;
+  document.getElementById('pricebtn_market').classList.toggle('is-active', val === '成行');
+  document.getElementById('pricebtn_limit').classList.toggle('is-active', val === '指値');
+  var wrap = document.getElementById('limitPriceWrap');
+  var input = document.getElementById('limitPriceInput');
+  var isLimit = val === '指値';
+  wrap.style.display = isLimit ? 'flex' : 'none';
+  input.required = isLimit;
+  if (!isLimit) input.value = '';
+}
+function setExecutionMethod(val) {
+  document.getElementById('executionMethodHidden').value = val;
+  ['通常', 'VWAP'].forEach(function(method) {
+    document.getElementById('executionbtn_' + method).classList.toggle('is-active', method === val);
+  });
+}
+function setToggle(hiddenId, btnPrefix, options, val) {
+  document.getElementById(hiddenId).value = val;
+  options.forEach(function(o){
+    var btn = document.getElementById(btnPrefix + o);
+    if (btn) btn.classList.toggle('is-active', o === val);
+  });
+}
+function formatQuantityInput(input) {
+  var digits = input.value.replace(/[^0-9]/g, '');
+  input.value = digits ? Number(digits).toLocaleString('en-US') : '';
+}
+function formatOrderDateInput(input) {
+  var digits = input.value.replace(/[^0-9]/g, '').slice(0, 4);
+  input.value = digits.length > 2 ? digits.slice(0, 2) + '/' + digits.slice(2) : digits;
+}
+function formatOrderTimeInput(input) {
+  var digits = input.value.replace(/[^0-9]/g, '').slice(0, 4);
+  input.value = digits.length > 2 ? digits.slice(0, 2) + ':' + digits.slice(2) : digits;
+}
+(function(){
+  var v = document.getElementById('tradeTypeHidden').value;
+  if (v) setTradeType(v);
+  var c = document.getElementById('custodyTradeHidden').value;
+  if (c) setCustodyType(c);
+  var priceType = document.getElementById('orderTypeHidden').value;
+  if (priceType) setPriceType(priceType);
+  var executionMethod = document.getElementById('executionMethodHidden').value;
+  if (executionMethod) setExecutionMethod(executionMethod);
+  // 売買未選択時はデフォルトのis-activeを除去
+  if (!v) {
+    document.getElementById('btnBuy').classList.remove('is-active');
+    document.getElementById('btnSell').classList.remove('is-active');
+  }
+})();
+
+var _lookupTimer = null;
+function lookupCustomer() {
+  clearTimeout(_lookupTimer);
+  var branch  = document.getElementById('branchCode').value.trim();
+  var account = document.getElementById('accountNumber').value.trim();
+  var hint    = document.getElementById('accountNameHint');
+  if (!account) { hint.textContent = ''; hint.className = 'account-name-hint'; return; }
+  _lookupTimer = setTimeout(function() {
+    fetch('/api/customer-lookup?branch=' + encodeURIComponent(branch) + '&account=' + encodeURIComponent(account))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.name) { hint.textContent = d.name; hint.className = 'account-name-hint'; }
+        else { hint.textContent = '該当なし'; hint.className = 'account-name-hint not-found'; }
+      })
+      .catch(function(){ hint.textContent = ''; });
+  }, 400);
+}
+var _symbolTimer = null;
+function lookupSymbol() {
+  clearTimeout(_symbolTimer);
+  var ticker = document.getElementById('symbolInput').value.trim().toUpperCase();
+  var hint   = document.getElementById('stockNameHint');
+  var hidden = document.getElementById('stockNameHidden');
+  if (!ticker) { hint.textContent = ''; hint.className = 'account-name-hint'; hidden.value = ''; return; }
+  _symbolTimer = setTimeout(function() {
+    fetch('/api/symbol-lookup?ticker=' + encodeURIComponent(ticker))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.name) {
+          hint.textContent = d.name;
+          hint.className = 'account-name-hint';
+          hidden.value = d.name;
+        } else {
+          hint.textContent = '銘柄なし';
+          hint.className = 'account-name-hint not-found';
+          hidden.value = '';
+        }
+      })
+      .catch(function(){ hint.textContent = ''; });
+  }, 400);
+}
+</script>
+
+<script
+			defer
+			data-domain="manus.space"
+			src="https://plausible.io/js/script.file-downloads.hash.outbound-links.pageview-props.revenue.tagged-events.js"
+		></script>
+		<script>
+			window.plausible =
+				window.plausible ||
+				function () {
+					(window.plausible.q = window.plausible.q || []).push(arguments);
+				};
+			plausible('custom-pageview', {
+			  props: {
+    			domain: window.location.host
+  			}
+			})
+		</script></body>
+</html>

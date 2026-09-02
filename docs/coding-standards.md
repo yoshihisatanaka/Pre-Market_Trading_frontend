@@ -15,6 +15,13 @@ Vue 公式スタイルガイドの **優先度 A（必須）/ B（強く推奨�
 - `v-for` には必ず一意な `:key` を付ける
 - `v-if` と `v-for` を同一要素に書かない
 - props はオブジェクト記法で `type` を必ず書き、必須でないものには `default` を書く（`vue/require-default-prop`）
+- **入力部品の `v-model` は `defineModel()` で書く。** `modelValue` prop と `update:modelValue` emit を
+  手書きしない（見本: [BaseInput.vue](../frontend/src/components/ui/BaseInput.vue)）
+- **ラベルと入力の紐付けは [FormField](../frontend/src/components/ui/FormField.vue) に任せる。**
+  `useId()` で作った `id` / `required` / `invalid` / `aria-describedby` を scoped slot の `field` として渡すので、
+  入力側は `v-bind="field"` するだけでよい。画面が `id` を自前で採番しないこと
+- 幅・`inputmode`・`maxlength` のような個別指定は汎用部品の props にせず、
+  フォールスルー属性（`class` / `style` / `$attrs`）で呼び出し側から渡す
 - スコープの狭いスタイルは `<style scoped>`。グローバルスタイルは `src/assets/styles/` にのみ置く
 - **画面（views）は `<h1>` を持たない。** 画面タイトルは `router/index.js` の `meta.title` を
   [AppHeader](../frontend/src/components/layout/AppHeader.vue) が表示する（見出しが二重になると E2E の
@@ -153,3 +160,20 @@ docker compose run --rm frontend npm i <package>   # 依存追加もコンテナ
 ```
 
 コミット前に最低限 `lint` と `test:unit` を通すこと。
+
+---
+
+## 8. Markdown の書きかた
+
+**コードブロックには必ず言語を指定する。** 言語指定が無いとシンタックスハイライトが効かず読みづらい。
+`docs/` 配下の文書・回答テキストのどちらでも同じ。
+
+````markdown
+```js
+const order = toOrder(res.data)
+```
+````
+
+よく使う指定子: `js` / `vue` / `css` / `html` / `json` / `yaml` / `powershell` / `bash` / `markdown` / `text`。
+シェルは実行環境に合わせて `powershell`（ホスト）と `bash`（コンテナ内スクリプト）を使い分ける。
+ディレクトリ図や表示例など該当する言語が無い場合は `text` を付ける（空のままにしない）。

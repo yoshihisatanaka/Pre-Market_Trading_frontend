@@ -17,12 +17,37 @@
   --color-primary-hover: #2c3848;
   --color-primary-contrast: #ffffff;
   --color-success: #276749;
+  --color-success-hover: #22543d;
   --color-danger: #e53e3e;
+  --color-danger-hover: #c53030;
   --color-warning: #92400e;
 
-  /* 売買方向（米国株注文ドメイン） */
-  --color-buy: #128a5c;
-  --color-sell: #c0392b;
+  /* 状態色の淡色面（アラート / バッジ） */
+  --color-danger-bg: #fff5f5;
+  --color-danger-border: #fed7d7;
+  --color-danger-text: #c53030; /* 淡色面の上に置く濃いめの赤 */
+  --color-success-bg: #f0fff4;
+  --color-success-border: #c6f6d5;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fef3c7;
+  --color-info-bg: #ebf8ff;
+  --color-info-border: #bee3f8;
+  --color-info-text: #2b6cb0;
+
+  /* フォーム */
+  --color-input-border: #cbd5e0;
+  --color-input-underline: #a0aec0; /* 下線だけの入力（注文入力画面） */
+  --color-input-placeholder: #a0aec0;
+  --color-label: #4b5b6c;
+  --shadow-focus-ring: 0 0 0 3px rgba(24, 34, 48, 0.16);
+
+  /* 売買方向（米国株注文ドメイン）。モックに合わせ 買=赤 / 売=青 */
+  --color-buy: #c53030;
+  --color-buy-hover: #9b2c2c;
+  --color-buy-strong: #e53e3e; /* トグル選択時など、面で塗るとき */
+  --color-sell: #2b6cb0;
+  --color-sell-hover: #2c5282;
+  --color-sell-strong: #3182ce;
 
   /* サイドバー（濃色。上の面用トークンとは別系統で持つ） */
   --color-sidebar-bg: #182230;
@@ -63,4 +88,6 @@
   --radius-sm: 6px;
   --radius-md: 8px;
   --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.04);
+  --shadow-modal: 0 8px 40px rgba(0, 0, 0, 0.18);
+  --color-overlay: rgba(0, 0, 0, 0.45); /* モーダルの背後を覆う幕 */
 }

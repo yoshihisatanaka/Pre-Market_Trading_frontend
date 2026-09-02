@@ -71,9 +71,58 @@
       "mcp__playwright__browser_select_option",
       "mcp__playwright__browser_drag",
       "mcp__playwright__browser_drop"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.development)",
+      "Read(**/.env.production)",
+      "Read(**/.env.test)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.p12)",
+      "Read(**/*.pfx)",
+      "Read(**/*.jks)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Read(**/.npmrc)",
+      "Read(**/secrets/**)",
+      "Read(//./private-data/**)",
+      "Edit(**/.env)",
+      "Edit(**/.env.local)",
+      "Edit(**/.env.development)",
+      "Edit(**/.env.production)",
+      "Edit(**/.env.test)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)",
+      "Edit(**/*.p12)",
+      "Edit(**/*.pfx)",
+      "Edit(**/*.jks)",
+      "Edit(**/id_rsa*)",
+      "Edit(**/id_ed25519*)",
+      "Edit(**/.npmrc)",
+      "Edit(**/secrets/**)",
+      "Edit(//./private-data/**)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "PowerShell(git push --force*)",
+      "PowerShell(git push -f*)"
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Glob|Grep|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard-secret-paths.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

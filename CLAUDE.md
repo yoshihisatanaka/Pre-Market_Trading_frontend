@@ -7,16 +7,45 @@
 1. **ホストに Node.js / npm は無い。** すべてのコマンドは `docker compose run --rm frontend ...` 経由で実行する。
    ホストで `npm` / `npx` / `node` を直接叩かない（存在しないので必ず失敗する）。
 2. **TypeScript を導入しない。** JavaScript のまま書く。`.ts` / `.tsx` ファイルを作らない。
-3. **実装前に [docs/coding-standards.md](docs/coding-standards.md) を読む。**
+3. **Markdown のコードブロックには必ず言語を指定する。** ` ```js ` / ` ```vue ` / ` ```powershell ` など。
+   該当する言語が無いときも ` ```text ` を付け、無指定にしない（ハイライトが効かず読みづらい）。
+   `docs/` 配下の文書でも、チャットの回答でも同じ。詳細は
+   [docs/coding-standards.md](docs/coding-standards.md) の「8. Markdown の書きかた」。
+4. **実装前に [docs/coding-standards.md](docs/coding-standards.md) を読む。**
    別メンバによるコードレビューが無いため、規約違反はそのまま残る。
-4. コードを書き終えたら **必ず** 次を実行して通す:
-   ```
+5. コードを書き終えたら **必ず** 次を実行して通す:
+   ```powershell
    docker compose run --rm frontend npm run lint
    docker compose run --rm frontend npm run test:unit
    docker compose run --rm frontend npm run check:scenarios
    ```
    lint はターン終了時の Stop フック（`.claude/hooks/lint-on-stop.sh`）でも自動実行され、失敗すると差し戻される。
    ただし **unit / E2E は自動では走らない**。画面を追加・変更したら E2E（`docker compose run --rm e2e npx playwright test`）も手動で回す。
+
+## 読ませないファイル
+
+機密パスは 2 層で遮断してある。**拒否されたら迂回しない。**
+別のコマンド・別のツールで読み直さず、何を読もうとして止められたかをユーザに伝えて手を止める。
+
+| 層 | 実体 | 守備範囲 |
+|---|---|---|
+| deny ルール | `.claude/settings.json` の `permissions.deny` | `Read` / `Glob` / `Grep` / `Edit` に対するパス指定 |
+| PreToolUse フック | `.claude/hooks/guard-secret-paths.sh` | 上記に加えて **Bash / PowerShell のコマンド文字列**（`cat` / `Get-Content` / `sed` / `docker cp` 等の抜け道） |
+
+対象は `.env` 系（`.env.example` は除く）、秘密鍵・証明書（`*.pem` / `*.key` / `id_rsa` 等）、
+`.ssh` / `.aws` などの認証情報ディレクトリ、および**プロジェクト外の絶対パス**
+（例外はスクラッチパッドと `~/.claude/`）。
+
+読ませたくないものが増えたら **`settings.json` の `deny` とフックの両方**に足す。
+フックの動作確認は手動実行できる:
+
+```bash
+echo '{"tool_name":"Bash","tool_input":{"command":"cat some/secret/path"}}' \
+  | bash .claude/hooks/guard-secret-paths.sh
+```
+
+なお設定は事故防止であって隔離ではない。**本当に読まれてはいけない値は
+ワークツリーに置かない**（秘密管理側かリポジトリ外に置く）のが本筋。
 
 ## レイヤ規約（違反しやすいので再掲）
 

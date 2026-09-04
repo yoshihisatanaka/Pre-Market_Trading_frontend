@@ -17,6 +17,13 @@ const routes = [
     meta: { title: 'UI カタログ' },
   },
   {
+    // path は navigation.js（サイドメニュー）の項目と一致させる
+    path: '/masters/market-holidays',
+    name: 'market-holiday-list',
+    component: () => import('@/views/MarketHolidayListView.vue'),
+    meta: { title: '海外休場日マスタ' },
+  },
+  {
     // 最初の画面以外は遅延 import にして初期バンドルを膨らませない
     path: '/:pathMatch(.*)*',
     name: 'not-found',

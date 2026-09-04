@@ -16,11 +16,16 @@ defineProps({
     type: String,
     default: 'id',
   },
+  // カード（BaseCard flush）の中に敷くとき、枠線・角丸・影が二重になるのを避ける
+  flat: {
+    type: Boolean,
+    default: false,
+  },
 })
 </script>
 
 <template>
-  <div class="data-table">
+  <div :class="['data-table', { 'is-flat': flat }]">
     <table>
       <thead>
         <tr>
@@ -49,6 +54,12 @@ defineProps({
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
+}
+
+.data-table.is-flat {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 th,

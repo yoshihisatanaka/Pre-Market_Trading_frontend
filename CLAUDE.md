@@ -119,6 +119,8 @@ views / components  →  stores  →  api  →  (HTTP)
 
 - **使う前に `docker compose up -d frontend` が必要。** MCP コンテナは compose の
   ネットワーク `us-stock-order-frontend_default` に参加して動くため、frontend が落ちていると接続できない
+  （この名前は `docker-compose.yml` の `name:` 固定値。リポジトリ名 `Pre-Market_Trading_frontend` や
+  ディレクトリ名とは意図的に別物なので、旧名のまま揃えなくてよい）
 - 接続先は **`http://frontend:5173`**（`localhost:5173` ではない。コンテナ間通信のため）
 - MSW はブラウザ側で動くので、バックエンド未実装のままでも画面はモックデータで描画される
 - Docker 版は **headless chromium のみ**（Firefox / WebKit は使えない）

@@ -2,6 +2,8 @@
 # Docker ネットワーク名 us-stock-order-frontend_default はここで決まり、
 # .mcp.json の --network がこれを参照する。
 # ディレクトリ名を変えてもネットワーク名がずれないように明示している。
+# リポジトリ名は Pre-Market_Trading_frontend だが、この compose 名は旧名のまま据え置く。
+# 変えると既存のネットワークと named volume（node_modules）が作り直しになるため。
 name: us-stock-order-frontend
 
 services:

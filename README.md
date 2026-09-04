@@ -1,4 +1,4 @@
-# us-stock-order-frontend
+# Pre-Market_Trading_frontend
 
 米国株注文システムの**フロントエンド**（Vue 3 + Vite / JavaScript）。
 バックエンドは**別リポジトリ・別サーバ**で動き、HTTP 経由でのみ結合する
@@ -86,6 +86,9 @@ E2E のセレクタ調査や、画面の 4 状態（ローディング / エラ�
 設定はリポジトリ直下の `.mcp.json`（コミット済み）。
 MCP コンテナが参加する Docker ネットワーク名 `us-stock-order-frontend_default` は
 `docker-compose.yml` の `name:` で固定してあるので、リポジトリのディレクトリ名を変えてもずれない。
+この名前はリポジトリ名 `Pre-Market_Trading_frontend` とは**意図的に別物**で、旧名のまま据え置いている
+（既存のネットワークと named volume を壊さないため）。改名したくなったら `docker-compose.yml` の
+`name:` と `.mcp.json` の `--network` を同時に変え、`docker compose down -v` からやり直す。
 
 ### 実行方法
 

@@ -52,7 +52,7 @@ normalize() {
   printf '%s' "$1" | tr 'A-Z' 'a-z' | tr '\\' '/' | sed 's|//*|/|g'
 }
 
-project=$(normalize "${CLAUDE_PROJECT_DIR:-c:/Users/0036/dev/us-stock-order-frontend}")
+project=$(normalize "${CLAUDE_PROJECT_DIR:-c:/Users/0036/dev/Pre-Market_Trading_frontend}")
 # Git Bash 形式（/c/users/...）と Windows 形式（c:/users/...）の両方を許可する。
 project_msys=$(printf '%s' "$project" | sed 's|^\([a-z]\):|/\1|')
 

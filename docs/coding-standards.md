@@ -163,6 +163,8 @@ docker compose run --rm frontend npm i <package>   # 依存追加もコンテナ
 
 コミット前に最低限 `lint` と `test:unit` を通すこと。
 
+作業ブランチの名前は [CLAUDE.md](../CLAUDE.md) の「Git ブランチ」節に従う。
+
 ---
 
 ## 8. Markdown の書きかた

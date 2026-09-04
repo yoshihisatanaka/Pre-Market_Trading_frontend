@@ -48,6 +48,30 @@ echo '{"tool_name":"Bash","tool_input":{"command":"cat some/secret/path"}}' \
 なお設定は事故防止であって隔離ではない。**本当に読まれてはいけない値は
 ワークツリーに置かない**（秘密管理側かリポジトリ外に置く）のが本筋。
 
+## Git ブランチ
+
+```text
+<type>/<kebab-case の短い説明>
+```
+
+- `<type>` は**コミットメッセージと同じ語彙**から、その作業の**主目的**にあたるものを 1 つ選ぶ:
+  `feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `style`
+- 説明は英小文字・数字・ハイフンのみ。2〜4 語、目安 30 文字以内
+- 日本語・大文字・アンダースコア・末尾スラッシュは使わない
+- 1 ブランチ = 1 目的。**コミットは何本あってもよい**。バグ修正に伴うテスト追加やドキュメント更新は、
+  同じブランチで `fix:` → `test:` → `docs:` と type を変えてコミットしてよい（ブランチは `fix/...` のまま）
+- 目的そのものが変わったとき（例: 修正と無関係な画面を作り始めた）だけブランチを切り直す
+- ベースは常に `main`。**`main` に直接コミットしない**。作業前に `git switch -c <type>/<説明>` で切り、
+  終わったら `main` にマージしてブランチを削除する
+
+```text
+feat/order-list-view
+fix/sidebar-active-state
+docs/branch-naming
+refactor/api-client-layer
+chore/deps-update
+```
+
 ## レイヤ規約（違反しやすいので再掲）
 
 ```

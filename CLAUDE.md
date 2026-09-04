@@ -10,7 +10,7 @@
 2. **TypeScript を導入しない。** JavaScript のまま書く。`.ts` / `.tsx` ファイルを作らない。
 3. **Markdown のコードブロックには必ず言語を指定する。** ` ```js ` / ` ```vue ` / ` ```powershell ` など。
    該当する言語が無いときも ` ```text ` を付け、無指定にしない（ハイライトが効かず読みづらい）。
-   `docs/` 配下の文書でも、チャットの回答でも同じ。詳細は
+   `docs/` 配下の文書でも、チャットの回答でも、**プランモードで提示するプラン**でも同じ。詳細は
    [docs/coding-standards.md](docs/coding-standards.md) の「8. Markdown の書きかた」。
 4. **実装前に [docs/coding-standards.md](docs/coding-standards.md) を読む。**
    別メンバによるコードレビューが無いため、規約違反はそのまま残る。

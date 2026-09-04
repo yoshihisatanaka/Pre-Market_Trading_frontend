@@ -4,6 +4,9 @@ node_modules/
 # build output
 dist/
 
+# Vite の依存事前バンドルキャッシュ
+.vite/
+
 # env（.env.example のみコミットする）
 .env
 .env.*

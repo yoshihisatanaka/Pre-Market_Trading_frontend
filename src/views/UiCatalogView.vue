@@ -12,6 +12,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
 import BaseSegmentedControl from '@/components/ui/BaseSegmentedControl.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import FileDropZone from '@/components/ui/FileDropZone.vue'
@@ -43,6 +44,7 @@ const side = ref('買')
 const forced = ref(false)
 const csvFile = ref(null)
 const isModalOpen = ref(false)
+const pageOffset = ref(50)
 </script>
 
 <template>
@@ -149,6 +151,16 @@ const isModalOpen = ref(false)
           <BaseButton variant="danger" @click="isModalOpen = false">削除する</BaseButton>
         </template>
       </BaseModal>
+    </BaseCard>
+
+    <BaseCard title="ページャー">
+      <div class="catalog__stack">
+        <!-- offset で受け渡しする。v-model:offset でも @update:offset でも受けられる -->
+        <BasePagination v-model:offset="pageOffset" :total="620" :limit="50" />
+        <!-- 1 ページに収まるときはボタンを出さず件数だけ -->
+        <BasePagination :total="8" :limit="50" :offset="0" />
+        <BasePagination :total="620" :limit="50" :offset="pageOffset" disabled />
+      </div>
     </BaseCard>
   </div>
 </template>

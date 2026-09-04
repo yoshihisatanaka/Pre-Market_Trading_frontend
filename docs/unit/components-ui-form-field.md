@@ -1,8 +1,8 @@
 # components/ui/FormField（フォーム1項目の器）
 
 - 略号: `FLD`
-- 対象: `frontend/src/components/ui/FormField.vue`
-- テスト: `frontend/src/components/ui/FormField.spec.js`
+- 対象: `src/components/ui/FormField.vue`
+- テスト: `src/components/ui/FormField.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

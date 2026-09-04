@@ -1,8 +1,8 @@
 # components/ui/BaseSegmentedControl（排他選択のボタン列）
 
 - 略号: `BSC`
-- 対象: `frontend/src/components/ui/BaseSegmentedControl.vue`
-- テスト: `frontend/src/components/ui/BaseSegmentedControl.spec.js`
+- 対象: `src/components/ui/BaseSegmentedControl.vue`
+- テスト: `src/components/ui/BaseSegmentedControl.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

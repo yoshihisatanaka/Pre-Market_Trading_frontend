@@ -1,8 +1,8 @@
 # components/ui/BaseCard（カード）
 
 - 略号: `BCD`
-- 対象: `frontend/src/components/ui/BaseCard.vue`
-- テスト: `frontend/src/components/ui/BaseCard.spec.js`
+- 対象: `src/components/ui/BaseCard.vue`
+- テスト: `src/components/ui/BaseCard.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

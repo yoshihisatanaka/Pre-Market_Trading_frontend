@@ -1,0 +1,31 @@
+node_modules
+dist
+**/.env
+**/.env.*
+!.env.example
+test-results
+playwright-report
+blob-report
+coverage
+*.log
+
+# ---- ルート平坦化に伴う追加 ----
+# ビルドコンテキストが frontend/ からリポジトリルートに変わり、
+# これまで存在しなかったものが COPY . . の対象に入るようになった。
+# アプリのビルド(vite build)に不要なものは送らない。
+# 特に docs/api/ はバックエンドから受領した仕様書のコピーを置くため、イメージに焼かない。
+#
+# 補足: docs/ を除外するので build ステージのイメージ内では check:scenarios を実行できない。
+# frontend / e2e サービスは .:/app のバインドマウントで動くので実運用には影響しない。
+.git
+.gitignore
+.gitattributes
+.editorconfig
+.idea
+.claude
+.mcp.json
+.playwright-mcp
+docker-compose.yml
+docs
+README.md
+CLAUDE.md

@@ -4,9 +4,11 @@
 
 ## 0. 前提
 
-- 原本は `docs/api/` 直下に **無加工**で置く（形式は問わない: Excel / Markdown / PDF / Word）
-- 変換後の `openapi.yaml` を **唯一の正**とする。原本と食い違ったらバックエンド担当に確認し、**両方を直す**
-- レスポンスのキー名（snake_case など）は **バックエンドの表記のまま**書く。camelCase への変換は `frontend/src/api/` で行う
+- 受領したコピーは `docs/api/` 直下に **無加工**で置く（形式は問わない: Excel / Markdown / PDF / Word）。
+  **仕様そのものの正はバックエンド側リポジトリの原本**で、ここに置くのはその受領コピー
+- 変換後の `openapi.yaml` を **フロント実装上の正**とする。受領コピーと食い違ったらバックエンド担当に確認し、
+  バックエンド側の原本を直してもらったうえで受領し直す（→ [README.md](README.md)）
+- レスポンスのキー名（snake_case など）は **バックエンドの表記のまま**書く。camelCase への変換は `src/api/` で行う
 
 ## 1. 変換の実行（Claude Code スキル）
 
@@ -51,9 +53,9 @@ lint のルールは [redocly.yaml](redocly.yaml) で調整する。
 
 順番どおりに行う。**各ステップ後に `docker compose run --rm frontend npm run test:unit` が通ること。**
 
-1. **fixtures** — `openapi.yaml` の `example` を `frontend/src/mocks/fixtures/<リソース>.js` に写す（生の形のまま）
-2. **api 層** — `frontend/src/api/<リソース>.js` にエンドポイント1つにつき関数を1つ追加。レスポンスを camelCase のアプリ内モデルへ変換する `toXxx()` を書く
-3. **handlers** — `frontend/src/mocks/handlers/index.js` に、そのエンドポイントの MSW ハンドラを追加（fixtures を返すだけ）
+1. **fixtures** — `openapi.yaml` の `example` を `src/mocks/fixtures/<リソース>.js` に写す（生の形のまま）
+2. **api 層** — `src/api/<リソース>.js` にエンドポイント1つにつき関数を1つ追加。レスポンスを camelCase のアプリ内モデルへ変換する `toXxx()` を書く
+3. **handlers** — `src/mocks/handlers/index.js` に、そのエンドポイントの MSW ハンドラを追加（fixtures を返すだけ）
 4. **store / composable** — 画面が必要とする状態と取得関数を追加
 5. **view** — 画面を実装。ローディング / エラー / 空 / データあり の4状態を出し分ける
 6. **テスト** — store の spec、画面の spec、E2E を1本ずつ
@@ -64,8 +66,8 @@ lint のルールは [redocly.yaml](redocly.yaml) で調整する。
 
 | 仮仕様（現在） | 該当ファイル | 確認すること |
 |---|---|---|
-| `GET /api/orders` → `{ items: Order[], total: number }` | `frontend/src/api/orders.js`, `frontend/src/mocks/fixtures/orders.js` | パス・ページング形式・キー名 |
-| `Order.side` = `buy` / `sell` | `frontend/src/views/OrderListView.vue`（`sideLabels`） | 実際の売買区分の値 |
-| `Order.status` = `working` / `filled` / `canceled` / `rejected` | `frontend/src/views/OrderListView.vue`（`statusLabels`） | 実際の注文状態の値と表示名 |
-| `Order.ordered_at` = ISO 8601 (UTC) | `frontend/src/api/orders.js`（`toOrder`）, `frontend/src/utils/format.js` | 形式とタイムゾーン |
-| エラー応答 = `{ message, code }` | `frontend/src/api/client.js`（`normalizeError`） | 実際のエラー形式 |
+| `GET /api/orders` → `{ items: Order[], total: number }` | `src/api/orders.js`, `src/mocks/fixtures/orders.js` | パス・ページング形式・キー名 |
+| `Order.side` = `buy` / `sell` | `src/views/OrderListView.vue`（`sideLabels`） | 実際の売買区分の値 |
+| `Order.status` = `working` / `filled` / `canceled` / `rejected` | `src/views/OrderListView.vue`（`statusLabels`） | 実際の注文状態の値と表示名 |
+| `Order.ordered_at` = ISO 8601 (UTC) | `src/api/orders.js`（`toOrder`）, `src/utils/format.js` | 形式とタイムゾーン |
+| エラー応答 = `{ message, code }` | `src/api/client.js`（`normalizeError`） | 実際のエラー形式 |

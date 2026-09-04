@@ -1,8 +1,8 @@
 # components/ui/BaseCheckbox（単独チェックボックス）
 
 - 略号: `BCK`
-- 対象: `frontend/src/components/ui/BaseCheckbox.vue`
-- テスト: `frontend/src/components/ui/BaseCheckbox.spec.js`
+- 対象: `src/components/ui/BaseCheckbox.vue`
+- テスト: `src/components/ui/BaseCheckbox.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

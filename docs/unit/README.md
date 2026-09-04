@@ -61,6 +61,6 @@ E2E と単体の両方を検査する。
 
 ## 見本
 
-- [stores-orders.md](stores-orders.md) ↔ `frontend/src/stores/orders.spec.js`（ストア）
-- [components-ui-data-table.md](components-ui-data-table.md) ↔ `frontend/src/components/ui/DataTable.spec.js`（汎用部品）
-- [views-order-list-view.md](views-order-list-view.md) ↔ `frontend/src/views/OrderListView.spec.js`（画面）
+- [stores-orders.md](stores-orders.md) ↔ `src/stores/orders.spec.js`（ストア）
+- [components-ui-data-table.md](components-ui-data-table.md) ↔ `src/components/ui/DataTable.spec.js`（汎用部品）
+- [views-order-list-view.md](views-order-list-view.md) ↔ `src/views/OrderListView.spec.js`（画面）

@@ -1,34 +1,42 @@
+# compose プロジェクト名を固定する（既定のディレクトリ名由来にしない）。
+# Docker ネットワーク名 us-stock-order-frontend_default はここで決まり、
+# .mcp.json の --network がこれを参照する。
+# ディレクトリ名を変えてもネットワーク名がずれないように明示している。
+name: us-stock-order-frontend
+
 services:
   frontend:
     build:
-      context: ./frontend
+      context: .
       target: dev
     working_dir: /app
     command: npm run dev
     ports:
-      - "5173:5173"
+      - '5173:5173'
     volumes:
-      - ./frontend:/app
+      # リポジトリ全体をマウントする。docs/ も /app/docs として見えるため、
+      # npm run check:scenarios はここからシナリオ文書を読む（別マウントは不要）。
+      - .:/app
       # ホスト(Windows)の node_modules とバインドが衝突しないよう named volume で上書きする
-      - frontend_node_modules:/app/node_modules
-      # シナリオ文書（npm run check:scenarios が読む）
-      - ./docs/e2e:/docs/e2e:ro
-      - ./docs/unit:/docs/unit:ro
-    # VITE_* は Vite 自身が frontend/.env から読み込むため、ここでは渡さない。
+      - node_modules:/app/node_modules
+    # Vite proxy の既定転送先 host.docker.internal をコンテナから解決させる。
+    # Docker Desktop(Windows/macOS) は既定で解決できるが、Linux の Docker Engine では
+    # 解決できないため明示する（Desktop 側でもこの指定は無害）。
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    # VITE_* は Vite 自身が .env から読み込むため、ここでは渡さない。
     # compose の environment: を併記すると env_file より優先され、
-    # frontend/.env での切り替え（VITE_ENABLE_MSW など）が効かなくなる。
+    # .env での切り替え（VITE_ENABLE_MSW など）が効かなくなる。
 
   # Playwright はブラウザ同梱の公式イメージを使う（alpine では動作しない）
-  # イメージのタグと frontend/package.json の @playwright/test は必ず同じバージョンに揃えること
+  # イメージのタグと package.json の @playwright/test は必ず同じバージョンに揃えること
   e2e:
     image: mcr.microsoft.com/playwright:v1.62.1-noble
     working_dir: /app
     command: npx playwright test
     volumes:
-      - ./frontend:/app
-      - frontend_node_modules:/app/node_modules
-      - ./docs/e2e:/docs/e2e:ro
-      - ./docs/unit:/docs/unit:ro
+      - .:/app
+      - node_modules:/app/node_modules
     environment:
       - E2E_BASE_URL=http://frontend:5173
     depends_on:
@@ -45,8 +53,9 @@ services:
     profiles:
       - tools # `docker compose up` では起動しない
 
-  # バックエンドは別メンバ管轄。構成が決まったらここに backend サービスを追加する。
-  # frontend の Vite proxy は既に http://backend:8000 を向いている。
+  # バックエンドは別リポジトリ・別サーバ（別メンバ管轄）。
+  # ここに backend サービスは追加しない。/api の転送先は .env の VITE_PROXY_TARGET で指定する。
+  # 取り決めは README の「バックエンドとの連携」を参照。
 
 volumes:
-  frontend_node_modules:
+  node_modules:

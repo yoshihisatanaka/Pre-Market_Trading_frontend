@@ -1,8 +1,8 @@
 # components/ui/BaseModal（ダイアログ）
 
 - 略号: `BMD`
-- 対象: `frontend/src/components/ui/BaseModal.vue`
-- テスト: `frontend/src/components/ui/BaseModal.spec.js`
+- 対象: `src/components/ui/BaseModal.vue`
+- テスト: `src/components/ui/BaseModal.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

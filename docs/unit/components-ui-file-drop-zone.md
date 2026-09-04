@@ -1,8 +1,8 @@
 # components/ui/FileDropZone（ファイル選択領域）
 
 - 略号: `FDZ`
-- 対象: `frontend/src/components/ui/FileDropZone.vue`
-- テスト: `frontend/src/components/ui/FileDropZone.spec.js`
+- 対象: `src/components/ui/FileDropZone.vue`
+- テスト: `src/components/ui/FileDropZone.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

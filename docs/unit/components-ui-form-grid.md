@@ -1,8 +1,8 @@
 # components/ui/FormGrid（フォーム項目の列配置）
 
 - 略号: `FGD`
-- 対象: `frontend/src/components/ui/FormGrid.vue`
-- テスト: `frontend/src/components/ui/FormGrid.spec.js`
+- 対象: `src/components/ui/FormGrid.vue`
+- テスト: `src/components/ui/FormGrid.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

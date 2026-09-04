@@ -11,6 +11,9 @@ export default [
       'playwright-report/**',
       'test-results/**',
       'public/mockServiceWorker.js',
+      // 文書ツリーは lint 対象外。docs/mock/ には Manus 出力の原本を無加工で置くため
+      // （docs/mock/README.md）、コード規約を当ててはいけない。
+      'docs/**',
     ],
   },
 

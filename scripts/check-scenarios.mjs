@@ -11,7 +11,8 @@
  *   - 状態が「未着手」「保留」でテストが無い
  *   - ID の付いていない test() / it() がある
  *
- * docs/ はコンテナでは /docs/e2e, /docs/unit に read-only マウントされている（docker-compose.yml）。
+ * docs/ はリポジトリルート直下にある。コンテナでは .:/app のマウントにより
+ * /app/docs として見える（docker-compose.yml）。
  */
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
@@ -19,12 +20,12 @@ import { join, relative, resolve } from 'node:path'
 const KINDS = [
   {
     name: 'E2E',
-    scenarioDir: process.env.E2E_SCENARIO_DIR || '/docs/e2e',
+    scenarioDir: process.env.E2E_SCENARIO_DIR || resolve(process.cwd(), 'docs/e2e'),
     testDir: resolve(process.cwd(), 'e2e'),
   },
   {
     name: 'Unit',
-    scenarioDir: process.env.UNIT_SCENARIO_DIR || '/docs/unit',
+    scenarioDir: process.env.UNIT_SCENARIO_DIR || resolve(process.cwd(), 'docs/unit'),
     testDir: resolve(process.cwd(), 'src'),
   },
 ]
@@ -48,7 +49,7 @@ function walk(dir, filter) {
 function readScenarios(kind, errors) {
   if (!existsSync(kind.scenarioDir)) {
     console.error(`[${kind.name}] シナリオディレクトリが見つかりません: ${kind.scenarioDir}`)
-    console.error('docker compose 経由で実行しているか、*_SCENARIO_DIR を確認してください。')
+    console.error('リポジトリルートで実行しているか、*_SCENARIO_DIR を確認してください。')
     process.exit(2)
   }
   const files = walk(kind.scenarioDir, (p) => p.endsWith('.md') && !p.endsWith('README.md'))

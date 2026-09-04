@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-米国株注文システム。フロントエンド（Vue 3 + Vite / JavaScript）を Claude 主導で開発する。
+米国株注文システムの**フロントエンド専用リポジトリ**（Vue 3 + Vite / JavaScript）を Claude 主導で開発する。
+バックエンドは別リポジトリ・別サーバ（別メンバ管轄）。`docker-compose.yml` に `backend` サービスは追加しない。
 
 ## 絶対に守る制約
 
@@ -66,16 +67,18 @@ views / components  →  stores  →  api  →  (HTTP)
 
 | パス | 役割 |
 |---|---|
-| `frontend/src/views/` | ルーティング単位の画面 |
-| `frontend/src/components/ui/` | ドメイン非依存の汎用部品 |
-| `frontend/src/components/<domain>/` | ドメイン別の部品 |
-| `frontend/src/components/layout/` | 共通の骨格（`AppLayout` / `AppSidebar` / `AppHeader`）とメニュー定義 `navigation.js` |
-| `frontend/src/composables/` | `useXxx` の再利用ロジック |
-| `frontend/src/api/` | HTTP 通信。1エンドポイント = 1関数 |
-| `frontend/src/stores/` | Pinia（setup ストア形式）。`useXxxStore` |
-| `frontend/src/utils/` | 純関数（整形・計算） |
-| `frontend/src/mocks/` | MSW ハンドラ / フィクスチャ |
-| `docs/api/` | API 仕様書原本と `openapi.yaml`（仕様の正） |
+| `src/views/` | ルーティング単位の画面 |
+| `src/components/ui/` | ドメイン非依存の汎用部品 |
+| `src/components/<domain>/` | ドメイン別の部品 |
+| `src/components/layout/` | 共通の骨格（`AppLayout` / `AppSidebar` / `AppHeader`）とメニュー定義 `navigation.js` |
+| `src/composables/` | `useXxx` の再利用ロジック |
+| `src/api/` | HTTP 通信。1エンドポイント = 1関数 |
+| `src/stores/` | Pinia（setup ストア形式）。`useXxxStore` |
+| `src/utils/` | 純関数（整形・計算） |
+| `src/mocks/` | MSW ハンドラ / フィクスチャ |
+| `e2e/` | Playwright の E2E テスト |
+| `scripts/` | 補助スクリプト（`check-scenarios.mjs`） |
+| `docs/api/` | バックエンドから受領した仕様書の**コピー**と `openapi.yaml`（フロント実装上の正） |
 | `docs/e2e/` | 画面ごとの E2E シナリオ（受け入れ条件）。ID をテスト名に付けて対応づける |
 | `docs/unit/` | テスト対象ファイルごとの単体テストシナリオ。同じ形式・同じチェック |
 | `docs/mock/` | Manus 出力の画面モック原本（編集しない） |
@@ -93,8 +96,8 @@ views / components  →  stores  →  api  →  (HTTP)
 
 ## API モック（MSW）
 
-- 未実装 API は `frontend/src/mocks/handlers/index.js` にハンドラを足してモックする
-- 応答データは `frontend/src/mocks/fixtures/` に **バックエンドが返す生の形**で書く
+- 未実装 API は `src/mocks/handlers/index.js` にハンドラを足してモックする
+- 応答データは `src/mocks/fixtures/` に **バックエンドが返す生の形**で書く
 - API が実装されたら、該当ハンドラを **削除**する。未定義のリクエストは実 API へ素通しされる
 - ブラウザ / 単体テスト / E2E で同じ handlers・fixtures を共用する
 
@@ -103,7 +106,7 @@ views / components  →  stores  →  api  →  (HTTP)
 - 単体テスト: 対象ファイルの隣に `*.spec.js`。MSW(node) が `vitest.setup.js` で自動起動する
 - **単体テストも `docs/unit/<対象>.md` のシナリオが先。** `it('[OST-01] …')` のようにタイトル先頭に ID を付ける（略号は 3 文字）
 - 個別のレスポンス差し替えは `server.use()`（`afterEach` で自動リセット）
-- E2E: `frontend/e2e/*.spec.js`。要素特定は `data-testid` か `getByRole` を使い、CSS クラスに依存しない
+- E2E: `e2e/*.spec.js`。要素特定は `data-testid` か `getByRole` を使い、CSS クラスに依存しない
 - E2E でエラー応答などを再現するときは `e2e/helpers/mockApi.js` の `mockApi()` を `page.goto()` の前に呼ぶ。`page.route()` は MSW と併用できない
 - レイヤ規約（axios 直接利用、view→api 直接 import）は ESLint がエラーにする。エラーが出たら迂回せず設計を直す
 - **E2E は `docs/e2e/<画面>.md` のシナリオが先。** タイトル先頭に ID を付ける（`test('[OL-01] …')`）。
@@ -115,7 +118,7 @@ views / components  →  stores  →  api  →  (HTTP)
 **推測せず実物で確認する**ために使う。
 
 - **使う前に `docker compose up -d frontend` が必要。** MCP コンテナは compose の
-  ネットワーク `us-stock-order_default` に参加して動くため、frontend が落ちていると接続できない
+  ネットワーク `us-stock-order-frontend_default` に参加して動くため、frontend が落ちていると接続できない
 - 接続先は **`http://frontend:5173`**（`localhost:5173` ではない。コンテナ間通信のため）
 - MSW はブラウザ側で動くので、バックエンド未実装のままでも画面はモックデータで描画される
 - Docker 版は **headless chromium のみ**（Firefox / WebKit は使えない）
@@ -140,7 +143,11 @@ headless なので**ブラウザ画面をリアルタイムには覗けない**�
 
 ## 現在の状況
 
-- API 仕様書は未受領。`docs/api/openapi.yaml` はまだ無い。受領したら `/api-to-openapi docs/api/<原本>` で変換する
+- **このリポジトリはフロントエンド専用。** バックエンドは別リポジトリ・別サーバ。`/api` は Vite dev サーバが
+  `.env` の `VITE_PROXY_TARGET`（既定 `http://host.docker.internal:8000`）へプロキシする。
+  取り決めは README の「バックエンドとの連携」
+- API 仕様書は未受領。`docs/api/openapi.yaml` はまだ無い。受領したら `/api-to-openapi docs/api/<原本>` で変換する。
+  **仕様の正はバックエンド側リポジトリの原本で、`docs/api/` に置くのは受領コピー**
 - Manus の画面モックは受領済（素の CSS。Tailwind ではないので導入しない）。
   共通レイアウト部分だけ取り込み済み（原本 `docs/mock/layout/masters-users.html`、`tokens.css` は
   モックの配色・文字サイズに更新済み）。個別画面はまだ未着手

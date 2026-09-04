@@ -1,9 +1,9 @@
 # components/layout/AppSidebar（共通サイドメニュー）
 
 - 略号: `ASB`
-- 対象: `frontend/src/components/layout/AppSidebar.vue`
-- テスト: `frontend/src/components/layout/AppSidebar.spec.js`
-- 項目定義: `frontend/src/components/layout/navigation.js`
+- 対象: `src/components/layout/AppSidebar.vue`
+- テスト: `src/components/layout/AppSidebar.spec.js`
+- 項目定義: `src/components/layout/navigation.js`
 - E2E 側のシナリオ: [docs/e2e/layout.md](../e2e/layout.md)
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |

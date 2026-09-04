@@ -1,8 +1,8 @@
 # components/ui/BaseBadge（状態チップ）
 
 - 略号: `BBG`
-- 対象: `frontend/src/components/ui/BaseBadge.vue`
-- テスト: `frontend/src/components/ui/BaseBadge.spec.js`
+- 対象: `src/components/ui/BaseBadge.vue`
+- テスト: `src/components/ui/BaseBadge.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

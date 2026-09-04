@@ -1,8 +1,8 @@
 # components/layout/AppHeader（共通ヘッダ）
 
 - 略号: `AHD`
-- 対象: `frontend/src/components/layout/AppHeader.vue`
-- テスト: `frontend/src/components/layout/AppHeader.spec.js`
+- 対象: `src/components/layout/AppHeader.vue`
+- テスト: `src/components/layout/AppHeader.spec.js`
 - E2E 側のシナリオ: [docs/e2e/layout.md](../e2e/layout.md)
 
 画面タイトルは view ではなくヘッダが `router` の `meta.title` から描画する。

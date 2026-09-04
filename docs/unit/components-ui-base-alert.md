@@ -1,8 +1,8 @@
 # components/ui/BaseAlert（帯状の通知）
 
 - 略号: `BAL`
-- 対象: `frontend/src/components/ui/BaseAlert.vue`
-- テスト: `frontend/src/components/ui/BaseAlert.spec.js`
+- 対象: `src/components/ui/BaseAlert.vue`
+- テスト: `src/components/ui/BaseAlert.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

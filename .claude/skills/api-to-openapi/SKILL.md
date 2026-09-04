@@ -38,7 +38,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(docker compose run --rm redoc
 - 各プロパティに `type` と、可能なら `description` を付ける。列挙値は `enum` に列挙する。
 - 日時は `type: string` + `format: date-time`。金額・価格は `type: number`。株数などの個数は `type: integer`。
 - `required` は原本で必須と明記されているものだけ。不明なものは `required` に入れず、そのプロパティに `x-todo: "必須かどうか要確認"` を付ける。
-- 各レスポンスに **必ず `example` を付ける**（`frontend/src/mocks/fixtures/` にそのまま流用する）。
+- 各レスポンスに **必ず `example` を付ける**（`src/mocks/fixtures/` にそのまま流用する）。
 - エラー応答は `ApiError` スキーマ（`message: string`, `code: string`）に統一し、各操作に 400 / 401 / 403 / 404 / 500 を付ける。原本にエラー仕様が無い場合は `ApiError` に `x-todo: "エラー応答の形式が原本に無いため仮置き"` を付ける。
 - 原本の記述が曖昧・矛盾している箇所は推測で埋めず、該当箇所に `x-todo` を付けて理由を書く。
 
@@ -73,7 +73,7 @@ Redocly CLI は Docker の `redocly` サービス（`docker-compose.yml`、作�
 
 ## やらないこと
 
-- `frontend/` 配下のコードは変更しない（fixtures / api / handlers への反映は別作業）。
+- `src/` / `e2e/` 配下のコードは変更しない（fixtures / api / handlers への反映は別作業）。
 - 原本ファイルを編集・移動しない。
 - `docs/api/openapi.html` はコミットしない（`.gitignore` 済み。`openapi.yaml` が唯一の正）。
 - `docker compose run --rm redocly ...` 以外のシェルコマンドは実行しない。

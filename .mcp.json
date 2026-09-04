@@ -8,7 +8,7 @@
         "--rm",
         "--init",
         "--network",
-        "us-stock-order_default",
+        "us-stock-order-frontend_default",
         "-v",
         "./.playwright-mcp:/output",
         "mcr.microsoft.com/playwright/mcp",

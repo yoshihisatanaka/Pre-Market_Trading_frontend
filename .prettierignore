@@ -1,0 +1,24 @@
+dist
+coverage
+playwright-report
+test-results
+public/mockServiceWorker.js
+package-lock.json
+
+# ---- ルート平坦化に伴う追加 ----
+# prettier --write . の対象が frontend/ からリポジトリルートに広がったため、
+# これまで対象外だったものを明示的に除外する。
+#
+# docs/mock/ は Manus 出力の原本を無加工で保管する場所（docs/mock/README.md）。
+# 整形すると差分の参照元としての価値が失われるので絶対に触らせない。
+docs/mock
+# 生成物（docker compose run --rm redocly build-docs で再生成する）
+docs/api/openapi.html
+# Markdown は従来どおり Prettier の管理外にする。
+# （frontend/ 配下に .md が無かったため、README / CLAUDE.md / docs/ は手で整形してきた。
+#   Prettier 管理下に入れたくなったらこの 3 行を消し、npm run format を 1 回流して
+#   その差分だけを単独コミットにすること。表の再整列で巨大な差分が出る）
+*.md
+docs
+.claude
+.playwright-mcp

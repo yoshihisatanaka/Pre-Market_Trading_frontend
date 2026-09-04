@@ -1,8 +1,8 @@
 # views/OrderListView（注文一覧画面）
 
 - 略号: `OLV`
-- 対象: `frontend/src/views/OrderListView.vue`
-- テスト: `frontend/src/views/OrderListView.spec.js`
+- 対象: `src/views/OrderListView.vue`
+- テスト: `src/views/OrderListView.spec.js`
 - E2E 側のシナリオ: [docs/e2e/order-list.md](../e2e/order-list.md)
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |

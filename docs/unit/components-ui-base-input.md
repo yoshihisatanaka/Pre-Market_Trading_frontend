@@ -1,8 +1,8 @@
 # components/ui/BaseInput（1行入力）
 
 - 略号: `BIN`
-- 対象: `frontend/src/components/ui/BaseInput.vue`
-- テスト: `frontend/src/components/ui/BaseInput.spec.js`
+- 対象: `src/components/ui/BaseInput.vue`
+- テスト: `src/components/ui/BaseInput.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

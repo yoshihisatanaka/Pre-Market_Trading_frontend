@@ -1,8 +1,8 @@
 # 注文一覧
 
 - 略号: `OL`
-- 画面: `frontend/src/views/OrderListView.vue`
-- テスト: `frontend/e2e/orders.spec.js`
+- 画面: `src/views/OrderListView.vue`
+- テスト: `e2e/orders.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

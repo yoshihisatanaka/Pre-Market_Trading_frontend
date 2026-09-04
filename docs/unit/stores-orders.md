@@ -1,8 +1,8 @@
 # stores/orders（注文一覧ストア）
 
 - 略号: `OST`
-- 対象: `frontend/src/stores/orders.js`
-- テスト: `frontend/src/stores/orders.spec.js`
+- 対象: `src/stores/orders.js`
+- テスト: `src/stores/orders.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

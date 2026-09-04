@@ -1,8 +1,8 @@
 # utils/marketStatus（米国市場の取引セッション判定）
 
 - 略号: `MKS`
-- 対象: `frontend/src/utils/marketStatus.js`
-- テスト: `frontend/src/utils/marketStatus.spec.js`
+- 対象: `src/utils/marketStatus.js`
+- テスト: `src/utils/marketStatus.spec.js`
 - 仕様の出所: Manus モック `docs/mock/layout/masters-users.html` の `updateMarketStatus`
 
 区切りはニューヨーク現地時刻（開始以上・終了未満）:

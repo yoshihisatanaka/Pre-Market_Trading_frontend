@@ -1,8 +1,8 @@
 # components/ui/DataTable（汎用テーブル）
 
 - 略号: `DTB`
-- 対象: `frontend/src/components/ui/DataTable.vue`
-- テスト: `frontend/src/components/ui/DataTable.spec.js`
+- 対象: `src/components/ui/DataTable.vue`
+- テスト: `src/components/ui/DataTable.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

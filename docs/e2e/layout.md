@@ -1,8 +1,8 @@
 # 共通レイアウト（サイドメニュー / ヘッダ）
 
 - 略号: `LAY`
-- 画面: `frontend/src/components/layout/`（`AppLayout` / `AppSidebar` / `AppHeader`）
-- テスト: `frontend/e2e/layout.spec.js`
+- 画面: `src/components/layout/`（`AppLayout` / `AppSidebar` / `AppHeader`）
+- テスト: `e2e/layout.spec.js`
 - モック原本: `docs/mock/layout/masters-users.html`
 
 全画面に出る共通部分の受け入れ条件。**個々の画面固有の要素（例: 注文一覧の「再読み込み」ボタン）は

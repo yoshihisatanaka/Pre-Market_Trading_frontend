@@ -1,11 +1,15 @@
-# us-stock-order
+# us-stock-order-frontend
 
-米国株注文システム。フロントエンド（Vue 3）とバックエンド（Python）をディレクトリ分離で開発する。
+米国株注文システムの**フロントエンド**（Vue 3 + Vite / JavaScript）。
+バックエンドは**別リポジトリ・別サーバ**で動き、HTTP 経由でのみ結合する
+（→「[バックエンドとの連携](#バックエンドとの連携)」）。
 
-```
-├─ frontend/   Vue 3 + Vite（このリポジトリで整備済み）
-├─ backend/    Python（別メンバ管轄・未着手）
-└─ docs/       API 仕様書 / 画面モック / コーディング規約
+```text
+├─ src/       アプリ本体（views / components / stores / api / mocks …）
+├─ e2e/       Playwright の E2E テスト
+├─ public/    静的配信ファイル（MSW の Service Worker）
+├─ scripts/   補助スクリプト（シナリオ対応チェック）
+└─ docs/      コーディング規約 / テストシナリオ / 画面モック / API 仕様（受領コピー）
 ```
 
 ## 前提
@@ -13,11 +17,31 @@
 **ホストに Node.js / npm は不要（インストールしない）。すべて Docker コンテナ内で実行する。**
 必要なのは Docker Desktop のみ。
 
+## バックエンドとの連携
+
+バックエンドは**別リポジトリ**（別メンバ管轄）で、**別サーバ**で動く。
+このリポジトリはフロントエンド専用で、`docker-compose.yml` に `backend` サービスは**追加しない**。
+結合は HTTP のみ。
+
+| 項目 | 内容 |
+|---|---|
+| 言語 | Python |
+| 想定ポート | 8000 |
+| 接続方法 | Vite dev サーバが `/api/*` を `.env` の `VITE_PROXY_TARGET` へプロキシする。既定は `http://host.docker.internal:8000`（= ホスト側で動いているバックエンドの 8000 番） |
+| API 仕様の正 | **バックエンド側リポジトリの仕様書原本**。`docs/api/` にあるのはその**受領コピー**で、フロント実装の判断基準は変換結果の `openapi.yaml`（→ [docs/api/README.md](docs/api/README.md)） |
+| API が実装されたら | `src/mocks/handlers/index.js` から該当ハンドラを**削除**する。MSW は未定義のリクエストを実 API へ素通しするため、削除するだけで本物に切り替わる |
+
+バックエンドをホストで動かす場合は既定値のまま繋がる（`host.docker.internal` は Docker Desktop が
+ホストへ解決する。Linux の Docker Engine 向けに `docker-compose.yml` の frontend へ
+`extra_hosts: ["host.docker.internal:host-gateway"]` を入れてある）。
+別サーバのバックエンドを叩くときは `.env` の `VITE_PROXY_TARGET` にその URL を書く。
+
 ## セットアップ
 
 ```powershell
 # 1. 環境変数ファイルを作る
-Copy-Item frontend\.env.example frontend\.env
+#    バックエンドの場所が既定（ホストの 8000 番）と違うなら VITE_PROXY_TARGET を書き換える
+Copy-Item .env.example .env
 
 # 2. 依存をインストール（コンテナ内の node_modules ボリュームに入る）
 docker compose run --rm frontend npm install
@@ -60,6 +84,8 @@ docker compose up frontend
 Claude Code が実際にブラウザで画面を開き、スクリーンショットや DOM 構造を取れる。
 E2E のセレクタ調査や、画面の 4 状態（ローディング / エラー / 空 / データあり）の目視確認に使う。
 設定はリポジトリ直下の `.mcp.json`（コミット済み）。
+MCP コンテナが参加する Docker ネットワーク名 `us-stock-order-frontend_default` は
+`docker-compose.yml` の `name:` で固定してあるので、リポジトリのディレクトリ名を変えてもずれない。
 
 ### 実行方法
 
@@ -108,11 +134,11 @@ explorer .\.playwright-mcp
 
 | 種別 | ツール | テストコード | シナリオ文書 | 対象 |
 |---|---|---|---|---|
-| 単体 | Vitest | `frontend/src/**/*.spec.js`（対象ファイルの隣） | `docs/unit/<src 相対パスのケバブケース>.md` | ストア・composable・utils・コンポーネント |
-| E2E | Playwright | `frontend/e2e/*.spec.js` | `docs/e2e/<画面のケバブケース>.md` | 画面の主要導線 |
+| 単体 | Vitest | `src/**/*.spec.js`（対象ファイルの隣） | `docs/unit/<src 相対パスのケバブケース>.md` | ストア・composable・utils・コンポーネント |
+| E2E | Playwright | `e2e/*.spec.js` | `docs/e2e/<画面のケバブケース>.md` | 画面の主要導線 |
 
 例: `src/stores/orders.js` → テスト `src/stores/orders.spec.js` / 文書 [docs/unit/stores-orders.md](docs/unit/stores-orders.md)
-　　注文一覧画面 → テスト `frontend/e2e/orders.spec.js` / 文書 [docs/e2e/order-list.md](docs/e2e/order-list.md)
+　　注文一覧画面 → テスト `e2e/orders.spec.js` / 文書 [docs/e2e/order-list.md](docs/e2e/order-list.md)
 
 ### シナリオ文書とテストの対応づけ
 
@@ -153,10 +179,10 @@ docker compose run --rm e2e npx playwright test --grep "\[OL-01\]"
 
 ### 書くときの注意
 
-- 単体テストでは MSW(node) が `frontend/vitest.setup.js` で自動起動する。
+- 単体テストでは MSW(node) が `vitest.setup.js` で自動起動する。
   個別にレスポンスを差し替えるときは `server.use()`（`afterEach` で自動リセット）
 - E2E の要素特定は `data-testid` か `getByRole` を使い、CSS クラス名に依存しない
-- E2E でエラー応答などを再現するときは [frontend/e2e/helpers/mockApi.js](frontend/e2e/helpers/mockApi.js) の `mockApi()` を
+- E2E でエラー応答などを再現するときは [e2e/helpers/mockApi.js](e2e/helpers/mockApi.js) の `mockApi()` を
   **`page.goto()` の前に**呼ぶ。MSW がページ内の fetch を横取りするため `page.route()` は併用できない
 
 ## E2E テスト結果の見かた
@@ -167,12 +193,12 @@ docker compose run --rm e2e npx playwright test --grep "\[OL-01\]"
 
 成功/失敗と失敗理由がその場に出る。**まずはこれを読む。**
 
-### 2. HTML レポート（`frontend/playwright-report/index.html`）
+### 2. HTML レポート（`playwright-report/index.html`）
 
 毎回上書き生成される。1ファイルに全データが埋め込まれているので、**そのままブラウザで開けばよい**。
 
 ```powershell
-Start-Process .\frontend\playwright-report\index.html
+Start-Process .\playwright-report\index.html
 ```
 
 失敗時はスクリーンショット等が `playwright-report/data/` に出るため、
@@ -184,7 +210,7 @@ docker compose run --rm -p 9323:9323 e2e npx playwright show-report --host 0.0.0
 
 → http://localhost:9323 で開く。終了は `Ctrl+C`。
 
-### 3. 失敗時の生データ（`frontend/test-results/`）
+### 3. 失敗時の生データ（`test-results/`）
 
 テストごとのディレクトリに `test-failed-1.png`（スクリーンショット）と
 `error-context.md`（失敗時点のページ構造）が出る。原因調査はこれが速い。
@@ -225,12 +251,14 @@ docker compose run --rm -p 9323:9323 e2e npx playwright show-trace --host 0.0.0.
 
 バックエンド未実装の API は **MSW** でモックしている。
 
-- ハンドラ: [frontend/src/mocks/handlers/index.js](frontend/src/mocks/handlers/index.js)
-- 応答データ: [frontend/src/mocks/fixtures/](frontend/src/mocks/fixtures/)
-- ON/OFF: `frontend/.env` の `VITE_ENABLE_MSW`
+- ハンドラ: [src/mocks/handlers/index.js](src/mocks/handlers/index.js)
+- 応答データ: [src/mocks/fixtures/](src/mocks/fixtures/)
+- ON/OFF: `.env` の `VITE_ENABLE_MSW`
 
-ハンドラが定義されていないリクエストは、Vite の proxy 経由で実 API（`http://backend:8000`）へ素通しされる。
+ハンドラが定義されていないリクエストは、Vite の proxy 経由で実 API へ素通しされる
+（転送先は `.env` の `VITE_PROXY_TARGET`。既定は `http://host.docker.internal:8000`）。
 **API が実装されたら、該当ハンドラを削除するだけで本物に切り替わる。**
+バックエンドの起動場所と分担は「[バックエンドとの連携](#バックエンドとの連携)」を参照。
 
 ## ドキュメント
 
@@ -244,5 +272,5 @@ docker compose run --rm -p 9323:9323 e2e npx playwright show-trace --host 0.0.0.
 ## バージョンを上げるときの注意
 
 `docker-compose.yml` の Playwright イメージタグ（`v1.62.1-noble`）と
-`frontend/package.json` の `@playwright/test` は、**必ず同じバージョンに揃える**こと。
+`package.json` の `@playwright/test` は、**必ず同じバージョンに揃える**こと。
 ずれるとブラウザとクライアントの不整合で E2E が起動しない。

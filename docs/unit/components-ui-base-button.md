@@ -1,8 +1,8 @@
 # components/ui/BaseButton（汎用ボタン）
 
 - 略号: `BBT`
-- 対象: `frontend/src/components/ui/BaseButton.vue`
-- テスト: `frontend/src/components/ui/BaseButton.spec.js`
+- 対象: `src/components/ui/BaseButton.vue`
+- テスト: `src/components/ui/BaseButton.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

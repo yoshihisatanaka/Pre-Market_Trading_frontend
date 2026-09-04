@@ -1,8 +1,8 @@
 # components/ui/BaseSelect（選択入力）
 
 - 略号: `BSL`
-- 対象: `frontend/src/components/ui/BaseSelect.vue`
-- テスト: `frontend/src/components/ui/BaseSelect.spec.js`
+- 対象: `src/components/ui/BaseSelect.vue`
+- テスト: `src/components/ui/BaseSelect.spec.js`
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

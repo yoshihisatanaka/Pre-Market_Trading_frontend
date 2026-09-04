@@ -1,8 +1,8 @@
 # UI カタログ（開発用）
 
 - 略号: `UC`
-- 画面: `frontend/src/views/UiCatalogView.vue`
-- テスト: `frontend/e2e/ui-catalog.spec.js`
+- 画面: `src/views/UiCatalogView.vue`
+- テスト: `e2e/ui-catalog.spec.js`
 
 業務画面ではなく、`components/ui/` の共通部品を実物で見比べるための開発用ページ（`/dev/ui-catalog`）。
 サイドメニューには載せない。部品ごとの詳しい振る舞いは [docs/unit/](../unit/README.md) 側で担保するので、

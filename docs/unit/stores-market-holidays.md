@@ -18,3 +18,8 @@
 | MHS-10 | `load({ offset: 50, dateFrom, dateTo })` 済み | `create()` が成功する | 同じページ位置・同じ絞り込みのまま読み直される（1 ページ目に戻らない） | 実装済 |
 | MHS-11 | `create()` が失敗して `createError` が入っている | `clearCreateError()` を呼ぶ | `createError` が null になる | 実装済 |
 | MHS-12 | POST の応答が返る前 | `create()` を await せずに状態を見る | `creating` が true で、一覧側の `loading` は false のまま | 実装済 |
+| MHS-13 | 既定モック（56 件）、`load()` 済み | 一覧の先頭の id で `remove(id)` を呼ぶ | 戻り値が true、`deleteError` は null。一覧が読み直されて `total` が 1 減り、その id が `items` から消える | 実装済 |
+| MHS-14 | DELETE が 404（`message` 付き）を返す（存在しない id） | `remove(id)` を呼ぶ | 戻り値が false、`deleteError` に status 404 と message が入る。`items` / `total` は変わらない | 実装済 |
+| MHS-15 | `load({ offset: 50, dateFrom, dateTo })` 済み | `remove()` が成功する | 同じページ位置・同じ絞り込みのまま読み直される（1 ページ目に戻らない） | 実装済 |
+| MHS-16 | `remove()` が失敗して `deleteError` が入っている | `clearDeleteError()` を呼ぶ | `deleteError` が null になる | 実装済 |
+| MHS-17 | DELETE の応答が返る前 | `remove()` を await せずに状態を見る | `deleting` が true で、一覧側の `loading` は false のまま | 実装済 |

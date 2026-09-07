@@ -42,6 +42,18 @@ const NEW_REASON = 'テスト休場日'
 const DUPLICATE_DATE = marketHolidays[0].date
 const DUPLICATE_MESSAGE = 'その日付の海外休場日はすでに登録されています。'
 
+// 削除の対象もフィクスチャから導く（id / 日付を直接書かない）
+const DELETE_TARGET = marketHolidays[0]
+const NOT_FOUND_MESSAGE = '対象の海外休場日が見つかりません。'
+
+/*
+ * 「最終ページが 1 件だけ」を作るための絞り込み。
+ * 先頭から PAGE_SIZE + 1 件目までを範囲にすると 2 ページ目がちょうど 1 件になる。
+ */
+const LAST_PAGE_FROM = marketHolidays[0].date
+const LAST_PAGE_TO = marketHolidays[PAGE_SIZE].date
+const LAST_PAGE_TARGET = marketHolidays[PAGE_SIZE]
+
 const Page = { render: () => h('div') }
 
 async function mountView(query = {}) {
@@ -104,6 +116,20 @@ const errorHandler = (options) =>
   )
 const emptyHandler = (options) =>
   http.get('*/api/market-holidays', () => HttpResponse.json({ items: [], total: 0 }), options)
+const deleteNotFoundHandler = () =>
+  http.delete('*/api/market-holidays/:id', () =>
+    HttpResponse.json({ message: NOT_FOUND_MESSAGE, code: 'not_found' }, { status: 404 }),
+  )
+
+const deleteButton = (wrapper, id) => wrapper.find(`[data-testid="market-holidays-delete-${id}"]`)
+// 削除確認モーダルは表の行と同じ日付を出すので、dialog に絞ってから本文を読む
+const deleteDialog = (wrapper) => wrapper.find('[role="dialog"][aria-label="削除確認"]')
+const openDelete = async (wrapper, id) => {
+  await deleteButton(wrapper, id).trigger('click')
+}
+const confirmDelete = async (wrapper) => {
+  await wrapper.find('[data-testid="market-holidays-delete-submit"]').trigger('click')
+}
 
 // シナリオ: docs/unit/views-market-holiday-list-view.md
 describe('MarketHolidayListView', () => {
@@ -318,5 +344,91 @@ describe('MarketHolidayListView', () => {
     expect(exists(wrapper, 'market-holidays-add-error')).toBe(false)
     expect(addDateInput(wrapper).element.value).toBe('')
     expect(addReasonInput(wrapper).element.value).toBe('')
+  })
+
+  it('[MHL-18] 行の「削除」で対象の日付を示す確認モーダルが開く', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    expect(deleteDialog(wrapper).exists()).toBe(false)
+
+    await openDelete(wrapper, DELETE_TARGET.id)
+
+    expect(deleteDialog(wrapper).exists()).toBe(true)
+    expect(deleteDialog(wrapper).text()).toContain(DELETE_TARGET.date)
+  })
+
+  it('[MHL-19] 「キャンセル」で確認モーダルが閉じ件数は変わらない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openDelete(wrapper, DELETE_TARGET.id)
+
+    await wrapper.find('[data-testid="market-holidays-delete-cancel"]').trigger('click')
+    await settle()
+
+    expect(deleteDialog(wrapper).exists()).toBe(false)
+    // API を呼んでいないので一覧の件数も行数も動かない
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+    expect(rows(wrapper)).toHaveLength(firstPage.length)
+    expect(exists(wrapper, 'market-holidays-notice')).toBe(false)
+  })
+
+  it('[MHL-20] 削除が成功するとモーダルが閉じ成功メッセージと減った件数が出る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openDelete(wrapper, DELETE_TARGET.id)
+
+    await confirmDelete(wrapper)
+    // DELETE → 一覧の再取得 → 再描画 の 2 往復を待つ
+    await settle()
+    await settle()
+
+    expect(deleteDialog(wrapper).exists()).toBe(false)
+    const notice = wrapper.find('[data-testid="market-holidays-notice"]')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain(DELETE_TARGET.date)
+    expect(countText(wrapper)).toBe(`${TOTAL - 1} 件`)
+    expect(deleteButton(wrapper, DELETE_TARGET.id).exists()).toBe(false)
+  })
+
+  it('[MHL-21] 削除が 404 のときモーダル内にエラーが出て成功メッセージは出ない', async () => {
+    server.use(deleteNotFoundHandler())
+    const { wrapper } = await mountView()
+    await settle()
+    await openDelete(wrapper, DELETE_TARGET.id)
+
+    await confirmDelete(wrapper)
+    await settle()
+
+    expect(deleteDialog(wrapper).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="market-holidays-delete-error"]').text()).toContain(
+      NOT_FOUND_MESSAGE,
+    )
+    expect(exists(wrapper, 'market-holidays-notice')).toBe(false)
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+  })
+
+  it('[MHL-22] 最終ページの最後の 1 件を消すと 1 ページ前に戻る', async () => {
+    const { wrapper, router } = await mountView({
+      date_from: LAST_PAGE_FROM,
+      date_to: LAST_PAGE_TO,
+      offset: String(PAGE_SIZE),
+    })
+    await settle()
+    expect(rows(wrapper)).toHaveLength(1)
+
+    await openDelete(wrapper, LAST_PAGE_TARGET.id)
+    await confirmDelete(wrapper)
+    // DELETE → 再取得 → 0 件を見て 1 ページ戻る → 再取得 の分だけ待つ
+    await settle()
+    await settle()
+    await settle()
+
+    // offset だけが消え、絞り込み条件は残る
+    expect(router.currentRoute.value.query).toEqual({
+      date_from: LAST_PAGE_FROM,
+      date_to: LAST_PAGE_TO,
+    })
+    expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
+    expect(countText(wrapper)).toBe(`${PAGE_SIZE} 件`)
   })
 })

@@ -35,6 +35,11 @@ const NEW_REASON = 'テスト休場日'
 // 既定ハンドラは日付が重複すると 409 を返すので、既存日付をそのまま重複の再現に使う
 const DUPLICATE_DATE = marketHolidays[0].date
 
+// 削除の対象と、既定ハンドラが 404 を返す「存在しない id」もフィクスチャから導く
+const DELETE_TARGET = marketHolidays[0]
+const MISSING_ID = `${DELETE_TARGET.id}_missing`
+const NOT_FOUND_MESSAGE = '対象の海外休場日が見つかりません。'
+
 const ids = (items) => items.map((item) => item.id)
 const dates = (items) => items.map((item) => item.date)
 
@@ -210,5 +215,76 @@ describe('useMarketHolidaysStore', () => {
 
     await pending
     expect(store.creating).toBe(false)
+  })
+
+  it('[MHS-13] remove が成功すると一覧が読み直され対象の id が消える', async () => {
+    const store = useMarketHolidaysStore()
+    await store.load()
+    expect(ids(store.items)).toContain(DELETE_TARGET.id)
+
+    const removed = await store.remove(DELETE_TARGET.id)
+
+    expect(removed).toBe(true)
+    expect(store.deleteError).toBeNull()
+    expect(store.total).toBe(TOTAL - 1)
+    expect(ids(store.items)).not.toContain(DELETE_TARGET.id)
+  })
+
+  it('[MHS-14] 存在しない id のとき deleteError に 404 が入り一覧は変わらない', async () => {
+    const store = useMarketHolidaysStore()
+    await store.load()
+
+    const removed = await store.remove(MISSING_ID)
+
+    expect(removed).toBe(false)
+    expect(store.deleteError).toBeInstanceOf(Error)
+    expect(store.deleteError.status).toBe(404)
+    expect(store.deleteError.message).toBe(NOT_FOUND_MESSAGE)
+    expect(store.total).toBe(TOTAL)
+    expect(ids(store.items)).toEqual(ids(firstPage))
+  })
+
+  it('[MHS-15] remove 後の読み直しでもページ位置と絞り込みが保たれる', async () => {
+    const store = useMarketHolidaysStore()
+    await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
+
+    await store.remove(DELETE_TARGET.id)
+
+    // 削除後の一覧は日付昇順のまま 1 件減る
+    const remaining = marketHolidays.filter((holiday) => holiday.id !== DELETE_TARGET.id)
+    expect(store.offset).toBe(PAGE_SIZE)
+    expect(store.dateFrom).toBe(ALL_FROM)
+    expect(store.dateTo).toBe(ALL_TO)
+    expect(store.total).toBe(TOTAL - 1)
+    expect(ids(store.items)).toEqual(ids(remaining.slice(PAGE_SIZE, PAGE_SIZE * 2)))
+  })
+
+  it('[MHS-16] clearDeleteError で削除エラーが消える', async () => {
+    const store = useMarketHolidaysStore()
+    await store.remove(MISSING_ID)
+    expect(store.deleteError).not.toBeNull()
+
+    store.clearDeleteError()
+
+    expect(store.deleteError).toBeNull()
+  })
+
+  it('[MHS-17] 削除中は deleting だけが true になり一覧の loading は false のまま', async () => {
+    server.use(
+      http.delete('*/api/market-holidays/:id', async () => {
+        await delay(50)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const store = useMarketHolidaysStore()
+    await store.load()
+
+    const pending = store.remove(DELETE_TARGET.id)
+
+    expect(store.deleting).toBe(true)
+    expect(store.loading).toBe(false)
+
+    await pending
+    expect(store.deleting).toBe(false)
   })
 })

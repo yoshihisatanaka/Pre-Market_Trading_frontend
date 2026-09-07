@@ -263,7 +263,7 @@ describe('MarketHolidayListView', () => {
     expect(fieldError(wrapper, addReasonInput(wrapper))).toBe('休場理由を入力してください。')
     // API を呼んでいないので一覧の件数は動かない
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
-    expect(exists(wrapper, 'market-holidays-created')).toBe(false)
+    expect(exists(wrapper, 'market-holidays-notice')).toBe(false)
   })
 
   it('[MHL-15] 追加が成功するとモーダルが閉じ成功メッセージと増えた件数が出る', async () => {
@@ -278,7 +278,7 @@ describe('MarketHolidayListView', () => {
     await settle()
 
     expect(exists(wrapper, 'market-holidays-add-form')).toBe(false)
-    const created = wrapper.find('[data-testid="market-holidays-created"]')
+    const created = wrapper.find('[data-testid="market-holidays-notice"]')
     expect(created.exists()).toBe(true)
     expect(created.text()).toContain(NEW_DATE)
     expect(countText(wrapper)).toBe(`${TOTAL + 1} 件`)
@@ -299,7 +299,7 @@ describe('MarketHolidayListView', () => {
     )
     // サーバの拒否は項目のエラーには混ぜない
     expect(fieldError(wrapper, addDateInput(wrapper))).toBe('')
-    expect(exists(wrapper, 'market-holidays-created')).toBe(false)
+    expect(exists(wrapper, 'market-holidays-notice')).toBe(false)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
   })
 

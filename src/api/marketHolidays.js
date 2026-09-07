@@ -59,3 +59,17 @@ export async function createMarketHoliday({ date, reason }) {
 
   return toMarketHoliday(data)
 }
+
+/**
+ * 海外休場日を 1 件削除する。
+ *
+ * 応答に本文は無い（204）。呼び出し側が useAsync で成否を判定できるよう、
+ * undefined ではなく削除した id を返す。
+ *
+ * @param {string} id 削除対象の id
+ * @returns {Promise<string>} 削除した id
+ */
+export async function deleteMarketHoliday(id) {
+  await apiClient.delete(`/market-holidays/${encodeURIComponent(id)}`)
+  return id
+}

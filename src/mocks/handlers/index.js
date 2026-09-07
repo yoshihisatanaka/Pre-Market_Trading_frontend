@@ -78,6 +78,22 @@ export const handlers = [
 
     return HttpResponse.json(created, { status: 201 })
   }),
+
+  // 海外休場日の削除。成功時は本文を返さない（204）
+  http.delete('*/api/market-holidays/:id', ({ params }) => {
+    const id = String(params.id)
+
+    if (!marketHolidayRows.some((holiday) => holiday.id === id)) {
+      return HttpResponse.json(
+        { message: '対象の海外休場日が見つかりません。', code: 'not_found' },
+        { status: 404 },
+      )
+    }
+
+    marketHolidayRows = marketHolidayRows.filter((holiday) => holiday.id !== id)
+
+    return new HttpResponse(null, { status: 204 })
+  }),
 ]
 
 function toNonNegativeInt(value, fallback) {

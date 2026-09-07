@@ -11,6 +11,8 @@
       "Bash(docker compose run --rm e2e npx playwright test *)",
       "Bash(docker compose run --rm e2e npx playwright test)",
       "Bash(docker compose run --rm redocly *)",
+      "Bash((cd ../Pre-Market_Trading && docker compose ps --services --filter status=running))",
+      "Bash((cd ../Pre-Market_Trading && docker compose exec -T api python *)",
       "Bash(docker compose up -d frontend)",
       "Bash(docker compose up -d frontend; docker compose run --rm e2e npx playwright test)",
       "Bash(docker compose run --rm frontend npm run lint; if ($?) { docker compose run --rm frontend npm run test:unit }; if ($?) { docker compose run --rm frontend npm run check:scenarios | Select-Object -Last 8 }; if ($?) { docker compose run --rm e2e npx playwright test })",

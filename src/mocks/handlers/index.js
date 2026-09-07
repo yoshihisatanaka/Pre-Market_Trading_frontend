@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { orderListResponse } from '../fixtures/orders'
 import { marketHolidays } from '../fixtures/marketHolidays'
+import { blockedDates } from '../fixtures/blockedDates'
 
 /*
  * モックハンドラの集約。
@@ -93,6 +94,27 @@ export const handlers = [
     marketHolidayRows = marketHolidayRows.filter((holiday) => holiday.id !== id)
 
     return new HttpResponse(null, { status: 204 })
+  }),
+
+  // 受注不可日マスタ。API 仕様は未確定なので limit / offset + total の一般的な形で受ける。
+  // 追加 / 削除は別コミットで足すので、いまは参照だけ（フィクスチャを直接読む）
+  http.get('*/api/blocked-dates', ({ request }) => {
+    const params = new URL(request.url).searchParams
+    const dateFrom = params.get('date_from') ?? ''
+    const dateTo = params.get('date_to') ?? ''
+    const limit = toNonNegativeInt(params.get('limit'), 50)
+    const offset = toNonNegativeInt(params.get('offset'), 0)
+
+    // 'YYYY-MM-DD' は固定長なので、文字列比較がそのまま日付の大小になる
+    const filtered = blockedDates.filter(
+      (blocked) => (!dateFrom || blocked.date >= dateFrom) && (!dateTo || blocked.date <= dateTo),
+    )
+
+    return HttpResponse.json({
+      items: filtered.slice(offset, offset + limit),
+      // total は絞り込み後・ページ切り出し前の件数
+      total: filtered.length,
+    })
   }),
 ]
 

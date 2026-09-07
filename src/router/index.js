@@ -24,6 +24,12 @@ const routes = [
     meta: { title: '海外休場日マスタ' },
   },
   {
+    path: '/masters/blocked-dates',
+    name: 'blocked-date-list',
+    component: () => import('@/views/BlockedDateListView.vue'),
+    meta: { title: '受注不可日マスタ' },
+  },
+  {
     // 最初の画面以外は遅延 import にして初期バンドルを膨らませない
     path: '/:pathMatch(.*)*',
     name: 'not-found',

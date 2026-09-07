@@ -27,6 +27,21 @@ const DATE_FROM = `${YEAR}-01-01`
 const DATE_TO = `${YEAR}-12-31`
 const inYear = marketHolidays.filter((holiday) => holiday.date.startsWith(YEAR))
 
+// 登録に使う「フィクスチャに無い日付」もフィクスチャから導く（既存日付と衝突したら別日になる）
+const existingDates = new Set(marketHolidays.map((holiday) => holiday.date))
+const NEW_DATE = (() => {
+  for (let day = 1; day <= 28; day += 1) {
+    const date = `${YEAR}-06-${String(day).padStart(2, '0')}`
+    if (!existingDates.has(date)) return date
+  }
+  throw new Error('フィクスチャに無い日付が見つからなかった')
+})()
+const NEW_REASON = 'テスト休場日'
+
+// 既定ハンドラは日付が重複すると 409 を返すので、既存日付をそのまま重複の再現に使う
+const DUPLICATE_DATE = marketHolidays[0].date
+const DUPLICATE_MESSAGE = 'その日付の海外休場日はすでに登録されています。'
+
 const Page = { render: () => h('div') }
 
 async function mountView(query = {}) {
@@ -65,6 +80,19 @@ const rows = (wrapper) => wrapper.findAll('[data-testid="data-table-row"]')
 const rangeText = (wrapper) => wrapper.find('[data-testid="pagination-range"]').text()
 const countText = (wrapper) => wrapper.find('[data-testid="market-holidays-count"]').text()
 const exists = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`).exists()
+const addDateInput = (wrapper) => wrapper.find('[data-testid="market-holidays-add-date"]')
+const addReasonInput = (wrapper) => wrapper.find('[data-testid="market-holidays-add-reason"]')
+const fillAdd = async (wrapper, date, reason) => {
+  await addDateInput(wrapper).setValue(date)
+  await addReasonInput(wrapper).setValue(reason)
+}
+// FormField はエラー文の id を入力欄の aria-describedby に渡すので、そこから項目単位で引く
+// （role="alert" で絞ると、同じ aria-describedby に並ぶ hint を拾わない）
+const fieldError = (wrapper, input) => {
+  const ids = (input.attributes('aria-describedby') ?? '').split(' ').filter(Boolean)
+  const found = ids.map((id) => wrapper.find(`#${id}[role="alert"]`)).find((el) => el.exists())
+  return found ? found.text() : ''
+}
 const pageButton = (wrapper, page) =>
   wrapper.find(`[data-testid="pagination-page"][data-page="${page}"]`)
 
@@ -208,5 +236,87 @@ describe('MarketHolidayListView', () => {
 
     expect(rows(wrapper)).toHaveLength(firstPage.length)
     expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('[MHL-13] 「新規追加」で空の追加モーダルが開く', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    expect(exists(wrapper, 'market-holidays-add-form')).toBe(false)
+
+    await wrapper.find('[data-testid="market-holidays-add"]').trigger('click')
+
+    expect(exists(wrapper, 'market-holidays-add-form')).toBe(true)
+    expect(addDateInput(wrapper).element.value).toBe('')
+    expect(addReasonInput(wrapper).element.value).toBe('')
+  })
+
+  it('[MHL-14] 未入力で「追加」を押すと項目ごとのエラーが出てモーダルは閉じない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await wrapper.find('[data-testid="market-holidays-add"]').trigger('click')
+
+    await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
+    await settle()
+
+    expect(exists(wrapper, 'market-holidays-add-form')).toBe(true)
+    expect(fieldError(wrapper, addDateInput(wrapper))).toBe('日付を入力してください。')
+    expect(fieldError(wrapper, addReasonInput(wrapper))).toBe('休場理由を入力してください。')
+    // API を呼んでいないので一覧の件数は動かない
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+    expect(exists(wrapper, 'market-holidays-created')).toBe(false)
+  })
+
+  it('[MHL-15] 追加が成功するとモーダルが閉じ成功メッセージと増えた件数が出る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await wrapper.find('[data-testid="market-holidays-add"]').trigger('click')
+
+    await fillAdd(wrapper, NEW_DATE, NEW_REASON)
+    await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
+    // POST → 一覧の再取得 → 再描画 の 2 往復を待つ
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'market-holidays-add-form')).toBe(false)
+    const created = wrapper.find('[data-testid="market-holidays-created"]')
+    expect(created.exists()).toBe(true)
+    expect(created.text()).toContain(NEW_DATE)
+    expect(countText(wrapper)).toBe(`${TOTAL + 1} 件`)
+  })
+
+  it('[MHL-16] 日付が重複したときはモーダル内にエラーが出て成功メッセージは出ない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await wrapper.find('[data-testid="market-holidays-add"]').trigger('click')
+
+    await fillAdd(wrapper, DUPLICATE_DATE, NEW_REASON)
+    await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
+    await settle()
+
+    expect(exists(wrapper, 'market-holidays-add-form')).toBe(true)
+    expect(wrapper.find('[data-testid="market-holidays-add-error"]').text()).toContain(
+      DUPLICATE_MESSAGE,
+    )
+    // サーバの拒否は項目のエラーには混ぜない
+    expect(fieldError(wrapper, addDateInput(wrapper))).toBe('')
+    expect(exists(wrapper, 'market-holidays-created')).toBe(false)
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+  })
+
+  it('[MHL-17] 失敗後に開き直すとエラーと入力が持ち込まれない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await wrapper.find('[data-testid="market-holidays-add"]').trigger('click')
+    await fillAdd(wrapper, DUPLICATE_DATE, NEW_REASON)
+    await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
+    await settle()
+    expect(exists(wrapper, 'market-holidays-add-error')).toBe(true)
+
+    await wrapper.find('[data-testid="market-holidays-add-cancel"]').trigger('click')
+    await wrapper.find('[data-testid="market-holidays-add"]').trigger('click')
+
+    expect(exists(wrapper, 'market-holidays-add-error')).toBe(false)
+    expect(addDateInput(wrapper).element.value).toBe('')
+    expect(addReasonInput(wrapper).element.value).toBe('')
   })
 })

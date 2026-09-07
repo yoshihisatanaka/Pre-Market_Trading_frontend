@@ -17,7 +17,26 @@ const DATE_FROM = `${YEAR}-01-01`
 const DATE_TO = `${YEAR}-12-31`
 const inYear = marketHolidays.filter((holiday) => holiday.date.startsWith(YEAR))
 
+// 全期間を含む絞り込み条件（先頭 / 末尾の日付そのもの）
+const ALL_FROM = marketHolidays[0].date
+const ALL_TO = marketHolidays[marketHolidays.length - 1].date
+
+// 登録に使う「フィクスチャに無い日付」もフィクスチャから導く（既存日付と衝突したら別日になる）
+const existingDates = new Set(marketHolidays.map((holiday) => holiday.date))
+const NEW_DATE = (() => {
+  for (let day = 1; day <= 28; day += 1) {
+    const date = `${YEAR}-06-${String(day).padStart(2, '0')}`
+    if (!existingDates.has(date)) return date
+  }
+  throw new Error('フィクスチャに無い日付が見つからなかった')
+})()
+const NEW_REASON = 'テスト休場日'
+
+// 既定ハンドラは日付が重複すると 409 を返すので、既存日付をそのまま重複の再現に使う
+const DUPLICATE_DATE = marketHolidays[0].date
+
 const ids = (items) => items.map((item) => item.id)
+const dates = (items) => items.map((item) => item.date)
 
 describe('useMarketHolidaysStore', () => {
   beforeEach(() => {
@@ -116,5 +135,80 @@ describe('useMarketHolidaysStore', () => {
     await Promise.all([fresh, stale])
 
     expect(ids(store.items)).toEqual(ids(secondPage))
+  })
+
+  it('[MHS-08] create が成功すると一覧が読み直され登録した日付が現れる', async () => {
+    const store = useMarketHolidaysStore()
+    await store.load()
+
+    const created = await store.create({ date: NEW_DATE, reason: NEW_REASON })
+
+    expect(created).toMatchObject({ date: NEW_DATE, reason: NEW_REASON })
+    expect(store.createError).toBeNull()
+    expect(store.total).toBe(TOTAL + 1)
+    expect(dates(store.items)).toContain(NEW_DATE)
+  })
+
+  it('[MHS-09] 日付が重複したとき createError に 409 が入り一覧は変わらない', async () => {
+    const store = useMarketHolidaysStore()
+    await store.load()
+
+    const created = await store.create({ date: DUPLICATE_DATE, reason: NEW_REASON })
+
+    expect(created).toBeNull()
+    expect(store.createError).toBeInstanceOf(Error)
+    expect(store.createError.status).toBe(409)
+    expect(store.createError.message).toBe('その日付の海外休場日はすでに登録されています。')
+    expect(store.total).toBe(TOTAL)
+    expect(ids(store.items)).toEqual(ids(firstPage))
+  })
+
+  it('[MHS-10] create 後の読み直しでもページ位置と絞り込みが保たれる', async () => {
+    const store = useMarketHolidaysStore()
+    await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
+
+    await store.create({ date: NEW_DATE, reason: NEW_REASON })
+
+    // 登録後の一覧は日付昇順のまま 1 件増える
+    const expected = [...marketHolidays, { date: NEW_DATE, reason: NEW_REASON }].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    )
+    expect(store.offset).toBe(PAGE_SIZE)
+    expect(store.dateFrom).toBe(ALL_FROM)
+    expect(store.dateTo).toBe(ALL_TO)
+    expect(store.total).toBe(TOTAL + 1)
+    expect(dates(store.items)).toEqual(dates(expected.slice(PAGE_SIZE, PAGE_SIZE * 2)))
+  })
+
+  it('[MHS-11] clearCreateError で登録エラーが消える', async () => {
+    const store = useMarketHolidaysStore()
+    await store.create({ date: DUPLICATE_DATE, reason: NEW_REASON })
+    expect(store.createError).not.toBeNull()
+
+    store.clearCreateError()
+
+    expect(store.createError).toBeNull()
+  })
+
+  it('[MHS-12] 登録中は creating だけが true になり一覧の loading は false のまま', async () => {
+    server.use(
+      http.post('*/api/market-holidays', async () => {
+        await delay(50)
+        return HttpResponse.json(
+          { id: `mhd_${NEW_DATE.replaceAll('-', '')}`, date: NEW_DATE, reason: NEW_REASON },
+          { status: 201 },
+        )
+      }),
+    )
+    const store = useMarketHolidaysStore()
+    await store.load()
+
+    const pending = store.create({ date: NEW_DATE, reason: NEW_REASON })
+
+    expect(store.creating).toBe(true)
+    expect(store.loading).toBe(false)
+
+    await pending
+    expect(store.creating).toBe(false)
   })
 })

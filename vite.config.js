@@ -61,6 +61,9 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: proxyTarget,
           changeOrigin: true,
+          // バックエンドの実パスに /api プレフィックスは無いので剥がす。
+          // /api はフロント側で「プロキシに乗せる」ための目印にすぎない。
+          rewrite: (path) => path.replace(/^\/api/, ''),
         },
       },
     },

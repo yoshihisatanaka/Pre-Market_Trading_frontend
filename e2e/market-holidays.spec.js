@@ -16,9 +16,35 @@ const PAGE_SIZE = 50
 const secondPage = marketHolidays.slice(PAGE_SIZE)
 const year2025 = marketHolidays.filter((h) => h.date >= '2025-01-01' && h.date <= '2025-12-31')
 
+const firstHoliday = marketHolidays[0]
+const lastHoliday = marketHolidays[marketHolidays.length - 1]
+
+// フィクスチャに無い日付。年を直書きすると YEARS が伸びたとき重複エラーになるので最終年の翌年から作る
+const NEW_DATE = `${Number(lastHoliday.date.slice(0, 4)) + 1}-01-01`
+const NEW_REASON = '独立記念日（テスト）'
+
+// 末尾から PAGE_SIZE + 1 件目の日付。これを date_from にすると既定ハンドラの絞り込みが
+// ちょうど 51 件になり、offset=50 の 2 ページ目が「最後の 1 件」だけになる
+const LAST_PAGE_FROM = marketHolidays[marketHolidays.length - (PAGE_SIZE + 1)].date
+
 /** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function rowsOf(page) {
   return page.getByTestId('market-holidays-table').getByTestId('data-table-row')
+}
+
+/** 追加モーダル。削除確認モーダルと取り違えないよう aria-label（タイトル）で絞る */
+function addDialogOf(page) {
+  return page.getByRole('dialog', { name: '海外休場日 新規追加' })
+}
+
+/** 削除確認モーダル */
+function deleteDialogOf(page) {
+  return page.getByRole('dialog', { name: '削除確認' })
+}
+
+/** 行の削除ボタン。testid は行の id を含む */
+function deleteButtonOf(page, holiday) {
+  return page.getByTestId(`market-holidays-delete-${holiday.id}`)
 }
 
 test.describe('海外休場日マスタ一覧', () => {
@@ -145,5 +171,171 @@ test.describe('海外休場日マスタ一覧', () => {
     await expect(
       page.getByTestId('market-holidays-pagination').getByRole('button', { name: '2', exact: true }),
     ).toHaveAttribute('aria-current', 'page')
+  })
+})
+
+// 新規追加（MH-08〜11）。既定ハンドラは追加した行を保持するので、件数が増えるところまで見る。
+// モックの可変状態はページを開き直すと初期化されるため、テスト間で持ち越さない。
+test.describe('海外休場日マスタ 新規追加', () => {
+  test('[MH-08] 「新規追加」を押すと空の入力欄でモーダルが開く', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('market-holidays-add').click()
+
+    const dialog = addDialogOf(page)
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('market-holidays-add-date')).toHaveValue('')
+    await expect(page.getByTestId('market-holidays-add-reason')).toHaveValue('')
+  })
+
+  test('[MH-09] 未入力のまま「追加」を押すと項目ごとにエラーが出る', async ({ page }) => {
+    await page.goto(PATH)
+    await page.getByTestId('market-holidays-add').click()
+
+    const dialog = addDialogOf(page)
+    await page.getByTestId('market-holidays-add-submit').click()
+
+    await expect(dialog.getByText('日付を入力してください。')).toBeVisible()
+    await expect(dialog.getByText('休場理由を入力してください。')).toBeVisible()
+
+    // 入力を直せるようモーダルは閉じない。一覧にも影響しない
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${marketHolidays.length} 件`,
+    )
+  })
+
+  test('[MH-10] 一覧に無い日付を追加すると件数が 1 増える', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('market-holidays-add').click()
+    await page.getByTestId('market-holidays-add-date').fill(NEW_DATE)
+    await page.getByTestId('market-holidays-add-reason').fill(NEW_REASON)
+    await page.getByTestId('market-holidays-add-submit').click()
+
+    await expect(addDialogOf(page)).toBeHidden()
+
+    // 成功メッセージの枠は追加と削除で共用
+    const notice = page.getByTestId('market-holidays-notice')
+    await expect(notice).toBeVisible()
+    await expect(notice).toHaveText(`${NEW_DATE} を追加しました。`)
+
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${marketHolidays.length + 1} 件`,
+    )
+  })
+
+  test('[MH-11] 既にある日付を追加すると重複エラーが出る', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('market-holidays-add').click()
+    await page.getByTestId('market-holidays-add-date').fill(firstHoliday.date)
+    await page.getByTestId('market-holidays-add-reason').fill(NEW_REASON)
+    await page.getByTestId('market-holidays-add-submit').click()
+
+    const error = page.getByTestId('market-holidays-add-error')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText('その日付の海外休場日はすでに登録されています。')
+
+    await expect(addDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${marketHolidays.length} 件`,
+    )
+  })
+})
+
+// 削除（MH-12〜16）。既定ハンドラは DELETE を可変配列に反映するので、件数が減るところまで見る。
+test.describe('海外休場日マスタ 削除', () => {
+  test('[MH-12] 行の「削除」を押すと確認モーダルが開く', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await deleteButtonOf(page, firstHoliday).click()
+
+    const dialog = deleteDialogOf(page)
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText(firstHoliday.date)
+    await expect(dialog).toContainText('を削除しますか？')
+    await expect(dialog).toContainText('この操作は元に戻せません。')
+  })
+
+  test('[MH-13] 「キャンセル」を押すと何も消えずに閉じる', async ({ page }) => {
+    await page.goto(PATH)
+    await deleteButtonOf(page, firstHoliday).click()
+    await expect(deleteDialogOf(page)).toBeVisible()
+
+    await page.getByTestId('market-holidays-delete-cancel').click()
+
+    await expect(deleteDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${marketHolidays.length} 件`,
+    )
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(rowsOf(page).filter({ hasText: firstHoliday.date })).toHaveCount(1)
+  })
+
+  test('[MH-14] 「削除する」を押すと件数が 1 減りその行が消える', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await deleteButtonOf(page, firstHoliday).click()
+    await page.getByTestId('market-holidays-delete-submit').click()
+
+    await expect(deleteDialogOf(page)).toBeHidden()
+
+    const notice = page.getByTestId('market-holidays-notice')
+    await expect(notice).toBeVisible()
+    await expect(notice).toHaveText(`${firstHoliday.date} を削除しました。`)
+
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${marketHolidays.length - 1} 件`,
+    )
+    await expect(rowsOf(page).filter({ hasText: firstHoliday.date })).toHaveCount(0)
+  })
+
+  test('[MH-15] 削除に失敗するとモーダルは開いたままエラーが出る', async ({ page }) => {
+    await mockApi(page, [
+      {
+        method: 'delete',
+        path: '*/api/market-holidays/:id',
+        status: 500,
+        body: { message: 'サーバーでエラーが発生しました。' },
+      },
+    ])
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await deleteButtonOf(page, firstHoliday).click()
+    await page.getByTestId('market-holidays-delete-submit').click()
+
+    const error = page.getByTestId('market-holidays-delete-error')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText('サーバーでエラーが発生しました。')
+
+    await expect(deleteDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${marketHolidays.length} 件`,
+    )
+    await expect(rowsOf(page).filter({ hasText: firstHoliday.date })).toHaveCount(1)
+  })
+
+  test('[MH-16] 最終ページの最後の 1 件を消すと 1 ページ前に戻る', async ({ page }) => {
+    // 51 件に絞った 2 ページ目。行はちょうど 1 件になる
+    await page.goto(`${PATH}?date_from=${LAST_PAGE_FROM}&offset=${PAGE_SIZE}`)
+
+    const rows = rowsOf(page)
+    await expect(rows).toHaveCount(1)
+    await expect(rows.first()).toContainText(lastHoliday.date)
+
+    await deleteButtonOf(page, lastHoliday).click()
+    await page.getByTestId('market-holidays-delete-submit').click()
+
+    // 戻る直前に空状態が一瞬描画されるため、最終状態だけを web-first assertion で待つ
+    await expect(page).toHaveURL(new RegExp(`\\${PATH}\\?date_from=${LAST_PAGE_FROM}$`))
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(`${PAGE_SIZE} 件`)
   })
 })

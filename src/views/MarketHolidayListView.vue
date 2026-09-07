@@ -2,9 +2,11 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
 import BasePagination from '@/components/ui/BasePagination.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
@@ -13,7 +15,8 @@ import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from '@/stores/mark
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useMarketHolidaysStore()
-const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(store)
+const { items, total, limit, offset, loading, error, isEmpty, creating, createError } =
+  storeToRefs(store)
 
 const route = useRoute()
 const router = useRouter()
@@ -105,6 +108,51 @@ function goToOffset(nextOffset) {
     }),
   })
 }
+
+/*
+ * 新規追加。画面モック（docs/mock/masters-blocked-dates/index.html）に合わせ、
+ * ヘッダの「新規追加」からモーダルを開く形にする。URL は変えない（一覧の単方向フローに触らない）。
+ *
+ * エラーは 2 種類あり、出し先を分ける。
+ *   入力の不備   … FormField の error（項目の直下）
+ *   サーバの拒否 … store.createError をモーダル内の BaseAlert（重複日付など）
+ */
+const isAddOpen = ref(false)
+const addDate = ref('')
+const addReason = ref('')
+const addErrors = ref({ date: '', reason: '' })
+const createdMessage = ref('')
+
+function openAdd() {
+  addDate.value = ''
+  addReason.value = ''
+  addErrors.value = { date: '', reason: '' }
+  // 前回の失敗と成功をどちらも持ち込まない
+  store.clearCreateError()
+  createdMessage.value = ''
+  isAddOpen.value = true
+}
+
+function closeAdd() {
+  // 登録中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (creating.value) return
+  isAddOpen.value = false
+}
+
+async function submitAdd() {
+  addErrors.value = {
+    date: addDate.value ? '' : '日付を入力してください。',
+    reason: addReason.value.trim() ? '' : '休場理由を入力してください。',
+  }
+  if (addErrors.value.date || addErrors.value.reason) return
+
+  const created = await store.create({ date: addDate.value, reason: addReason.value.trim() })
+  // 失敗時はモーダルを開いたままにして、入力を直せるようにする（理由は createError に出る）
+  if (!created) return
+
+  isAddOpen.value = false
+  createdMessage.value = `${created.date} を追加しました。`
+}
 </script>
 
 <template>
@@ -119,7 +167,12 @@ function goToOffset(nextOffset) {
       >
         再読み込み
       </BaseButton>
+      <BaseButton data-testid="market-holidays-add" @click="openAdd">新規追加</BaseButton>
     </Teleport>
+
+    <BaseAlert v-if="createdMessage" variant="success" data-testid="market-holidays-created">
+      {{ createdMessage }}
+    </BaseAlert>
 
     <!-- 検索カードは 4 状態の外に置く。0 件やエラーのときこそ条件を直したいので消さない -->
     <BaseCard>
@@ -205,6 +258,57 @@ function goToOffset(nextOffset) {
         />
       </template>
     </BaseCard>
+
+    <BaseModal :open="isAddOpen" title="海外休場日 新規追加" @close="closeAdd">
+      <!-- 送信ボタンはモーダルのフッタ（この form の外）にあるので、
+           ここでの submit は入力欄での Enter キーのためだけにある -->
+      <form
+        data-testid="market-holidays-add-form"
+        class="market-holiday-list__form"
+        @submit.prevent="submitAdd"
+      >
+        <BaseAlert v-if="createError" variant="error" data-testid="market-holidays-add-error">
+          {{ createError.message }}
+        </BaseAlert>
+
+        <FormField v-slot="{ field }" label="日付" required :error="addErrors.date">
+          <BaseInput
+            v-bind="field"
+            v-model="addDate"
+            type="date"
+            data-testid="market-holidays-add-date"
+          />
+        </FormField>
+
+        <FormField v-slot="{ field }" label="休場理由" required :error="addErrors.reason">
+          <BaseInput
+            v-bind="field"
+            v-model="addReason"
+            placeholder="例: 独立記念日"
+            maxlength="100"
+            data-testid="market-holidays-add-reason"
+          />
+        </FormField>
+      </form>
+
+      <template #footer>
+        <BaseButton
+          variant="secondary"
+          data-testid="market-holidays-add-cancel"
+          :disabled="creating"
+          @click="closeAdd"
+        >
+          キャンセル
+        </BaseButton>
+        <BaseButton
+          data-testid="market-holidays-add-submit"
+          :disabled="creating"
+          @click="submitAdd"
+        >
+          {{ creating ? '追加中…' : '追加' }}
+        </BaseButton>
+      </template>
+    </BaseModal>
   </section>
 </template>
 
@@ -220,6 +324,13 @@ function goToOffset(nextOffset) {
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-3);
+}
+
+/* モーダル内の入力欄。項目間の余白は検索カード（FormGrid）と同じ間隔に揃える */
+.market-holiday-list__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .market-holiday-list__count {

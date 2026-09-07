@@ -42,3 +42,20 @@ function toMarketHoliday(raw) {
     reason: raw.reason,
   }
 }
+
+/**
+ * 海外休場日を 1 件登録する。
+ *
+ * @param {{ date: string, reason: string }} params date は 'YYYY-MM-DD'
+ * @returns {Promise<{ id: string, date: string, reason: string }>} 登録された 1 件
+ */
+export async function createMarketHoliday({ date, reason }) {
+  const { data } = await apiClient.post('/market-holidays', {
+    // date / reason は 1 語なので snake_case との差は無いが、
+    // 変換の責務がこの層にあることを明示するため素通しの形でも書き出す
+    date,
+    reason,
+  })
+
+  return toMarketHoliday(data)
+}

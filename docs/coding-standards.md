@@ -98,12 +98,15 @@ views / components  →  stores  →  api  →  (HTTP)
 
 ## 4. API 仕様書 / OpenAPI の運用
 
-1. バックエンドから受領した仕様書のコピーを `docs/api/` にそのまま置く
-   （**仕様そのものの正はバックエンド側リポジトリの原本**。ここに置くのは受領コピー）
-2. Claude で `docs/api/openapi.yaml` へ変換する
-3. **以後 `openapi.yaml` をフロント実装上の正**とし、仕様の解釈で迷ったらここを見る。
-   受領コピーと食い違ったらバックエンド担当に確認する（→ [docs/api/README.md](api/README.md)）
-4. `openapi.yaml` の `example` を `src/mocks/fixtures/` に反映する
+1. `/api-spec-sync` でバックエンドの `api` コンテナから仕様を取り込み、`docs/api/openapi.json` に無加工で置く
+   （**仕様そのものの正はバックエンド側リポジトリ**。ここに置くのはその取り込みコピー）
+2. 原本は FastAPI が生成する **OpenAPI 3.1 の JSON**。**YAML へ変換しない**（二度手間になるうえ、
+   2 本並ぶとどちらが正か曖昧になる）
+3. **`openapi.json` をフロント実装上の正**とし、仕様の解釈で迷ったらここを見る。
+   ここを手で直しても仕様は変わらないし次の取り込みで消える。食い違いはバックエンド担当に確認する
+   （→ [docs/api/README.md](api/README.md)）
+4. `openapi.json` のスキーマから `src/mocks/fixtures/` を起こす。要素の形が未定義な箇所は
+   推測で埋めず、バックエンド担当に確認してから書く
 5. エンドポイントが増えたら `src/api/` に関数を1つ追加する（1エンドポイント = 1関数、動詞始まりの名前）
 
 > 本プロジェクトは JavaScript のため型の自動生成は行わない。

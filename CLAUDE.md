@@ -97,7 +97,7 @@ views / components  →  stores  →  api  →  (HTTP)
 - **バックエンドのレスポンス形（snake_case 等）を知ってよいのは `src/api/` だけ。**
   そこで camelCase のアプリ内モデルに変換してから外へ返す（参考: `src/api/orders.js` の `toOrder()`）
 - 新しいエンドポイントを使うときは、**先に `src/api/` に関数を1つ追加**してから呼ぶ
-- `docs/api/openapi.yaml` を編集したら `docker compose run --rm redocly lint openapi.yaml` を通す（HTML は `build-docs` で再生成。コミットしない）
+- `docs/api/openapi.json` は**編集しない**（バックエンドの生成物。次の取り込みで消える）。lint と HTML 生成は `/api-spec-sync` が通す
 - 非同期は `src/composables/useAsync.js` を使い、各所で try-catch を書かない
 - 画面は **ローディング / エラー / 空 / データあり の4状態**を必ず出し分ける（参考: `src/views/OrderListView.vue`）
 
@@ -116,7 +116,7 @@ views / components  →  stores  →  api  →  (HTTP)
 | `src/mocks/` | MSW ハンドラ / フィクスチャ |
 | `e2e/` | Playwright の E2E テスト |
 | `scripts/` | 補助スクリプト（`check-scenarios.mjs`） |
-| `docs/api/` | バックエンドから受領した仕様書の**コピー**と `openapi.yaml`（フロント実装上の正） |
+| `docs/api/` | バックエンドから取り込んだ `openapi.json`（フロント実装上の正）と閲覧用 HTML |
 | `docs/e2e/` | 画面ごとの E2E シナリオ（受け入れ条件）。ID をテスト名に付けて対応づける |
 | `docs/unit/` | テスト対象ファイルごとの単体テストシナリオ。同じ形式・同じチェック |
 | `docs/mock/` | Manus 出力の画面モック原本（編集しない） |
@@ -186,8 +186,14 @@ headless なので**ブラウザ画面をリアルタイムには覗けない**�
 - **このリポジトリはフロントエンド専用。** バックエンドは別リポジトリ・別サーバ。`/api` は Vite dev サーバが
   `.env` の `VITE_PROXY_TARGET`（既定 `http://host.docker.internal:8000`）へプロキシする。
   取り決めは README の「バックエンドとの連携」
-- API 仕様書は未受領。`docs/api/openapi.yaml` はまだ無い。受領したら `/api-to-openapi docs/api/<原本>` で変換する。
-  **仕様の正はバックエンド側リポジトリの原本で、`docs/api/` に置くのは受領コピー**
+- API 仕様は `docs/api/openapi.json` に取り込み済み（55 パス / 76 オペレーション / 95 スキーマ）。
+  原本は FastAPI が生成する **OpenAPI 3.1 の JSON** なので **YAML へ変換しない**（二度手間）。
+  `/api-spec-sync` を実行すると、隣のバックエンドリポジトリ（`../Pre-Market_Trading`。**相対パスで参照する**。
+  絶対パスは guard フックが弾く）の稼働中 `api` コンテナから取得し直し、lint・HTML 生成・仕様ギャップの点検まで通す。
+  事前に `(cd ../Pre-Market_Trading && docker compose up -d api)` が必要。
+  **仕様の正はバックエンド側リポジトリで、`docs/api/openapi.json` はその取り込みコピー（フロント実装上の正）**
+- ただし主要レスポンスに `response_model` が無く中身が未定義、`enum` 0 件、エラー応答が 422 のみ、といった
+  **ギャップが残っている**（→ `.claude/skills/api-spec-sync/checklist.md`）。埋まるまでは `src/mocks/` の仮フィクスチャで進める
 - Manus の画面モックは受領済（素の CSS。Tailwind ではないので導入しない）。
   共通レイアウト部分だけ取り込み済み（原本 `docs/mock/layout/masters-users.html`、`tokens.css` は
   モックの配色・文字サイズに更新済み）。個別画面はまだ未着手

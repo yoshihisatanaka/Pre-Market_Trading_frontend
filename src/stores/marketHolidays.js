@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { fetchMarketHolidays } from '@/api/marketHolidays'
+import { createMarketHoliday, fetchMarketHolidays } from '@/api/marketHolidays'
 import { useAsync } from '@/composables/useAsync'
 
 /** 一覧 1 ページあたりの表示件数 */
@@ -55,6 +55,33 @@ export const useMarketHolidaysStore = defineStore('marketHolidays', () => {
     return load({ offset: offset.value, dateFrom: dateFrom.value, dateTo: dateTo.value })
   }
 
+  // 登録は一覧とは別の loading / error を持つ。
+  // 登録中も一覧の表示はそのまま残したいので、useAsync をもう 1 つ作る
+  const {
+    error: createError,
+    loading: creating,
+    execute: executeCreate,
+  } = useAsync(createMarketHoliday)
+
+  /**
+   * 海外休場日を 1 件登録し、成功したら今の条件のまま一覧を読み直す。
+   *
+   * @returns {Promise<{ id: string, date: string, reason: string } | null>}
+   *   登録された 1 件。失敗時は null（理由は createError に入る）
+   */
+  async function create({ date, reason }) {
+    const created = await executeCreate({ date, reason })
+    if (!created) return null
+
+    await reload()
+    return created
+  }
+
+  /** 登録エラーを消す（モーダルを開き直したときに前回の失敗を残さない） */
+  function clearCreateError() {
+    createError.value = null
+  }
+
   return {
     items,
     total,
@@ -67,5 +94,9 @@ export const useMarketHolidaysStore = defineStore('marketHolidays', () => {
     isEmpty,
     load,
     reload,
+    creating,
+    createError,
+    create,
+    clearCreateError,
   }
 })

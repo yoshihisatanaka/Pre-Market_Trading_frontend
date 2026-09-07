@@ -28,7 +28,7 @@
 | 言語 | Python |
 | 想定ポート | 8000 |
 | 接続方法 | Vite dev サーバが `/api/*` を `.env` の `VITE_PROXY_TARGET` へプロキシする。既定は `http://host.docker.internal:8000`（= ホスト側で動いているバックエンドの 8000 番） |
-| API 仕様の正 | **バックエンド側リポジトリの仕様書原本**。`docs/api/` にあるのはその**受領コピー**で、フロント実装の判断基準は変換結果の `openapi.yaml`（→ [docs/api/README.md](docs/api/README.md)） |
+| API 仕様の正 | **バックエンド側リポジトリ**。`docs/api/openapi.json` はそこから取り込んだコピーで、フロント実装の判断基準はこれ。取り込みは `/api-spec-sync`（→ [docs/api/README.md](docs/api/README.md)） |
 | API が実装されたら | `src/mocks/handlers/index.js` から該当ハンドラを**削除**する。MSW は未定義のリクエストを実 API へ素通しするため、削除するだけで本物に切り替わる |
 
 バックエンドをホストで動かす場合は既定値のまま繋がる（`host.docker.internal` は Docker Desktop が
@@ -70,8 +70,8 @@ docker compose up frontend
 | シナリオ対応チェック（E2E / 単体） | `docker compose run --rm frontend npm run check:scenarios`（[docs/e2e/](docs/e2e/README.md), [docs/unit/](docs/unit/README.md)） |
 | 本番ビルド確認 | `docker compose run --rm frontend npm run build` |
 | 依存の追加 | `docker compose run --rm frontend npm i <package>` |
-| API 仕様の lint | `docker compose run --rm redocly lint openapi.yaml` |
-| API ドキュメント生成 | `docker compose run --rm redocly build-docs openapi.yaml -o openapi.html` → `docs/api/openapi.html` |
+| API 仕様の lint | `docker compose run --rm redocly lint openapi.json` |
+| API ドキュメント生成 | `docker compose run --rm redocly build-docs openapi.json -o openapi.html` → `docs/api/openapi.html` |
 
 > テストを書く・直すときは、コマンドを叩く前に下の「[テスト](#テスト)」を読むこと。
 > シナリオ文書との対応づけ（ID）が必須で、守らないと `check:scenarios` で落ちる。

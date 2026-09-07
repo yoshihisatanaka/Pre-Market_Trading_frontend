@@ -13,6 +13,7 @@ dist/
 !.env.example
 
 # 生成物（docker compose run --rm redocly build-docs で再生成できる）
+# openapi.json は取り込んだ仕様そのもの（フロント実装上の正）なのでコミットする
 docs/api/openapi.html
 
 # test artifacts

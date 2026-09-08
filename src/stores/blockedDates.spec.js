@@ -42,6 +42,11 @@ const DUPLICATE_MESSAGE = 'その日付の受注不可日はすでに登録さ�
 const INVALID_DATE_MESSAGE = '日付は YYYY-MM-DD 形式で入力してください。'
 const INVALID_REASON_MESSAGE = '理由を入力してください。'
 
+// 削除の対象と、既定ハンドラが 404 を返す「存在しない id」もフィクスチャから導く
+const DELETE_TARGET = blockedDates[0]
+const MISSING_ID = `${DELETE_TARGET.id}_missing`
+const NOT_FOUND_MESSAGE = '対象の受注不可日が見つかりません。'
+
 const ids = (items) => items.map((item) => item.id)
 const dates = (items) => items.map((item) => item.date)
 
@@ -398,5 +403,76 @@ describe('useBlockedDatesStore', () => {
     releaseCreate()
     await pending
     expect(store.creating).toBe(false)
+  })
+
+  it('[BDS-21] remove が成功すると一覧が読み直され対象の id が消える', async () => {
+    const store = useBlockedDatesStore()
+    await store.load()
+    expect(ids(store.items)).toContain(DELETE_TARGET.id)
+
+    const removed = await store.remove(DELETE_TARGET.id)
+
+    expect(removed).toBe(true)
+    expect(store.deleteError).toBeNull()
+    expect(store.total).toBe(TOTAL - 1)
+    expect(ids(store.items)).not.toContain(DELETE_TARGET.id)
+  })
+
+  it('[BDS-22] 存在しない id のとき deleteError に 404 が入り一覧は変わらない', async () => {
+    const store = useBlockedDatesStore()
+    await store.load()
+
+    const removed = await store.remove(MISSING_ID)
+
+    expect(removed).toBe(false)
+    expect(store.deleteError).toBeInstanceOf(Error)
+    expect(store.deleteError.status).toBe(404)
+    expect(store.deleteError.message).toBe(NOT_FOUND_MESSAGE)
+    expect(store.total).toBe(TOTAL)
+    expect(ids(store.items)).toEqual(ids(firstPage))
+  })
+
+  it('[BDS-23] remove 後の読み直しでもページ位置と絞り込みが保たれる', async () => {
+    const store = useBlockedDatesStore()
+    await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
+
+    await store.remove(DELETE_TARGET.id)
+
+    // 削除後の一覧は日付昇順のまま 1 件減る
+    const remaining = blockedDates.filter((blocked) => blocked.id !== DELETE_TARGET.id)
+    expect(store.offset).toBe(PAGE_SIZE)
+    expect(store.dateFrom).toBe(ALL_FROM)
+    expect(store.dateTo).toBe(ALL_TO)
+    expect(store.total).toBe(TOTAL - 1)
+    expect(ids(store.items)).toEqual(ids(remaining.slice(PAGE_SIZE, PAGE_SIZE * 2)))
+  })
+
+  it('[BDS-24] clearDeleteError で削除エラーが消える', async () => {
+    const store = useBlockedDatesStore()
+    await store.remove(MISSING_ID)
+    expect(store.deleteError).not.toBeNull()
+
+    store.clearDeleteError()
+
+    expect(store.deleteError).toBeNull()
+  })
+
+  it('[BDS-25] 削除中は deleting だけが true になり一覧の loading は false のまま', async () => {
+    server.use(
+      http.delete('*/api/blocked-dates/:id', async () => {
+        await delay(50)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const store = useBlockedDatesStore()
+    await store.load()
+
+    const pending = store.remove(DELETE_TARGET.id)
+
+    expect(store.deleting).toBe(true)
+    expect(store.loading).toBe(false)
+
+    await pending
+    expect(store.deleting).toBe(false)
   })
 })

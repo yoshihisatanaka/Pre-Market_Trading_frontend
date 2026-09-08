@@ -26,3 +26,8 @@
 | BDS-18 | 直前の `create()` が通信エラーで失敗した状態 / 事前検証で弾かれた状態 | それぞれで `clearCreateError()` を呼ぶ | `createError` が null になり、`validationErrors` も空になる（どちらの失敗も残らない） | 実装済 |
 | BDS-19 | 事前検証で弾かれて `validationErrors` が入っている | 続けて成功する入力で `create()` を呼ぶ | `validationErrors` が空に戻り、登録した 1 件が返る（前回の理由が残らない） | 実装済 |
 | BDS-20 | 事前検証の応答が返る前 | `create()` を await せずに状態を見る | `creating` が true で、一覧側の `loading` は false のまま。検証と登録の 2 往復が終わるまで true が続き、完了後に false に戻る | 実装済 |
+| BDS-21 | 既定モック、`load()` 済み | 一覧の先頭の id で `remove(id)` を呼ぶ | 戻り値が true、`deleteError` は null。一覧が読み直されて `total` が 1 減り、その id が `items` から消える | 実装済 |
+| BDS-22 | DELETE が 404（`message` 付き）を返す（存在しない id） | `remove(id)` を呼ぶ | 戻り値が false、`deleteError` に status 404 と message が入る。`items` / `total` は変わらない | 実装済 |
+| BDS-23 | `load({ offset: 表示件数, dateFrom, dateTo })` 済み | `remove()` が成功する | 同じページ位置・同じ絞り込みのまま読み直される（1 ページ目・全件に戻らない） | 実装済 |
+| BDS-24 | `remove()` が失敗して `deleteError` が入っている | `clearDeleteError()` を呼ぶ | `deleteError` が null になる | 実装済 |
+| BDS-25 | DELETE の応答が返る前 | `remove()` を await せずに状態を見る | `deleting` が true で、一覧側の `loading` は false のまま。完了後に false に戻る | 実装済 |

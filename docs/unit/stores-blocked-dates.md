@@ -16,3 +16,13 @@
 | BDS-08 | `load({ offset: 表示件数, dateFrom, dateTo })` 済み | `reload()` を呼ぶ | 同じページ位置・同じ絞り込みの結果が返る（1 ページ目・全件に戻らない） | 実装済 |
 | BDS-09 | 1 ページ目の応答だけが遅れて返る | 1 ページ目 → 2 ページ目の順に `load()` を呼び、両方の完了を待つ | 後から届いた古い応答で `items` が 1 ページ目に巻き戻らない | 実装済 |
 | BDS-10 | 既定モック | `load()` を呼ぶ | `limit` が表示件数の定数と一致し、リクエストの `limit` にも同じ値が載る | 実装済 |
+| BDS-11 | 既定モック、`load()` 済み | 一覧に無い日付で `create({ date, reason })` を呼ぶ | 事前検証を通って登録され、登録した 1 件が返る。日付・理由は渡した値。対象市場はサーバが決めた値が入り、読み直した一覧の同じ日付の行と一致する。`createError` は null、`validationErrors` は空。`total` が 1 増え、その日付が `items` に入る | 実装済 |
+| BDS-12 | 既定モック、`load()` 済み | すでに登録済みの日付で `create()` を呼ぶ | 戻り値が null。`validationErrors` にサーバが返した理由（重複を知らせる文言）が入り、`createError` は null のまま。`items` / `total` は変わらない | 実装済 |
+| BDS-13 | 事前検証が不合格になる入力 | `create()` を呼ぶ | 登録の API（`POST /blocked-dates`）は 1 度も呼ばれない | 実装済 |
+| BDS-14 | 事前検証が理由を 2 件返す | `create()` を呼ぶ | `validationErrors` にその 2 件が、サーバが返した順のまま入る | 実装済 |
+| BDS-15 | 事前検証の API が 500（`message` 付き）を返す | `create()` を呼ぶ | 戻り値が null、`createError` に status 500 とその message が入る。`validationErrors` は空のまま。`items` / `total` は変わらない | 実装済 |
+| BDS-16 | 登録の API が 409（`message` 付き）を返す（事前検証は通る） | `create()` を呼ぶ | 戻り値が null、`createError` に status 409 とその message が入る（サーバ側の防御に到達した場合も理由が失われない） | 実装済 |
+| BDS-17 | `load({ offset: 表示件数, dateFrom, dateTo })` 済み | `create()` が成功する | 同じページ位置・同じ絞り込みのまま読み直される（1 ページ目・全件に戻らない） | 実装済 |
+| BDS-18 | 直前の `create()` が通信エラーで失敗した状態 / 事前検証で弾かれた状態 | それぞれで `clearCreateError()` を呼ぶ | `createError` が null になり、`validationErrors` も空になる（どちらの失敗も残らない） | 実装済 |
+| BDS-19 | 事前検証で弾かれて `validationErrors` が入っている | 続けて成功する入力で `create()` を呼ぶ | `validationErrors` が空に戻り、登録した 1 件が返る（前回の理由が残らない） | 実装済 |
+| BDS-20 | 事前検証の応答が返る前 | `create()` を await せずに状態を見る | `creating` が true で、一覧側の `loading` は false のまま。検証と登録の 2 往復が終わるまで true が続き、完了後に false に戻る | 実装済 |

@@ -39,6 +39,49 @@ export async function fetchBlockedDates({
   }
 }
 
+/**
+ * 受注不可日の入力内容を事前検証する（DB には登録しない）。
+ *
+ * 実仕様（docs/api/openapi.json の Validate Blackout Date Endpoint）では、登録は
+ * 「事前検証を通過した内容を登録する」前提になっている。日付の実在性や重複はサーバだけが
+ * 判断できるので、登録の前にこれを呼ぶ。
+ *
+ * 応答の warnings / details は今回扱わない（実仕様が固まってから足す）。
+ *
+ * @param {{ date: string, reason: string }} params date は 'YYYY-MM-DD'
+ * @returns {Promise<{ valid: boolean, errors: string[] }>}
+ *   valid が false のときだけ errors に理由が入る
+ */
+export async function validateBlockedDate({ date, reason }) {
+  const { data } = await apiClient.post('/blocked-dates/validate', { date, reason })
+
+  return {
+    valid: Boolean(data?.valid),
+    errors: Array.isArray(data?.errors) ? data.errors : [],
+  }
+}
+
+/**
+ * 受注不可日を 1 件登録する。
+ *
+ * 対象市場（market）は送らない。一覧には列があるが、docs/api/openapi.json の
+ * BlackoutDateRequest に対応する項目が無く、サーバ側が既定値を決める前提。
+ *
+ * @param {{ date: string, reason: string }} params date は 'YYYY-MM-DD'
+ * @returns {Promise<{ id: string, date: string, market: string, reason: string }>}
+ *   登録された 1 件
+ */
+export async function createBlockedDate({ date, reason }) {
+  const { data } = await apiClient.post('/blocked-dates', {
+    // date / reason は 1 語なので snake_case との差は無いが、
+    // 変換の責務がこの層にあることを明示するため素通しの形でも書き出す
+    date,
+    reason,
+  })
+
+  return toBlockedDate(data)
+}
+
 function toBlockedDate(raw) {
   return {
     id: raw.id,

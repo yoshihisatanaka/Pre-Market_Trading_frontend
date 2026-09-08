@@ -33,6 +33,28 @@ const inYear = blockedDates.filter((blocked) => blocked.date.startsWith(YEAR))
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
+// 登録に使う「フィクスチャに無い日付」もフィクスチャから導く（既存日付と衝突したら別日になる）
+const existingDates = new Set(blockedDates.map((blocked) => blocked.date))
+const NEW_DATE = (() => {
+  for (let day = 1; day <= 28; day += 1) {
+    const date = `${YEAR}-06-${String(day).padStart(2, '0')}`
+    if (!existingDates.has(date)) return date
+  }
+  throw new Error('フィクスチャに無い日付が見つからなかった')
+})()
+const NEW_REASON = 'テスト受注不可日'
+
+// 既定の事前検証は既存の日付を重複として弾くので、フィクスチャ先頭の日付をそのまま使う
+const DUPLICATE_DATE = blockedDates[0].date
+
+// 事前検証ハンドラが返す文言（src/mocks/handlers/index.js と共有する定数）
+const DUPLICATE_MESSAGE = 'その日付の受注不可日はすでに登録されています。'
+const INVALID_DATE_MESSAGE = '日付は YYYY-MM-DD 形式で入力してください。'
+
+// 複数の理由が並ぶ表示を確かめるための応答。既定ハンドラは日付の不正と重複を排他で返すため、
+// 「2 件同時」は差し替えで作る
+const MULTI_MESSAGES = [INVALID_DATE_MESSAGE, DUPLICATE_MESSAGE]
+
 const Page = { render: () => h('div') }
 
 async function mountView(query = {}) {
@@ -83,6 +105,40 @@ const errorHandler = (options) =>
   )
 const emptyHandler = (options) =>
   http.get('*/api/blocked-dates', () => HttpResponse.json({ items: [], total: 0 }), options)
+
+// 事前検証は HTTP 200 で valid / errors を返す契約なので、不合格も 200 で作る
+const validateInvalidHandler = (errors) =>
+  http.post('*/api/blocked-dates/validate', () =>
+    HttpResponse.json({ valid: false, errors, warnings: [], details: null }),
+  )
+const validateErrorHandler = () =>
+  http.post('*/api/blocked-dates/validate', () =>
+    HttpResponse.json({ message: ERROR_MESSAGE }, { status: 500 }),
+  )
+
+const addDateInput = (wrapper) => wrapper.find('[data-testid="blocked-dates-add-date"]')
+const addReasonInput = (wrapper) => wrapper.find('[data-testid="blocked-dates-add-reason"]')
+const addSubmit = (wrapper) => wrapper.find('[data-testid="blocked-dates-add-submit"]')
+const addCancel = (wrapper) => wrapper.find('[data-testid="blocked-dates-add-cancel"]')
+const openAddModal = async (wrapper) => {
+  await wrapper.find('[data-testid="blocked-dates-add"]').trigger('click')
+}
+const fillAdd = async (wrapper, date, reason) => {
+  await addDateInput(wrapper).setValue(date)
+  await addReasonInput(wrapper).setValue(reason)
+}
+// 事前検証の理由は箇条書きで出るので、行ごとのテキストで取り出す
+const validationMessages = (wrapper) =>
+  wrapper
+    .findAll('[data-testid="blocked-dates-add-validation-error"] li')
+    .map((item) => item.text())
+// FormField はエラー文の id を入力欄の aria-describedby に渡すので、そこから項目単位で引く
+// （role="alert" で絞ると、同じ aria-describedby に並ぶ hint を拾わない）
+const fieldError = (wrapper, input) => {
+  const ids = (input.attributes('aria-describedby') ?? '').split(' ').filter(Boolean)
+  const found = ids.map((id) => wrapper.find(`#${id}[role="alert"]`)).find((el) => el.exists())
+  return found ? found.text() : ''
+}
 
 // シナリオ: docs/unit/views-blocked-date-list-view.md
 describe('BlockedDateListView', () => {
@@ -260,5 +316,176 @@ describe('BlockedDateListView', () => {
     expect(cellTexts).toEqual(
       firstPage.map((blocked) => [blocked.date, blocked.market, blocked.reason]),
     )
+  })
+
+  it('[BDL-15] 「新規追加」で空の追加モーダルが開く', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(false)
+
+    await openAddModal(wrapper)
+
+    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
+    expect(addDateInput(wrapper).element.value).toBe('')
+    expect(addReasonInput(wrapper).element.value).toBe('')
+  })
+
+  it('[BDL-16] 未入力で「追加」を押すと項目ごとのエラーが出て API を呼ばない', async () => {
+    let validateCalls = 0
+    let createCalls = 0
+    server.use(
+      http.post('*/api/blocked-dates/validate', () => {
+        validateCalls += 1
+        return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
+      }),
+      http.post('*/api/blocked-dates', () => {
+        createCalls += 1
+        return HttpResponse.json(
+          { id: 'unexpected', date: '', market: '', reason: '' },
+          { status: 201 },
+        )
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await addSubmit(wrapper).trigger('click')
+    await settle()
+
+    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
+    expect(fieldError(wrapper, addDateInput(wrapper))).toBe('日付を入力してください。')
+    expect(fieldError(wrapper, addReasonInput(wrapper))).toBe('理由を入力してください。')
+    // 無駄な往復をしない（事前検証も登録も呼ばない）
+    expect(validateCalls).toBe(0)
+    expect(createCalls).toBe(0)
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+  })
+
+  it('[BDL-17] 追加が成功するとモーダルが閉じ成功メッセージと増えた件数が出る', async () => {
+    const { wrapper, router } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, NEW_DATE, NEW_REASON)
+    await addSubmit(wrapper).trigger('click')
+    // 事前検証 → 登録 → 一覧の再取得 → 再描画 の往復を待つ
+    await settle()
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(false)
+    const notice = wrapper.find('[data-testid="blocked-dates-notice"]')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain(NEW_DATE)
+    expect(countText(wrapper)).toBe(`${TOTAL + 1} 件`)
+    // 追加では URL を変えない
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('[BDL-18] 事前検証で弾かれるとモーダル内に理由が出て件数は変わらない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, DUPLICATE_DATE, NEW_REASON)
+    await addSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
+    expect(validationMessages(wrapper)).toEqual([DUPLICATE_MESSAGE])
+    // サーバの拒否は項目のエラーにも通信障害用の表示にも混ぜない
+    expect(fieldError(wrapper, addDateInput(wrapper))).toBe('')
+    expect(exists(wrapper, 'blocked-dates-add-error')).toBe(false)
+    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+  })
+
+  it('[BDL-19] 事前検証の理由が複数あるとその件数だけ箇条書きで並ぶ', async () => {
+    server.use(validateInvalidHandler(MULTI_MESSAGES))
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, NEW_DATE, NEW_REASON)
+    await addSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+
+    expect(validationMessages(wrapper)).toEqual(MULTI_MESSAGES)
+  })
+
+  it('[BDL-20] 事前検証がサーバエラーのときは通信障害用のエラーが出る', async () => {
+    server.use(validateErrorHandler())
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, NEW_DATE, NEW_REASON)
+    await addSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
+    expect(wrapper.find('[data-testid="blocked-dates-add-error"]').text()).toContain(ERROR_MESSAGE)
+    // 事前検証の不合格ではないので箇条書きは出さない
+    expect(exists(wrapper, 'blocked-dates-add-validation-error')).toBe(false)
+    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+  })
+
+  it('[BDL-21] 事前検証で弾かれた後に開き直すと理由と入力が持ち込まれない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, DUPLICATE_DATE, NEW_REASON)
+    await addSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+    expect(exists(wrapper, 'blocked-dates-add-validation-error')).toBe(true)
+
+    await addCancel(wrapper).trigger('click')
+    await openAddModal(wrapper)
+
+    expect(exists(wrapper, 'blocked-dates-add-validation-error')).toBe(false)
+    expect(addDateInput(wrapper).element.value).toBe('')
+    expect(addReasonInput(wrapper).element.value).toBe('')
+  })
+
+  it('[BDL-22] 登録中は「追加中…」になり追加もキャンセルも押せない', async () => {
+    // 事前検証の応答を握って、登録中の表示を確かめられるようにする
+    let releaseValidate
+    const validateGate = new Promise((resolve) => {
+      releaseValidate = resolve
+    })
+    server.use(
+      http.post('*/api/blocked-dates/validate', async () => {
+        await validateGate
+        return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, NEW_DATE, NEW_REASON)
+
+    await addSubmit(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(addSubmit(wrapper).text()).toBe('追加中…')
+    expect(addSubmit(wrapper).attributes('disabled')).toBeDefined()
+    expect(addCancel(wrapper).attributes('disabled')).toBeDefined()
+    // 閉じさせない（結果の行き先が無くなるため）
+    await addCancel(wrapper).trigger('click')
+    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
+
+    releaseValidate()
+    await settle()
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(false)
   })
 })

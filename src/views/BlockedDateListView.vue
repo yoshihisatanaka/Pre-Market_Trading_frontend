@@ -10,7 +10,8 @@ import BasePagination from '@/components/ui/BasePagination.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
-import { BLOCKED_DATES_PAGE_SIZE, useBlockedDatesStore } from '@/stores/blockedDates'
+import { useBlockedDatesStore } from '@/stores/blockedDates'
+import { toOffset } from '@/utils/queryParams'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useBlockedDatesStore()
@@ -43,12 +44,8 @@ const columns = [
  * バックエンドのモデル表現ではない。snake_case はこの 2 つの関数の中だけに閉じる。
  */
 function paramsFromQuery(query) {
-  const rawOffset = Number.parseInt(typeof query.offset === 'string' ? query.offset : '', 10)
-  const safeOffset = Number.isInteger(rawOffset) && rawOffset > 0 ? rawOffset : 0
-
   return {
-    // 表示件数の倍数に丸める（?offset=7 のような値でページ番号がずれないように）
-    offset: safeOffset - (safeOffset % BLOCKED_DATES_PAGE_SIZE),
+    offset: toOffset(query.offset),
     dateFrom: typeof query.date_from === 'string' ? query.date_from : '',
     dateTo: typeof query.date_to === 'string' ? query.date_to : '',
   }

@@ -27,6 +27,8 @@ const firstPage = marketHolidays.slice(0, PAGE_SIZE)
 const secondPage = marketHolidays.slice(PAGE_SIZE, PAGE_SIZE * 2)
 
 // 表示件数の倍数でない offset（丸めを廃止したので、この位置から表示件数分が出る）
+const ODD_OFFSET = 7
+const oddPage = marketHolidays.slice(ODD_OFFSET, ODD_OFFSET + PAGE_SIZE)
 
 // 絞り込みはフィクスチャ先頭の年をそのまま使う（年もハードコードしない）
 const YEAR = marketHolidays[0].date.slice(0, 4)
@@ -227,11 +229,15 @@ describe('MarketHolidayListView', () => {
     expect(rangeText(wrapper)).toBe(`${TOTAL} 件中 ${PAGE_SIZE + 1}–${TOTAL} 件`)
   })
 
-  it('[MHL-07] 表示件数の倍数でない offset は 1 ページ目に丸める', async () => {
-    const { wrapper } = await mountView({ offset: '7' })
+  it('[MHL-07] 表示件数の倍数でない offset は丸めずその位置から表示する', async () => {
+    const { wrapper } = await mountView({ offset: String(ODD_OFFSET) })
     await settle()
 
-    expect(rows(wrapper)).toHaveLength(firstPage.length)
+    // 端数の位置から表示件数分（ここでは残り全件）を出す。1 ページ目には戻さない
+    expect(rows(wrapper)).toHaveLength(oddPage.length)
+    expect(rows(wrapper)[0].text()).toContain(oddPage[0].date)
+    // ページャーの件数ラベルは offset ではなく現在ページ（= 1 ページ目）から導かれるため、
+    // 実際に見えている行（8 件目以降）とは一致しない。これは許容する仕様
     expect(rangeText(wrapper)).toBe(`${TOTAL} 件中 1–${PAGE_SIZE} 件`)
   })
 

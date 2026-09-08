@@ -122,7 +122,7 @@ export const handlers = [
   }),
 
   // 受注不可日マスタ。API 仕様は未確定なので limit / offset + total の一般的な形で受ける。
-  // 削除 / 編集は別コミットで足すので、いまは参照と追加だけ
+  // 編集は別コミットで足すので、いまは参照・追加・削除だけ
   http.get('*/api/blocked-dates', ({ request }) => {
     const params = new URL(request.url).searchParams
     const dateFrom = params.get('date_from') ?? ''
@@ -204,6 +204,22 @@ export const handlers = [
     blockedDateRows = [...blockedDateRows, created].sort((a, b) => a.date.localeCompare(b.date))
 
     return HttpResponse.json(created, { status: 201 })
+  }),
+
+  // 受注不可日の削除。成功時は本文を返さない（204）
+  http.delete('*/api/blocked-dates/:id', ({ params }) => {
+    const id = String(params.id)
+
+    if (!blockedDateRows.some((blocked) => blocked.id === id)) {
+      return HttpResponse.json(
+        { message: '対象の受注不可日が見つかりません。', code: 'not_found' },
+        { status: 404 },
+      )
+    }
+
+    blockedDateRows = blockedDateRows.filter((blocked) => blocked.id !== id)
+
+    return new HttpResponse(null, { status: 204 })
   }),
 ]
 

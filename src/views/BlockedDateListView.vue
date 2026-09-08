@@ -11,7 +11,7 @@ import BasePagination from '@/components/ui/BasePagination.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
-import { useBlockedDatesStore } from '@/stores/blockedDates'
+import { BLOCKED_DATES_PAGE_SIZE, useBlockedDatesStore } from '@/stores/blockedDates'
 import { toOffset } from '@/utils/queryParams'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
@@ -27,18 +27,22 @@ const {
   creating,
   createError,
   validationErrors,
+  deleting,
+  deleteError,
 } = storeToRefs(store)
 
 const route = useRoute()
 const router = useRouter()
 
 // 列は画面モック（docs/mock/masters-blocked-dates/index.html）に合わせる。
-// 行ごとの操作（編集 / 削除）は別コミットで足すので、いまは操作列を持たない
-// （新規追加はヘッダのボタンから開くので、この列とは関係しない）
+// 操作列に置くのは削除だけ。行ごとの編集は別コミットで足す
+// （新規追加はヘッダのボタンから開くので、この列には出さない）
 const columns = [
   { key: 'date', label: '日付' },
   { key: 'market', label: '対象市場' },
   { key: 'reason', label: '理由' },
+  // 行ごとの操作（削除）。画面モックに合わせて見出しは空にする
+  { key: 'actions', label: '' },
 ]
 
 /*
@@ -137,7 +141,7 @@ const addDate = ref('')
 const addReason = ref('')
 const addErrors = ref({ date: '', reason: '' })
 
-// 追加の成功メッセージ
+// 追加と削除の成功メッセージは同じ枠に出す（同時に成功することは無い）
 const noticeMessage = ref('')
 
 function openAdd() {
@@ -172,6 +176,41 @@ async function submitAdd() {
 
   isAddOpen.value = false
   noticeMessage.value = `${created.date} を追加しました。`
+}
+
+/*
+ * 削除。確認モーダルは「開いているか」と「何を消すか」を deleteTarget 1 つで持つ。
+ * エラーの出し先は新規追加と同じ考えかたで、サーバの拒否は deleteError をモーダル内に出す。
+ */
+const deleteTarget = ref(null)
+
+function openDelete(blocked) {
+  store.clearDeleteError()
+  noticeMessage.value = ''
+  deleteTarget.value = blocked
+}
+
+function closeDelete() {
+  // 削除中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (deleting.value) return
+  deleteTarget.value = null
+}
+
+async function submitDelete() {
+  const target = deleteTarget.value
+  if (!target) return
+
+  const deleted = await store.remove(target.id)
+  // 失敗時はモーダルを開いたままにして、理由（deleteError）を読ませる
+  if (!deleted) return
+
+  deleteTarget.value = null
+  noticeMessage.value = `${target.date} を削除しました。`
+
+  // 最終ページの最後の 1 件を消すと今の offset に行が無くなるので、1 ページ戻す
+  if (items.value.length === 0 && offset.value > 0) {
+    goToOffset(offset.value - BLOCKED_DATES_PAGE_SIZE)
+  }
 }
 </script>
 
@@ -271,6 +310,17 @@ async function submitAdd() {
           <template #cell-market="{ value }">
             <span class="blocked-date-list__market">{{ value || '—' }}</span>
           </template>
+
+          <template #cell-actions="{ row }">
+            <BaseButton
+              variant="danger"
+              :data-testid="`blocked-dates-delete-${row.id}`"
+              :disabled="deleting"
+              @click="openDelete(row)"
+            >
+              削除
+            </BaseButton>
+          </template>
         </DataTable>
 
         <BasePagination
@@ -342,6 +392,37 @@ async function submitAdd() {
         </BaseButton>
       </template>
     </BaseModal>
+
+    <!-- 削除確認。本文が短いので size="sm"（画面モックの max-width:400px 相当） -->
+    <BaseModal :open="Boolean(deleteTarget)" title="削除確認" size="sm" @close="closeDelete">
+      <BaseAlert v-if="deleteError" variant="error" data-testid="blocked-dates-delete-error">
+        {{ deleteError.message }}
+      </BaseAlert>
+
+      <p>
+        <span class="blocked-date-list__date">{{ deleteTarget?.date }}</span> を削除しますか？
+      </p>
+      <p class="blocked-date-list__warning">この操作は元に戻せません。</p>
+
+      <template #footer>
+        <BaseButton
+          variant="secondary"
+          data-testid="blocked-dates-delete-cancel"
+          :disabled="deleting"
+          @click="closeDelete"
+        >
+          キャンセル
+        </BaseButton>
+        <BaseButton
+          variant="danger"
+          data-testid="blocked-dates-delete-submit"
+          :disabled="deleting"
+          @click="submitDelete"
+        >
+          {{ deleting ? '削除中…' : '削除する' }}
+        </BaseButton>
+      </template>
+    </BaseModal>
   </section>
 </template>
 
@@ -371,6 +452,13 @@ async function submitAdd() {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* 削除確認モーダルの注意書き。本文（既定色）より一段小さく、危険色で出す */
+.blocked-date-list__warning {
+  margin-top: var(--space-2);
+  color: var(--color-danger);
+  font-size: var(--font-size-xs);
 }
 
 .blocked-date-list__count {

@@ -1,6 +1,11 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { createBlockedDate, fetchBlockedDates, validateBlockedDate } from '@/api/blockedDates'
+import {
+  createBlockedDate,
+  deleteBlockedDate,
+  fetchBlockedDates,
+  validateBlockedDate,
+} from '@/api/blockedDates'
 import { useAsync } from '@/composables/useAsync'
 
 /** 一覧 1 ページあたりの表示件数 */
@@ -10,7 +15,7 @@ export const BLOCKED_DATES_PAGE_SIZE = 50
  * 受注不可日マスタのストア。
  * ページ位置・検索条件は URL クエリが正で、ここはその写しを持つだけ（画面側が load で渡す）。
  *
- * 削除 / 編集は別コミットで足すので、いまは一覧の取得と新規追加だけを持つ。
+ * 編集は別コミットで足すので、いまは一覧の取得・新規追加・削除だけを持つ。
  */
 export const useBlockedDatesStore = defineStore('blockedDates', () => {
   // ページャー連打やブラウザバック連打で、古い応答が新しい結果を上書きするのを防ぐ
@@ -111,6 +116,32 @@ export const useBlockedDatesStore = defineStore('blockedDates', () => {
     validationErrors.value = []
   }
 
+  // 削除も同じ理由で 3 つ目の useAsync を持つ（削除中も一覧の表示はそのまま残す）
+  const {
+    error: deleteError,
+    loading: deleting,
+    execute: executeDelete,
+  } = useAsync(deleteBlockedDate)
+
+  /**
+   * 受注不可日を 1 件削除し、成功したら今の条件のまま一覧を読み直す。
+   *
+   * @param {string} id 削除対象の id
+   * @returns {Promise<boolean>} 削除できたら true（失敗の理由は deleteError に入る）
+   */
+  async function remove(id) {
+    const deleted = await executeDelete(id)
+    if (!deleted) return false
+
+    await reload()
+    return true
+  }
+
+  /** 削除エラーを消す（確認モーダルを開き直したときに前回の失敗を残さない） */
+  function clearDeleteError() {
+    deleteError.value = null
+  }
+
   return {
     items,
     total,
@@ -128,5 +159,9 @@ export const useBlockedDatesStore = defineStore('blockedDates', () => {
     validationErrors,
     create,
     clearCreateError,
+    deleting,
+    deleteError,
+    remove,
+    clearDeleteError,
   }
 })

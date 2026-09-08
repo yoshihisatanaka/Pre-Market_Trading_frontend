@@ -70,4 +70,15 @@ describe('getMarketStatus', () => {
 
     expect(getMarketStatus().key).toBe('regular')
   })
+
+  it('[MKS-12] 土曜は取引時間帯でも休場', () => {
+    expect(getMarketStatus(new Date('2026-03-07T15:00:00Z'))).toEqual({
+      key: 'closed',
+      label: '○ Closed',
+    })
+  })
+
+  it('[MKS-13] 日曜は取引時間帯でも休場', () => {
+    expect(getMarketStatus(new Date('2026-03-08T15:00:00Z')).key).toBe('closed')
+  })
 })

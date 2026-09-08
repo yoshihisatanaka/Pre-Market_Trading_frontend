@@ -9,6 +9,7 @@
 // hourCycle: 'h23' にしないと 0 時が "24" になる環境がある
 const nyTimeFormat = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/New_York',
+  weekday: 'short',
   hour: '2-digit',
   minute: '2-digit',
   hourCycle: 'h23',
@@ -22,6 +23,9 @@ const SESSIONS = [
 ]
 const CLOSED = { key: 'closed', label: '○ Closed' }
 
+// ニューヨーク現地の曜日が週末なら、時刻によらず休場
+const WEEKEND = new Set(['Sat', 'Sun'])
+
 /**
  * 与えた時刻のニューヨーク現地時刻を、0:00 からの分数で返す。
  * @param {Date} date
@@ -34,12 +38,25 @@ export function toNewYorkMinutes(date) {
 }
 
 /**
+ * 与えた時刻のニューヨーク現地の曜日を 'Mon'〜'Sun' で返す。
+ * @param {Date} date
+ * @returns {string}
+ */
+function toNewYorkWeekday(date) {
+  const parts = nyTimeFormat.formatToParts(date)
+  return parts.find((part) => part.type === 'weekday').value
+}
+
+/**
  * 取引セッションを判定する。
- * 休日・祝日は判定しない（モックと同じ挙動。docs/unit/utils-market-status.md の MKS-12 参照）。
+ * 週末（ニューヨーク現地の土日）は時刻によらず休場として扱う。
+ * 祝日は判定しない（海外休場日マスタの責務）。
  * @param {Date} [date] 省略時は現在時刻
  * @returns {{ key: 'premarket'|'regular'|'afterhours'|'closed', label: string }}
  */
 export function getMarketStatus(date = new Date()) {
+  if (WEEKEND.has(toNewYorkWeekday(date))) return { ...CLOSED }
+
   const minutes = toNewYorkMinutes(date)
   const session = SESSIONS.find((s) => minutes >= s.from && minutes < s.to)
   return session ? { key: session.key, label: session.label } : { ...CLOSED }

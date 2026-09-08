@@ -165,6 +165,17 @@ print_docker_owner() {
   esac
 }
 
+# 本体リポジトリが main 以外を掴んでいたら警告する。
+# worktree が 0 件でも「全セッションが本体でブランチを奪い合っている」異常が見えるように、
+# list / doctor の両方から呼ぶ（2026-09-08 の事故は worktree が 1 つも無い状態で起きた）。
+print_main_head() {
+  head=$(git -C "$main_repo" rev-parse --abbrev-ref HEAD 2>/dev/null || printf '?')
+  [ "$head" = 'main' ] && return 0
+  printf '! 本体リポジトリが main 以外を掴んでいる: %s\n' "$head"
+  printf '  本体は main 常駐が規約。ブランチ作業は worktree で行うこと:\n'
+  printf '    bash scripts/worktree.sh add <type>/<説明>\n'
+}
+
 # --- 設定ファイルの配備 -----------------------------------------------------
 # シンボリックリンクにはしない。docker-compose.yml が `.:/app` をバインドマウントするため、
 # リンク先のホスト絶対パスはコンテナ内に存在せず壊れたリンクになる。しかも vite.config.js の
@@ -305,11 +316,12 @@ cmd_add() {
 
   head2 '次にやること:'
   cat <<EOF
-  1. 新しいターミナルを開き、次のディレクトリへ移動して claude を起動する
-       cd "$(win_path "$dir")"
-       claude
-     （いまのセッションから cd しても CLAUDE_PROJECT_DIR は変わらず、
-       フックと設定が本体側を向いたままになる）
+  1. この worktree を「新しい VSCode ウィンドウ」で開き、そこで Claude を起動する
+       code "$(win_path "$dir")"
+     （VSCode の File > New Window でこのフォルダを開いてもよい。
+       ターミナルから使うなら cd "$(win_path "$dir")" してから claude を起動する）
+     いまの VSCode ウィンドウで新しいセッションを開いても cwd は本体のままで、
+     CLAUDE_PROJECT_DIR も変わらず、フックと設定が本体側を向く。
   2. その worktree の $LOCAL_MEMO に「この worktree の目的」を書く
   3. Docker を使う前に現所有者を確認する
        bash scripts/worktree.sh list
@@ -431,6 +443,7 @@ cmd_list() {
     printf '  %-52s %-34s %-12s %s\n' "$(basename "$d")" "$b" "$state" "$ab"
   done
   printf '\n'
+  print_main_head
   print_docker_owner
 }
 
@@ -483,6 +496,7 @@ cmd_doctor() {
     printf '    重い npm タスク（build / test:unit）の同時実行は避ける\n'
   fi
   printf '\n'
+  print_main_head
   print_docker_owner
 }
 

@@ -23,9 +23,11 @@ allowed-tools: Bash(bash scripts/worktree.sh), Bash(bash scripts/worktree.sh *),
    - `2` 使い方の誤り / `3` ブランチ名が規約違反 / `4` git・環境の状態不整合 /
      `5` 未コミット・未マージがある
 4. `add` が成功したら、次を案内して**そこで終わる**。
-   - 表示された Windows パスへ、**新しいターミナルで** `cd` して `claude` を起動すること
-   - **いまのセッションから `cd` して作業を続けてはいけない。** `CLAUDE_PROJECT_DIR` は
-     変わらないため、フックと設定が本体リポジトリを向いたままになる
+   - 表示された Windows パスを **新しい VSCode ウィンドウで開き**、そこで Claude を
+     起動すること（`code "<パス>"`、または File > New Window でそのフォルダを開く。
+     ターミナルから使うなら `cd` してから `claude`）
+   - **いまのウィンドウで新しいセッションを開いたり、`cd` して作業を続けたりしてはいけない。**
+     `CLAUDE_PROJECT_DIR` は変わらないため、フックと設定が本体リポジトリを向いたままになる
    - その worktree の `CLAUDE.local.md` に「この worktree の目的」を書くこと
    - **Docker は排他利用。** `docker compose up -d frontend` / E2E / Playwright MCP /
      `localhost:5173` を使えるのは同時に 1 worktree だけで、現所有者は `list` の

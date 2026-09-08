@@ -32,6 +32,9 @@ coverage/
 # worktree ごとのローカル指示（scripts/worktree.sh add が生成する。共有しない）
 CLAUDE.local.md
 
+# 稼働中セッションのロック（session-worktree-notice.sh が同居検知に使う。共有しない）
+.claude/.sessions/
+
 # editor / OS
 .vscode/*
 !.vscode/extensions.json

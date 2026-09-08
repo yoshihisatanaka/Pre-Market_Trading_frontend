@@ -75,8 +75,11 @@ echo '{"tool_name":"Bash","tool_input":{"command":"cat some/secret/path"}}' \
 - 1 ブランチ = 1 目的。**コミットは何本あってもよい**。バグ修正に伴うテスト追加やドキュメント更新は、
   同じブランチで `fix:` → `test:` → `docs:` と type を変えてコミットしてよい（ブランチは `fix/...` のまま）
 - 目的そのものが変わったとき（例: 修正と無関係な画面を作り始めた）だけブランチを切り直す
-- ベースは常に `main`。**`main` に直接コミットしない**。作業前に `git switch -c <type>/<説明>` で切り、
-  終わったら `main` にマージしてブランチを削除する
+- ベースは常に `main`。**`main` に直接コミットしない**。作業ブランチは
+  **worktree として切る**（`bash scripts/worktree.sh add <type>/<説明>`）。
+  終わったら本体セッションで `main` にマージし、worktree を撤収してブランチを削除する。
+  **本体リポジトリでの `git switch` / `git checkout` は PreToolUse フックが拒否する**
+  （`main` への切り替えとファイル復元は通る）。理由は次節
 
 ```text
 feat/order-list-view
@@ -103,8 +106,11 @@ bash scripts/worktree.sh remove feat/market-holiday-type
 - 置き場所は `C:\Users\0036\worktrees\<リポジトリ名>-<ブランチ名>` 固定。
   gitignore された `.env` / `.claude/settings.local.json` は `add` が本体からコピーする
   （シンボリックリンクにしない。compose の `.:/app` マウント越しに壊れたリンクになるため）
-- 作成後は **新しいターミナルで** worktree に `cd` して `claude` を起動する。
-  既存セッションから `cd` しても `CLAUDE_PROJECT_DIR` は変わらず、フックと設定が本体側を向いたままになる
+- 作成後は worktree を **新しい VSCode ウィンドウで開き**、そこで Claude を起動する
+  （`code "<worktree のパス>"`、または File > New Window でそのフォルダを開く。
+  ターミナルから使うなら `cd` してから `claude`）。
+  **いまの VSCode ウィンドウで新しいセッションを開いても cwd は本体のまま**で、
+  `CLAUDE_PROJECT_DIR` も変わらず、フックと設定が本体側を向いたままになる
 - worktree 固有の指示は各 worktree の `CLAUDE.local.md`（`add` が雛形を生成・gitignore 済み）に書く。
   「この worktree の目的」を書いておくと、複数セッションが互いの担当範囲に踏み込みにくくなる
 - `main` は本体（`C:\Users\0036\dev\Pre-Market_Trading_frontend`）に常駐させる。
@@ -117,6 +123,29 @@ bash scripts/worktree.sh remove feat/market-holiday-type
   worktree からだと存在しない場所を見る。絶対パスは guard フックが弾く（それが正しい挙動）
 - worktree セッションから**本体リポジトリのファイルを絶対パスで書き換えない**。
   guard フックが拒否する（`main` に未コミット変更が生えるのを防ぐための意図的な非対称）
+
+### 並行セッションの事故を止めるフック
+
+2026-09-08、4 つのセッションが本体リポジトリを共有したまま `git switch -c` でブランチを
+奪い合い、同じファイルを同時に書き換える事故が起きた（このとき worktree は 1 つも作られて
+いなかった）。運用を文書に書くだけでは再発するので、2 本のフックで拒否・検知する。
+
+| フック | 実体 | 役割 |
+|---|---|---|
+| `PreToolUse` | `.claude/hooks/guard-main-checkout.sh` | **本体での `git switch` / `git checkout` を拒否**する。`main` への切り替えとファイル復元（`git checkout -- <path>`、実在するパス）は通す。worktree 側では何もしない |
+| `SessionStart` | `.claude/hooks/session-worktree-notice.sh` | セッション冒頭に現在地（本体 / worktree・HEAD）を注入し、**同じチェックアウトで他セッションが稼働中なら警告**する |
+
+同居の検知はロックファイル方式。`<project>/.claude/.sessions/<session_id>`（gitignore 済み）を
+`SessionStart` が作り、Stop フックが毎ターン更新する。直近 2 時間に更新のあるものを稼働中とみなす。
+worktree ごとに別ディレクトリになるので、判定の粒度がそのまま「1 チェックアウト」になる。
+
+拒否されたら**迂回しない**。`bash scripts/worktree.sh add <type>/<説明>` で worktree を作り、
+新しい VSCode ウィンドウで開いてそちらで作業する。動作確認は手動でもできる:
+
+```bash
+echo '{"tool_name":"Bash","tool_input":{"command":"git switch -c feat/x"}}' \
+  | bash .claude/hooks/guard-main-checkout.sh
+```
 
 ### Docker は排他利用
 

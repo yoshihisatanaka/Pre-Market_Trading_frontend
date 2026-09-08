@@ -15,6 +15,15 @@ esac
 
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 
+# セッション同居検知（SessionStart の session-worktree-notice.sh）用のロックを更新する。
+# Stop は毎ターン走るので、これで「まだ生きているセッション」だけが新しい mtime を持つ。
+sid=$(printf '%s' "$input" |
+  sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' |
+  tr -cd 'A-Za-z0-9._-' | cut -c1-64)
+if [ -n "$sid" ]; then
+  mkdir -p .claude/.sessions 2>/dev/null && : >".claude/.sessions/$sid" 2>/dev/null || true
+fi
+
 if ! docker info >/dev/null 2>&1; then
   echo '{"systemMessage":"[lint hook] Docker が起動していないため lint をスキップしました"}'
   exit 0

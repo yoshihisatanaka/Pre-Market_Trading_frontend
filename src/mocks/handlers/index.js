@@ -20,6 +20,13 @@ import { blockedDates } from '../fixtures/blockedDates'
  */
 let marketHolidayRows = [...marketHolidays]
 
+/*
+ * バックエンドが受け付ける海外休場区分コード。
+ * src/utils/marketHolidayTypes.js と同じ値だが、モックは「バックエンド側の検証」を模すものなので
+ * アプリ内のコードには依存させず、ここに独立して持つ。
+ */
+const HOLIDAY_TYPE_CODES = ['0', '1']
+
 /** モックの可変状態をフィクスチャの内容に戻す */
 export function resetMockState() {
   marketHolidayRows = [...marketHolidays]
@@ -33,12 +40,16 @@ export const handlers = [
     const params = new URL(request.url).searchParams
     const dateFrom = params.get('date_from') ?? ''
     const dateTo = params.get('date_to') ?? ''
+    const holidayType = params.get('holiday_type') ?? ''
     const limit = toNonNegativeInt(params.get('limit'), 50)
     const offset = toNonNegativeInt(params.get('offset'), 0)
 
     // 'YYYY-MM-DD' は固定長なので、文字列比較がそのまま日付の大小になる
     const filtered = marketHolidayRows.filter(
-      (holiday) => (!dateFrom || holiday.date >= dateFrom) && (!dateTo || holiday.date <= dateTo),
+      (holiday) =>
+        (!dateFrom || holiday.date >= dateFrom) &&
+        (!dateTo || holiday.date <= dateTo) &&
+        (!holidayType || holiday.holiday_type === holidayType),
     )
 
     return HttpResponse.json({
@@ -53,10 +64,17 @@ export const handlers = [
     const body = await request.json().catch(() => null)
     const date = typeof body?.date === 'string' ? body.date.trim() : ''
     const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
+    const holidayType = typeof body?.holiday_type === 'string' ? body.holiday_type : ''
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return HttpResponse.json(
         { message: '日付は YYYY-MM-DD 形式で入力してください。', code: 'invalid_date' },
+        { status: 400 },
+      )
+    }
+    if (!HOLIDAY_TYPE_CODES.includes(holidayType)) {
+      return HttpResponse.json(
+        { message: '休場区分を選択してください。', code: 'invalid_holiday_type' },
         { status: 400 },
       )
     }
@@ -73,7 +91,7 @@ export const handlers = [
       )
     }
 
-    const created = { id: `mhd_${date.replaceAll('-', '')}`, date, reason }
+    const created = { id: `mhd_${date.replaceAll('-', '')}`, date, reason, holiday_type: holidayType }
     // 一覧は日付の昇順を前提にしているので、追加後も並びを保つ
     marketHolidayRows = [...marketHolidayRows, created].sort((a, b) => a.date.localeCompare(b.date))
 

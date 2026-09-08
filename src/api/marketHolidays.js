@@ -6,15 +6,21 @@ import { apiClient } from './client'
  * ページャーを持つ一覧なので、配列ではなく `{ items, total }` を返す。
  * （ページングの無い一覧は fetchOrders のように配列を返してよい）
  *
- * @param {{ limit?: number, offset?: number, dateFrom?: string, dateTo?: string }} [params]
- *   dateFrom / dateTo は 'YYYY-MM-DD'。空文字は「条件なし」としてリクエストに載せない
- * @returns {Promise<{ items: Array<{ id: string, date: string, reason: string }>, total: number }>}
+ * @param {{ limit?: number, offset?: number, dateFrom?: string, dateTo?: string,
+ *   holidayType?: string }} [params]
+ *   dateFrom / dateTo は 'YYYY-MM-DD'、holidayType は '0'（終日休場）/ '1'（短縮取引）。
+ *   空文字は「条件なし」としてリクエストに載せない
+ * @returns {Promise<{
+ *   items: Array<{ id: string, date: string, reason: string, holidayType: string }>,
+ *   total: number
+ * }>}
  */
 export async function fetchMarketHolidays({
   limit = 50,
   offset = 0,
   dateFrom = '',
   dateTo = '',
+  holidayType = '',
 } = {}) {
   const { data } = await apiClient.get('/market-holidays', {
     // クエリ名が snake_case であることを知ってよいのは、この層だけ。
@@ -24,6 +30,7 @@ export async function fetchMarketHolidays({
       offset,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
+      holiday_type: holidayType || undefined,
     },
   })
 
@@ -40,21 +47,25 @@ function toMarketHoliday(raw) {
     // UTC より西のタイムゾーンで前日にずれる
     date: raw.date,
     reason: raw.reason,
+    holidayType: raw.holiday_type ?? '',
   }
 }
 
 /**
  * 海外休場日を 1 件登録する。
  *
- * @param {{ date: string, reason: string }} params date は 'YYYY-MM-DD'
- * @returns {Promise<{ id: string, date: string, reason: string }>} 登録された 1 件
+ * @param {{ date: string, reason: string, holidayType: string }} params
+ *   date は 'YYYY-MM-DD'、holidayType は '0'（終日休場）/ '1'（短縮取引）
+ * @returns {Promise<{ id: string, date: string, reason: string, holidayType: string }>}
+ *   登録された 1 件
  */
-export async function createMarketHoliday({ date, reason }) {
+export async function createMarketHoliday({ date, reason, holidayType }) {
   const { data } = await apiClient.post('/market-holidays', {
     // date / reason は 1 語なので snake_case との差は無いが、
     // 変換の責務がこの層にあることを明示するため素通しの形でも書き出す
     date,
     reason,
+    holiday_type: holidayType,
   })
 
   return toMarketHoliday(data)

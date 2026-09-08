@@ -3,6 +3,10 @@ import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { marketHolidays } from '@/mocks/fixtures/marketHolidays'
+import {
+  MARKET_HOLIDAY_TYPE_DEFAULT,
+  MARKET_HOLIDAY_TYPE_OPTIONS,
+} from '@/utils/marketHolidayTypes'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from './marketHolidays'
 
 // 期待値はフィクスチャと表示件数から導く（56 / 50 を直接書かない）
@@ -31,6 +35,16 @@ const NEW_DATE = (() => {
   throw new Error('フィクスチャに無い日付が見つからなかった')
 })()
 const NEW_REASON = 'テスト休場日'
+
+/*
+ * 休場区分。コードは選択肢の定義から引き、件数はフィクスチャを数えて出す
+ * （'1' が 7 件、といった内訳を直接書かない）。
+ */
+const SHORTENED_TYPE = MARKET_HOLIDAY_TYPE_OPTIONS[1].value
+const shortenedHolidays = marketHolidays.filter(
+  (holiday) => holiday.holiday_type === SHORTENED_TYPE,
+)
+const NEW_TYPE = MARKET_HOLIDAY_TYPE_DEFAULT
 
 // 既定ハンドラは日付が重複すると 409 を返すので、既存日付をそのまま重複の再現に使う
 const DUPLICATE_DATE = marketHolidays[0].date
@@ -146,9 +160,17 @@ describe('useMarketHolidaysStore', () => {
     const store = useMarketHolidaysStore()
     await store.load()
 
-    const created = await store.create({ date: NEW_DATE, reason: NEW_REASON })
+    const created = await store.create({
+      date: NEW_DATE,
+      reason: NEW_REASON,
+      holidayType: NEW_TYPE,
+    })
 
-    expect(created).toMatchObject({ date: NEW_DATE, reason: NEW_REASON })
+    expect(created).toMatchObject({
+      date: NEW_DATE,
+      reason: NEW_REASON,
+      holidayType: NEW_TYPE,
+    })
     expect(store.createError).toBeNull()
     expect(store.total).toBe(TOTAL + 1)
     expect(dates(store.items)).toContain(NEW_DATE)
@@ -158,7 +180,11 @@ describe('useMarketHolidaysStore', () => {
     const store = useMarketHolidaysStore()
     await store.load()
 
-    const created = await store.create({ date: DUPLICATE_DATE, reason: NEW_REASON })
+    const created = await store.create({
+      date: DUPLICATE_DATE,
+      reason: NEW_REASON,
+      holidayType: NEW_TYPE,
+    })
 
     expect(created).toBeNull()
     expect(store.createError).toBeInstanceOf(Error)
@@ -172,7 +198,7 @@ describe('useMarketHolidaysStore', () => {
     const store = useMarketHolidaysStore()
     await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
 
-    await store.create({ date: NEW_DATE, reason: NEW_REASON })
+    await store.create({ date: NEW_DATE, reason: NEW_REASON, holidayType: NEW_TYPE })
 
     // 登録後の一覧は日付昇順のまま 1 件増える
     const expected = [...marketHolidays, { date: NEW_DATE, reason: NEW_REASON }].sort((a, b) =>
@@ -187,7 +213,9 @@ describe('useMarketHolidaysStore', () => {
 
   it('[MHS-11] clearCreateError で登録エラーが消える', async () => {
     const store = useMarketHolidaysStore()
-    await store.create({ date: DUPLICATE_DATE, reason: NEW_REASON })
+    // 休場区分まで正しく埋めて、狙いどおり「日付重複」で失敗させる
+    // （区分を欠くとモックの検証順で先に 400 になり、別の経路を見てしまう）
+    await store.create({ date: DUPLICATE_DATE, reason: NEW_REASON, holidayType: NEW_TYPE })
     expect(store.createError).not.toBeNull()
 
     store.clearCreateError()
@@ -200,7 +228,12 @@ describe('useMarketHolidaysStore', () => {
       http.post('*/api/market-holidays', async () => {
         await delay(50)
         return HttpResponse.json(
-          { id: `mhd_${NEW_DATE.replaceAll('-', '')}`, date: NEW_DATE, reason: NEW_REASON },
+          {
+            id: `mhd_${NEW_DATE.replaceAll('-', '')}`,
+            date: NEW_DATE,
+            reason: NEW_REASON,
+            holiday_type: NEW_TYPE,
+          },
           { status: 201 },
         )
       }),
@@ -208,7 +241,7 @@ describe('useMarketHolidaysStore', () => {
     const store = useMarketHolidaysStore()
     await store.load()
 
-    const pending = store.create({ date: NEW_DATE, reason: NEW_REASON })
+    const pending = store.create({ date: NEW_DATE, reason: NEW_REASON, holidayType: NEW_TYPE })
 
     expect(store.creating).toBe(true)
     expect(store.loading).toBe(false)
@@ -286,5 +319,50 @@ describe('useMarketHolidaysStore', () => {
 
     await pending
     expect(store.deleting).toBe(false)
+  })
+
+  it('[MHS-18] 休場区分で絞り込むと total も絞り込み後の件数になる', async () => {
+    const store = useMarketHolidaysStore()
+
+    await store.load({ holidayType: SHORTENED_TYPE })
+
+    expect(store.holidayType).toBe(SHORTENED_TYPE)
+    expect(store.total).toBe(shortenedHolidays.length)
+    expect(ids(store.items)).toEqual(ids(shortenedHolidays))
+  })
+
+  it('[MHS-19] reload は休場区分の絞り込みも保ったまま取り直す', async () => {
+    const store = useMarketHolidaysStore()
+    await store.load({
+      dateFrom: ALL_FROM,
+      dateTo: ALL_TO,
+      holidayType: SHORTENED_TYPE,
+    })
+
+    await store.reload()
+
+    expect(store.holidayType).toBe(SHORTENED_TYPE)
+    expect(store.dateFrom).toBe(ALL_FROM)
+    expect(store.dateTo).toBe(ALL_TO)
+    // 条件が落ちて全件に戻っていないこと
+    expect(store.total).toBe(shortenedHolidays.length)
+    expect(ids(store.items)).toEqual(ids(shortenedHolidays))
+  })
+
+  it('[MHS-20] create は休場区分を送り、登録された行にその区分が入る', async () => {
+    const store = useMarketHolidaysStore()
+    await store.load()
+
+    const created = await store.create({
+      date: NEW_DATE,
+      reason: NEW_REASON,
+      holidayType: SHORTENED_TYPE,
+    })
+
+    expect(created).toMatchObject({ date: NEW_DATE, holidayType: SHORTENED_TYPE })
+    expect(store.createError).toBeNull()
+    // 読み直した一覧側でも区分が保たれている（POST の応答だけの話にしない）
+    const row = store.items.find((item) => item.date === NEW_DATE)
+    expect(row?.holidayType).toBe(SHORTENED_TYPE)
   })
 })

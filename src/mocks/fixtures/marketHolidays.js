@@ -8,25 +8,29 @@
  * 画面モックの 8 件を「1 年分のひな型」として 7 年分に展開し、8 × 7 = 56 件にしてある。
  * 移動祝日（グッドフライデー / メモリアルデー / レイバーデー / 感謝祭）の実日付は年ごとに違うため、
  * ここでは月日を流用した近似値。実 API が実装されたら本物のデータに置き換わる。
+ *
+ * holiday_type は海外休場区分（'0': 終日休場 / '1': 短縮取引）。
+ * 絞り込みを検証できるよう、ボクシングデーだけ短縮取引にして偏りを付けてある（7 年分 = 7 件）。
  */
 const YEARS = [2023, 2024, 2025, 2026, 2027, 2028, 2029]
 
 const HOLIDAYS_PER_YEAR = [
-  { monthDay: '01-01', reason: '元日' },
-  { monthDay: '04-03', reason: 'グッドフライデー' },
-  { monthDay: '05-25', reason: 'メモリアルデー' },
-  { monthDay: '07-04', reason: '独立記念日' },
-  { monthDay: '09-07', reason: 'レイバーデー' },
-  { monthDay: '11-26', reason: '感謝祭' },
-  { monthDay: '12-25', reason: 'クリスマス' },
-  { monthDay: '12-26', reason: 'ボクシングデー' },
+  { monthDay: '01-01', reason: '元日', holidayType: '0' },
+  { monthDay: '04-03', reason: 'グッドフライデー', holidayType: '0' },
+  { monthDay: '05-25', reason: 'メモリアルデー', holidayType: '0' },
+  { monthDay: '07-04', reason: '独立記念日', holidayType: '0' },
+  { monthDay: '09-07', reason: 'レイバーデー', holidayType: '0' },
+  { monthDay: '11-26', reason: '感謝祭', holidayType: '0' },
+  { monthDay: '12-25', reason: 'クリスマス', holidayType: '0' },
+  { monthDay: '12-26', reason: 'ボクシングデー', holidayType: '1' },
 ]
 
 /** 日付の昇順。YEARS もひな型も昇順なので、この生成順がそのまま昇順になる */
 export const marketHolidays = YEARS.flatMap((year) =>
-  HOLIDAYS_PER_YEAR.map(({ monthDay, reason }) => ({
+  HOLIDAYS_PER_YEAR.map(({ monthDay, reason, holidayType }) => ({
     id: `mhd_${year}${monthDay.replace('-', '')}`,
     date: `${year}-${monthDay}`,
     reason,
+    holiday_type: holidayType,
   })),
 )

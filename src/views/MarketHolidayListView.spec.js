@@ -7,6 +7,11 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { marketHolidays } from '@/mocks/fixtures/marketHolidays'
 import { MARKET_HOLIDAYS_PAGE_SIZE } from '@/stores/marketHolidays'
+import {
+  MARKET_HOLIDAY_TYPE_DEFAULT,
+  MARKET_HOLIDAY_TYPE_OPTIONS,
+  formatMarketHolidayType,
+} from '@/utils/marketHolidayTypes'
 import MarketHolidayListView from './MarketHolidayListView.vue'
 
 /*
@@ -20,6 +25,8 @@ const PAGE_SIZE = MARKET_HOLIDAYS_PAGE_SIZE
 const TOTAL = marketHolidays.length
 const firstPage = marketHolidays.slice(0, PAGE_SIZE)
 const secondPage = marketHolidays.slice(PAGE_SIZE, PAGE_SIZE * 2)
+
+// 表示件数の倍数でない offset（丸めを廃止したので、この位置から表示件数分が出る）
 
 // 絞り込みはフィクスチャ先頭の年をそのまま使う（年もハードコードしない）
 const YEAR = marketHolidays[0].date.slice(0, 4)
@@ -37,6 +44,22 @@ const NEW_DATE = (() => {
   throw new Error('フィクスチャに無い日付が見つからなかった')
 })()
 const NEW_REASON = 'テスト休場日'
+
+/*
+ * 休場区分。コードと表示名は選択肢の定義から引き、件数はフィクスチャを数えて出す
+ * （「短縮取引が 7 件」といった内訳を直接書かない）。
+ */
+const SHORTENED = MARKET_HOLIDAY_TYPE_OPTIONS[1]
+const shortenedHolidays = marketHolidays.filter(
+  (holiday) => holiday.holiday_type === SHORTENED.value,
+)
+// 選択肢に無いコード（?holiday_type=9 のような外から来た値の再現用）
+const UNKNOWN_TYPE = (() => {
+  for (const code of ['9', '8', '7']) {
+    if (!MARKET_HOLIDAY_TYPE_OPTIONS.some((option) => option.value === code)) return code
+  }
+  throw new Error('選択肢に無いコードが見つからなかった')
+})()
 
 // 既定ハンドラは日付が重複すると 409 を返すので、既存日付をそのまま重複の再現に使う
 const DUPLICATE_DATE = marketHolidays[0].date
@@ -94,6 +117,15 @@ const countText = (wrapper) => wrapper.find('[data-testid="market-holidays-count
 const exists = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`).exists()
 const addDateInput = (wrapper) => wrapper.find('[data-testid="market-holidays-add-date"]')
 const addReasonInput = (wrapper) => wrapper.find('[data-testid="market-holidays-add-reason"]')
+const addTypeSelect = (wrapper) => wrapper.find('[data-testid="market-holidays-add-holiday-type"]')
+const searchTypeSelect = (wrapper) => wrapper.find('[data-testid="market-holidays-holiday-type"]')
+// 一覧の休場区分セル（行ごとに 1 つ）
+const typeCells = (wrapper) =>
+  rows(wrapper).map((row) => row.find('.market-holiday-list__type').text())
+const headers = (wrapper) => wrapper.findAll('th').map((th) => th.text())
+const openAddModal = async (wrapper) => {
+  await wrapper.find('[data-testid="market-holidays-add"]').trigger('click')
+}
 const fillAdd = async (wrapper, date, reason) => {
   await addDateInput(wrapper).setValue(date)
   await addReasonInput(wrapper).setValue(reason)
@@ -430,5 +462,89 @@ describe('MarketHolidayListView', () => {
     })
     expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
     expect(countText(wrapper)).toBe(`${PAGE_SIZE} 件`)
+  })
+
+  it('[MHL-23] 一覧に休場区分の列が出てコードではなく表示名が入る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    expect(headers(wrapper)).toContain('休場区分')
+    // 期待値はフィクスチャの生の値を変換して作る（表示名を並べ書きしない）
+    expect(typeCells(wrapper)).toEqual(
+      firstPage.map((holiday) => formatMarketHolidayType(holiday.holiday_type)),
+    )
+    // 生のコードがそのまま出ていないこと
+    expect(typeCells(wrapper)).not.toContain(SHORTENED.value)
+  })
+
+  it('[MHL-24] 休場区分を選んで検索すると URL に条件が乗り絞り込まれる', async () => {
+    const { wrapper, router } = await mountView()
+    await settle()
+
+    await searchTypeSelect(wrapper).setValue(SHORTENED.value)
+    await wrapper.find('[data-testid="market-holidays-search"]').trigger('submit')
+    await settle()
+
+    expect(router.currentRoute.value.query).toEqual({ holiday_type: SHORTENED.value })
+    expect(rows(wrapper)).toHaveLength(shortenedHolidays.length)
+    expect(countText(wrapper)).toBe(`${shortenedHolidays.length} 件`)
+    expect(new Set(typeCells(wrapper))).toEqual(new Set([SHORTENED.label]))
+  })
+
+  it('[MHL-25] URL の休場区分がセレクトと一覧に復元される', async () => {
+    const { wrapper } = await mountView({ holiday_type: SHORTENED.value })
+    await settle()
+
+    expect(searchTypeSelect(wrapper).element.value).toBe(SHORTENED.value)
+    expect(rows(wrapper)).toHaveLength(shortenedHolidays.length)
+    expect(countText(wrapper)).toBe(`${shortenedHolidays.length} 件`)
+  })
+
+  it('[MHL-26] 選択肢に無い休場区分は条件なしとして扱う', async () => {
+    const { wrapper } = await mountView({ holiday_type: UNKNOWN_TYPE })
+    await settle()
+
+    expect(searchTypeSelect(wrapper).element.value).toBe('')
+    expect(rows(wrapper)).toHaveLength(firstPage.length)
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+  })
+
+  it('[MHL-27] 追加モーダルの休場区分は既定値で開き、開き直すとリセットされる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openAddModal(wrapper)
+    expect(addTypeSelect(wrapper).element.value).toBe(MARKET_HOLIDAY_TYPE_DEFAULT)
+
+    await addTypeSelect(wrapper).setValue(SHORTENED.value)
+    await wrapper.find('[data-testid="market-holidays-add-cancel"]').trigger('click')
+    await openAddModal(wrapper)
+
+    expect(addTypeSelect(wrapper).element.value).toBe(MARKET_HOLIDAY_TYPE_DEFAULT)
+  })
+
+  it('[MHL-28] 休場区分を選んで追加するとその区分で登録される', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, NEW_DATE, NEW_REASON)
+    await addTypeSelect(wrapper).setValue(SHORTENED.value)
+    await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
+    // POST → 一覧の再取得 → 再描画 の 2 往復を待つ
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'market-holidays-add-form')).toBe(false)
+    expect(wrapper.find('[data-testid="market-holidays-notice"]').text()).toContain(NEW_DATE)
+    expect(countText(wrapper)).toBe(`${TOTAL + 1} 件`)
+
+    // 選んだ区分で絞り込むと、増えた 1 件が含まれる
+    await searchTypeSelect(wrapper).setValue(SHORTENED.value)
+    await wrapper.find('[data-testid="market-holidays-search"]').trigger('submit')
+    await settle()
+
+    expect(rows(wrapper)).toHaveLength(shortenedHolidays.length + 1)
+    expect(rows(wrapper).map((row) => row.text())).toContainEqual(expect.stringContaining(NEW_DATE))
   })
 })

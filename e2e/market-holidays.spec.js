@@ -4,8 +4,9 @@ import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/market-holidays.md（タイトル先頭の [MH-xx] が対応 ID）
 // ページ位置と検索条件は URL クエリを正とするため、URL と画面の同期をここで守る。
-// mockApi() は固定の body を返すだけで limit / offset / date_from を解釈しない。
-// ページングと絞り込み（MH-02 / 03 / 04 / 07）はクエリを実際に処理する既定ハンドラで検証する。
+// mockApi() は固定の body を返すだけで limit / offset / date_from / holiday_type を解釈しない。
+// ページングと絞り込み（MH-02 / 03 / 04 / 07 / 18 / 19 / 20 / 21）は
+// クエリを実際に処理する既定ハンドラで検証する。
 
 const PATH = '/masters/market-holidays'
 
@@ -18,6 +19,15 @@ const year2025 = marketHolidays.filter((h) => h.date >= '2025-01-01' && h.date <
 
 const firstHoliday = marketHolidays[0]
 const lastHoliday = marketHolidays[marketHolidays.length - 1]
+
+// 休場区分。画面に出る表示名で書く（コード '0' / '1' は利用者に見えない）
+const TYPE_ALL_LABEL = '-- すべて --'
+const TYPE_FULL_LABEL = '終日休場'
+const TYPE_SHORT_LABEL = '短縮取引'
+
+// 短縮取引の行はフィクスチャから数える（件数を直書きするとフィクスチャ変更で崩れる）
+const shortenedHolidays = marketHolidays.filter((holiday) => holiday.holiday_type === '1')
+const fullDayHoliday = marketHolidays.find((holiday) => holiday.holiday_type === '0')
 
 // フィクスチャに無い日付。年を直書きすると YEARS が伸びたとき重複エラーになるので最終年の翌年から作る
 const NEW_DATE = `${Number(lastHoliday.date.slice(0, 4)) + 1}-01-01`
@@ -245,6 +255,44 @@ test.describe('海外休場日マスタ 新規追加', () => {
       `${marketHolidays.length} 件`,
     )
   })
+
+  test('[MH-21] 短縮取引で追加した行が一覧に短縮取引で出る', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('market-holidays-add').click()
+
+    // 既定は終日休場（プレースホルダを置かないので常に有効なコードが入っている）
+    const addType = page.getByTestId('market-holidays-add-holiday-type')
+    await expect(addType.getByRole('option', { selected: true })).toHaveText(TYPE_FULL_LABEL)
+
+    await addType.selectOption({ label: TYPE_SHORT_LABEL })
+    await page.getByTestId('market-holidays-add-date').fill(NEW_DATE)
+    await page.getByTestId('market-holidays-add-reason').fill(NEW_REASON)
+    await page.getByTestId('market-holidays-add-submit').click()
+
+    await expect(addDialogOf(page)).toBeHidden()
+
+    /*
+     * 追加した日付はフィクスチャの最終年の翌年なので日付昇順では末尾に来る。
+     * 1 ページ目（50 行）には現れないため、休場区分で絞り込んで追加行を見る。
+     * ページを開き直すとモックの可変状態が初期化されるので、遷移せず検索する。
+     */
+    await page.getByTestId('market-holidays-holiday-type').selectOption({ label: TYPE_SHORT_LABEL })
+    await page.getByTestId('market-holidays-search-submit').click()
+
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${shortenedHolidays.length + 1} 件`,
+    )
+
+    const rows = rowsOf(page)
+    await expect(rows).toHaveCount(shortenedHolidays.length + 1)
+
+    const addedRow = rows.filter({ hasText: NEW_DATE })
+    await expect(addedRow).toHaveCount(1)
+    await expect(addedRow).toContainText(NEW_REASON)
+    await expect(addedRow).toContainText(TYPE_SHORT_LABEL)
+  })
 })
 
 // 削除（MH-12〜16）。既定ハンドラは DELETE を可変配列に反映するので、件数が減るところまで見る。
@@ -337,5 +385,87 @@ test.describe('海外休場日マスタ 削除', () => {
     await expect(page).toHaveURL(new RegExp(`\\${PATH}\\?date_from=${LAST_PAGE_FROM}$`))
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(page.getByTestId('market-holidays-count')).toHaveText(`${PAGE_SIZE} 件`)
+  })
+})
+
+// 休場区分（MH-17〜20）。一覧の列・検索条件・URL クエリ（holiday_type）の同期を守る。
+// 既定モックの短縮取引はボクシングデーの 7 件だけなので、絞り込みの前後で件数が変わる。
+test.describe('海外休場日マスタ 休場区分', () => {
+  test('[MH-17] 一覧に休場区分の列が削除ボタンの左に表示される', async ({ page }) => {
+    await page.goto(PATH)
+
+    const table = page.getByTestId('market-holidays-table')
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    // 見出しの並び。最後の列（行ごとの操作）は画面モックに合わせて見出しが空
+    await expect(table.getByRole('columnheader')).toHaveText([
+      '日付',
+      '休場理由',
+      '休場区分',
+      '',
+    ])
+
+    // 休場区分のセルは削除ボタンのセルより左（列の並びと同じ位置関係）
+    const fullDayRow = rowsOf(page).filter({ hasText: fullDayHoliday.date })
+    await expect(fullDayRow.getByRole('cell').nth(2)).toHaveText(TYPE_FULL_LABEL)
+    await expect(fullDayRow.getByRole('cell').nth(3).getByRole('button', { name: '削除' })).toBeVisible()
+
+    // ボクシングデーだけ短縮取引
+    const shortenedRow = rowsOf(page).filter({ hasText: shortenedHolidays[0].date })
+    await expect(shortenedRow.getByRole('cell').nth(2)).toHaveText(TYPE_SHORT_LABEL)
+  })
+
+  test('[MH-18] 休場区分で絞り込むと URL と一覧に反映される', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('market-holidays-holiday-type').selectOption({ label: TYPE_SHORT_LABEL })
+    await page.getByTestId('market-holidays-search-submit').click()
+
+    await expect(page).toHaveURL(/holiday_type=1/)
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${shortenedHolidays.length} 件`,
+    )
+
+    const rows = rowsOf(page)
+    await expect(rows).toHaveCount(shortenedHolidays.length)
+    await expect(rows.filter({ hasText: TYPE_SHORT_LABEL })).toHaveCount(shortenedHolidays.length)
+    await expect(rows.filter({ hasText: TYPE_FULL_LABEL })).toHaveCount(0)
+    for (const holiday of shortenedHolidays) {
+      await expect(rows.filter({ hasText: holiday.date })).toHaveCount(1)
+    }
+  })
+
+  test('[MH-19] holiday_type 付きの URL を直接開くと絞り込みが復元される', async ({ page }) => {
+    await page.goto(`${PATH}?holiday_type=1`)
+
+    // セレクトの選択も URL に追従する（ブラウザバックやブックマークで開いた場合も同じ）
+    await expect(
+      page.getByTestId('market-holidays-holiday-type').getByRole('option', { selected: true }),
+    ).toHaveText(TYPE_SHORT_LABEL)
+
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${shortenedHolidays.length} 件`,
+    )
+    await expect(rowsOf(page)).toHaveCount(shortenedHolidays.length)
+  })
+
+  test('[MH-20] 「クリア」を押すと休場区分の条件も解除される', async ({ page }) => {
+    await page.goto(PATH)
+
+    await page.getByTestId('market-holidays-holiday-type').selectOption({ label: TYPE_SHORT_LABEL })
+    await page.getByTestId('market-holidays-search-submit').click()
+    await expect(rowsOf(page)).toHaveCount(shortenedHolidays.length)
+
+    await page.getByTestId('market-holidays-search-clear').click()
+
+    await expect(page).toHaveURL(new RegExp(`${PATH}$`))
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${marketHolidays.length} 件`,
+    )
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(
+      page.getByTestId('market-holidays-holiday-type').getByRole('option', { selected: true }),
+    ).toHaveText(TYPE_ALL_LABEL)
   })
 })

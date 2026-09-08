@@ -8,10 +8,17 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BasePagination from '@/components/ui/BasePagination.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from '@/stores/marketHolidays'
+import {
+  MARKET_HOLIDAY_TYPE_DEFAULT,
+  MARKET_HOLIDAY_TYPE_OPTIONS,
+  formatMarketHolidayType,
+  isMarketHolidayType,
+} from '@/utils/marketHolidayTypes'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useMarketHolidaysStore()
@@ -35,6 +42,7 @@ const router = useRouter()
 const columns = [
   { key: 'date', label: '日付' },
   { key: 'reason', label: '休場理由' },
+  { key: 'holidayType', label: '休場区分' },
   // 行ごとの操作（削除）。画面モックに合わせて見出しは空にする
   { key: 'actions', label: '' },
 ]
@@ -51,7 +59,7 @@ const columns = [
  * こうすると二重フェッチが起きず、ブラウザバック / フォワードやブックマークにも
  * 追加のコードなしで対応できる。onMounted での初回読み込みは書かない（immediate が担う）。
  *
- * クエリ名の date_from / date_to は URL 上の契約（画面モックの form と同じ）であって
+ * クエリ名の date_from / date_to / holiday_type は URL 上の契約（画面モックの form と同じ）であって
  * バックエンドのモデル表現ではない。snake_case はこの 2 つの関数の中だけに閉じる。
  */
 function paramsFromQuery(query) {
@@ -63,26 +71,30 @@ function paramsFromQuery(query) {
     offset: safeOffset - (safeOffset % MARKET_HOLIDAYS_PAGE_SIZE),
     dateFrom: typeof query.date_from === 'string' ? query.date_from : '',
     dateTo: typeof query.date_to === 'string' ? query.date_to : '',
+    // 未知のコード（?holiday_type=9 など）は条件なしとして捨てる
+    holidayType: isMarketHolidayType(query.holiday_type) ? query.holiday_type : '',
   }
 }
 
-function queryFromParams({ offset: nextOffset, dateFrom, dateTo }) {
+function queryFromParams({ offset: nextOffset, dateFrom, dateTo, holidayType: nextType }) {
   // 既定値はクエリに出さず URL を短く保つ
   const query = {}
   if (nextOffset > 0) query.offset = String(nextOffset)
   if (dateFrom) query.date_from = dateFrom
   if (dateTo) query.date_to = dateTo
+  if (nextType) query.holiday_type = nextType
   return query
 }
 
 // 検索フォームの入力値。URL に反映されるのは「検索」を押したときだけ
 const dateFromInput = ref('')
 const dateToInput = ref('')
+const holidayTypeInput = ref('')
 
 // route.query は毎回オブジェクトの参照が変わるため、文字列に畳んでから監視する
 const queryKey = computed(() => {
   const params = paramsFromQuery(route.query)
-  return `${params.offset}|${params.dateFrom}|${params.dateTo}`
+  return `${params.offset}|${params.dateFrom}|${params.dateTo}|${params.holidayType}`
 })
 
 watch(
@@ -92,6 +104,7 @@ watch(
     // ブラウザバックでも入力欄が URL に追従するようにする
     dateFromInput.value = params.dateFrom
     dateToInput.value = params.dateTo
+    holidayTypeInput.value = params.holidayType
     store.load(params)
   },
   { immediate: true },
@@ -104,6 +117,7 @@ function submitSearch() {
       offset: 0,
       dateFrom: dateFromInput.value,
       dateTo: dateToInput.value,
+      holidayType: holidayTypeInput.value,
     }),
   })
 }
@@ -118,6 +132,7 @@ function goToOffset(nextOffset) {
       offset: nextOffset,
       dateFrom: store.dateFrom,
       dateTo: store.dateTo,
+      holidayType: store.holidayType,
     }),
   })
 }
@@ -133,6 +148,8 @@ function goToOffset(nextOffset) {
 const isAddOpen = ref(false)
 const addDate = ref('')
 const addReason = ref('')
+// セレクトは常に有効なコードが入る（プレースホルダを置かない）ので addErrors には持たせない
+const addHolidayType = ref(MARKET_HOLIDAY_TYPE_DEFAULT)
 const addErrors = ref({ date: '', reason: '' })
 
 // 追加と削除の成功メッセージは同じ枠に出す（同時に成功することは無い）
@@ -141,6 +158,7 @@ const noticeMessage = ref('')
 function openAdd() {
   addDate.value = ''
   addReason.value = ''
+  addHolidayType.value = MARKET_HOLIDAY_TYPE_DEFAULT
   addErrors.value = { date: '', reason: '' }
   // 前回の失敗と成功をどちらも持ち込まない
   store.clearCreateError()
@@ -161,7 +179,11 @@ async function submitAdd() {
   }
   if (addErrors.value.date || addErrors.value.reason) return
 
-  const created = await store.create({ date: addDate.value, reason: addReason.value.trim() })
+  const created = await store.create({
+    date: addDate.value,
+    reason: addReason.value.trim(),
+    holidayType: addHolidayType.value,
+  })
   // 失敗時はモーダルを開いたままにして、入力を直せるようにする（理由は createError に出る）
   if (!created) return
 
@@ -244,6 +266,15 @@ async function submitDelete() {
               data-testid="market-holidays-date-to"
             />
           </FormField>
+          <FormField v-slot="{ field }" label="休場区分">
+            <BaseSelect
+              v-bind="field"
+              v-model="holidayTypeInput"
+              :options="MARKET_HOLIDAY_TYPE_OPTIONS"
+              placeholder="-- すべて --"
+              data-testid="market-holidays-holiday-type"
+            />
+          </FormField>
         </FormGrid>
 
         <div class="market-holiday-list__actions">
@@ -297,6 +328,10 @@ async function submitDelete() {
             <span class="market-holiday-list__date">{{ value || '—' }}</span>
           </template>
 
+          <template #cell-holidayType="{ value }">
+            <span class="market-holiday-list__type">{{ formatMarketHolidayType(value) }}</span>
+          </template>
+
           <template #cell-actions="{ row }">
             <BaseButton
               variant="danger"
@@ -348,6 +383,15 @@ async function submitDelete() {
             placeholder="例: 独立記念日"
             maxlength="100"
             data-testid="market-holidays-add-reason"
+          />
+        </FormField>
+
+        <FormField v-slot="{ field }" label="休場区分" required>
+          <BaseSelect
+            v-bind="field"
+            v-model="addHolidayType"
+            :options="MARKET_HOLIDAY_TYPE_OPTIONS"
+            data-testid="market-holidays-add-holiday-type"
           />
         </FormField>
       </form>
@@ -447,6 +491,12 @@ async function submitDelete() {
   align-items: center;
   gap: var(--space-4);
   color: var(--color-danger);
+}
+
+/* 休場区分は補助的な情報なので、画面モックの中間列（対象市場）と同じく一段小さく落ち着かせる */
+.market-holiday-list__type {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 
 /* 日付は等幅にはせず、桁を揃えて少し強調する（画面モックの ui-code-strong 相当） */

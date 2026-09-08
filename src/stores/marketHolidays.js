@@ -32,6 +32,7 @@ export const useMarketHolidaysStore = defineStore('marketHolidays', () => {
   const offset = ref(0)
   const dateFrom = ref('')
   const dateTo = ref('')
+  const holidayType = ref('')
 
   const items = computed(() => data.value?.items ?? [])
   const total = computed(() => data.value?.total ?? 0)
@@ -41,22 +42,34 @@ export const useMarketHolidaysStore = defineStore('marketHolidays', () => {
    * 検索条件とページ位置を指定して読み込む。
    * 呼ぶのは URL クエリを監視している画面側の watcher だけ。
    */
-  function load({ offset: nextOffset = 0, dateFrom: nextFrom = '', dateTo: nextTo = '' } = {}) {
+  function load({
+    offset: nextOffset = 0,
+    dateFrom: nextFrom = '',
+    dateTo: nextTo = '',
+    holidayType: nextType = '',
+  } = {}) {
     offset.value = nextOffset
     dateFrom.value = nextFrom
     dateTo.value = nextTo
+    holidayType.value = nextType
 
     return execute({
       limit: limit.value,
       offset: nextOffset,
       dateFrom: nextFrom,
       dateTo: nextTo,
+      holidayType: nextType,
     })
   }
 
   /** いまの条件のまま読み直す（再読み込み / 再試行ボタン用。URL は変えない） */
   function reload() {
-    return load({ offset: offset.value, dateFrom: dateFrom.value, dateTo: dateTo.value })
+    return load({
+      offset: offset.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+      holidayType: holidayType.value,
+    })
   }
 
   // 登録は一覧とは別の loading / error を持つ。
@@ -70,11 +83,11 @@ export const useMarketHolidaysStore = defineStore('marketHolidays', () => {
   /**
    * 海外休場日を 1 件登録し、成功したら今の条件のまま一覧を読み直す。
    *
-   * @returns {Promise<{ id: string, date: string, reason: string } | null>}
+   * @returns {Promise<{ id: string, date: string, reason: string, holidayType: string } | null>}
    *   登録された 1 件。失敗時は null（理由は createError に入る）
    */
-  async function create({ date, reason }) {
-    const created = await executeCreate({ date, reason })
+  async function create({ date, reason, holidayType: nextType }) {
+    const created = await executeCreate({ date, reason, holidayType: nextType })
     if (!created) return null
 
     await reload()
@@ -119,6 +132,7 @@ export const useMarketHolidaysStore = defineStore('marketHolidays', () => {
     offset,
     dateFrom,
     dateTo,
+    holidayType,
     error,
     loading,
     isEmpty,

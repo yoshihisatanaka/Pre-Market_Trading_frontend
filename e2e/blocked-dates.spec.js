@@ -27,6 +27,10 @@ const NEW_REASON = '年末年始休業（テスト）'
 // 理由の maxlength。src/views/BlockedDateListView.vue の入力欄（実仕様 BlackoutDateRequest の備考）と同じ値
 const REASON_MAX_LENGTH = 45
 
+// 末尾から PAGE_SIZE + 1 件目の日付。これを date_from にすると既定ハンドラの絞り込みが
+// ちょうど 51 件になり、offset=50 の 2 ページ目が「最後の 1 件」だけになる
+const LAST_PAGE_FROM = blockedDates[blockedDates.length - (PAGE_SIZE + 1)].date
+
 /** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function rowsOf(page) {
   return page.getByTestId('blocked-dates-table').getByTestId('data-table-row')
@@ -35,6 +39,16 @@ function rowsOf(page) {
 /** 追加モーダル。role=dialog の aria-label はモーダルのタイトル（BaseModal） */
 function addDialogOf(page) {
   return page.getByRole('dialog', { name: '受注不可日 新規追加' })
+}
+
+/** 削除確認モーダル。追加モーダルと取り違えないようタイトルで絞る */
+function deleteDialogOf(page) {
+  return page.getByRole('dialog', { name: '削除確認' })
+}
+
+/** 行の削除ボタン。testid は行の id を含む */
+function deleteButtonOf(page, blocked) {
+  return page.getByTestId(`blocked-dates-delete-${blocked.id}`)
 }
 
 test.describe('受注不可日マスタ一覧', () => {
@@ -159,17 +173,22 @@ test.describe('受注不可日マスタ一覧', () => {
     ).toHaveAttribute('aria-current', 'page')
   })
 
-  test('[BD-08] 一覧は 3 列の読み取り専用で行に操作ボタンが無い', async ({ page }) => {
+  test('[BD-08] 一覧の右端に削除の操作列がある', async ({ page }) => {
     await page.goto(PATH)
 
     const table = page.getByTestId('blocked-dates-table')
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    // 行ごとの操作（編集 / 削除）が実装されたらこの行が落ちて気づける（シナリオを更新する合図）
-    await expect(table.getByRole('columnheader')).toHaveText(['日付', '対象市場', '理由'])
-    await expect(rowsOf(page).first().getByRole('button')).toHaveCount(0)
+    // 見出しの並び。最後の列（行ごとの操作）は画面モックに合わせて見出しが空
+    await expect(table.getByRole('columnheader')).toHaveText(['日付', '対象市場', '理由', ''])
 
-    // 追加は行ではなくヘッダのボタンから行う
+    // 理由のセルは削除ボタンのセルより左（列の並びと同じ位置関係）
+    const firstRow = rowsOf(page).first()
+    await expect(firstRow.getByRole('cell').nth(2)).toHaveText(firstBlockedDate.reason)
+    await expect(firstRow.getByRole('cell').nth(3).getByRole('button', { name: '削除' })).toBeVisible()
+
+    // 行の操作は削除だけ。追加は行ではなくヘッダのボタンから行う
+    await expect(firstRow.getByRole('button')).toHaveCount(1)
     await expect(page.getByTestId('blocked-dates-add')).toBeVisible()
   })
 
@@ -386,5 +405,109 @@ test.describe('受注不可日マスタ 新規追加', () => {
     await reason.pressSequentially('あ'.repeat(REASON_MAX_LENGTH + 1))
 
     await expect(reason).toHaveValue('あ'.repeat(REASON_MAX_LENGTH))
+  })
+})
+
+/*
+ * 削除（BD-19〜23）。既定ハンドラは DELETE を可変配列に反映するので、件数が減るところまで見る。
+ * モックの可変状態はページを開き直すと初期化されるため、テスト間で持ち越さない。
+ *
+ * サーバの拒否は blocked-dates-delete-error（モーダル内）に出る。新規追加と違い
+ * 事前検証の 2 段は無いので、エラーの系統はこの 1 つだけ。
+ */
+test.describe('受注不可日マスタ 削除', () => {
+  test('[BD-19] 行の「削除」を押すと確認モーダルが開く', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await deleteButtonOf(page, firstBlockedDate).click()
+
+    const dialog = deleteDialogOf(page)
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText(firstBlockedDate.date)
+    await expect(dialog).toContainText('を削除しますか？')
+    await expect(dialog).toContainText('この操作は元に戻せません。')
+  })
+
+  test('[BD-20] 「キャンセル」を押すと何も消えずに閉じる', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await deleteButtonOf(page, firstBlockedDate).click()
+    await expect(deleteDialogOf(page)).toBeVisible()
+
+    await page.getByTestId('blocked-dates-delete-cancel').click()
+
+    await expect(deleteDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(rowsOf(page).filter({ hasText: firstBlockedDate.date })).toHaveCount(1)
+    await expect(page.getByTestId('blocked-dates-notice')).toHaveCount(0)
+  })
+
+  test('[BD-21] 「削除する」を押すと件数が 1 減りその行が消える', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await deleteButtonOf(page, firstBlockedDate).click()
+    await page.getByTestId('blocked-dates-delete-submit').click()
+
+    await expect(deleteDialogOf(page)).toBeHidden()
+
+    // 成功メッセージの枠は追加と削除で共用
+    const notice = page.getByTestId('blocked-dates-notice')
+    await expect(notice).toBeVisible()
+    await expect(notice).toHaveText(`${firstBlockedDate.date} を削除しました。`)
+
+    await expect(page.getByTestId('blocked-dates-count')).toHaveText(
+      `${blockedDates.length - 1} 件`,
+    )
+    await expect(rowsOf(page).filter({ hasText: firstBlockedDate.date })).toHaveCount(0)
+
+    // 削除は一覧の単方向フローに触らない（URL は変わらない）
+    await expect(page).toHaveURL(new RegExp(`${PATH}$`))
+  })
+
+  test('[BD-22] 削除に失敗するとモーダルは開いたままエラーが出る', async ({ page }) => {
+    await mockApi(page, [
+      {
+        method: 'delete',
+        path: '*/api/blocked-dates/:id',
+        status: 500,
+        body: { message: 'サーバーでエラーが発生しました。' },
+      },
+    ])
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await deleteButtonOf(page, firstBlockedDate).click()
+    await page.getByTestId('blocked-dates-delete-submit').click()
+
+    const error = page.getByTestId('blocked-dates-delete-error')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText('サーバーでエラーが発生しました。')
+
+    // 消せていないので閉じない。一覧も通知も変わらない
+    await expect(deleteDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
+    await expect(rowsOf(page).filter({ hasText: firstBlockedDate.date })).toHaveCount(1)
+    await expect(page.getByTestId('blocked-dates-notice')).toHaveCount(0)
+  })
+
+  test('[BD-23] 最終ページの最後の 1 件を消すと 1 ページ前に戻る', async ({ page }) => {
+    // 51 件に絞った 2 ページ目。行はちょうど 1 件になる
+    await page.goto(`${PATH}?date_from=${LAST_PAGE_FROM}&offset=${PAGE_SIZE}`)
+
+    const rows = rowsOf(page)
+    await expect(rows).toHaveCount(1)
+    await expect(rows.first()).toContainText(lastBlockedDate.date)
+
+    await deleteButtonOf(page, lastBlockedDate).click()
+    await page.getByTestId('blocked-dates-delete-submit').click()
+
+    // 戻る直前に空状態が一瞬描画されるため、最終状態だけを web-first assertion で待つ
+    await expect(page).toHaveURL(new RegExp(`\\${PATH}\\?date_from=${LAST_PAGE_FROM}$`))
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${PAGE_SIZE} 件`)
   })
 })

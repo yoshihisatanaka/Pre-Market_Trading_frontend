@@ -86,6 +86,67 @@ refactor/api-client-layer
 chore/deps-update
 ```
 
+## Git worktree（並行セッション）
+
+複数の Claude Code セッションを同時に走らせるときは、ブランチを切り替えるのではなく
+**worktree を分ける**（git は 1 リポジトリ 1 チェックアウトなので、切り替えでは衝突する）。
+入口はスラッシュコマンド **`/worktree`**（実体は `scripts/worktree.sh`）。
+**`git worktree` を直接叩かない**（安全確認と設定ファイルの配備がスクリプト側に入っている）。
+
+```bash
+bash scripts/worktree.sh add feat/market-holiday-type    # 作成＋設定の配備（冪等）
+bash scripts/worktree.sh list                            # 一覧＋Docker の現所有者
+bash scripts/worktree.sh doctor                          # 配備漏れ・共有リソースの点検
+bash scripts/worktree.sh remove feat/market-holiday-type
+```
+
+- 置き場所は `C:\Users\0036\worktrees\<リポジトリ名>-<ブランチ名>` 固定。
+  gitignore された `.env` / `.claude/settings.local.json` は `add` が本体からコピーする
+  （シンボリックリンクにしない。compose の `.:/app` マウント越しに壊れたリンクになるため）
+- 作成後は **新しいターミナルで** worktree に `cd` して `claude` を起動する。
+  既存セッションから `cd` しても `CLAUDE_PROJECT_DIR` は変わらず、フックと設定が本体側を向いたままになる
+- worktree 固有の指示は各 worktree の `CLAUDE.local.md`（`add` が雛形を生成・gitignore 済み）に書く。
+  「この worktree の目的」を書いておくと、複数セッションが互いの担当範囲に踏み込みにくくなる
+- `main` は本体（`C:\Users\0036\dev\Pre-Market_Trading_frontend`）に常駐させる。
+  **マージとブランチ削除は本体セッションで行う**（worktree が掴んでいるブランチは
+  本体で `switch` も `branch -d` もできない）。順序は `main で merge` →
+  `worktree.sh remove` → `git branch -d`（`remove --delete-branch` でまとめてもよい）
+- **`git stash` を使わない。** stash はリポジトリ共通で、別 worktree から pop できてしまう。
+  中断するときは WIP コミットで退避する
+- **`/api-spec-sync` は本体セッション専用。** 参照先 `../Pre-Market_Trading` は相対パスなので、
+  worktree からだと存在しない場所を見る。絶対パスは guard フックが弾く（それが正しい挙動）
+- worktree セッションから**本体リポジトリのファイルを絶対パスで書き換えない**。
+  guard フックが拒否する（`main` に未コミット変更が生えるのを防ぐための意図的な非対称）
+
+### Docker は排他利用
+
+compose のプロジェクト名は `us-stock-order-frontend` 固定（`docker-compose.yml` の `name:`）。
+worktree を分けても **compose プロジェクト・コンテナ名・ポート・ネットワーク・`node_modules`
+ボリュームは全 worktree で共有**される。ポートもプロジェクト名も変数化しない方針なので、**規律で守る**。
+
+| 操作 | 並行 | 理由 |
+|---|---|---|
+| `run --rm frontend npm run lint` / `lint:fix` / `format` / `format:check` / `test:unit` / `check:scenarios` / `build` | **可** | 一時コンテナが「実行した worktree の `.:/app`」をマウントする。稼働中の frontend には触らない |
+| `npm install` / `npm ci`、`package.json` / `package-lock.json` / `Dockerfile` の変更 | **排他** | `node_modules` は共有ボリューム、イメージも共有。追加だけなら無害だが、削除・ダウングレード・`npm ci` は他 worktree を壊す |
+| `up -d frontend` / `restart` / `down` | **1 worktree だけ** | 同じプロジェクト名なのでコンテナが**作り直され、マウント元が奪われる**。他 worktree の dev サーバが黙って別ブランチのコードを配信し始める |
+| `run --rm e2e npx playwright test` | **1 worktree だけ** | `depends_on: frontend` で frontend を起動・再作成する。接続先 `http://frontend:5173` は共有ネットワーク上の 1 個 |
+| Playwright MCP（`mcp__playwright__*`） | **1 worktree だけ** | 固定ネットワーク `us-stock-order-frontend_default` の稼働中 frontend を見る |
+| ブラウザで `http://localhost:5173` | **1 worktree だけ** | 5173 は 1 個しか無い |
+| `down -v` | **禁止** | 共有の `node_modules` ボリュームを消し、全 worktree が動かなくなる |
+
+**Docker を使う番になったら、まず `bash scripts/worktree.sh list` の最終行で現所有者を確認する。**
+自分以外が持っているなら、そのセッションのユーザに返してもらうまで `up -d` / E2E / MCP を実行しない。
+持ち主が終わるときは `docker compose down`（**`-v` は付けない**）で明け渡す。
+
+Stop フックの lint は一時コンテナなので各 worktree で並行しても安全。ただし複数セッションが
+同時に `docker compose run` を叩くと、ネットワーク作成の競合で稀に失敗する。
+**再実行で回復するので「lint が壊れた」と誤診しない。**
+
+なお **コンテナ内で `git` は使えない**（worktree の `.git` は Windows の絶対パスを書いたファイルで、
+その先はコンテナ内に存在しない）。現在の lint / test:unit / build / check:scenarios は git を
+使わないので無害だが、`vitest --changed` や ESLint の `includeIgnoreFile(gitignore)` のような
+git 依存を入れると **worktree でだけ壊れる**。導入するときは本体と worktree の両方で試す。
+
 ## レイヤ規約（違反しやすいので再掲）
 
 ```
@@ -115,7 +176,7 @@ views / components  →  stores  →  api  →  (HTTP)
 | `src/utils/` | 純関数（整形・計算） |
 | `src/mocks/` | MSW ハンドラ / フィクスチャ |
 | `e2e/` | Playwright の E2E テスト |
-| `scripts/` | 補助スクリプト（`check-scenarios.mjs`） |
+| `scripts/` | 補助スクリプト（`check-scenarios.mjs` / `worktree.sh`） |
 | `docs/api/` | バックエンドから取り込んだ `openapi.json`（フロント実装上の正）と閲覧用 HTML |
 | `docs/e2e/` | 画面ごとの E2E シナリオ（受け入れ条件）。ID をテスト名に付けて対応づける |
 | `docs/unit/` | テスト対象ファイルごとの単体テストシナリオ。同じ形式・同じチェック |

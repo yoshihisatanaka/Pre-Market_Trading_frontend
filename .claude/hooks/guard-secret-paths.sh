@@ -52,16 +52,35 @@ normalize() {
   printf '%s' "$1" | tr 'A-Z' 'a-z' | tr '\\' '/' | sed 's|//*|/|g'
 }
 
-project=$(normalize "${CLAUDE_PROJECT_DIR:-c:/Users/0036/dev/Pre-Market_Trading_frontend}")
-# Git Bash 形式（/c/users/...）と Windows 形式（c:/users/...）の両方を許可する。
-project_msys=$(printf '%s' "$project" | sed 's|^\([a-z]\):|/\1|')
+# CLAUDE_PROJECT_DIR が渡らないときは、このフック自身の位置（.claude/hooks/ の 2 つ上）から
+# 導出する。worktree でも「自分が置かれている worktree」を指すので成立する。
+# git rev-parse --show-toplevel は cwd 依存で、PreToolUse は全ツール呼び出しで走るため使わない。
+self_root=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd || true)
+project=$(normalize "${CLAUDE_PROJECT_DIR:-${self_root:-c:/Users/0036/dev/Pre-Market_Trading_frontend}}")
 
-home=$(printf '%s' "$project" | sed 's|\(/users/[^/]*\)/.*|\1|')
+# Git Bash 形式（/c/users/...）と Windows 形式（c:/users/...）の両方を許可する。
+# 入力がどちらの形式でも両方を作る（pwd は前者、CLAUDE_PROJECT_DIR は後者を返す）。
+case "$project" in
+  /?/*)
+    project_msys="$project"
+    project_win=$(printf '%s' "$project" | sed 's|^/\([a-z]\)/|\1:/|')
+    ;;
+  *)
+    project_win="$project"
+    project_msys=$(printf '%s' "$project" | sed 's|^\([a-z]\):|/\1|')
+    ;;
+esac
+
+home=$(printf '%s' "$project_win" | sed 's|\(/users/[^/]*\)/.*|\1|')
 home_msys=$(printf '%s' "$project_msys" | sed 's|\(/users/[^/]*\)/.*|\1|')
 
-allowed="$project $project_msys"
+allowed="$project_win $project_msys"
 for h in "$home" "$home_msys"; do
-  allowed="$allowed $h/appdata/local/temp/claude $h/.claude"
+  # worktrees は並行セッション用の worktree 置き場（scripts/worktree.sh が作る）。
+  # 本体 → worktrees は許可する（worktree の作成・撤収は本体セッションの仕事）。
+  # 逆向き（worktree → 本体の dev/）は許可しない。worktree セッションが絶対パスで本体を
+  # 書き換えると main に未コミット変更が生えるため、そこは塞いだままにする。
+  allowed="$allowed $h/appdata/local/temp/claude $h/.claude $h/worktrees"
 done
 
 # JSON 中に現れる絶対パスらしき文字列を列挙する（\\ でエスケープされた形も戻す）。

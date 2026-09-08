@@ -29,6 +29,9 @@ coverage/
 # Claude Code の個人設定（承認モードなど。共有しない）
 .claude/settings.local.json
 
+# worktree ごとのローカル指示（scripts/worktree.sh add が生成する。共有しない）
+CLAUDE.local.md
+
 # editor / OS
 .vscode/*
 !.vscode/extensions.json

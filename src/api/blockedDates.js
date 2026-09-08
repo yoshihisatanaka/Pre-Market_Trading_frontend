@@ -82,6 +82,22 @@ export async function createBlockedDate({ date, reason }) {
   return toBlockedDate(data)
 }
 
+/**
+ * 受注不可日を 1 件削除する。
+ *
+ * 実仕様（docs/api/openapi.json の Delete Blackout Date Endpoint）は論理削除で 200 + 本文だが、
+ * 一覧・登録が /blocked-dates のままなので、画面内の一貫性を優先して海外休場日と同じ
+ * 「204 で本文なし」の形で受ける（API が固まったら 3 本まとめて直す）。
+ *
+ * @param {string} id 削除対象の id
+ * @returns {Promise<string>} 削除した id
+ */
+export async function deleteBlockedDate(id) {
+  await apiClient.delete(`/blocked-dates/${encodeURIComponent(id)}`)
+  // 204 は本文が無いので、呼び出し側（useAsync）が成功を判定できるよう id を返す
+  return id
+}
+
 function toBlockedDate(raw) {
   return {
     id: raw.id,

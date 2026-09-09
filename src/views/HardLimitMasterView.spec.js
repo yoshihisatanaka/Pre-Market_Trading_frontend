@@ -32,7 +32,7 @@ const INVALID_PERCENT = 0
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 const SAVED_MESSAGE = 'ハードリミットを保存しました。'
 const EMPTY_MESSAGE = 'ハードリミットが設定されていません。'
-const INVALID_RATE_MESSAGE = '市場関与率は 0.01%〜100%（0.0001〜1.0）の範囲で入力してください。'
+const INVALID_RATE_MESSAGE = '市場関与率は 0.01%〜100% の範囲で入力してください。'
 
 const errorHandler = (options) =>
   http.get(
@@ -116,11 +116,10 @@ describe('HardLimitMasterView', () => {
     expect(exists(wrapper, 'hard-limits-form')).toBe(false)
   })
 
-  it('[HLV-04] 取得成功時はモック注記と現在値を表示する', async () => {
+  it('[HLV-04] 取得成功時は現在値を表示する', async () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(exists(wrapper, 'hard-limits-mock-notice')).toBe(true)
     expect(text(wrapper, 'hard-limits-rate')).toBe(`${PERCENT.toFixed(2)}%`)
     expect(text(wrapper, 'hard-limits-quantity')).toBe(`${formatQuantity(QUANTITY)} 株`)
     expect(text(wrapper, 'hard-limits-amount')).toBe(`USD ${formatQuantity(AMOUNT)}`)

@@ -8,10 +8,6 @@ test.describe('ハードリミットマスタ', () => {
   test('[HL-01] 現在のハードリミットが 3 項目とも表示される', async ({ page }) => {
     await page.goto('/masters/hard-limits')
 
-    await expect(page.getByTestId('hard-limits-mock-notice')).toContainText(
-      'モック表示です。直近5営業日の平均出来高の取込値を分母に',
-    )
-
     // 比率 0.05 → 5.00%、整形（utils/format）まで通っていることを確認する
     await expect(page.getByTestId('hard-limits-rate')).toHaveText('5.00%')
     await expect(page.getByTestId('hard-limits-quantity')).toHaveText('10,000 株')

@@ -3,14 +3,13 @@ import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import BasePagination from '@/components/ui/BasePagination.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
-import FormGrid from '@/components/ui/FormGrid.vue'
 import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
 import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
+import MasterListCard from '@/components/masters/MasterListCard.vue'
+import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { BLOCKED_DATES_PAGE_SIZE, useBlockedDatesStore } from '@/stores/blockedDates'
 
@@ -169,101 +168,64 @@ async function submitDelete() {
       国内の営業日・受注停止日を管理します。ゴールデンウィーク、シルバーウィーク、年末年始など、国内拠点で受注を停止する日を登録してください。
     </BaseAlert>
 
-    <!-- 検索カードは 4 状態の外に置く。0 件やエラーのときこそ条件を直したいので消さない -->
-    <BaseCard>
-      <form data-testid="blocked-dates-search" @submit.prevent="submitSearch">
-        <FormGrid :columns="4">
-          <FormField v-slot="{ field }" label="日付（From）">
-            <BaseInput
-              v-bind="field"
-              v-model="inputs.dateFrom"
-              type="date"
-              data-testid="blocked-dates-date-from"
-            />
-          </FormField>
-          <FormField v-slot="{ field }" label="日付（To）">
-            <BaseInput
-              v-bind="field"
-              v-model="inputs.dateTo"
-              type="date"
-              data-testid="blocked-dates-date-to"
-            />
-          </FormField>
-        </FormGrid>
-
-        <div class="blocked-date-list__actions">
-          <BaseButton type="submit" data-testid="blocked-dates-search-submit" :disabled="loading">
-            検索
-          </BaseButton>
-          <BaseButton
-            variant="secondary"
-            data-testid="blocked-dates-search-clear"
-            :disabled="loading"
-            @click="clearSearch"
-          >
-            クリア
-          </BaseButton>
-        </div>
-      </form>
-    </BaseCard>
-
-    <BaseCard title="受注不可日一覧" flush>
-      <template #header-actions>
-        <span class="blocked-date-list__count" data-testid="blocked-dates-count">
-          {{ total }} 件
-        </span>
-      </template>
-
-      <!-- ローディング / エラー / 空 / データあり の 4 状態 -->
-      <p v-if="loading" data-testid="blocked-dates-loading" class="blocked-date-list__status">
-        読み込み中…
-      </p>
-
-      <div
-        v-else-if="error"
-        data-testid="blocked-dates-error"
-        class="blocked-date-list__status is-error"
-      >
-        <p>{{ error.message }}</p>
-        <BaseButton variant="secondary" @click="store.reload()">再試行</BaseButton>
-      </div>
-
-      <p v-else-if="isEmpty" data-testid="blocked-dates-empty" class="blocked-date-list__status">
-        該当する受注不可日はありません。
-      </p>
-
-      <template v-else>
-        <DataTable flat data-testid="blocked-dates-table" :columns="columns" :rows="items">
-          <template #cell-date="{ value }">
-            <span class="blocked-date-list__date">{{ value || '—' }}</span>
-          </template>
-
-          <template #cell-market="{ value }">
-            <span class="blocked-date-list__market">{{ value || '—' }}</span>
-          </template>
-
-          <template #cell-actions="{ row }">
-            <BaseButton
-              variant="danger"
-              :data-testid="`blocked-dates-delete-${row.id}`"
-              :disabled="deleting"
-              @click="openDelete(row)"
-            >
-              削除
-            </BaseButton>
-          </template>
-        </DataTable>
-
-        <BasePagination
-          data-testid="blocked-dates-pagination"
-          :total="total"
-          :limit="limit"
-          :offset="offset"
-          :disabled="loading"
-          @update:offset="goToOffset"
+    <MasterSearchCard
+      testid-prefix="blocked-dates"
+      :disabled="loading"
+      @submit="submitSearch"
+      @clear="clearSearch"
+    >
+      <FormField v-slot="{ field }" label="日付（From）">
+        <BaseInput
+          v-bind="field"
+          v-model="inputs.dateFrom"
+          type="date"
+          data-testid="blocked-dates-date-from"
         />
-      </template>
-    </BaseCard>
+      </FormField>
+      <FormField v-slot="{ field }" label="日付（To）">
+        <BaseInput
+          v-bind="field"
+          v-model="inputs.dateTo"
+          type="date"
+          data-testid="blocked-dates-date-to"
+        />
+      </FormField>
+    </MasterSearchCard>
+
+    <MasterListCard
+      testid-prefix="blocked-dates"
+      title="受注不可日一覧"
+      empty-message="該当する受注不可日はありません。"
+      :total="total"
+      :limit="limit"
+      :offset="offset"
+      :loading="loading"
+      :is-empty="isEmpty"
+      :error="error"
+      @reload="store.reload()"
+      @update:offset="goToOffset"
+    >
+      <DataTable flat data-testid="blocked-dates-table" :columns="columns" :rows="items">
+        <template #cell-date="{ value }">
+          <span class="blocked-date-list__date">{{ value || '—' }}</span>
+        </template>
+
+        <template #cell-market="{ value }">
+          <span class="blocked-date-list__market">{{ value || '—' }}</span>
+        </template>
+
+        <template #cell-actions="{ row }">
+          <BaseButton
+            variant="danger"
+            :data-testid="`blocked-dates-delete-${row.id}`"
+            :disabled="deleting"
+            @click="openDelete(row)"
+          >
+            削除
+          </BaseButton>
+        </template>
+      </DataTable>
+    </MasterListCard>
 
     <MasterFormDialog
       :open="isAddOpen"
@@ -313,30 +275,6 @@ async function submitDelete() {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-}
-
-.blocked-date-list__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-
-.blocked-date-list__count {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-.blocked-date-list__status {
-  padding: var(--space-5);
-  color: var(--color-text-muted);
-}
-
-.blocked-date-list__status.is-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  color: var(--color-danger);
 }
 
 /* 日付は等幅にはせず、桁を揃えて少し強調する（画面モックの ui-code-strong 相当） */

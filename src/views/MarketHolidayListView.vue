@@ -3,15 +3,14 @@ import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import BasePagination from '@/components/ui/BasePagination.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
-import FormGrid from '@/components/ui/FormGrid.vue'
 import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
 import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
+import MasterListCard from '@/components/masters/MasterListCard.vue'
+import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from '@/stores/marketHolidays'
 import {
@@ -173,114 +172,73 @@ async function submitDelete() {
       {{ noticeMessage }}
     </BaseAlert>
 
-    <!-- 検索カードは 4 状態の外に置く。0 件やエラーのときこそ条件を直したいので消さない -->
-    <BaseCard>
-      <form data-testid="market-holidays-search" @submit.prevent="submitSearch">
-        <FormGrid :columns="4">
-          <FormField v-slot="{ field }" label="日付（From）">
-            <BaseInput
-              v-bind="field"
-              v-model="inputs.dateFrom"
-              type="date"
-              data-testid="market-holidays-date-from"
-            />
-          </FormField>
-          <FormField v-slot="{ field }" label="日付（To）">
-            <BaseInput
-              v-bind="field"
-              v-model="inputs.dateTo"
-              type="date"
-              data-testid="market-holidays-date-to"
-            />
-          </FormField>
-          <FormField v-slot="{ field }" label="休場区分">
-            <BaseSelect
-              v-bind="field"
-              v-model="inputs.holidayType"
-              :options="MARKET_HOLIDAY_TYPE_OPTIONS"
-              placeholder="-- すべて --"
-              data-testid="market-holidays-holiday-type"
-            />
-          </FormField>
-        </FormGrid>
-
-        <div class="market-holiday-list__actions">
-          <BaseButton type="submit" data-testid="market-holidays-search-submit" :disabled="loading">
-            検索
-          </BaseButton>
-          <BaseButton
-            variant="secondary"
-            data-testid="market-holidays-search-clear"
-            :disabled="loading"
-            @click="clearSearch"
-          >
-            クリア
-          </BaseButton>
-        </div>
-      </form>
-    </BaseCard>
-
-    <BaseCard title="海外休場日一覧" flush>
-      <template #header-actions>
-        <span class="market-holiday-list__count" data-testid="market-holidays-count">
-          {{ total }} 件
-        </span>
-      </template>
-
-      <!-- ローディング / エラー / 空 / データあり の 4 状態 -->
-      <p v-if="loading" data-testid="market-holidays-loading" class="market-holiday-list__status">
-        読み込み中…
-      </p>
-
-      <div
-        v-else-if="error"
-        data-testid="market-holidays-error"
-        class="market-holiday-list__status is-error"
-      >
-        <p>{{ error.message }}</p>
-        <BaseButton variant="secondary" @click="store.reload()">再試行</BaseButton>
-      </div>
-
-      <p
-        v-else-if="isEmpty"
-        data-testid="market-holidays-empty"
-        class="market-holiday-list__status"
-      >
-        該当する海外休場日はありません。
-      </p>
-
-      <template v-else>
-        <DataTable flat data-testid="market-holidays-table" :columns="columns" :rows="items">
-          <template #cell-date="{ value }">
-            <span class="market-holiday-list__date">{{ value || '—' }}</span>
-          </template>
-
-          <template #cell-holidayType="{ value }">
-            <span class="market-holiday-list__type">{{ formatMarketHolidayType(value) }}</span>
-          </template>
-
-          <template #cell-actions="{ row }">
-            <BaseButton
-              variant="danger"
-              :data-testid="`market-holidays-delete-${row.id}`"
-              :disabled="deleting"
-              @click="openDelete(row)"
-            >
-              削除
-            </BaseButton>
-          </template>
-        </DataTable>
-
-        <BasePagination
-          data-testid="market-holidays-pagination"
-          :total="total"
-          :limit="limit"
-          :offset="offset"
-          :disabled="loading"
-          @update:offset="goToOffset"
+    <MasterSearchCard
+      testid-prefix="market-holidays"
+      :disabled="loading"
+      @submit="submitSearch"
+      @clear="clearSearch"
+    >
+      <FormField v-slot="{ field }" label="日付（From）">
+        <BaseInput
+          v-bind="field"
+          v-model="inputs.dateFrom"
+          type="date"
+          data-testid="market-holidays-date-from"
         />
-      </template>
-    </BaseCard>
+      </FormField>
+      <FormField v-slot="{ field }" label="日付（To）">
+        <BaseInput
+          v-bind="field"
+          v-model="inputs.dateTo"
+          type="date"
+          data-testid="market-holidays-date-to"
+        />
+      </FormField>
+      <FormField v-slot="{ field }" label="休場区分">
+        <BaseSelect
+          v-bind="field"
+          v-model="inputs.holidayType"
+          :options="MARKET_HOLIDAY_TYPE_OPTIONS"
+          placeholder="-- すべて --"
+          data-testid="market-holidays-holiday-type"
+        />
+      </FormField>
+    </MasterSearchCard>
+
+    <MasterListCard
+      testid-prefix="market-holidays"
+      title="海外休場日一覧"
+      empty-message="該当する海外休場日はありません。"
+      :total="total"
+      :limit="limit"
+      :offset="offset"
+      :loading="loading"
+      :is-empty="isEmpty"
+      :error="error"
+      @reload="store.reload()"
+      @update:offset="goToOffset"
+    >
+      <DataTable flat data-testid="market-holidays-table" :columns="columns" :rows="items">
+        <template #cell-date="{ value }">
+          <span class="market-holiday-list__date">{{ value || '—' }}</span>
+        </template>
+
+        <template #cell-holidayType="{ value }">
+          <span class="market-holiday-list__type">{{ formatMarketHolidayType(value) }}</span>
+        </template>
+
+        <template #cell-actions="{ row }">
+          <BaseButton
+            variant="danger"
+            :data-testid="`market-holidays-delete-${row.id}`"
+            :disabled="deleting"
+            @click="openDelete(row)"
+          >
+            削除
+          </BaseButton>
+        </template>
+      </DataTable>
+    </MasterListCard>
 
     <MasterFormDialog
       :open="isAddOpen"
@@ -337,30 +295,6 @@ async function submitDelete() {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-}
-
-.market-holiday-list__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-
-.market-holiday-list__count {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-.market-holiday-list__status {
-  padding: var(--space-5);
-  color: var(--color-text-muted);
-}
-
-.market-holiday-list__status.is-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  color: var(--color-danger);
 }
 
 /* 休場区分は補助的な情報なので、画面モックの中間列（対象市場）と同じく一段小さく落ち着かせる */

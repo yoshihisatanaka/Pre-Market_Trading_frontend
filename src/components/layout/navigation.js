@@ -29,6 +29,9 @@ export const navSections = [
       { label: 'ユーザマスタ', to: '/masters/users' },
       { label: '銘柄マスタ', to: '/masters/symbols' },
       { label: '為替マスタ', to: '/masters/fx' },
+      // docs/mock/layout/ の原本には無いが、公開モックのサイドバーには
+      // /masters/hard-limits がこの位置にある（原本の取り込みが古い）
+      { label: 'ハードリミットマスタ', to: '/masters/hard-limits' },
       { label: 'CAマスタ', to: '/masters/ca' },
       { label: '受注不可日マスタ', to: '/masters/blocked-dates' },
       { label: '海外休場日マスタ', to: '/masters/market-holidays' },

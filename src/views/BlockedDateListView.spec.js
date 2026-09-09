@@ -133,6 +133,7 @@ const deleteNotFoundHandler = () =>
   )
 
 const deleteButton = (wrapper, id) => wrapper.find(`[data-testid="blocked-dates-delete-${id}"]`)
+const editButton = (wrapper, id) => wrapper.find(`[data-testid="blocked-dates-edit-${id}"]`)
 // 削除確認モーダルは表の行と同じ日付を出すので、dialog に絞ってから本文を読む
 const deleteDialog = (wrapper) => wrapper.find('[role="dialog"][aria-label="削除確認"]')
 const openDelete = async (wrapper, id) => {
@@ -335,7 +336,7 @@ describe('BlockedDateListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    // 行ごとの削除ボタンを置く操作列が末尾に付く。見出しは画面モックに合わせて空
+    // 行ごとの編集・削除ボタンを置く操作列が末尾に付く。見出しは画面モックに合わせて空
     expect(headers(wrapper)).toEqual(['日付', '対象市場', '理由', ''])
 
     // 期待値はフィクスチャの値そのものから作る（表示文言を並べ書きしない）。
@@ -350,7 +351,8 @@ describe('BlockedDateListView', () => {
       firstPage.map((blocked) => [blocked.date, blocked.market, blocked.reason]),
     )
 
-    // 操作列には行ごとの削除ボタンが出る
+    // 操作列には行ごとの編集・削除ボタンが出る
+    expect(firstPage.every((blocked) => editButton(wrapper, blocked.id).exists())).toBe(true)
     expect(firstPage.every((blocked) => deleteButton(wrapper, blocked.id).exists())).toBe(true)
   })
 

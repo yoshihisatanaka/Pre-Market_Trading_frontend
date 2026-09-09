@@ -173,7 +173,7 @@ test.describe('受注不可日マスタ一覧', () => {
     ).toHaveAttribute('aria-current', 'page')
   })
 
-  test('[BD-08] 一覧の右端に削除の操作列がある', async ({ page }) => {
+  test('[BD-08] 一覧の右端に編集・削除の操作列がある', async ({ page }) => {
     await page.goto(PATH)
 
     const table = page.getByTestId('blocked-dates-table')
@@ -182,13 +182,15 @@ test.describe('受注不可日マスタ一覧', () => {
     // 見出しの並び。最後の列（行ごとの操作）は画面モックに合わせて見出しが空
     await expect(table.getByRole('columnheader')).toHaveText(['日付', '対象市場', '理由', ''])
 
-    // 理由のセルは削除ボタンのセルより左（列の並びと同じ位置関係）
+    // 理由のセルは操作のセルより左（列の並びと同じ位置関係）
     const firstRow = rowsOf(page).first()
     await expect(firstRow.getByRole('cell').nth(2)).toHaveText(firstBlockedDate.reason)
-    await expect(firstRow.getByRole('cell').nth(3).getByRole('button', { name: '削除' })).toBeVisible()
 
-    // 行の操作は削除だけ。追加は行ではなくヘッダのボタンから行う
-    await expect(firstRow.getByRole('button')).toHaveCount(1)
+    // 行の操作は編集 → 削除の順。破壊的な操作を右端に置く
+    const actionCell = firstRow.getByRole('cell').nth(3)
+    await expect(actionCell.getByRole('button')).toHaveText(['編集', '削除'])
+
+    // 追加は行ではなくヘッダのボタンから行う
     await expect(page.getByTestId('blocked-dates-add')).toBeVisible()
   })
 

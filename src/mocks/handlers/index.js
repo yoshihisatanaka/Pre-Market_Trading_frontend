@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { orderListResponse } from '../fixtures/orders'
 import { marketHolidays } from '../fixtures/marketHolidays'
 import { blockedDates } from '../fixtures/blockedDates'
+import { hardLimitSetting } from '../fixtures/hardLimits'
 
 /*
  * モックハンドラの集約。
@@ -20,6 +21,8 @@ import { blockedDates } from '../fixtures/blockedDates'
  */
 let marketHolidayRows = [...marketHolidays]
 let blockedDateRows = [...blockedDates]
+// ハードリミットは 1 件しか無いので、行の配列ではなくオブジェクトの写しを持つ
+let hardLimitRow = { ...hardLimitSetting }
 
 /*
  * バックエンドが受け付ける海外休場区分コード。
@@ -32,6 +35,7 @@ const HOLIDAY_TYPE_CODES = ['0', '1']
 export function resetMockState() {
   marketHolidayRows = [...marketHolidays]
   blockedDateRows = [...blockedDates]
+  hardLimitRow = { ...hardLimitSetting }
 }
 
 export const handlers = [
@@ -221,7 +225,76 @@ export const handlers = [
 
     return new HttpResponse(null, { status: 204 })
   }),
+
+  // ハードリミット（バックエンドの呼称は「スライス注文設定」）。1 件だけの設定なので一覧ではない
+  http.get('*/api/slice-settings', () => HttpResponse.json(hardLimitRow)),
+
+  /*
+   * ハードリミットの更新。検証は openapi.json の SliceSettingUpdateRequest の制約に合わせる
+   * （市場関与率 0.0001〜1.0 / 大口数量閾値 1 以上の整数 / 大口金額閾値 1 以上）。
+   * 画面側では検証しない方針なので、拒否の理由はここが持つ。
+   */
+  http.put('*/api/slice-settings', async ({ request }) => {
+    const body = await request.json().catch(() => null)
+    const rate = toFiniteNumber(body?.['市場関与率'])
+    const quantity = toFiniteNumber(body?.['大口数量閾値'])
+    const amount = toFiniteNumber(body?.['大口金額閾値'])
+
+    if (rate === null || rate < 0.0001 || rate > 1) {
+      return HttpResponse.json(
+        {
+          message: '市場関与率は 0.01%〜100%（0.0001〜1.0）の範囲で入力してください。',
+          code: 'invalid_participation_rate',
+        },
+        { status: 400 },
+      )
+    }
+    if (quantity === null || !Number.isInteger(quantity) || quantity < 1) {
+      return HttpResponse.json(
+        {
+          message: '注文数量の上限は 1 株以上の整数で入力してください。',
+          code: 'invalid_quantity',
+        },
+        { status: 400 },
+      )
+    }
+    if (amount === null || amount < 1) {
+      return HttpResponse.json(
+        { message: '注文金額の上限は 1 USD 以上で入力してください。', code: 'invalid_amount' },
+        { status: 400 },
+      )
+    }
+
+    // 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば弾く
+    const updatedAt = body?.['更新日時'] ?? null
+    if (updatedAt && updatedAt !== hardLimitRow['更新日時']) {
+      return HttpResponse.json(
+        {
+          message: '他の担当者が先に更新しました。再読み込みしてからやり直してください。',
+          code: 'conflict',
+        },
+        { status: 409 },
+      )
+    }
+
+    hardLimitRow = {
+      ...hardLimitRow,
+      市場関与率: rate,
+      大口数量閾値: quantity,
+      大口金額閾値: amount,
+      // 省略されたら現在値を保つ（勝手に有効化しない）
+      スライス有効フラグ: body?.['スライス有効フラグ'] ?? hardLimitRow['スライス有効フラグ'],
+      更新日時: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      更新者: '006',
+    }
+
+    return HttpResponse.json(hardLimitRow)
+  }),
 ]
+
+function toFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
 
 function toNonNegativeInt(value, fallback) {
   const parsed = Number.parseInt(value ?? '', 10)

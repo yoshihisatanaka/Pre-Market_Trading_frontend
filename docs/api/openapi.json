@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pre-Market Trading API",
-    "description": "\n### 米国株プレマーケット取引システム API 仕様書\n\n- **検証ステータス**: `Phase 1〜13 完了`\n- **推奨ブランチ**: `verified/balance-api` / `verified/all` / `main`\n- **対応機能**: 注文発注/取消/照会、口座・銘柄・為替・受注不可日・CA・海外休場日・残高補正マスタ管理（楽観ロック/差分履歴対応）、締め管理、部店/扱者マスタ\n",
+    "description": "\n### 米国株プレマーケット取引システム API 仕様書\n\n- **検証ステータス**: `Phase 1〜15 完了 / Slice Step 1 完了`\n- **推奨ブランチ**: `main`\n- **対応機能**: 注文発注/取消/照会、口座・銘柄・為替・受注不可日・CA・海外休場日・残高補正マスタ管理（楽観ロック/差分履歴対応）、締め管理、みずほ連携Excel出力、部店/扱者マスタ、預り残高検索、スライス注文設定\n",
     "version": "1.0.0 [Verified: Phase 1-13]"
   },
   "paths": {
@@ -375,19 +375,30 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みデータを含めるか",
-              "default": true,
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みデータを含めるか"
+            "description": "削除済みデータを含めるか（デフォルト: False）"
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "口座マスタCSVファイル (UTF-8 BOM付き)",
             "content": {
               "application/json": {
                 "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -421,8 +432,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 20,
+              "description": "操作者社員コード",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード"
           }
         ],
         "requestBody": {
@@ -442,6 +455,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CsvImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -502,6 +535,26 @@
               }
             }
           },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -521,7 +574,7 @@
           "Accounts"
         ],
         "summary": "Create Account Endpoint",
-        "description": "口座情報新規登録API。権限判定は認証機構実装時に追加する。",
+        "description": "口座情報新規登録API。論理削除済み口座が存在する場合は再有効化（復活）登録。",
         "operationId": "create_account_endpoint_accounts_post",
         "parameters": [
           {
@@ -531,9 +584,11 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 5,
+              "maxLength": 20,
+              "description": "操作者社員コード",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード"
           }
         ],
         "requestBody": {
@@ -553,6 +608,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -600,6 +675,36 @@
               }
             }
           },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された口座情報が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -636,9 +741,11 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 5,
+              "maxLength": 20,
+              "description": "操作者社員コード",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード"
           }
         ],
         "requestBody": {
@@ -658,6 +765,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された口座情報が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "楽観的ロック競合（他ユーザーによる更新）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -698,9 +845,11 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 5,
+              "maxLength": 20,
+              "description": "操作者社員コード",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード"
           }
         ],
         "responses": {
@@ -710,6 +859,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された口座情報が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -766,6 +945,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AccountHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された口座情報が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -870,19 +1079,30 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みデータを含めるか",
-              "default": true,
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みデータを含めるか"
+            "description": "削除済みデータを含めるか（デフォルト: False）"
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "銘柄マスタCSVファイル（UTF-8 with BOM）",
             "content": {
               "application/json": {
                 "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -937,6 +1157,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CsvImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1095,11 +1335,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みデータを含めるか（デフォルト: True）",
-              "default": true,
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みデータを含めるか（デフォルト: True）"
+            "description": "削除済みデータを含めるか（デフォルト: False）"
           },
           {
             "name": "offset",
@@ -1122,6 +1362,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StockListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1153,7 +1403,7 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 5,
+              "maxLength": 20,
               "title": "X-User-Code"
             }
           }
@@ -1175,6 +1425,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StockResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (バリデーションエラー・重複エラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1235,6 +1505,16 @@
               }
             }
           },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1278,6 +1558,26 @@
               }
             }
           },
+          "404": {
+            "description": "Not Found (指定された銘柄が存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1314,7 +1614,7 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 5,
+              "maxLength": 20,
               "title": "X-User-Code"
             }
           }
@@ -1336,6 +1636,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StockResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found (指定された銘柄が存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (楽観的ロック競合)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1376,7 +1716,7 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 5,
+              "maxLength": 20,
               "title": "X-User-Code"
             }
           }
@@ -1388,6 +1728,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StockResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found (指定された銘柄が存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1448,6 +1808,26 @@
               }
             }
           },
+          "404": {
+            "description": "Not Found (指定された銘柄が存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1470,42 +1850,6 @@
         "description": "為替マスタCSVエクスポートAPI\n\n- 検索条件に合致する為替レート全件をCSV形式でダウンロード\n- UTF-8 with BOM 形式（Excel対応）",
         "operationId": "export_exchange_rates_csv_endpoint_exchange_rates_export_csv_get",
         "parameters": [
-          {
-            "name": "基準日_開始",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "適用開始日 (YYYYMMDD)",
-              "title": "基準日 開始"
-            },
-            "description": "適用開始日 (YYYYMMDD)"
-          },
-          {
-            "name": "基準日_終了",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "適用終了日 (YYYYMMDD)",
-              "title": "基準日 終了"
-            },
-            "description": "適用終了日 (YYYYMMDD)"
-          },
           {
             "name": "start_date",
             "in": "query",
@@ -1585,19 +1929,30 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みデータを含めるか",
-              "default": true,
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みデータを含めるか"
+            "description": "削除済みデータを含めるか（デフォルト: False）"
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "為替マスタCSVファイル（UTF-8 with BOM）",
             "content": {
               "application/json": {
                 "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1656,6 +2011,26 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1678,42 +2053,6 @@
         "description": "為替マスタ一覧検索API（1ページ50件、適用日範囲指定、適用日の降順）",
         "operationId": "list_exchange_rates_endpoint_exchange_rates_get",
         "parameters": [
-          {
-            "name": "基準日_開始",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "適用開始日 (YYYYMMDD)",
-              "title": "基準日 開始"
-            },
-            "description": "適用開始日 (YYYYMMDD)"
-          },
-          {
-            "name": "基準日_終了",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "適用終了日 (YYYYMMDD)",
-              "title": "基準日 終了"
-            },
-            "description": "適用終了日 (YYYYMMDD)"
-          },
           {
             "name": "start_date",
             "in": "query",
@@ -1793,11 +2132,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みデータを含めるか（デフォルト: True）",
-              "default": true,
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みデータを含めるか（デフォルト: True）"
+            "description": "削除済みデータを含めるか（デフォルト: False）"
           },
           {
             "name": "offset",
@@ -1820,6 +2159,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ExchangeRateListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1873,6 +2222,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ExchangeRateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (バリデーションエラー・重複エラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1941,6 +2310,26 @@
               }
             }
           },
+          "404": {
+            "description": "Not Found (有効な直近為替レートが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1997,6 +2386,16 @@
               }
             }
           },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2048,6 +2447,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ExchangeRateDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found (指定された為替データが存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2126,6 +2545,46 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found (指定された為替データが存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (楽観的ロック競合)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2186,6 +2645,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ExchangeRateResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found (指定された為替データが存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2258,6 +2737,26 @@
               }
             }
           },
+          "404": {
+            "description": "Not Found (指定された為替データが存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2280,42 +2779,6 @@
         "description": "受注不可日マスタCSVエクスポートAPI\n\n- 検索条件に合致する受注不可日全件をCSV形式でダウンロード\n- UTF-8 with BOM 形式（Excel対応）",
         "operationId": "export_blackout_dates_csv_endpoint_blackout_dates_export_csv_get",
         "parameters": [
-          {
-            "name": "受注不可日_開始",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "開始日 (YYYYMMDD)",
-              "title": "受注不可日 開始"
-            },
-            "description": "開始日 (YYYYMMDD)"
-          },
-          {
-            "name": "受注不可日_終了",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "終了日 (YYYYMMDD)",
-              "title": "受注不可日 終了"
-            },
-            "description": "終了日 (YYYYMMDD)"
-          },
           {
             "name": "start_date",
             "in": "query",
@@ -2353,7 +2816,7 @@
             "description": "終了日 (YYYYMMDD)"
           },
           {
-            "name": "受注不可日",
+            "name": "blackout_date",
             "in": "query",
             "required": false,
             "schema": {
@@ -2366,7 +2829,7 @@
                 }
               ],
               "description": "受注不可日（単一指定: YYYYMMDD）",
-              "title": "受注不可日"
+              "title": "Blackout Date"
             },
             "description": "受注不可日（単一指定: YYYYMMDD）"
           },
@@ -2376,19 +2839,30 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みレコードを含めるか",
-              "default": true,
+              "description": "削除済みレコードを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みレコードを含めるか"
+            "description": "削除済みレコードを含めるか（デフォルト: False）"
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "受注不可日マスタCSVファイル（UTF-8 with BOM）",
             "content": {
               "application/json": {
                 "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -2447,6 +2921,26 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2469,42 +2963,6 @@
         "description": "受注不可日マスタ一覧検索API（1ページ50件、範囲指定、受注不可日の降順）",
         "operationId": "list_blackout_dates_endpoint_blackout_dates_get",
         "parameters": [
-          {
-            "name": "受注不可日_開始",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "開始日 (YYYYMMDD)",
-              "title": "受注不可日 開始"
-            },
-            "description": "開始日 (YYYYMMDD)"
-          },
-          {
-            "name": "受注不可日_終了",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "終了日 (YYYYMMDD)",
-              "title": "受注不可日 終了"
-            },
-            "description": "終了日 (YYYYMMDD)"
-          },
           {
             "name": "start_date",
             "in": "query",
@@ -2542,7 +3000,7 @@
             "description": "終了日 (YYYYMMDD)"
           },
           {
-            "name": "受注不可日",
+            "name": "blackout_date",
             "in": "query",
             "required": false,
             "schema": {
@@ -2555,7 +3013,7 @@
                 }
               ],
               "description": "受注不可日（単一指定: YYYYMMDD）",
-              "title": "受注不可日"
+              "title": "Blackout Date"
             },
             "description": "受注不可日（単一指定: YYYYMMDD）"
           },
@@ -2565,11 +3023,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みレコードを含めるか（デフォルト: True）",
-              "default": true,
+              "description": "削除済みレコードを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みレコードを含めるか（デフォルト: True）"
+            "description": "削除済みレコードを含めるか（デフォルト: False）"
           },
           {
             "name": "offset",
@@ -2592,6 +3050,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BlackoutDateListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2645,6 +3113,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BlackoutDateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (バリデーションエラー・重複エラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2705,6 +3193,16 @@
               }
             }
           },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2744,6 +3242,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BlackoutDateDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found (指定された受注不可日が存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2810,6 +3328,46 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found (指定された受注不可日が存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (楽観的ロック競合)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2858,6 +3416,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BlackoutDateResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found (指定された受注不可日が存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2914,6 +3492,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BlackoutDateHistoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found (指定された受注不可日が存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2982,19 +3580,30 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みレコードを含めるか",
-              "default": true,
+              "description": "削除済みレコードを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みレコードを含めるか"
+            "description": "削除済みレコードを含めるか（デフォルト: False）"
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "CAマスタCSVファイル（UTF-8 with BOM）",
             "content": {
               "application/json": {
                 "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -3049,6 +3658,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CsvImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3117,11 +3746,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みレコードを含めるか（デフォルト: True）",
-              "default": true,
+              "description": "削除済みレコードを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みレコードを含めるか（デフォルト: True）"
+            "description": "削除済みレコードを含めるか（デフォルト: False）"
           },
           {
             "name": "limit",
@@ -3158,6 +3787,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CAListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3211,6 +3850,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CAResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3289,6 +3948,16 @@
               }
             }
           },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3328,6 +3997,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CADetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3394,6 +4083,46 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (楽観ロック競合)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3442,6 +4171,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CAResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3516,6 +4265,26 @@
               }
             }
           },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3539,7 +4308,7 @@
         "operationId": "export_holidays_csv_endpoint_holidays_export_csv_get",
         "parameters": [
           {
-            "name": "holiday_from",
+            "name": "start_date",
             "in": "query",
             "required": false,
             "schema": {
@@ -3552,12 +4321,12 @@
                 }
               ],
               "description": "休場日 検索開始日 (YYYYMMDD)",
-              "title": "Holiday From"
+              "title": "Start Date"
             },
             "description": "休場日 検索開始日 (YYYYMMDD)"
           },
           {
-            "name": "holiday_to",
+            "name": "end_date",
             "in": "query",
             "required": false,
             "schema": {
@@ -3570,7 +4339,7 @@
                 }
               ],
               "description": "休場日 検索終了日 (YYYYMMDD)",
-              "title": "Holiday To"
+              "title": "End Date"
             },
             "description": "休場日 検索終了日 (YYYYMMDD)"
           },
@@ -3587,46 +4356,10 @@
                   "type": "null"
                 }
               ],
-              "description": "海外休場区分フィルタ",
+              "description": "海外休場区分フィルタ (0: 終日休場, 1: 短縮取引)",
               "title": "Holiday Type"
             },
-            "description": "海外休場区分フィルタ"
-          },
-          {
-            "name": "start_date",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "エイリアス: 検索開始日",
-              "title": "Start Date"
-            },
-            "description": "エイリアス: 検索開始日"
-          },
-          {
-            "name": "end_date",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "エイリアス: 検索終了日",
-              "title": "End Date"
-            },
-            "description": "エイリアス: 検索終了日"
+            "description": "海外休場区分フィルタ (0: 終日休場, 1: 短縮取引)"
           },
           {
             "name": "include_deleted",
@@ -3634,19 +4367,30 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みレコードを含めるか",
-              "default": true,
+              "description": "削除済みレコードを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みレコードを含めるか"
+            "description": "削除済みレコードを含めるか（デフォルト: False）"
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "海外休場日マスタCSVファイル (UTF-8 BOM付き)",
             "content": {
               "application/json": {
                 "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -3680,8 +4424,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 20,
+              "description": "操作者社員コード",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード"
           }
         ],
         "requestBody": {
@@ -3701,6 +4447,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CsvImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3728,7 +4494,7 @@
         "operationId": "list_holidays_endpoint_holidays_get",
         "parameters": [
           {
-            "name": "holiday_from",
+            "name": "start_date",
             "in": "query",
             "required": false,
             "schema": {
@@ -3741,12 +4507,12 @@
                 }
               ],
               "description": "休場日 検索開始日 (YYYYMMDD)",
-              "title": "Holiday From"
+              "title": "Start Date"
             },
             "description": "休場日 検索開始日 (YYYYMMDD)"
           },
           {
-            "name": "holiday_to",
+            "name": "end_date",
             "in": "query",
             "required": false,
             "schema": {
@@ -3759,7 +4525,7 @@
                 }
               ],
               "description": "休場日 検索終了日 (YYYYMMDD)",
-              "title": "Holiday To"
+              "title": "End Date"
             },
             "description": "休場日 検索終了日 (YYYYMMDD)"
           },
@@ -3782,52 +4548,16 @@
             "description": "海外休場区分フィルタ (0: 終日休場, 1: 短縮取引)"
           },
           {
-            "name": "start_date",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "エイリアス: 休場日 検索開始日 (YYYYMMDD)",
-              "title": "Start Date"
-            },
-            "description": "エイリアス: 休場日 検索開始日 (YYYYMMDD)"
-          },
-          {
-            "name": "end_date",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "エイリアス: 休場日 検索終了日 (YYYYMMDD)",
-              "title": "End Date"
-            },
-            "description": "エイリアス: 休場日 検索終了日 (YYYYMMDD)"
-          },
-          {
             "name": "include_deleted",
             "in": "query",
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みレコードを含めるか（デフォルト: True）",
-              "default": true,
+              "description": "削除済みレコードを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みレコードを含めるか（デフォルト: True）"
+            "description": "削除済みレコードを含めるか（デフォルト: False）"
           },
           {
             "name": "limit",
@@ -3868,6 +4598,26 @@
               }
             }
           },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3885,7 +4635,7 @@
           "OverseasHolidays"
         ],
         "summary": "Create Holiday Endpoint",
-        "description": "海外休場日マスタ新規登録API\n\n- 事前検証を通過した休場日情報をDBへ登録\n- ユーザー操作フラグ=1 自動設定\n- d_海外休場日履歴 へ作成ログ（操作区分: CREATE）保存",
+        "description": "海外休場日マスタ新規登録API\n\n- 事前検証を通過した休場日情報をDBへ登録（論理削除済み行が存在する場合は再有効化登録）\n- ユーザー操作フラグ=1 自動設定\n- d_海外休場日履歴 へ作成ログ（操作区分: CREATE）保存",
         "operationId": "create_holiday_endpoint_holidays_post",
         "parameters": [
           {
@@ -3896,8 +4646,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 20,
+              "description": "操作者社員コード",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード"
           }
         ],
         "requestBody": {
@@ -3917,6 +4669,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HolidayResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3995,6 +4767,26 @@
               }
             }
           },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4038,6 +4830,36 @@
               }
             }
           },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された海外休場日が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4075,8 +4897,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 20,
+              "description": "操作者社員コード",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード"
           }
         ],
         "requestBody": {
@@ -4096,6 +4920,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HolidayResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された海外休場日が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "楽観的ロック競合（他ユーザーによる更新）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -4137,8 +5001,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 20,
+              "description": "操作者社員コード",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード"
           }
         ],
         "responses": {
@@ -4148,6 +5014,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HolidayResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された海外休場日が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -4222,6 +5118,36 @@
               }
             }
           },
+          "400": {
+            "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された海外休場日が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4281,24 +5207,6 @@
             "description": "口座番号完全一致フィルタ"
           },
           {
-            "name": "stock_query",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "銘柄コードまたはティッカー検索",
-              "title": "Stock Query"
-            },
-            "description": "銘柄コードまたはティッカー検索"
-          },
-          {
             "name": "stock_code",
             "in": "query",
             "required": false,
@@ -4311,28 +5219,10 @@
                   "type": "null"
                 }
               ],
-              "description": "エイリアス: 銘柄コードまたはティッカー",
+              "description": "銘柄コードまたはティッカー検索",
               "title": "Stock Code"
             },
-            "description": "エイリアス: 銘柄コードまたはティッカー"
-          },
-          {
-            "name": "customer_query",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "顧客名または顧客名カナ検索",
-              "title": "Customer Query"
-            },
-            "description": "顧客名または顧客名カナ検索"
+            "description": "銘柄コードまたはティッカー検索"
           },
           {
             "name": "customer_name",
@@ -4347,10 +5237,10 @@
                   "type": "null"
                 }
               ],
-              "description": "エイリアス: 顧客名または顧客名カナ",
+              "description": "顧客名または顧客名カナ検索",
               "title": "Customer Name"
             },
-            "description": "エイリアス: 顧客名または顧客名カナ"
+            "description": "顧客名または顧客名カナ検索"
           },
           {
             "name": "include_deleted",
@@ -4358,19 +5248,30 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みレコードを含めるか",
-              "default": true,
+              "description": "削除済みレコードを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みレコードを含めるか"
+            "description": "削除済みレコードを含めるか（デフォルト: False）"
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "残高補正マスタCSVファイル（UTF-8 with BOM）",
             "content": {
               "application/json": {
                 "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -4425,6 +5326,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CsvImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -4488,24 +5409,6 @@
             "description": "口座番号完全一致フィルタ"
           },
           {
-            "name": "stock_query",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "銘柄コードまたはティッカー検索（いずれかに一致）",
-              "title": "Stock Query"
-            },
-            "description": "銘柄コードまたはティッカー検索（いずれかに一致）"
-          },
-          {
             "name": "stock_code",
             "in": "query",
             "required": false,
@@ -4518,28 +5421,10 @@
                   "type": "null"
                 }
               ],
-              "description": "エイリアス: 銘柄コードまたはティッカー",
+              "description": "銘柄コードまたはティッカー検索（いずれかに一致）",
               "title": "Stock Code"
             },
-            "description": "エイリアス: 銘柄コードまたはティッカー"
-          },
-          {
-            "name": "customer_query",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "顧客名または顧客名カナ検索（部分一致）",
-              "title": "Customer Query"
-            },
-            "description": "顧客名または顧客名カナ検索（部分一致）"
+            "description": "銘柄コードまたはティッカー検索（いずれかに一致）"
           },
           {
             "name": "customer_name",
@@ -4554,10 +5439,10 @@
                   "type": "null"
                 }
               ],
-              "description": "エイリアス: 顧客名または顧客名カナ",
+              "description": "顧客名または顧客名カナ検索（部分一致）",
               "title": "Customer Name"
             },
-            "description": "エイリアス: 顧客名または顧客名カナ"
+            "description": "顧客名または顧客名カナ検索（部分一致）"
           },
           {
             "name": "include_deleted",
@@ -4565,11 +5450,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みレコードを含めるか（デフォルト: True）",
-              "default": true,
+              "description": "削除済みレコードを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みレコードを含めるか（デフォルト: True）"
+            "description": "削除済みレコードを含めるか（デフォルト: False）"
           },
           {
             "name": "limit",
@@ -4606,6 +5491,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BalanceListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -4659,6 +5554,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BalanceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -4745,6 +5660,16 @@
               }
             }
           },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4784,6 +5709,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BalanceDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -4858,6 +5803,46 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (楽観ロック競合)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4906,6 +5891,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BalanceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (バッチ作成明細削除不可エラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -4976,6 +5991,453 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BalanceHistoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/holdings": {
+      "get": {
+        "tags": [
+          "HoldingSearch"
+        ],
+        "summary": "Search Holdings Endpoint",
+        "description": "預り残高検索API\n\n- 参照テーブル: m_残高情報, m_口座情報, m_銘柄情報, m_為替, m_基準日, m_ca\n- 検索条件:\n  - 部店コード (完全一致)\n  - 口座番号 (完全一致)\n  - 顧客名・顧客名カナ (部分一致)\n  - 銘柄コード・ティッカー (完全一致)\n  - 銘柄名・銘柄名_英字 (部分一致)\n  - 特定預り区分 (完全一致)\n- 表示項目:\n  - 評価額_USD (前日終値 * 残高)\n  - 評価額_JPY (前日終値 * 残高 * 為替レート)\n  - 平均取得単価\n  - 取得金額 (平均取得単価 * 前日終値)\n  - 評価損益 (評価額_JPY - 取得金額)\n  - 評価損益率 ((取得金額 / 評価額_JPY) - 1 を % 表示)\n  - CA (CA種別名(分母 : 分子) ※効力発生日 <= 基準日 <= 支払日, 支払日 IS NOT NULL)",
+        "operationId": "search_holdings_endpoint_holdings_get",
+        "parameters": [
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード完全一致フィルタ",
+              "title": "Branch Code"
+            },
+            "description": "部店コード完全一致フィルタ"
+          },
+          {
+            "name": "account_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "口座番号完全一致フィルタ",
+              "title": "Account Number"
+            },
+            "description": "口座番号完全一致フィルタ"
+          },
+          {
+            "name": "customer_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "顧客名または顧客名カナ（部分一致）",
+              "title": "Customer Query"
+            },
+            "description": "顧客名または顧客名カナ（部分一致）"
+          },
+          {
+            "name": "customer_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "エイリアス: 顧客名または顧客名カナ",
+              "title": "Customer Name"
+            },
+            "description": "エイリアス: 顧客名または顧客名カナ"
+          },
+          {
+            "name": "stock_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "銘柄コードまたはティッカー（完全一致）",
+              "title": "Stock Query"
+            },
+            "description": "銘柄コードまたはティッカー（完全一致）"
+          },
+          {
+            "name": "stock_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "エイリアス: 銘柄コードまたはティッカー",
+              "title": "Stock Code"
+            },
+            "description": "エイリアス: 銘柄コードまたはティッカー"
+          },
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "エイリアス: 銘柄コードまたはティッカー",
+              "title": "Ticker"
+            },
+            "description": "エイリアス: 銘柄コードまたはティッカー"
+          },
+          {
+            "name": "stock_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "銘柄名または銘柄名_英字（部分一致）",
+              "title": "Stock Name"
+            },
+            "description": "銘柄名または銘柄名_英字（部分一致）"
+          },
+          {
+            "name": "account_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "特定預り区分コード完全一致",
+              "title": "Account Type"
+            },
+            "description": "特定預り区分コード完全一致"
+          },
+          {
+            "name": "specific_account_division",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "エイリアス: 特定預り区分コード",
+              "title": "Specific Account Division"
+            },
+            "description": "エイリアス: 特定預り区分コード"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数上限（デフォルト: 50件）",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数上限（デフォルト: 50件）"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "取得開始位置",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "取得開始位置"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/slice-settings": {
+      "get": {
+        "tags": [
+          "SliceSettings"
+        ],
+        "summary": "Get Slice Setting Endpoint",
+        "description": "スライス注文判定設定照会 API\n\n- 現在有効なスライス注文設定（市場関与率、大口数量閾値、大口金額閾値、有効フラグ）を取得します。",
+        "operationId": "get_slice_setting_endpoint_slice_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SliceSettingResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "SliceSettings"
+        ],
+        "summary": "Update Slice Setting Endpoint",
+        "description": "スライス注文判定設定変更 API\n\n- 市場関与率、大口数量閾値、大口金額閾値、有効フラグ等を更新します。\n- 楽観的ロック（更新日時照合による同時更新競合防止・409 Conflict）に対応しています。\n- 変更前後の差分diffを `d_スライス注文設定履歴` に自動記録します。",
+        "operationId": "update_slice_setting_endpoint_slice_settings_put",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者コード",
+              "default": "SYSTEM",
+              "title": "X-User-Code"
+            },
+            "description": "操作者コード"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SliceSettingUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SliceSettingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/slice-settings/history": {
+      "get": {
+        "tags": [
+          "SliceSettings"
+        ],
+        "summary": "Get Slice Setting History Endpoint",
+        "description": "スライス注文設定変更履歴照会 API\n\n- スライス注文設定の変更履歴一覧（変更前データ、変更後データ、差分diff、操作者、操作日時）を取得します。",
+        "operationId": "get_slice_setting_history_endpoint_slice_settings_history_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "取得開始位置",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "取得開始位置"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SliceSettingHistoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/slice-settings/simulate": {
+      "post": {
+        "tags": [
+          "SliceSettings"
+        ],
+        "summary": "Simulate Slice Calculation Endpoint",
+        "description": "スライス判定・分割計算シミュレーション API\n\n- 注文パラメータ（数量・価格・出来高など）を元に、現在の設定でスライス対象となるか、どのように均等案分＋端数先頭寄せされるかをシミュレーションして返却します（DB更新なし）。",
+        "operationId": "simulate_slice_calculation_endpoint_slice_settings_simulate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SliceSimulateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SliceSimulateResponse"
                 }
               }
             }
@@ -5080,11 +6542,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "削除済みデータを含めるか（デフォルト: True）",
-              "default": true,
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
               "title": "Include Deleted"
             },
-            "description": "削除済みデータを含めるか（デフォルト: True）"
+            "description": "削除済みデータを含めるか（デフォルト: False）"
           },
           {
             "name": "offset",
@@ -5311,6 +6773,137 @@
         }
       }
     },
+    "/mizuho/orders": {
+      "get": {
+        "tags": [
+          "MizuhoIntegration"
+        ],
+        "summary": "List Mizuho Orders Endpoint",
+        "description": "みずほ発注対象注文一覧取得 API\n\n- 抽出条件: 注文ルート='0' AND 処理状況='003' AND Dream登録状況='2'\n- ソート: 銘柄コード ASC, 部店 ASC, 口座番号 ASC, ID ASC",
+        "operationId": "list_mizuho_orders_endpoint_mizuho_orders_get",
+        "parameters": [
+          {
+            "name": "target_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "対象日 (YYYYMMDD形式、省略時は当日)",
+              "title": "Target Date"
+            },
+            "description": "対象日 (YYYYMMDD形式、省略時は当日)"
+          },
+          {
+            "name": "side",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "売買区分フィルタ (buy: 買, sell: 売, all: 全て)",
+              "default": "all",
+              "title": "Side"
+            },
+            "description": "売買区分フィルタ (buy: 買, sell: 売, all: 全て)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mizuho/export-orders": {
+      "get": {
+        "tags": [
+          "MizuhoIntegration"
+        ],
+        "summary": "Export Mizuho Order Sheet Endpoint",
+        "description": "みずほオーダーシート (Excel .xlsx) ダウンロード API\n\n- BUY用ブック または SELL用ブック を単体Excelファイルとして出力\n- ヘッダー: A1=本日日付(yyyy/mm/dd(ddd)書式), C2=\"BUY\"または\"SELL\"\n- 明細: A=B-1/S-1連番, B=Ticker, C=銘柄名, D=数量, E=指値単価, F=\"当日中\", G=銘柄コード, H=部店_受注番号\n- 書式: A5:H5 のセルスタイルを各データ行にコピー適用\n- ファイル名: オーダーシート_[yyyymmdd]_[BUY/SELL]_US.xlsx",
+        "operationId": "export_mizuho_order_sheet_endpoint_mizuho_export_orders_get",
+        "parameters": [
+          {
+            "name": "target_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "対象日 (YYYYMMDD形式、省略時は当日)",
+              "title": "Target Date"
+            },
+            "description": "対象日 (YYYYMMDD形式、省略時は当日)"
+          },
+          {
+            "name": "side",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "売買区分ブック選択 (buy: 買注文ブック, sell: 売注文ブック)",
+              "default": "buy",
+              "title": "Side"
+            },
+            "description": "売買区分ブック選択 (buy: 買注文ブック, sell: 売注文ブック)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/branches": {
       "get": {
         "tags": [
@@ -5437,34 +7030,137 @@
       "AccountDetailResponse": {
         "properties": {
           "account": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Account"
+            "$ref": "#/components/schemas/AccountItem",
+            "description": "口座情報詳細"
           }
         },
         "type": "object",
         "required": [
           "account"
         ],
-        "title": "AccountDetailResponse"
+        "title": "AccountDetailResponse",
+        "description": "口座情報詳細照会レスポンス"
+      },
+      "AccountHistoryDiff": {
+        "properties": {
+          "before": {
+            "title": "Before",
+            "description": "変更前値"
+          },
+          "after": {
+            "title": "After",
+            "description": "変更後値"
+          }
+        },
+        "type": "object",
+        "title": "AccountHistoryDiff",
+        "description": "差分項目情報"
+      },
+      "AccountHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "履歴ID"
+          },
+          "口座番号": {
+            "type": "integer",
+            "title": "口座番号",
+            "description": "口座番号"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分",
+            "description": "操作区分 (CREATE / UPDATE / DELETE)"
+          },
+          "操作者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作者",
+            "description": "操作者コード"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ",
+            "description": "変更前スナップショット"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ",
+            "description": "変更後スナップショット"
+          },
+          "操作日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作日時",
+            "description": "操作日時 (ISO8601)"
+          },
+          "差分": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AccountHistoryDiff"
+            },
+            "type": "object",
+            "title": "差分",
+            "description": "変更差分フィールド"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "口座番号",
+          "操作区分"
+        ],
+        "title": "AccountHistoryItem",
+        "description": "口座履歴明細"
       },
       "AccountHistoryResponse": {
         "properties": {
           "account_no": {
             "type": "integer",
-            "title": "Account No"
+            "title": "Account No",
+            "description": "口座番号"
           },
           "total": {
             "type": "integer",
-            "title": "Total"
+            "title": "Total",
+            "description": "履歴総件数"
           },
           "histories": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/AccountHistoryItem"
             },
             "type": "array",
-            "title": "Histories"
+            "title": "Histories",
+            "description": "履歴一覧"
           }
         },
         "type": "object",
@@ -5473,35 +7169,111 @@
           "total",
           "histories"
         ],
-        "title": "AccountHistoryResponse"
+        "title": "AccountHistoryResponse",
+        "description": "口座変更履歴レスポンス"
       },
-      "AccountRequest": {
+      "AccountItem": {
         "properties": {
           "口座番号": {
             "type": "integer",
-            "exclusiveMinimum": 0.0,
             "title": "口座番号",
-            "description": "正の整数"
+            "description": "口座番号"
           },
           "部店コード": {
-            "type": "string",
-            "title": "部店コード"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店コード",
+            "description": "部店コード"
+          },
+          "部店名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店名",
+            "description": "部店名"
           },
           "扱者コード": {
-            "type": "string",
-            "title": "扱者コード"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "扱者コード",
+            "description": "扱者コード"
+          },
+          "扱者名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "扱者名",
+            "description": "扱者名"
           },
           "法人区分": {
-            "type": "string",
-            "title": "法人区分"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "法人区分",
+            "description": "法人区分 (0: 個人, 1: 法人)"
+          },
+          "法人区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "法人区分名",
+            "description": "法人区分名"
           },
           "顧客名": {
-            "type": "string",
-            "title": "顧客名"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名",
+            "description": "顧客名"
           },
           "顧客名カナ": {
-            "type": "string",
-            "title": "顧客名カナ"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名カナ",
+            "description": "顧客名カナ"
           },
           "生年月日": {
             "anyOf": [
@@ -5512,11 +7284,44 @@
                 "type": "null"
               }
             ],
-            "title": "生年月日"
+            "title": "生年月日",
+            "description": "生年月日 (個人: YYYYMMDD, 法人: 0)"
+          },
+          "年齢": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "年齢",
+            "description": "年齢"
           },
           "コンプラランク": {
-            "type": "string",
-            "title": "コンプラランク"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "コンプラランク",
+            "description": "コンプラランク (A/B/C/D)"
+          },
+          "コンプラランク名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "コンプラランク名",
+            "description": "コンプラランク名"
           },
           "投資方針": {
             "anyOf": [
@@ -5527,35 +7332,520 @@
                 "type": "null"
               }
             ],
-            "title": "投資方針"
+            "title": "投資方針",
+            "description": "投資方針コード"
+          },
+          "投資方針名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "投資方針名",
+            "description": "投資方針名"
+          },
+          "VWAP書類受入": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap書類受入",
+            "description": "VWAP書類受入区分 (0: 未受入, 1: 受入済)"
+          },
+          "VWAP書類受入名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap書類受入名",
+            "description": "VWAP書類受入名"
+          },
+          "リスク外株書類受入": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "リスク外株書類受入",
+            "description": "リスク外株書類受入区分 (0: 未受入, 1: 受入済)"
+          },
+          "リスク外株書類受入名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "リスク外株書類受入名",
+            "description": "リスク外株書類受入名"
+          },
+          "外国証券同意書受入": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "外国証券同意書受入",
+            "description": "外国証券取引口座設定同意書受入区分 (0: 未受入, 1: 受入済)"
+          },
+          "外国証券同意書受入名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "外国証券同意書受入名",
+            "description": "外国証券同意書受入名"
+          },
+          "総預り資産": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "総預り資産",
+            "description": "総預り資産（円）"
+          },
+          "NISA契約": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa契約",
+            "description": "NISA契約区分 (0: 無, 1: 有)"
+          },
+          "NISA契約名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa契約名",
+            "description": "NISA契約名"
+          },
+          "NISA買付可能額_当年": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa買付可能額 当年",
+            "description": "NISA買付可能額_当年（円）",
+            "default": 0
+          },
+          "NISA買付可能額_翌年": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa買付可能額 翌年",
+            "description": "NISA買付可能額_翌年（円）",
+            "default": 0
+          },
+          "円貨預り金": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "円貨預り金",
+            "description": "円貨預り金（円）",
+            "default": 0
+          },
+          "外貨預り金": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "外貨預り金",
+            "description": "外貨預り金（米ドル）",
+            "default": 0.0
+          },
+          "取引停止区分_全取引": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 全取引",
+            "description": "取引停止区分_全取引 (0: 通常, 1: 停止)",
+            "default": 0
+          },
+          "取引停止区分_全取引名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 全取引名",
+            "description": "取引停止区分_全取引名"
+          },
+          "取引停止区分_エクイティ商品取引_売買": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 売買",
+            "description": "取引停止区分_エクイティ商品取引_売買 (0: 通常, 1: 停止)",
+            "default": 0
+          },
+          "取引停止区分_エクイティ商品取引_売買名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 売買名",
+            "description": "取引停止区分_エクイティ商品取引_売買名"
+          },
+          "取引停止区分_リスク商品取引_売買": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 売買",
+            "description": "取引停止区分_リスク商品取引_売買 (0: 通常, 1: 停止)",
+            "default": 0
+          },
+          "取引停止区分_リスク商品取引_売買名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 売買名",
+            "description": "取引停止区分_リスク商品取引_売買名"
+          },
+          "取引停止区分_エクイティ商品取引_買": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 買",
+            "description": "取引停止区分_エクイティ商品取引_買 (0: 通常, 1: 停止)",
+            "default": 0
+          },
+          "取引停止区分_エクイティ商品取引_買名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 買名",
+            "description": "取引停止区分_エクイティ商品取引_買名"
+          },
+          "取引停止区分_リスク商品取引_買": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 買",
+            "description": "取引停止区分_リスク商品取引_買 (0: 通常, 1: 停止)",
+            "default": 0
+          },
+          "取引停止区分_リスク商品取引_買名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 買名",
+            "description": "取引停止区分_リスク商品取引_買名"
+          },
+          "特定口座区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "特定口座区分",
+            "description": "特定口座区分 (0: 一般, 1: 源泉あり, 2: 源泉なし, 3: 対象外(法人))"
+          },
+          "特定口座区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "特定口座区分名",
+            "description": "特定口座区分名"
+          },
+          "取消区分": {
+            "type": "integer",
+            "title": "取消区分",
+            "description": "取消区分 (0: 有効, 1: 削除済み)",
+            "default": 0
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "ユーザー操作フラグ (0: システム, 1: ユーザー操作)",
+            "default": 0
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時",
+            "description": "作成日時 (ISO8601)"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者",
+            "description": "作成者コード"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "更新日時 (ISO8601)"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者",
+            "description": "更新者コード"
+          },
+          "取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消日時",
+            "description": "取消日時 (ISO8601)"
+          },
+          "取消者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消者",
+            "description": "取消者コード"
+          }
+        },
+        "type": "object",
+        "required": [
+          "口座番号"
+        ],
+        "title": "AccountItem",
+        "description": "口座マスタデータ行モデル"
+      },
+      "AccountRequest": {
+        "properties": {
+          "口座番号": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "口座番号",
+            "description": "口座番号 (正の整数)"
+          },
+          "部店コード": {
+            "type": "string",
+            "title": "部店コード",
+            "description": "部店コード (3桁)"
+          },
+          "扱者コード": {
+            "type": "string",
+            "title": "扱者コード",
+            "description": "扱者コード (100〜999)"
+          },
+          "法人区分": {
+            "type": "string",
+            "title": "法人区分",
+            "description": "法人区分 (0: 個人, 1: 法人)"
+          },
+          "顧客名": {
+            "type": "string",
+            "title": "顧客名",
+            "description": "顧客名"
+          },
+          "顧客名カナ": {
+            "type": "string",
+            "title": "顧客名カナ",
+            "description": "顧客名カナ"
+          },
+          "生年月日": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "生年月日",
+            "description": "生年月日 (個人: YYYYMMDD形式, 法人: '0')"
+          },
+          "コンプラランク": {
+            "type": "string",
+            "title": "コンプラランク",
+            "description": "コンプラランク (A/B/C/D)"
+          },
+          "投資方針": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "投資方針",
+            "description": "投資方針コード"
           },
           "VWAP書類受入": {
             "type": "string",
-            "title": "Vwap書類受入"
+            "title": "Vwap書類受入",
+            "description": "VWAP書類受入区分 (0/1)"
           },
           "リスク外株書類受入": {
             "type": "string",
-            "title": "リスク外株書類受入"
+            "title": "リスク外株書類受入",
+            "description": "リスク外株書類受入区分 (0/1)"
           },
           "外国証券同意書受入": {
             "type": "string",
-            "title": "外国証券同意書受入"
+            "title": "外国証券同意書受入",
+            "description": "外国証券同意書受入区分 (0/1)"
           },
           "総預り資産": {
             "type": "integer",
             "maximum": 1000000000.0,
             "minimum": 0.0,
-            "title": "総預り資産"
+            "title": "総預り資産",
+            "description": "総預り資産"
           },
           "NISA契約": {
             "type": "string",
-            "title": "Nisa契約"
+            "title": "Nisa契約",
+            "description": "NISA契約区分 (0/1)"
           },
           "NISA買付可能額_当年": {
             "type": "integer",
             "maximum": 1200000.0,
             "minimum": 0.0,
             "title": "Nisa買付可能額 当年",
+            "description": "NISA買付可能額_当年",
             "default": 0
           },
           "NISA買付可能額_翌年": {
@@ -5563,6 +7853,7 @@
             "maximum": 1200000.0,
             "minimum": 0.0,
             "title": "Nisa買付可能額 翌年",
+            "description": "NISA買付可能額_翌年",
             "default": 0
           },
           "円貨預り金": {
@@ -5570,6 +7861,7 @@
             "maximum": 100000000.0,
             "minimum": 0.0,
             "title": "円貨預り金",
+            "description": "円貨預り金",
             "default": 0
           },
           "外貨預り金": {
@@ -5577,31 +7869,48 @@
             "maximum": 1000000.0,
             "minimum": 0.0,
             "title": "外貨預り金",
+            "description": "外貨預り金",
             "default": 0
           },
           "取引停止区分_全取引": {
             "type": "integer",
-            "title": "取引停止区分 全取引"
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "取引停止区分 全取引",
+            "description": "取引停止区分_全取引 (0/1)"
           },
           "取引停止区分_エクイティ商品取引_売買": {
             "type": "integer",
-            "title": "取引停止区分 エクイティ商品取引 売買"
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "取引停止区分 エクイティ商品取引 売買",
+            "description": "取引停止区分_エクイティ商品取引_売買 (0/1)"
           },
           "取引停止区分_リスク商品取引_売買": {
             "type": "integer",
-            "title": "取引停止区分 リスク商品取引 売買"
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "取引停止区分 リスク商品取引 売買",
+            "description": "取引停止区分_リスク商品取引_売買 (0/1)"
           },
           "取引停止区分_エクイティ商品取引_買": {
             "type": "integer",
-            "title": "取引停止区分 エクイティ商品取引 買"
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "取引停止区分 エクイティ商品取引 買",
+            "description": "取引停止区分_エクイティ商品取引_買 (0/1)"
           },
           "取引停止区分_リスク商品取引_買": {
             "type": "integer",
-            "title": "取引停止区分 リスク商品取引 買"
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "取引停止区分 リスク商品取引 買",
+            "description": "取引停止区分_リスク商品取引_買 (0/1)"
           },
           "特定口座区分": {
             "type": "string",
-            "title": "特定口座区分"
+            "title": "特定口座区分",
+            "description": "特定口座区分 (0/1/2/3)"
           },
           "更新日時": {
             "anyOf": [
@@ -5613,7 +7922,7 @@
               }
             ],
             "title": "更新日時",
-            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+            "description": "楽観ロック用: 取得時の更新日時（ISO8601形式 または YYYY-MM-DD HH:MM:SS形式）"
           }
         },
         "type": "object",
@@ -5644,16 +7953,17 @@
         "properties": {
           "success": {
             "type": "boolean",
-            "title": "Success"
+            "title": "Success",
+            "description": "処理成否"
           },
           "account": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Account"
+            "$ref": "#/components/schemas/AccountItem",
+            "description": "口座情報レコード"
           },
           "message": {
             "type": "string",
-            "title": "Message"
+            "title": "Message",
+            "description": "処理結果メッセージ"
           }
         },
         "type": "object",
@@ -5662,27 +7972,31 @@
           "account",
           "message"
         ],
-        "title": "AccountResponse"
+        "title": "AccountResponse",
+        "description": "口座マスタ単一操作レスポンス"
       },
       "AccountValidationResponse": {
         "properties": {
           "valid": {
             "type": "boolean",
-            "title": "Valid"
+            "title": "Valid",
+            "description": "検証結果 (True: 正常, False: エラーあり)"
           },
           "errors": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Errors"
+            "title": "Errors",
+            "description": "エラーメッセージ一覧"
           },
           "warnings": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Warnings"
+            "title": "Warnings",
+            "description": "警告メッセージ一覧"
           },
           "details": {
             "anyOf": [
@@ -5694,14 +8008,16 @@
                 "type": "null"
               }
             ],
-            "title": "Details"
+            "title": "Details",
+            "description": "入力解析結果詳細"
           }
         },
         "type": "object",
         "required": [
           "valid"
         ],
-        "title": "AccountValidationResponse"
+        "title": "AccountValidationResponse",
+        "description": "口座情報事前検証レスポンス"
       },
       "BalanceDetailResponse": {
         "properties": {
@@ -6304,75 +8620,285 @@
       "BlackoutDateDetailResponse": {
         "properties": {
           "blackout_date": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Blackout Date"
+            "$ref": "#/components/schemas/BlackoutDateItem",
+            "description": "受注不可日詳細データ"
           }
         },
         "type": "object",
         "required": [
           "blackout_date"
         ],
-        "title": "BlackoutDateDetailResponse"
+        "title": "BlackoutDateDetailResponse",
+        "description": "受注不可日詳細レスポンス"
+      },
+      "BlackoutDateHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "履歴ID"
+          },
+          "受注不可日": {
+            "type": "integer",
+            "title": "受注不可日",
+            "description": "受注不可日 (YYYYMMDD)"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分",
+            "description": "操作区分 (CREATE, UPDATE, DELETE)"
+          },
+          "操作者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作者",
+            "description": "操作者コード"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ",
+            "description": "変更前レコードJSON"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ",
+            "description": "変更後レコードJSON"
+          },
+          "差分": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "差分",
+            "description": "項目別差分 {項目名: {before: x, after: y}}"
+          },
+          "操作日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作日時",
+            "description": "履歴記録日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "受注不可日",
+          "操作区分"
+        ],
+        "title": "BlackoutDateHistoryItem",
+        "description": "受注不可日マスタ変更履歴項目モデル"
       },
       "BlackoutDateHistoryResponse": {
         "properties": {
           "blackout_date": {
             "type": "integer",
-            "title": "Blackout Date"
+            "title": "Blackout Date",
+            "description": "受注不可日 (YYYYMMDD)"
           },
           "total": {
             "type": "integer",
-            "title": "Total"
+            "title": "Total",
+            "description": "履歴総件数"
           },
           "histories": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/BlackoutDateHistoryItem"
             },
             "type": "array",
-            "title": "Histories"
+            "title": "Histories",
+            "description": "履歴データ一覧"
           }
         },
         "type": "object",
         "required": [
           "blackout_date",
-          "total",
-          "histories"
+          "total"
         ],
-        "title": "BlackoutDateHistoryResponse"
+        "title": "BlackoutDateHistoryResponse",
+        "description": "受注不可日履歴レスポンス"
+      },
+      "BlackoutDateItem": {
+        "properties": {
+          "受注不可日": {
+            "type": "integer",
+            "title": "受注不可日",
+            "description": "受注不可日 (YYYYMMDD)"
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考",
+            "description": "理由・備考"
+          },
+          "取消区分": {
+            "type": "integer",
+            "title": "取消区分",
+            "description": "取消区分 (0:有効, 1:削除済)",
+            "default": 0
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "ユーザー操作フラグ (0:自動/初期, 1:手動変更)",
+            "default": 0
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時",
+            "description": "作成日時"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者",
+            "description": "作成者コード"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "更新日時"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者",
+            "description": "更新者コード"
+          },
+          "取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消日時",
+            "description": "取消日時"
+          },
+          "取消者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消者",
+            "description": "取消者コード"
+          }
+        },
+        "type": "object",
+        "required": [
+          "受注不可日"
+        ],
+        "title": "BlackoutDateItem",
+        "description": "受注不可日マスタのエンティティモデル（OpenAPI 完全定義）"
       },
       "BlackoutDateListResponse": {
         "properties": {
           "total": {
             "type": "integer",
-            "title": "Total"
+            "title": "Total",
+            "description": "検索該当総件数"
           },
           "limit": {
             "type": "integer",
-            "title": "Limit"
+            "title": "Limit",
+            "description": "取得上限件数"
           },
           "offset": {
             "type": "integer",
-            "title": "Offset"
+            "title": "Offset",
+            "description": "取得開始位置"
           },
           "blackout_dates": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/BlackoutDateItem"
             },
             "type": "array",
-            "title": "Blackout Dates"
+            "title": "Blackout Dates",
+            "description": "受注不可日データ一覧"
           }
         },
         "type": "object",
         "required": [
           "total",
           "limit",
-          "offset",
-          "blackout_dates"
+          "offset"
         ],
-        "title": "BlackoutDateListResponse"
+        "title": "BlackoutDateListResponse",
+        "description": "受注不可日一覧レスポンス"
       },
       "BlackoutDateRequest": {
         "properties": {
@@ -6420,16 +8946,17 @@
         "properties": {
           "success": {
             "type": "boolean",
-            "title": "Success"
+            "title": "Success",
+            "description": "成否フラグ"
           },
           "blackout_date": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Blackout Date"
+            "$ref": "#/components/schemas/BlackoutDateItem",
+            "description": "対象受注不可日データ"
           },
           "message": {
             "type": "string",
-            "title": "Message"
+            "title": "Message",
+            "description": "処理結果メッセージ"
           }
         },
         "type": "object",
@@ -6438,27 +8965,31 @@
           "blackout_date",
           "message"
         ],
-        "title": "BlackoutDateResponse"
+        "title": "BlackoutDateResponse",
+        "description": "受注不可日登録・更新・削除レスポンス"
       },
       "BlackoutDateValidationResponse": {
         "properties": {
           "valid": {
             "type": "boolean",
-            "title": "Valid"
+            "title": "Valid",
+            "description": "バリデーション成否"
           },
           "errors": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Errors"
+            "title": "Errors",
+            "description": "エラーメッセージ一覧"
           },
           "warnings": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Warnings"
+            "title": "Warnings",
+            "description": "警告メッセージ一覧"
           },
           "details": {
             "anyOf": [
@@ -6470,14 +9001,16 @@
                 "type": "null"
               }
             ],
-            "title": "Details"
+            "title": "Details",
+            "description": "検証後詳細データ"
           }
         },
         "type": "object",
         "required": [
           "valid"
         ],
-        "title": "BlackoutDateValidationResponse"
+        "title": "BlackoutDateValidationResponse",
+        "description": "受注不可日事前検証レスポンス"
       },
       "Body_import_accounts_csv_endpoint_accounts_import_csv_post": {
         "properties": {
@@ -6587,9 +9120,7 @@
       "CADetailResponse": {
         "properties": {
           "ca": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Ca"
+            "$ref": "#/components/schemas/CAItem"
           }
         },
         "type": "object",
@@ -6598,6 +9129,90 @@
         ],
         "title": "CADetailResponse",
         "description": "CA詳細照会レスポンス"
+      },
+      "CAHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "履歴ID"
+          },
+          "CA_ID": {
+            "type": "integer",
+            "title": "Ca Id",
+            "description": "CA ID"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分",
+            "description": "操作区分（CREATE / UPDATE / DELETE）"
+          },
+          "操作者": {
+            "type": "string",
+            "title": "操作者",
+            "description": "操作者コード"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ",
+            "description": "変更前レコードデータ"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ",
+            "description": "変更後レコードデータ"
+          },
+          "差分": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "差分",
+            "description": "変更項目の差分データ"
+          },
+          "操作日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作日時",
+            "description": "操作日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "CA_ID",
+          "操作区分",
+          "操作者"
+        ],
+        "title": "CAHistoryItem",
+        "description": "CA履歴レコードモデル"
       },
       "CAHistoryResponse": {
         "properties": {
@@ -6611,8 +9226,7 @@
           },
           "histories": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/CAHistoryItem"
             },
             "type": "array",
             "title": "Histories"
@@ -6626,6 +9240,225 @@
         ],
         "title": "CAHistoryResponse",
         "description": "CA変更履歴レスポンス"
+      },
+      "CAItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "CA ID (主キー)"
+          },
+          "銘柄コード": {
+            "type": "string",
+            "title": "銘柄コード",
+            "description": "当社銘柄コード"
+          },
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker",
+            "description": "Tickerコード"
+          },
+          "CA種別": {
+            "type": "string",
+            "title": "Ca種別",
+            "description": "CA種別コード（codes.json参照）"
+          },
+          "CA種別名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ca種別名",
+            "description": "CA種別日本語名称"
+          },
+          "権利付最終日": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "権利付最終日",
+            "description": "権利付最終日（YYYYMMDD形式）"
+          },
+          "効力発生日": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "効力発生日",
+            "description": "効力発生日（YYYYMMDD形式）"
+          },
+          "支払日": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "支払日",
+            "description": "支払日（YYYYMMDD形式）"
+          },
+          "分母": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "分母",
+            "description": "比率の分母"
+          },
+          "分子": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "分子",
+            "description": "比率の分子"
+          },
+          "比率": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "比率",
+            "description": "比率表示文字列（例: 1:2）"
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考",
+            "description": "備考"
+          },
+          "取消区分": {
+            "type": "integer",
+            "title": "取消区分",
+            "description": "論理削除フラグ（0:有効, 1:削除済み）",
+            "default": 0
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "画面・API操作フラグ（0:自動取込, 1:手動操作）",
+            "default": 0
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時",
+            "description": "作成日時 (ISO8601形式 または YYYY-MM-DD HH:MM:SS)"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者",
+            "description": "作成者コード"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "更新日時 (ISO8601形式 または YYYY-MM-DD HH:MM:SS)"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者",
+            "description": "更新者コード"
+          },
+          "取消日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消日時",
+            "description": "取消日時 (ISO8601形式 または YYYY-MM-DD HH:MM:SS)"
+          },
+          "取消者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消者",
+            "description": "取消者コード"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "銘柄コード",
+          "CA種別"
+        ],
+        "title": "CAItem",
+        "description": "CAマスタ単一レコードモデル"
       },
       "CAListResponse": {
         "properties": {
@@ -6643,8 +9476,7 @@
           },
           "ca_list": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/CAItem"
             },
             "type": "array",
             "title": "Ca List"
@@ -6777,9 +9609,7 @@
             "title": "Success"
           },
           "ca": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Ca"
+            "$ref": "#/components/schemas/CAItem"
           },
           "message": {
             "type": "string",
@@ -7039,83 +9869,315 @@
         "title": "CustomerListResponse",
         "description": "顧客検索APIのレスポンスモデル"
       },
+      "ErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "エラー詳細メッセージ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorResponse",
+        "description": "共通エラーレスポンスモデル"
+      },
       "ExchangeRateDetailResponse": {
         "properties": {
           "exchange_rate": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Exchange Rate"
+            "$ref": "#/components/schemas/ExchangeRateItem",
+            "description": "為替レート詳細データ"
           }
         },
         "type": "object",
         "required": [
           "exchange_rate"
         ],
-        "title": "ExchangeRateDetailResponse"
+        "title": "ExchangeRateDetailResponse",
+        "description": "為替マスタ詳細レスポンス"
+      },
+      "ExchangeRateHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "履歴ID"
+          },
+          "基準日": {
+            "type": "integer",
+            "title": "基準日",
+            "description": "適用日・基準日 (YYYYMMDD)"
+          },
+          "通貨コード": {
+            "type": "string",
+            "title": "通貨コード",
+            "description": "通貨コード"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分",
+            "description": "操作区分 (CREATE, UPDATE, DELETE)"
+          },
+          "操作者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作者",
+            "description": "操作者コード"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ",
+            "description": "変更前レコードJSON"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ",
+            "description": "変更後レコードJSON"
+          },
+          "差分": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "差分",
+            "description": "項目別差分 {項目名: {before: x, after: y}}"
+          },
+          "操作日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作日時",
+            "description": "履歴記録日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "基準日",
+          "通貨コード",
+          "操作区分"
+        ],
+        "title": "ExchangeRateHistoryItem",
+        "description": "為替マスタ変更履歴項目モデル"
       },
       "ExchangeRateHistoryResponse": {
         "properties": {
           "base_date": {
             "type": "integer",
-            "title": "Base Date"
+            "title": "Base Date",
+            "description": "適用日・基準日 (YYYYMMDD)"
           },
           "currency_code": {
             "type": "string",
-            "title": "Currency Code"
+            "title": "Currency Code",
+            "description": "通貨コード"
           },
           "total": {
             "type": "integer",
-            "title": "Total"
+            "title": "Total",
+            "description": "履歴総件数"
           },
           "histories": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ExchangeRateHistoryItem"
             },
             "type": "array",
-            "title": "Histories"
+            "title": "Histories",
+            "description": "履歴データ一覧"
           }
         },
         "type": "object",
         "required": [
           "base_date",
           "currency_code",
-          "total",
-          "histories"
+          "total"
         ],
-        "title": "ExchangeRateHistoryResponse"
+        "title": "ExchangeRateHistoryResponse",
+        "description": "為替マスタ履歴レスポンス"
+      },
+      "ExchangeRateItem": {
+        "properties": {
+          "基準日": {
+            "type": "integer",
+            "title": "基準日",
+            "description": "適用日・基準日 (YYYYMMDD)"
+          },
+          "通貨コード": {
+            "type": "string",
+            "title": "通貨コード",
+            "description": "通貨コード (例: USD)"
+          },
+          "為替レート": {
+            "type": "number",
+            "title": "為替レート",
+            "description": "為替レート(円)"
+          },
+          "取消区分": {
+            "type": "integer",
+            "title": "取消区分",
+            "description": "取消区分 (0:有効, 1:削除済)",
+            "default": 0
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "ユーザー操作フラグ (0:自動/初期, 1:手動変更)",
+            "default": 0
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時",
+            "description": "作成日時"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者",
+            "description": "作成者コード"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "更新日時"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者",
+            "description": "更新者コード"
+          },
+          "取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消日時",
+            "description": "取消日時"
+          },
+          "取消者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消者",
+            "description": "取消者コード"
+          }
+        },
+        "type": "object",
+        "required": [
+          "基準日",
+          "通貨コード",
+          "為替レート"
+        ],
+        "title": "ExchangeRateItem",
+        "description": "為替マスタのエンティティモデル（OpenAPI 完全定義）"
       },
       "ExchangeRateListResponse": {
         "properties": {
           "total": {
             "type": "integer",
-            "title": "Total"
+            "title": "Total",
+            "description": "検索該当総件数"
           },
           "limit": {
             "type": "integer",
-            "title": "Limit"
+            "title": "Limit",
+            "description": "取得上限件数"
           },
           "offset": {
             "type": "integer",
-            "title": "Offset"
+            "title": "Offset",
+            "description": "取得開始位置"
           },
           "exchange_rates": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ExchangeRateItem"
             },
             "type": "array",
-            "title": "Exchange Rates"
+            "title": "Exchange Rates",
+            "description": "為替レートデータ一覧"
           }
         },
         "type": "object",
         "required": [
           "total",
           "limit",
-          "offset",
-          "exchange_rates"
+          "offset"
         ],
-        "title": "ExchangeRateListResponse"
+        "title": "ExchangeRateListResponse",
+        "description": "為替マスタ一覧レスポンス"
       },
       "ExchangeRateRequest": {
         "properties": {
@@ -7165,16 +10227,17 @@
         "properties": {
           "success": {
             "type": "boolean",
-            "title": "Success"
+            "title": "Success",
+            "description": "成否フラグ"
           },
           "exchange_rate": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Exchange Rate"
+            "$ref": "#/components/schemas/ExchangeRateItem",
+            "description": "対象為替レートデータ"
           },
           "message": {
             "type": "string",
-            "title": "Message"
+            "title": "Message",
+            "description": "処理結果メッセージ"
           }
         },
         "type": "object",
@@ -7183,27 +10246,31 @@
           "exchange_rate",
           "message"
         ],
-        "title": "ExchangeRateResponse"
+        "title": "ExchangeRateResponse",
+        "description": "為替マスタ登録・更新・削除レスポンス"
       },
       "ExchangeRateValidationResponse": {
         "properties": {
           "valid": {
             "type": "boolean",
-            "title": "Valid"
+            "title": "Valid",
+            "description": "バリデーション成否"
           },
           "errors": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Errors"
+            "title": "Errors",
+            "description": "エラーメッセージ一覧"
           },
           "warnings": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Warnings"
+            "title": "Warnings",
+            "description": "警告メッセージ一覧"
           },
           "details": {
             "anyOf": [
@@ -7215,14 +10282,16 @@
                 "type": "null"
               }
             ],
-            "title": "Details"
+            "title": "Details",
+            "description": "検証後詳細データ"
           }
         },
         "type": "object",
         "required": [
           "valid"
         ],
-        "title": "ExchangeRateValidationResponse"
+        "title": "ExchangeRateValidationResponse",
+        "description": "為替マスタ事前検証レスポンス"
       },
       "HTTPValidationError": {
         "properties": {
@@ -7236,6 +10305,236 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HoldingItem": {
+        "properties": {
+          "部店コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店コード",
+            "description": "部店コード"
+          },
+          "口座番号": {
+            "type": "integer",
+            "title": "口座番号",
+            "description": "口座番号"
+          },
+          "顧客名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名",
+            "description": "顧客名"
+          },
+          "顧客名カナ": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名カナ",
+            "description": "顧客名カナ"
+          },
+          "銘柄コード": {
+            "type": "string",
+            "title": "銘柄コード",
+            "description": "銘柄コード"
+          },
+          "ティッカー": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "ティッカー",
+            "description": "Ticker (ティッカー)"
+          },
+          "銘柄名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名",
+            "description": "銘柄名"
+          },
+          "数量": {
+            "type": "integer",
+            "title": "数量",
+            "description": "残高数量"
+          },
+          "預り売買区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "預り売買区分",
+            "description": "特定預り区分コード"
+          },
+          "預り売買区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "預り売買区分名",
+            "description": "特定預り区分名称"
+          },
+          "評価額_USD": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "評価額 Usd",
+            "description": "評価額 (USD) = 前日終値 * 残高"
+          },
+          "評価額_JPY": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "評価額 Jpy",
+            "description": "評価額 (JPY) = 前日終値 * 残高 * 為替レート"
+          },
+          "平均取得単価": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "平均取得単価",
+            "description": "平均取得単価"
+          },
+          "取得金額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取得金額",
+            "description": "取得金額 = 平均取得単価 * 前日終値"
+          },
+          "評価損益": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "評価損益",
+            "description": "評価損益 = 評価額_JPY - 取得金額"
+          },
+          "評価損益率": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "評価損益率",
+            "description": "評価損益率 = (取得金額 / 評価額_JPY) - 1 (%表記)"
+          },
+          "CA": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ca",
+            "description": "CA情報 (例: 株式分割(1 : 2))"
+          }
+        },
+        "type": "object",
+        "required": [
+          "口座番号",
+          "銘柄コード",
+          "数量"
+        ],
+        "title": "HoldingItem",
+        "description": "預り残高・評価額明細アイテム"
+      },
+      "HoldingListResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "総件数"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "取得件数上限"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "取得開始位置"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingItem"
+            },
+            "type": "array",
+            "title": "Holdings",
+            "description": "預り明細リスト"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "HoldingListResponse",
+        "description": "預り残高検索レスポンス"
       },
       "HoldingStockItem": {
         "properties": {
@@ -7324,9 +10623,8 @@
       "HolidayDetailResponse": {
         "properties": {
           "holiday": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Holiday"
+            "$ref": "#/components/schemas/HolidayItem",
+            "description": "海外休場日詳細情報"
           }
         },
         "type": "object",
@@ -7336,23 +10634,126 @@
         "title": "HolidayDetailResponse",
         "description": "海外休場日詳細照会レスポンス"
       },
+      "HolidayHistoryDiff": {
+        "properties": {
+          "before": {
+            "title": "Before",
+            "description": "変更前値"
+          },
+          "after": {
+            "title": "After",
+            "description": "変更後値"
+          }
+        },
+        "type": "object",
+        "title": "HolidayHistoryDiff",
+        "description": "差分項目情報"
+      },
+      "HolidayHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "履歴ID"
+          },
+          "休場日": {
+            "type": "integer",
+            "title": "休場日",
+            "description": "休場日"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分",
+            "description": "操作区分 (CREATE / UPDATE / DELETE)"
+          },
+          "操作者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作者",
+            "description": "操作者コード"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ",
+            "description": "変更前スナップショット"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ",
+            "description": "変更後スナップショット"
+          },
+          "操作日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作日時",
+            "description": "操作日時 (ISO8601)"
+          },
+          "差分": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/HolidayHistoryDiff"
+            },
+            "type": "object",
+            "title": "差分",
+            "description": "変更差分フィールド"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "休場日",
+          "操作区分"
+        ],
+        "title": "HolidayHistoryItem",
+        "description": "海外休場日履歴明細"
+      },
       "HolidayHistoryResponse": {
         "properties": {
           "holiday_date": {
             "type": "integer",
-            "title": "Holiday Date"
+            "title": "Holiday Date",
+            "description": "休場日"
           },
           "total": {
             "type": "integer",
-            "title": "Total"
+            "title": "Total",
+            "description": "履歴総件数"
           },
           "histories": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/HolidayHistoryItem"
             },
             "type": "array",
-            "title": "Histories"
+            "title": "Histories",
+            "description": "履歴一覧"
           }
         },
         "type": "object",
@@ -7364,27 +10765,162 @@
         "title": "HolidayHistoryResponse",
         "description": "海外休場日変更履歴レスポンス"
       },
+      "HolidayItem": {
+        "properties": {
+          "休場日": {
+            "type": "integer",
+            "title": "休場日",
+            "description": "休場日 (YYYYMMDD)"
+          },
+          "休場区分": {
+            "type": "string",
+            "title": "休場区分",
+            "description": "海外休場区分コード (0: 終日休場, 1: 短縮取引)"
+          },
+          "休場区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "休場区分名",
+            "description": "海外休場区分名 (終日休場 / 短縮取引)"
+          },
+          "休場理由": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "休場理由",
+            "description": "休場理由"
+          },
+          "取消区分": {
+            "type": "integer",
+            "title": "取消区分",
+            "description": "取消区分 (0: 有効, 1: 削除済み)",
+            "default": 0
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "ユーザー操作フラグ (0: システム/自動, 1: ユーザー操作)",
+            "default": 0
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時",
+            "description": "作成日時 (ISO8601)"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者",
+            "description": "作成者社員コード"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "更新日時 (ISO8601)"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者",
+            "description": "更新者社員コード"
+          },
+          "取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消日時",
+            "description": "取消日時 (ISO8601)"
+          },
+          "取消者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消者",
+            "description": "取消者社員コード"
+          }
+        },
+        "type": "object",
+        "required": [
+          "休場日",
+          "休場区分"
+        ],
+        "title": "HolidayItem",
+        "description": "海外休場日データ行モデル（12項目）"
+      },
       "HolidayListResponse": {
         "properties": {
           "total": {
             "type": "integer",
-            "title": "Total"
+            "title": "Total",
+            "description": "総件数"
           },
           "limit": {
             "type": "integer",
-            "title": "Limit"
+            "title": "Limit",
+            "description": "取得件数"
           },
           "offset": {
             "type": "integer",
-            "title": "Offset"
+            "title": "Offset",
+            "description": "取得開始位置"
           },
           "holidays": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/HolidayItem"
             },
             "type": "array",
-            "title": "Holidays"
+            "title": "Holidays",
+            "description": "海外休場日データ一覧"
           }
         },
         "type": "object",
@@ -7442,7 +10978,7 @@
               }
             ],
             "title": "更新日時",
-            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+            "description": "楽観ロック用: 取得時の更新日時（ISO8601形式 または YYYY-MM-DD HH:MM:SS形式）"
           }
         },
         "type": "object",
@@ -7456,16 +10992,17 @@
         "properties": {
           "success": {
             "type": "boolean",
-            "title": "Success"
+            "title": "Success",
+            "description": "処理成否"
           },
           "holiday": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Holiday"
+            "$ref": "#/components/schemas/HolidayItem",
+            "description": "海外休場日レコード"
           },
           "message": {
             "type": "string",
-            "title": "Message"
+            "title": "Message",
+            "description": "処理結果メッセージ"
           }
         },
         "type": "object",
@@ -7477,37 +11014,94 @@
         "title": "HolidayResponse",
         "description": "海外休場日単一操作レスポンス"
       },
+      "HolidayValidationDetails": {
+        "properties": {
+          "休場日": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "休場日",
+            "description": "休場日 (YYYYMMDD)"
+          },
+          "休場区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "休場区分",
+            "description": "休場区分コード"
+          },
+          "休場区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "休場区分名",
+            "description": "休場区分名"
+          },
+          "休場理由": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "休場理由",
+            "description": "休場理由"
+          }
+        },
+        "type": "object",
+        "title": "HolidayValidationDetails",
+        "description": "海外休場日事前検証の詳細"
+      },
       "HolidayValidationResponse": {
         "properties": {
           "valid": {
             "type": "boolean",
-            "title": "Valid"
+            "title": "Valid",
+            "description": "検証結果 (True: 正常, False: エラーあり)"
           },
           "errors": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Errors"
+            "title": "Errors",
+            "description": "エラーメッセージ一覧"
           },
           "warnings": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Warnings"
+            "title": "Warnings",
+            "description": "警告メッセージ一覧"
           },
           "details": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/HolidayValidationDetails"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Details"
+            "description": "入力解析結果詳細"
           }
         },
         "type": "object",
@@ -7521,15 +11115,18 @@
         "properties": {
           "基準日": {
             "type": "integer",
-            "title": "基準日"
+            "title": "基準日",
+            "description": "適用日・基準日 (YYYYMMDD)"
           },
           "通貨コード": {
             "type": "string",
-            "title": "通貨コード"
+            "title": "通貨コード",
+            "description": "通貨コード"
           },
           "為替レート": {
             "type": "number",
-            "title": "為替レート"
+            "title": "為替レート",
+            "description": "最新為替レート(円)"
           }
         },
         "type": "object",
@@ -7538,7 +11135,8 @@
           "通貨コード",
           "為替レート"
         ],
-        "title": "LatestExchangeRateResponse"
+        "title": "LatestExchangeRateResponse",
+        "description": "直近為替レートレスポンス"
       },
       "MasterListResponse": {
         "properties": {
@@ -7944,34 +11542,78 @@
         "title": "OrderValidationResponse",
         "description": "注文検証APIのレスポンスモデル"
       },
-      "StockDetailResponse": {
+      "SliceSettingHistoryItem": {
         "properties": {
-          "stock": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "setting_id": {
+            "type": "integer",
+            "title": "Setting Id"
+          },
+          "operation_type": {
+            "type": "string",
+            "title": "Operation Type"
+          },
+          "operator": {
+            "type": "string",
+            "title": "Operator"
+          },
+          "before_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Data"
+          },
+          "after_data": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Stock"
+            "title": "After Data"
+          },
+          "diff": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diff"
+          },
+          "operated_at": {
+            "type": "string",
+            "title": "Operated At"
           }
         },
         "type": "object",
         "required": [
-          "stock"
+          "id",
+          "setting_id",
+          "operation_type",
+          "operator",
+          "after_data",
+          "operated_at"
         ],
-        "title": "StockDetailResponse"
+        "title": "SliceSettingHistoryItem"
       },
-      "StockHistoryResponse": {
+      "SliceSettingHistoryResponse": {
         "properties": {
-          "stock_code": {
-            "type": "string",
-            "title": "Stock Code"
-          },
           "total": {
             "type": "integer",
             "title": "Total"
           },
           "histories": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SliceSettingHistoryItem"
             },
             "type": "array",
             "title": "Histories"
@@ -7979,43 +11621,755 @@
         },
         "type": "object",
         "required": [
-          "stock_code",
           "total",
           "histories"
         ],
-        "title": "StockHistoryResponse"
+        "title": "SliceSettingHistoryResponse"
+      },
+      "SliceSettingResponse": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "設定ID"
+          },
+          "市場関与率": {
+            "type": "number",
+            "title": "市場関与率",
+            "description": "市場関与率上限 (例: 0.0100 = 1%)"
+          },
+          "大口数量閾値": {
+            "type": "integer",
+            "title": "大口数量閾値",
+            "description": "大口注文数量上限 (株数)"
+          },
+          "大口金額閾値": {
+            "type": "number",
+            "title": "大口金額閾値",
+            "description": "大口注文金額上限 (USD)"
+          },
+          "スライス有効フラグ": {
+            "type": "integer",
+            "title": "スライス有効フラグ",
+            "description": "1: 有効, 0: 無効"
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考",
+            "description": "備考"
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "ユーザー操作フラグ"
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時",
+            "description": "作成日時"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者",
+            "description": "作成者"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "更新日時"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者",
+            "description": "更新者"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "市場関与率",
+          "大口数量閾値",
+          "大口金額閾値",
+          "スライス有効フラグ",
+          "ユーザー操作フラグ"
+        ],
+        "title": "SliceSettingResponse"
+      },
+      "SliceSettingUpdateRequest": {
+        "properties": {
+          "市場関与率": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0001,
+            "title": "市場関与率",
+            "description": "市場関与率上限 (0.0001〜1.0000)"
+          },
+          "大口数量閾値": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "大口数量閾値",
+            "description": "大口注文数量上限 (株数)"
+          },
+          "大口金額閾値": {
+            "type": "number",
+            "minimum": 1.0,
+            "title": "大口金額閾値",
+            "description": "大口注文金額上限 (USD)"
+          },
+          "スライス有効フラグ": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "スライス有効フラグ",
+            "description": "1: 有効, 0: 無効",
+            "default": 1
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考",
+            "description": "備考"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観的ロック用更新日時 (YYYY-MM-DD HH:MM:SS)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "市場関与率",
+          "大口数量閾値",
+          "大口金額閾値"
+        ],
+        "title": "SliceSettingUpdateRequest"
+      },
+      "SliceSimulateRequest": {
+        "properties": {
+          "数量": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "数量",
+            "description": "注文数量"
+          },
+          "指成区分": {
+            "type": "string",
+            "title": "指成区分",
+            "description": "LO (指値) または MO (成行)",
+            "default": "LO"
+          },
+          "指値単価": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "指値単価",
+            "description": "指値単価 (USD)"
+          },
+          "平均出来高": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "平均出来高",
+            "description": "5日間平均出来高",
+            "default": 0
+          },
+          "前日終値": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "前日終値",
+            "description": "前日終値 (USD)",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "数量"
+        ],
+        "title": "SliceSimulateRequest"
+      },
+      "SliceSimulateResponse": {
+        "properties": {
+          "is_candidate": {
+            "type": "boolean",
+            "title": "Is Candidate",
+            "description": "スライス注文候補に該当するか"
+          },
+          "matched_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Reasons",
+            "description": "該当した理由一覧"
+          },
+          "total_quantity": {
+            "type": "integer",
+            "title": "Total Quantity",
+            "description": "総注文数量"
+          },
+          "split_count": {
+            "type": "integer",
+            "title": "Split Count",
+            "description": "分割数"
+          },
+          "max_slice_quantity": {
+            "type": "integer",
+            "title": "Max Slice Quantity",
+            "description": "1子注文あたりの許容上限数量"
+          },
+          "slice_quantities": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Slice Quantities",
+            "description": "分割された各子注文数量リスト (均等案分+端数先頭)"
+          },
+          "limits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Limits",
+            "description": "各条件の上限株数"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details",
+            "description": "判定詳細パラメータ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_candidate",
+          "total_quantity",
+          "split_count",
+          "max_slice_quantity"
+        ],
+        "title": "SliceSimulateResponse"
+      },
+      "StockDetailResponse": {
+        "properties": {
+          "stock": {
+            "$ref": "#/components/schemas/StockItem",
+            "description": "銘柄詳細データ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stock"
+        ],
+        "title": "StockDetailResponse",
+        "description": "銘柄詳細レスポンス"
+      },
+      "StockHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "履歴ID"
+          },
+          "銘柄コード": {
+            "type": "string",
+            "title": "銘柄コード",
+            "description": "銘柄コード"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分",
+            "description": "操作区分 (CREATE, UPDATE, DELETE)"
+          },
+          "操作者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作者",
+            "description": "操作者コード"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ",
+            "description": "変更前レコードJSON"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ",
+            "description": "変更後レコードJSON"
+          },
+          "差分": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "差分",
+            "description": "項目別差分 {項目名: {before: x, after: y}}"
+          },
+          "操作日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作日時",
+            "description": "履歴記録日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "銘柄コード",
+          "操作区分"
+        ],
+        "title": "StockHistoryItem",
+        "description": "銘柄マスタ変更履歴項目モデル"
+      },
+      "StockHistoryResponse": {
+        "properties": {
+          "stock_code": {
+            "type": "string",
+            "title": "Stock Code",
+            "description": "銘柄コード"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "履歴総件数"
+          },
+          "histories": {
+            "items": {
+              "$ref": "#/components/schemas/StockHistoryItem"
+            },
+            "type": "array",
+            "title": "Histories",
+            "description": "履歴データ一覧"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stock_code",
+          "total"
+        ],
+        "title": "StockHistoryResponse",
+        "description": "銘柄履歴レスポンス"
+      },
+      "StockItem": {
+        "properties": {
+          "銘柄コード": {
+            "type": "string",
+            "title": "銘柄コード",
+            "description": "銘柄コード (主キー)"
+          },
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker",
+            "description": "ティッカーコード"
+          },
+          "銘柄名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名",
+            "description": "銘柄名（日本語）"
+          },
+          "銘柄名_英字": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名 英字",
+            "description": "銘柄名（英字）"
+          },
+          "市場名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "市場名",
+            "description": "市場名"
+          },
+          "規制情報": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "規制情報",
+            "description": "取引可否・規制情報コード"
+          },
+          "規制情報名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "規制情報名",
+            "description": "取引可否・規制情報名称"
+          },
+          "注文ルート": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文ルート",
+            "description": "預託先区分コード (0:みずほ, 1:IB)",
+            "default": "0"
+          },
+          "注文ルート名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文ルート名",
+            "description": "預託先区分名称"
+          },
+          "VWAP対象区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap対象区分",
+            "description": "VWAP対象区分コード (0:非対象, 1:対象)",
+            "default": "0"
+          },
+          "VWAP対象区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap対象区分名",
+            "description": "VWAP対象区分名称"
+          },
+          "Pre区分": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pre区分",
+            "description": "プレ区分 (0:不可, 1:可能)",
+            "default": 0
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考",
+            "description": "備考"
+          },
+          "前日終値": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "前日終値",
+            "description": "前日終値"
+          },
+          "前日出来高": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "前日出来高",
+            "description": "前日出来高"
+          },
+          "平均出来高": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "平均出来高",
+            "description": "5日間平均出来高"
+          },
+          "取消区分": {
+            "type": "integer",
+            "title": "取消区分",
+            "description": "取消区分 (0:有効, 1:削除済)",
+            "default": 0
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "ユーザー操作フラグ (0:自動/初期, 1:手動変更)",
+            "default": 0
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時",
+            "description": "作成日時"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者",
+            "description": "作成者コード"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "更新日時"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者",
+            "description": "更新者コード"
+          },
+          "取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消日時",
+            "description": "取消日時"
+          },
+          "取消者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消者",
+            "description": "取消者コード"
+          }
+        },
+        "type": "object",
+        "required": [
+          "銘柄コード"
+        ],
+        "title": "StockItem",
+        "description": "銘柄マスタのエンティティモデル（OpenAPI 完全定義）"
       },
       "StockListResponse": {
         "properties": {
           "total": {
             "type": "integer",
-            "title": "Total"
+            "title": "Total",
+            "description": "検索該当総件数"
           },
           "limit": {
             "type": "integer",
-            "title": "Limit"
+            "title": "Limit",
+            "description": "取得上限件数"
           },
           "offset": {
             "type": "integer",
-            "title": "Offset"
+            "title": "Offset",
+            "description": "取得開始位置"
           },
           "stocks": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/StockItem"
             },
             "type": "array",
-            "title": "Stocks"
+            "title": "Stocks",
+            "description": "銘柄データ一覧"
           }
         },
         "type": "object",
         "required": [
           "total",
           "limit",
-          "offset",
-          "stocks"
+          "offset"
         ],
-        "title": "StockListResponse"
+        "title": "StockListResponse",
+        "description": "銘柄一覧レスポンス"
       },
       "StockRequest": {
         "properties": {
@@ -8191,16 +12545,17 @@
         "properties": {
           "success": {
             "type": "boolean",
-            "title": "Success"
+            "title": "Success",
+            "description": "成否フラグ"
           },
           "stock": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Stock"
+            "$ref": "#/components/schemas/StockItem",
+            "description": "対象銘柄データ"
           },
           "message": {
             "type": "string",
-            "title": "Message"
+            "title": "Message",
+            "description": "処理結果メッセージ"
           }
         },
         "type": "object",
@@ -8209,27 +12564,31 @@
           "stock",
           "message"
         ],
-        "title": "StockResponse"
+        "title": "StockResponse",
+        "description": "銘柄登録・更新・削除レスポンス"
       },
       "StockValidationResponse": {
         "properties": {
           "valid": {
             "type": "boolean",
-            "title": "Valid"
+            "title": "Valid",
+            "description": "バリデーション成否"
           },
           "errors": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Errors"
+            "title": "Errors",
+            "description": "エラーメッセージ一覧"
           },
           "warnings": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Warnings"
+            "title": "Warnings",
+            "description": "警告メッセージ一覧"
           },
           "details": {
             "anyOf": [
@@ -8241,14 +12600,16 @@
                 "type": "null"
               }
             ],
-            "title": "Details"
+            "title": "Details",
+            "description": "検証後詳細データ（名称解決済み）"
           }
         },
         "type": "object",
         "required": [
           "valid"
         ],
-        "title": "StockValidationResponse"
+        "title": "StockValidationResponse",
+        "description": "銘柄事前検証レスポンス"
       },
       "ValidationDetails": {
         "properties": {
@@ -8455,6 +12816,14 @@
       "description": "【検証済 / Verified】残高補正マスタ（登録・変更・削除・詳細・履歴・一覧検索・事前検証）API（全テスト通過済）"
     },
     {
+      "name": "HoldingSearch",
+      "description": "【検証済 / Verified】預り残高・評価額・損益・CA検索 API"
+    },
+    {
+      "name": "SliceSettings",
+      "description": "【Step 1】スライス注文判定設定マスタ（照会・変更・履歴・計算シミュレーション）API"
+    },
+    {
       "name": "Customers",
       "description": "【検証済 / Verified】顧客検索 API（全テスト通過済）"
     },
@@ -8465,6 +12834,10 @@
     {
       "name": "Closing",
       "description": "【検証済 / Verified】みずほ締め管理（締め実行・解除・状態照会）API（全テスト通過済）"
+    },
+    {
+      "name": "MizuhoIntegration",
+      "description": "【検証済 / Verified】みずほ連携・オーダーシート (Excel .xlsx) ダウンロード API"
     },
     {
       "name": "Masters",

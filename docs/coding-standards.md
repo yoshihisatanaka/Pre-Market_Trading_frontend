@@ -191,3 +191,63 @@ const order = toOrder(res.data)
 `src/api/orders.js` / `e2e/orders.spec.js` / `docs/unit/stores-orders.md` のように書く
 （`./` を付けない。かつてフロントエンドが `frontend/` 配下にあった名残の接頭辞も付けない）。
 Markdown のリンクは相対パスにする — `docs/` 直下からは `../src/...`、`docs/api/` からは `../../src/...`。
+
+---
+
+## 9. Effort レベルの選びかた
+
+Claude Code の **effort**（`/effort`）は、モデルがどれだけ考えるかを決める設定。
+Opus 5 は `low` / `medium` / `high` / `xhigh` / `max` の 5 段階で、**既定は `high`**。
+厳密なトークン予算ではなく振る舞いの信号なので、`low` でも難所では思考する。
+
+設定は `/effort <level>`（セッション単位）のほか、`claude --effort <level>`、
+環境変数 `CLAUDE_CODE_EFFORT_LEVEL`、`settings.json` の `effortLevel`、
+サブエージェント / スキルの frontmatter `effort:` でも指定できる。
+なお `ultrathink` はそのターン限りの深掘りで、セッションの effort 設定は変えない。
+
+**`settings.json` にプロジェクト既定を書かない。** 調査・実装・テストが同じセッションに
+混ざったときに不適切な値で固定される。作業の切り替わりで `/effort` を叩く運用にする。
+
+### 判断の 4 軸
+
+上げる方向に効く順。**該当が 1 つでもあれば上のレベルを採る。**
+
+1. **型を作る回か、型に乗る回か。**
+   新しい共通部品（`src/components/ui/`）・新しい composable・レイヤ間の新しい約束事を
+   決める回は `xhigh`。既存の同型画面をなぞるだけなら `high` 以下でよい
+2. **誤りが機械検査で落ちるか。**
+   `lint` / `test:unit` / `check:scenarios` が拾える範囲は下げてよい。
+   見た目・仕様解釈・4 状態の出し分けなど、人が見るまで判らないものは上げる
+3. **波及範囲。**
+   `src/api/client.js` / `src/composables/` / `src/components/ui/` /
+   `src/components/layout/navigation.js` など他画面が乗るものを触るなら `xhigh`
+4. **このリポジトリには人間のコードレビューが無い。**
+   → **`src/` の製品コードを触る回の下限は `high`。`low` は使わない。**
+   逆に `docs/` とテストは機械検査があるので下げやすい
+
+補助的に、**手戻り 1 回のコスト**も効く。lint / test:unit / E2E はすべて Docker 経由で
+数十秒〜分単位かかるため、`low` で 2 回やり直すより `medium` で 1 回通すほうが速い。
+「速いから `low`」はこのリポジトリでは成立しないことが多い。
+
+### 早見表
+
+| 作業 | レベル |
+|---|---|
+| 新しいパターンの確立（共通部品・URL クエリ設計・store の競合制御など） | `xhigh` |
+| 既存パターンに乗る画面 / 機能追加、バグ修正、`src/` を触るすべて | `high`（既定） |
+| シナリオ承認済みのテスト実装、モックのフィクスチャ追加、docs の新規執筆 | `medium` |
+| シナリオ状態の「未着手 → 実装済」更新、lint 指摘の機械的修正、`git log` 調査 | `low` |
+| — | `max` は使わない（`xhigh` との差より Docker 検証の待ち時間が支配的） |
+
+### 実例: 海外休場日マスタ
+
+実装 816 行 / テスト 1,464 行 / コミット 11 本。**1 機能 = 1 レベルではない**ことの例。
+
+| コミット | 内容 | 適正 |
+|---|---|---|
+| `471fe10` feat: 一覧画面（`BasePagination` 新規、URL クエリ単方向フロー、`latestToken` 競合制御） | 型を作る回。受注不可日マスタがコメント文面まで踏襲した | `xhigh` |
+| `6347a47` / `dde9978` / `f30a5e0` feat: 追加・削除・休場区分 | 型に乗る回。最終ページの最後の 1 件を削除したら前ページへ戻る等の分岐あり | `high` |
+| `test:` 系 6 本 | シナリオ承認済み・ID 対応を `check:scenarios` が機械検査 | `medium` |
+| `8d3de0c` / `9d68bab` docs: シナリオ | 新規執筆なら `medium`、状態更新だけなら `low` | `medium` / `low` |
+
+機能全体で 1 つ選ぶなら `high`。全体を `xhigh` にする必要は無かった。

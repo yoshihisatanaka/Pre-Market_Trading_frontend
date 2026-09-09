@@ -2,12 +2,12 @@ import { computed, ref } from 'vue'
 import { useAsync } from '@/composables/useAsync'
 
 /**
- * ページャー付きマスタ一覧の足回り（取得・競合防止・新規追加・削除）を共通化する。
+ * ページャー付きマスタ一覧の足回り（取得・競合防止・新規追加・編集・削除）を共通化する。
  *
  * Pinia の setup ストアの中から呼び、返り値をそのままストアの公開 API にする。
  * ページ位置・検索条件は URL クエリが正で、ここはその写しを持つだけ（画面側が load で渡す）。
  *
- * loading / error は 3 つに分かれている。一覧・登録・削除で別々の useAsync を持つのは、
+ * loading / error は操作ごとに分かれている。一覧・登録・更新・削除で別々の useAsync を持つのは、
  * 登録中や削除中も一覧の表示をそのまま残したいため。
  *
  * @param {{
@@ -16,18 +16,24 @@ import { useAsync } from '@/composables/useAsync'
  *   fetchPage: (params: object) => Promise<{ items: object[], total: number }>,
  *   createItem: (payload: object) => Promise<object>,
  *   validateItem?: (payload: object) => Promise<{ valid: boolean, errors: string[] }>,
+ *   updateItem?: (payload: object) => Promise<object>,
  *   deleteItem: (id: string) => Promise<unknown>,
  * }} options
  *   filterKeys は検索条件の名前。同名の ref をそのまま公開する（画面が storeToRefs で読む）。
  *
- *   validateItem は「登録の前にサーバの事前検証を通す」API を持つ一覧だけ渡す。
+ *   validateItem は「登録・更新の前にサーバの事前検証を通す」API を持つ一覧だけ渡す。
  *   **不合格を例外で表してはいけない**（`{ valid: false, errors }` を返す）。
- *   throw は通信・サーバ障害として createError に入り、事前検証の不合格とは扱いが違う。
+ *   throw は通信・サーバ障害として createError / updateError に入り、
+ *   事前検証の不合格とは扱いが違う。
+ *
+ *   updateItem は行ごとの編集を持つ一覧だけ渡す。渡さない一覧には更新系の名前を公開しない。
  * @returns {object}
  *   items / total / limit / offset / filterKeys の各 ref /
  *   loading / error / isEmpty / load / reload /
  *   creating / createError / validationErrors / create / clearCreateError /
  *   deleting / deleteError / remove / clearDeleteError。
+ *   updateItem を渡した場合はさらに
+ *   updating / updateError / updateValidationErrors / update / clearUpdateError。
  *   validationErrors は validateItem を渡さない場合は常に空配列。
  *   1 件の形は各 src/api/*.js の JSDoc を参照。
  */
@@ -37,6 +43,7 @@ export function useCrudList({
   fetchPage,
   createItem,
   validateItem,
+  updateItem,
   deleteItem,
 }) {
   // ページャー連打やブラウザバック連打で、古い応答が新しい結果を上書きするのを防ぐ。
@@ -137,6 +144,67 @@ export function useCrudList({
     validationErrors.value = []
   }
 
+  /*
+   * 更新。登録と同じく「事前検証 → 更新」を 1 本の useAsync にまとめる。
+   * 検証には対象の id も渡す（更新では自分自身を重複と見なさないため、サーバに対象を伝える）。
+   */
+  async function validateThenUpdate(payload) {
+    if (validateItem) {
+      const validation = await validateItem(payload)
+      if (!validation.valid) return { valid: false, errors: validation.errors }
+    }
+
+    const updated = await updateItem(payload)
+    return { valid: true, updated }
+  }
+
+  const {
+    error: updateError,
+    loading: updating,
+    execute: executeUpdate,
+  } = useAsync(validateThenUpdate)
+
+  /*
+   * 更新の事前検証が返した理由。登録側の validationErrors とは共用しない。
+   * 共用すると「編集モーダルを開くときに登録の失敗も消す」義務が互いに生まれ、
+   * 片方を消し忘れると他方のモーダルに前回の理由が漏れる。
+   * 名前が validationErrors / updateValidationErrors と非対称なのは、
+   * 既存の validationErrors を改名するとシナリオ文書とテストに広く波及するため。
+   */
+  const updateValidationErrors = ref([])
+
+  /**
+   * 1 件更新し、成功したら今の条件のまま一覧を読み直す。
+   *
+   * @param {object} payload api 層の updateItem / validateItem へそのまま渡る
+   *   （id と、楽観的ロックを持つ一覧では取得時の更新日時を含む）
+   * @returns {Promise<object|null>} 更新後の 1 件。失敗時は null
+   *   （通信・サーバエラーは updateError、事前検証で弾かれた理由は updateValidationErrors に入る）
+   *   削除の true / false と違い実体を返すのは、成功メッセージに使う日付が
+   *   「サーバが受理した日付」であるべきなため（日付を変更できる）
+   */
+  async function update(payload) {
+    updateValidationErrors.value = []
+
+    const result = await executeUpdate(payload)
+    // 通信・サーバエラー（理由は updateError。楽観的ロックの競合 409 もここに入る）
+    if (!result) return null
+
+    if (!result.valid) {
+      updateValidationErrors.value = result.errors
+      return null
+    }
+
+    await reload()
+    return result.updated
+  }
+
+  /** 更新の失敗理由を消す（モーダルを開き直したときに前回の失敗を残さない） */
+  function clearUpdateError() {
+    updateError.value = null
+    updateValidationErrors.value = []
+  }
+
   const { error: deleteError, loading: deleting, execute: executeDelete } = useAsync(deleteItem)
 
   /**
@@ -174,6 +242,11 @@ export function useCrudList({
     validationErrors,
     create,
     clearCreateError,
+    // 更新は updateItem を渡した一覧だけが持つ。渡していない一覧で store.update() を
+    // 呼んだら「関数が無い」で落ちるようにしたいので、キーごと出さない
+    ...(updateItem
+      ? { updating, updateError, updateValidationErrors, update, clearUpdateError }
+      : {}),
     deleting,
     deleteError,
     remove,

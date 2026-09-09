@@ -1,6 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -11,8 +10,8 @@ import BasePagination from '@/components/ui/BasePagination.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
+import { useListQuery } from '@/composables/useListQuery'
 import { BLOCKED_DATES_PAGE_SIZE, useBlockedDatesStore } from '@/stores/blockedDates'
-import { toOffset } from '@/utils/queryParams'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useBlockedDatesStore()
@@ -31,9 +30,6 @@ const {
   deleteError,
 } = storeToRefs(store)
 
-const route = useRoute()
-const router = useRouter()
-
 // 列は画面モック（docs/mock/masters-blocked-dates/index.html）に合わせる。
 // 操作列に置くのは削除だけ。行ごとの編集は別コミットで足す
 // （新規追加はヘッダのボタンから開くので、この列には出さない）
@@ -46,83 +42,17 @@ const columns = [
 ]
 
 /*
- * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う。
- *
- *   操作（検索 / ページ移動） → router.push({ query })  ← ここでは読み込まない
- *                                    ↓
- *                          route.query が変わる
- *                                    ↓
- *              watch(queryKey, immediate) → store.load(...)
- *
- * こうすると二重フェッチが起きず、ブラウザバック / フォワードやブックマークにも
- * 追加のコードなしで対応できる。onMounted での初回読み込みは書かない（immediate が担う）。
- *
- * クエリ名の date_from / date_to は URL 上の契約（画面モックの form と同じ）であって
- * バックエンドのモデル表現ではない。snake_case はこの 2 つの関数の中だけに閉じる。
+ * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
+ * URL 上のクエリ名（date_from / date_to）は画面モックの form と同じ契約で、
+ * この filters 定義にだけ現れる。
  */
-function paramsFromQuery(query) {
-  return {
-    offset: toOffset(query.offset),
-    dateFrom: typeof query.date_from === 'string' ? query.date_from : '',
-    dateTo: typeof query.date_to === 'string' ? query.date_to : '',
-  }
-}
-
-function queryFromParams({ offset: nextOffset, dateFrom, dateTo }) {
-  // 既定値はクエリに出さず URL を短く保つ
-  const query = {}
-  if (nextOffset > 0) query.offset = String(nextOffset)
-  if (dateFrom) query.date_from = dateFrom
-  if (dateTo) query.date_to = dateTo
-  return query
-}
-
-// 検索フォームの入力値。URL に反映されるのは「検索」を押したときだけ
-const dateFromInput = ref('')
-const dateToInput = ref('')
-
-// route.query は毎回オブジェクトの参照が変わるため、文字列に畳んでから監視する
-const queryKey = computed(() => {
-  const params = paramsFromQuery(route.query)
-  return `${params.offset}|${params.dateFrom}|${params.dateTo}`
+const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
+  filters: [
+    { key: 'dateFrom', query: 'date_from' },
+    { key: 'dateTo', query: 'date_to' },
+  ],
+  load: (params) => store.load(params),
 })
-
-watch(
-  queryKey,
-  () => {
-    const params = paramsFromQuery(route.query)
-    // ブラウザバックでも入力欄が URL に追従するようにする
-    dateFromInput.value = params.dateFrom
-    dateToInput.value = params.dateTo
-    store.load(params)
-  },
-  { immediate: true },
-)
-
-function submitSearch() {
-  // 条件を変えたら 1 ページ目に戻す
-  router.push({
-    query: queryFromParams({
-      offset: 0,
-      dateFrom: dateFromInput.value,
-      dateTo: dateToInput.value,
-    }),
-  })
-}
-
-function clearSearch() {
-  router.push({ query: {} })
-}
-
-function goToOffset(nextOffset) {
-  router.push({
-    query: queryFromParams({
-      offset: nextOffset,
-      dateFrom: store.dateFrom,
-      dateTo: store.dateTo,
-    }),
-  })
-}
 
 /*
  * 新規追加。画面モック（docs/mock/masters-blocked-dates/index.html）に合わせ、
@@ -245,7 +175,7 @@ async function submitDelete() {
           <FormField v-slot="{ field }" label="日付（From）">
             <BaseInput
               v-bind="field"
-              v-model="dateFromInput"
+              v-model="inputs.dateFrom"
               type="date"
               data-testid="blocked-dates-date-from"
             />
@@ -253,7 +183,7 @@ async function submitDelete() {
           <FormField v-slot="{ field }" label="日付（To）">
             <BaseInput
               v-bind="field"
-              v-model="dateToInput"
+              v-model="inputs.dateTo"
               type="date"
               data-testid="blocked-dates-date-to"
             />

@@ -1,6 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -12,6 +11,7 @@ import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
+import { useListQuery } from '@/composables/useListQuery'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from '@/stores/marketHolidays'
 import {
   MARKET_HOLIDAY_TYPE_DEFAULT,
@@ -19,7 +19,6 @@ import {
   formatMarketHolidayType,
   isMarketHolidayType,
 } from '@/utils/marketHolidayTypes'
-import { toOffset } from '@/utils/queryParams'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useMarketHolidaysStore()
@@ -37,9 +36,6 @@ const {
   deleteError,
 } = storeToRefs(store)
 
-const route = useRoute()
-const router = useRouter()
-
 const columns = [
   { key: 'date', label: '日付' },
   { key: 'reason', label: '休場理由' },
@@ -49,94 +45,27 @@ const columns = [
 ]
 
 /*
- * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う。
- *
- *   操作（検索 / ページ移動） → router.push({ query })  ← ここでは読み込まない
- *                                    ↓
- *                          route.query が変わる
- *                                    ↓
- *              watch(queryKey, immediate) → store.load(...)
- *
- * こうすると二重フェッチが起きず、ブラウザバック / フォワードやブックマークにも
- * 追加のコードなしで対応できる。onMounted での初回読み込みは書かない（immediate が担う）。
- *
- * クエリ名の date_from / date_to / holiday_type は URL 上の契約（画面モックの form と同じ）であって
- * バックエンドのモデル表現ではない。snake_case はこの 2 つの関数の中だけに閉じる。
+ * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
+ * URL 上のクエリ名（date_from / date_to / holiday_type）は画面モックの form と同じ契約で、
+ * この filters 定義にだけ現れる。
  */
-function paramsFromQuery(query) {
-  return {
-    offset: toOffset(query.offset),
-    dateFrom: typeof query.date_from === 'string' ? query.date_from : '',
-    dateTo: typeof query.date_to === 'string' ? query.date_to : '',
+const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
+  filters: [
+    { key: 'dateFrom', query: 'date_from' },
+    { key: 'dateTo', query: 'date_to' },
     // 未知のコード（?holiday_type=9 など）は条件なしとして捨てる
-    holidayType: isMarketHolidayType(query.holiday_type) ? query.holiday_type : '',
-  }
-}
-
-function queryFromParams({ offset: nextOffset, dateFrom, dateTo, holidayType: nextType }) {
-  // 既定値はクエリに出さず URL を短く保つ
-  const query = {}
-  if (nextOffset > 0) query.offset = String(nextOffset)
-  if (dateFrom) query.date_from = dateFrom
-  if (dateTo) query.date_to = dateTo
-  if (nextType) query.holiday_type = nextType
-  return query
-}
-
-// 検索フォームの入力値。URL に反映されるのは「検索」を押したときだけ
-const dateFromInput = ref('')
-const dateToInput = ref('')
-const holidayTypeInput = ref('')
-
-// route.query は毎回オブジェクトの参照が変わるため、文字列に畳んでから監視する
-const queryKey = computed(() => {
-  const params = paramsFromQuery(route.query)
-  return `${params.offset}|${params.dateFrom}|${params.dateTo}|${params.holidayType}`
+    {
+      key: 'holidayType',
+      query: 'holiday_type',
+      parse: (value) => (isMarketHolidayType(value) ? value : ''),
+    },
+  ],
+  load: (params) => store.load(params),
 })
 
-watch(
-  queryKey,
-  () => {
-    const params = paramsFromQuery(route.query)
-    // ブラウザバックでも入力欄が URL に追従するようにする
-    dateFromInput.value = params.dateFrom
-    dateToInput.value = params.dateTo
-    holidayTypeInput.value = params.holidayType
-    store.load(params)
-  },
-  { immediate: true },
-)
-
-function submitSearch() {
-  // 条件を変えたら 1 ページ目に戻す
-  router.push({
-    query: queryFromParams({
-      offset: 0,
-      dateFrom: dateFromInput.value,
-      dateTo: dateToInput.value,
-      holidayType: holidayTypeInput.value,
-    }),
-  })
-}
-
-function clearSearch() {
-  router.push({ query: {} })
-}
-
-function goToOffset(nextOffset) {
-  router.push({
-    query: queryFromParams({
-      offset: nextOffset,
-      dateFrom: store.dateFrom,
-      dateTo: store.dateTo,
-      holidayType: store.holidayType,
-    }),
-  })
-}
-
 /*
- * 新規追加。画面モック（docs/mock/masters-blocked-dates/index.html）に合わせ、
- * ヘッダの「新規追加」からモーダルを開く形にする。URL は変えない（一覧の単方向フローに触らない）。
+ * 新規追加。ヘッダの「新規追加」からモーダルを開く形にする
+ * （URL は変えない。一覧の単方向フローに触らない）。
  *
  * エラーは 2 種類あり、出し先を分ける。
  *   入力の不備   … FormField の error（項目の直下）
@@ -250,7 +179,7 @@ async function submitDelete() {
           <FormField v-slot="{ field }" label="日付（From）">
             <BaseInput
               v-bind="field"
-              v-model="dateFromInput"
+              v-model="inputs.dateFrom"
               type="date"
               data-testid="market-holidays-date-from"
             />
@@ -258,7 +187,7 @@ async function submitDelete() {
           <FormField v-slot="{ field }" label="日付（To）">
             <BaseInput
               v-bind="field"
-              v-model="dateToInput"
+              v-model="inputs.dateTo"
               type="date"
               data-testid="market-holidays-date-to"
             />
@@ -266,7 +195,7 @@ async function submitDelete() {
           <FormField v-slot="{ field }" label="休場区分">
             <BaseSelect
               v-bind="field"
-              v-model="holidayTypeInput"
+              v-model="inputs.holidayType"
               :options="MARKET_HOLIDAY_TYPE_OPTIONS"
               placeholder="-- すべて --"
               data-testid="market-holidays-holiday-type"

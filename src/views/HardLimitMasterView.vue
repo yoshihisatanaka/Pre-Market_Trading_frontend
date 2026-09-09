@@ -100,10 +100,6 @@ store.load()
       </BaseButton>
     </Teleport>
 
-    <BaseAlert variant="info" data-testid="hard-limits-mock-notice">
-      モック表示です。直近5営業日の平均出来高の取込値を分母に、市場関与率・注文数量・注文金額（USD）のうち最も厳しい株数上限で注文を自動分割するイメージです。実IB連携・実TWS投入は行いません。
-    </BaseAlert>
-
     <BaseAlert v-if="noticeMessage" variant="success" data-testid="hard-limits-notice">
       {{ noticeMessage }}
     </BaseAlert>
@@ -123,7 +119,7 @@ store.load()
     <template v-else>
       <BaseCard title="現在のハードリミット">
         <template #header-actions>
-          <span class="hard-limit__caption">5営業日平均出来高基準</span>
+          <span class="hard-limit__chip">5営業日平均出来高基準</span>
         </template>
 
         <dl class="hard-limit__list" data-testid="hard-limits-current">
@@ -161,7 +157,7 @@ store.load()
 
       <BaseCard title="設定変更">
         <template #header-actions>
-          <span class="hard-limit__caption">管理責任者</span>
+          <span class="hard-limit__chip hard-limit__chip--owner">管理責任者</span>
         </template>
 
         <form class="hard-limit__form" data-testid="hard-limits-form" @submit.prevent="submitSave">
@@ -222,10 +218,24 @@ store.load()
   gap: var(--space-5);
 }
 
-/* カードヘッダ右の補足（「5営業日平均出来高基準」「管理責任者」） */
-.hard-limit__caption {
-  color: var(--color-text-muted);
+/* カードヘッダ右のチップ。既定はグレー面＋濃い文字 */
+.hard-limit__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-heading);
+  background-color: var(--color-surface-muted);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 管理責任者は淡い緑の面＋緑の枠線 */
+.hard-limit__chip--owner {
+  background-color: var(--color-success-bg);
+  border-color: var(--color-success-border);
 }
 
 .hard-limit__list {

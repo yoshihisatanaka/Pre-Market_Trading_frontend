@@ -243,7 +243,7 @@ export const handlers = [
     if (rate === null || rate < 0.0001 || rate > 1) {
       return HttpResponse.json(
         {
-          message: '市場関与率は 0.01%〜100%（0.0001〜1.0）の範囲で入力してください。',
+          message: '市場関与率は 0.01%〜100% の範囲で入力してください。',
           code: 'invalid_participation_rate',
         },
         { status: 400 },

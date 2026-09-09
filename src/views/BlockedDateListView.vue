@@ -1,18 +1,17 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import BaseModal from '@/components/ui/BaseModal.vue'
-import BasePagination from '@/components/ui/BasePagination.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
-import FormGrid from '@/components/ui/FormGrid.vue'
+import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
+import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
+import MasterListCard from '@/components/masters/MasterListCard.vue'
+import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
+import { useListQuery } from '@/composables/useListQuery'
 import { BLOCKED_DATES_PAGE_SIZE, useBlockedDatesStore } from '@/stores/blockedDates'
-import { toOffset } from '@/utils/queryParams'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useBlockedDatesStore()
@@ -31,9 +30,6 @@ const {
   deleteError,
 } = storeToRefs(store)
 
-const route = useRoute()
-const router = useRouter()
-
 // 列は画面モック（docs/mock/masters-blocked-dates/index.html）に合わせる。
 // 操作列に置くのは削除だけ。行ごとの編集は別コミットで足す
 // （新規追加はヘッダのボタンから開くので、この列には出さない）
@@ -46,83 +42,17 @@ const columns = [
 ]
 
 /*
- * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う。
- *
- *   操作（検索 / ページ移動） → router.push({ query })  ← ここでは読み込まない
- *                                    ↓
- *                          route.query が変わる
- *                                    ↓
- *              watch(queryKey, immediate) → store.load(...)
- *
- * こうすると二重フェッチが起きず、ブラウザバック / フォワードやブックマークにも
- * 追加のコードなしで対応できる。onMounted での初回読み込みは書かない（immediate が担う）。
- *
- * クエリ名の date_from / date_to は URL 上の契約（画面モックの form と同じ）であって
- * バックエンドのモデル表現ではない。snake_case はこの 2 つの関数の中だけに閉じる。
+ * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
+ * URL 上のクエリ名（date_from / date_to）は画面モックの form と同じ契約で、
+ * この filters 定義にだけ現れる。
  */
-function paramsFromQuery(query) {
-  return {
-    offset: toOffset(query.offset),
-    dateFrom: typeof query.date_from === 'string' ? query.date_from : '',
-    dateTo: typeof query.date_to === 'string' ? query.date_to : '',
-  }
-}
-
-function queryFromParams({ offset: nextOffset, dateFrom, dateTo }) {
-  // 既定値はクエリに出さず URL を短く保つ
-  const query = {}
-  if (nextOffset > 0) query.offset = String(nextOffset)
-  if (dateFrom) query.date_from = dateFrom
-  if (dateTo) query.date_to = dateTo
-  return query
-}
-
-// 検索フォームの入力値。URL に反映されるのは「検索」を押したときだけ
-const dateFromInput = ref('')
-const dateToInput = ref('')
-
-// route.query は毎回オブジェクトの参照が変わるため、文字列に畳んでから監視する
-const queryKey = computed(() => {
-  const params = paramsFromQuery(route.query)
-  return `${params.offset}|${params.dateFrom}|${params.dateTo}`
+const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
+  filters: [
+    { key: 'dateFrom', query: 'date_from' },
+    { key: 'dateTo', query: 'date_to' },
+  ],
+  load: (params) => store.load(params),
 })
-
-watch(
-  queryKey,
-  () => {
-    const params = paramsFromQuery(route.query)
-    // ブラウザバックでも入力欄が URL に追従するようにする
-    dateFromInput.value = params.dateFrom
-    dateToInput.value = params.dateTo
-    store.load(params)
-  },
-  { immediate: true },
-)
-
-function submitSearch() {
-  // 条件を変えたら 1 ページ目に戻す
-  router.push({
-    query: queryFromParams({
-      offset: 0,
-      dateFrom: dateFromInput.value,
-      dateTo: dateToInput.value,
-    }),
-  })
-}
-
-function clearSearch() {
-  router.push({ query: {} })
-}
-
-function goToOffset(nextOffset) {
-  router.push({
-    query: queryFromParams({
-      offset: nextOffset,
-      dateFrom: store.dateFrom,
-      dateTo: store.dateTo,
-    }),
-  })
-}
 
 /*
  * 新規追加。画面モック（docs/mock/masters-blocked-dates/index.html）に合わせ、
@@ -238,191 +168,105 @@ async function submitDelete() {
       国内の営業日・受注停止日を管理します。ゴールデンウィーク、シルバーウィーク、年末年始など、国内拠点で受注を停止する日を登録してください。
     </BaseAlert>
 
-    <!-- 検索カードは 4 状態の外に置く。0 件やエラーのときこそ条件を直したいので消さない -->
-    <BaseCard>
-      <form data-testid="blocked-dates-search" @submit.prevent="submitSearch">
-        <FormGrid :columns="4">
-          <FormField v-slot="{ field }" label="日付（From）">
-            <BaseInput
-              v-bind="field"
-              v-model="dateFromInput"
-              type="date"
-              data-testid="blocked-dates-date-from"
-            />
-          </FormField>
-          <FormField v-slot="{ field }" label="日付（To）">
-            <BaseInput
-              v-bind="field"
-              v-model="dateToInput"
-              type="date"
-              data-testid="blocked-dates-date-to"
-            />
-          </FormField>
-        </FormGrid>
-
-        <div class="blocked-date-list__actions">
-          <BaseButton type="submit" data-testid="blocked-dates-search-submit" :disabled="loading">
-            検索
-          </BaseButton>
-          <BaseButton
-            variant="secondary"
-            data-testid="blocked-dates-search-clear"
-            :disabled="loading"
-            @click="clearSearch"
-          >
-            クリア
-          </BaseButton>
-        </div>
-      </form>
-    </BaseCard>
-
-    <BaseCard title="受注不可日一覧" flush>
-      <template #header-actions>
-        <span class="blocked-date-list__count" data-testid="blocked-dates-count">
-          {{ total }} 件
-        </span>
-      </template>
-
-      <!-- ローディング / エラー / 空 / データあり の 4 状態 -->
-      <p v-if="loading" data-testid="blocked-dates-loading" class="blocked-date-list__status">
-        読み込み中…
-      </p>
-
-      <div
-        v-else-if="error"
-        data-testid="blocked-dates-error"
-        class="blocked-date-list__status is-error"
-      >
-        <p>{{ error.message }}</p>
-        <BaseButton variant="secondary" @click="store.reload()">再試行</BaseButton>
-      </div>
-
-      <p v-else-if="isEmpty" data-testid="blocked-dates-empty" class="blocked-date-list__status">
-        該当する受注不可日はありません。
-      </p>
-
-      <template v-else>
-        <DataTable flat data-testid="blocked-dates-table" :columns="columns" :rows="items">
-          <template #cell-date="{ value }">
-            <span class="blocked-date-list__date">{{ value || '—' }}</span>
-          </template>
-
-          <template #cell-market="{ value }">
-            <span class="blocked-date-list__market">{{ value || '—' }}</span>
-          </template>
-
-          <template #cell-actions="{ row }">
-            <BaseButton
-              variant="danger"
-              :data-testid="`blocked-dates-delete-${row.id}`"
-              :disabled="deleting"
-              @click="openDelete(row)"
-            >
-              削除
-            </BaseButton>
-          </template>
-        </DataTable>
-
-        <BasePagination
-          data-testid="blocked-dates-pagination"
-          :total="total"
-          :limit="limit"
-          :offset="offset"
-          :disabled="loading"
-          @update:offset="goToOffset"
+    <MasterSearchCard
+      testid-prefix="blocked-dates"
+      :disabled="loading"
+      @submit="submitSearch"
+      @clear="clearSearch"
+    >
+      <FormField v-slot="{ field }" label="日付（From）">
+        <BaseInput
+          v-bind="field"
+          v-model="inputs.dateFrom"
+          type="date"
+          data-testid="blocked-dates-date-from"
         />
-      </template>
-    </BaseCard>
+      </FormField>
+      <FormField v-slot="{ field }" label="日付（To）">
+        <BaseInput
+          v-bind="field"
+          v-model="inputs.dateTo"
+          type="date"
+          data-testid="blocked-dates-date-to"
+        />
+      </FormField>
+    </MasterSearchCard>
 
-    <BaseModal :open="isAddOpen" title="受注不可日 新規追加" @close="closeAdd">
-      <!-- 送信ボタンはモーダルのフッタ（この form の外）にあるので、
-           ここでの submit は入力欄での Enter キーのためだけにある -->
-      <form
-        data-testid="blocked-dates-add-form"
-        class="blocked-date-list__form"
-        @submit.prevent="submitAdd"
-      >
-        <!-- サーバの事前検証が返した理由。複数返ることがあるので箇条書きで出す -->
-        <BaseAlert
-          v-if="validationErrors.length > 0"
-          variant="error"
-          data-testid="blocked-dates-add-validation-error"
-        >
-          <ul class="blocked-date-list__validation-errors">
-            <li v-for="message in validationErrors" :key="message">{{ message }}</li>
-          </ul>
-        </BaseAlert>
+    <MasterListCard
+      testid-prefix="blocked-dates"
+      title="受注不可日一覧"
+      empty-message="該当する受注不可日はありません。"
+      :total="total"
+      :limit="limit"
+      :offset="offset"
+      :loading="loading"
+      :is-empty="isEmpty"
+      :error="error"
+      @reload="store.reload()"
+      @update:offset="goToOffset"
+    >
+      <DataTable flat data-testid="blocked-dates-table" :columns="columns" :rows="items">
+        <template #cell-date="{ value }">
+          <span class="blocked-date-list__date">{{ value || '—' }}</span>
+        </template>
 
-        <BaseAlert v-if="createError" variant="error" data-testid="blocked-dates-add-error">
-          {{ createError.message }}
-        </BaseAlert>
+        <template #cell-market="{ value }">
+          <span class="blocked-date-list__market">{{ value || '—' }}</span>
+        </template>
 
-        <FormField v-slot="{ field }" label="日付" required :error="addErrors.date">
-          <BaseInput
-            v-bind="field"
-            v-model="addDate"
-            type="date"
-            data-testid="blocked-dates-add-date"
-          />
-        </FormField>
+        <template #cell-actions="{ row }">
+          <BaseButton
+            variant="danger"
+            :data-testid="`blocked-dates-delete-${row.id}`"
+            :disabled="deleting"
+            @click="openDelete(row)"
+          >
+            削除
+          </BaseButton>
+        </template>
+      </DataTable>
+    </MasterListCard>
 
-        <!-- maxlength は実仕様（BlackoutDateRequest の 備考）の 45 文字に合わせる -->
-        <FormField v-slot="{ field }" label="理由" required :error="addErrors.reason">
-          <BaseInput
-            v-bind="field"
-            v-model="addReason"
-            placeholder="例: GW前"
-            maxlength="45"
-            data-testid="blocked-dates-add-reason"
-          />
-        </FormField>
-      </form>
+    <MasterFormDialog
+      :open="isAddOpen"
+      title="受注不可日 新規追加"
+      testid-prefix="blocked-dates"
+      :pending="creating"
+      :error="createError"
+      :validation-errors="validationErrors"
+      @close="closeAdd"
+      @submit="submitAdd"
+    >
+      <FormField v-slot="{ field }" label="日付" required :error="addErrors.date">
+        <BaseInput
+          v-bind="field"
+          v-model="addDate"
+          type="date"
+          data-testid="blocked-dates-add-date"
+        />
+      </FormField>
 
-      <template #footer>
-        <BaseButton
-          variant="secondary"
-          data-testid="blocked-dates-add-cancel"
-          :disabled="creating"
-          @click="closeAdd"
-        >
-          キャンセル
-        </BaseButton>
-        <BaseButton data-testid="blocked-dates-add-submit" :disabled="creating" @click="submitAdd">
-          {{ creating ? '追加中…' : '追加' }}
-        </BaseButton>
-      </template>
-    </BaseModal>
+      <!-- maxlength は実仕様（BlackoutDateRequest の 備考）の 45 文字に合わせる -->
+      <FormField v-slot="{ field }" label="理由" required :error="addErrors.reason">
+        <BaseInput
+          v-bind="field"
+          v-model="addReason"
+          placeholder="例: GW前"
+          maxlength="45"
+          data-testid="blocked-dates-add-reason"
+        />
+      </FormField>
+    </MasterFormDialog>
 
-    <!-- 削除確認。本文が短いので size="sm"（画面モックの max-width:400px 相当） -->
-    <BaseModal :open="Boolean(deleteTarget)" title="削除確認" size="sm" @close="closeDelete">
-      <BaseAlert v-if="deleteError" variant="error" data-testid="blocked-dates-delete-error">
-        {{ deleteError.message }}
-      </BaseAlert>
-
-      <p>
-        <span class="blocked-date-list__date">{{ deleteTarget?.date }}</span> を削除しますか？
-      </p>
-      <p class="blocked-date-list__warning">この操作は元に戻せません。</p>
-
-      <template #footer>
-        <BaseButton
-          variant="secondary"
-          data-testid="blocked-dates-delete-cancel"
-          :disabled="deleting"
-          @click="closeDelete"
-        >
-          キャンセル
-        </BaseButton>
-        <BaseButton
-          variant="danger"
-          data-testid="blocked-dates-delete-submit"
-          :disabled="deleting"
-          @click="submitDelete"
-        >
-          {{ deleting ? '削除中…' : '削除する' }}
-        </BaseButton>
-      </template>
-    </BaseModal>
+    <ConfirmDeleteDialog
+      :open="Boolean(deleteTarget)"
+      testid-prefix="blocked-dates"
+      :label="deleteTarget?.date ?? ''"
+      :pending="deleting"
+      :error="deleteError"
+      @close="closeDelete"
+      @confirm="submitDelete"
+    />
   </section>
 </template>
 
@@ -431,51 +275,6 @@ async function submitDelete() {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-}
-
-.blocked-date-list__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-
-/* モーダル内の入力欄。項目間の余白は検索カード（FormGrid）と同じ間隔に揃える */
-.blocked-date-list__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-/* 事前検証の理由。1 件のときも箇条書きの体裁が浮かないよう、記号と字下げは付けない */
-.blocked-date-list__validation-errors {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* 削除確認モーダルの注意書き。本文（既定色）より一段小さく、危険色で出す */
-.blocked-date-list__warning {
-  margin-top: var(--space-2);
-  color: var(--color-danger);
-  font-size: var(--font-size-xs);
-}
-
-.blocked-date-list__count {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-.blocked-date-list__status {
-  padding: var(--space-5);
-  color: var(--color-text-muted);
-}
-
-.blocked-date-list__status.is-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  color: var(--color-danger);
 }
 
 /* 日付は等幅にはせず、桁を揃えて少し強調する（画面モックの ui-code-strong 相当） */

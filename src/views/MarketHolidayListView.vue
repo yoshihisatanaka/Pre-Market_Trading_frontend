@@ -1,17 +1,17 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import BaseModal from '@/components/ui/BaseModal.vue'
-import BasePagination from '@/components/ui/BasePagination.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
-import FormGrid from '@/components/ui/FormGrid.vue'
+import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
+import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
+import MasterListCard from '@/components/masters/MasterListCard.vue'
+import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
+import { useListQuery } from '@/composables/useListQuery'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from '@/stores/marketHolidays'
 import {
   MARKET_HOLIDAY_TYPE_DEFAULT,
@@ -19,7 +19,6 @@ import {
   formatMarketHolidayType,
   isMarketHolidayType,
 } from '@/utils/marketHolidayTypes'
-import { toOffset } from '@/utils/queryParams'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useMarketHolidaysStore()
@@ -37,9 +36,6 @@ const {
   deleteError,
 } = storeToRefs(store)
 
-const route = useRoute()
-const router = useRouter()
-
 const columns = [
   { key: 'date', label: '日付' },
   { key: 'reason', label: '休場理由' },
@@ -49,94 +45,27 @@ const columns = [
 ]
 
 /*
- * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う。
- *
- *   操作（検索 / ページ移動） → router.push({ query })  ← ここでは読み込まない
- *                                    ↓
- *                          route.query が変わる
- *                                    ↓
- *              watch(queryKey, immediate) → store.load(...)
- *
- * こうすると二重フェッチが起きず、ブラウザバック / フォワードやブックマークにも
- * 追加のコードなしで対応できる。onMounted での初回読み込みは書かない（immediate が担う）。
- *
- * クエリ名の date_from / date_to / holiday_type は URL 上の契約（画面モックの form と同じ）であって
- * バックエンドのモデル表現ではない。snake_case はこの 2 つの関数の中だけに閉じる。
+ * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
+ * URL 上のクエリ名（date_from / date_to / holiday_type）は画面モックの form と同じ契約で、
+ * この filters 定義にだけ現れる。
  */
-function paramsFromQuery(query) {
-  return {
-    offset: toOffset(query.offset),
-    dateFrom: typeof query.date_from === 'string' ? query.date_from : '',
-    dateTo: typeof query.date_to === 'string' ? query.date_to : '',
+const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
+  filters: [
+    { key: 'dateFrom', query: 'date_from' },
+    { key: 'dateTo', query: 'date_to' },
     // 未知のコード（?holiday_type=9 など）は条件なしとして捨てる
-    holidayType: isMarketHolidayType(query.holiday_type) ? query.holiday_type : '',
-  }
-}
-
-function queryFromParams({ offset: nextOffset, dateFrom, dateTo, holidayType: nextType }) {
-  // 既定値はクエリに出さず URL を短く保つ
-  const query = {}
-  if (nextOffset > 0) query.offset = String(nextOffset)
-  if (dateFrom) query.date_from = dateFrom
-  if (dateTo) query.date_to = dateTo
-  if (nextType) query.holiday_type = nextType
-  return query
-}
-
-// 検索フォームの入力値。URL に反映されるのは「検索」を押したときだけ
-const dateFromInput = ref('')
-const dateToInput = ref('')
-const holidayTypeInput = ref('')
-
-// route.query は毎回オブジェクトの参照が変わるため、文字列に畳んでから監視する
-const queryKey = computed(() => {
-  const params = paramsFromQuery(route.query)
-  return `${params.offset}|${params.dateFrom}|${params.dateTo}|${params.holidayType}`
+    {
+      key: 'holidayType',
+      query: 'holiday_type',
+      parse: (value) => (isMarketHolidayType(value) ? value : ''),
+    },
+  ],
+  load: (params) => store.load(params),
 })
 
-watch(
-  queryKey,
-  () => {
-    const params = paramsFromQuery(route.query)
-    // ブラウザバックでも入力欄が URL に追従するようにする
-    dateFromInput.value = params.dateFrom
-    dateToInput.value = params.dateTo
-    holidayTypeInput.value = params.holidayType
-    store.load(params)
-  },
-  { immediate: true },
-)
-
-function submitSearch() {
-  // 条件を変えたら 1 ページ目に戻す
-  router.push({
-    query: queryFromParams({
-      offset: 0,
-      dateFrom: dateFromInput.value,
-      dateTo: dateToInput.value,
-      holidayType: holidayTypeInput.value,
-    }),
-  })
-}
-
-function clearSearch() {
-  router.push({ query: {} })
-}
-
-function goToOffset(nextOffset) {
-  router.push({
-    query: queryFromParams({
-      offset: nextOffset,
-      dateFrom: store.dateFrom,
-      dateTo: store.dateTo,
-      holidayType: store.holidayType,
-    }),
-  })
-}
-
 /*
- * 新規追加。画面モック（docs/mock/masters-blocked-dates/index.html）に合わせ、
- * ヘッダの「新規追加」からモーダルを開く形にする。URL は変えない（一覧の単方向フローに触らない）。
+ * 新規追加。ヘッダの「新規追加」からモーダルを開く形にする
+ * （URL は変えない。一覧の単方向フローに触らない）。
  *
  * エラーは 2 種類あり、出し先を分ける。
  *   入力の不備   … FormField の error（項目の直下）
@@ -243,205 +172,121 @@ async function submitDelete() {
       {{ noticeMessage }}
     </BaseAlert>
 
-    <!-- 検索カードは 4 状態の外に置く。0 件やエラーのときこそ条件を直したいので消さない -->
-    <BaseCard>
-      <form data-testid="market-holidays-search" @submit.prevent="submitSearch">
-        <FormGrid :columns="4">
-          <FormField v-slot="{ field }" label="日付（From）">
-            <BaseInput
-              v-bind="field"
-              v-model="dateFromInput"
-              type="date"
-              data-testid="market-holidays-date-from"
-            />
-          </FormField>
-          <FormField v-slot="{ field }" label="日付（To）">
-            <BaseInput
-              v-bind="field"
-              v-model="dateToInput"
-              type="date"
-              data-testid="market-holidays-date-to"
-            />
-          </FormField>
-          <FormField v-slot="{ field }" label="休場区分">
-            <BaseSelect
-              v-bind="field"
-              v-model="holidayTypeInput"
-              :options="MARKET_HOLIDAY_TYPE_OPTIONS"
-              placeholder="-- すべて --"
-              data-testid="market-holidays-holiday-type"
-            />
-          </FormField>
-        </FormGrid>
-
-        <div class="market-holiday-list__actions">
-          <BaseButton type="submit" data-testid="market-holidays-search-submit" :disabled="loading">
-            検索
-          </BaseButton>
-          <BaseButton
-            variant="secondary"
-            data-testid="market-holidays-search-clear"
-            :disabled="loading"
-            @click="clearSearch"
-          >
-            クリア
-          </BaseButton>
-        </div>
-      </form>
-    </BaseCard>
-
-    <BaseCard title="海外休場日一覧" flush>
-      <template #header-actions>
-        <span class="market-holiday-list__count" data-testid="market-holidays-count">
-          {{ total }} 件
-        </span>
-      </template>
-
-      <!-- ローディング / エラー / 空 / データあり の 4 状態 -->
-      <p v-if="loading" data-testid="market-holidays-loading" class="market-holiday-list__status">
-        読み込み中…
-      </p>
-
-      <div
-        v-else-if="error"
-        data-testid="market-holidays-error"
-        class="market-holiday-list__status is-error"
-      >
-        <p>{{ error.message }}</p>
-        <BaseButton variant="secondary" @click="store.reload()">再試行</BaseButton>
-      </div>
-
-      <p
-        v-else-if="isEmpty"
-        data-testid="market-holidays-empty"
-        class="market-holiday-list__status"
-      >
-        該当する海外休場日はありません。
-      </p>
-
-      <template v-else>
-        <DataTable flat data-testid="market-holidays-table" :columns="columns" :rows="items">
-          <template #cell-date="{ value }">
-            <span class="market-holiday-list__date">{{ value || '—' }}</span>
-          </template>
-
-          <template #cell-holidayType="{ value }">
-            <span class="market-holiday-list__type">{{ formatMarketHolidayType(value) }}</span>
-          </template>
-
-          <template #cell-actions="{ row }">
-            <BaseButton
-              variant="danger"
-              :data-testid="`market-holidays-delete-${row.id}`"
-              :disabled="deleting"
-              @click="openDelete(row)"
-            >
-              削除
-            </BaseButton>
-          </template>
-        </DataTable>
-
-        <BasePagination
-          data-testid="market-holidays-pagination"
-          :total="total"
-          :limit="limit"
-          :offset="offset"
-          :disabled="loading"
-          @update:offset="goToOffset"
+    <MasterSearchCard
+      testid-prefix="market-holidays"
+      :disabled="loading"
+      @submit="submitSearch"
+      @clear="clearSearch"
+    >
+      <FormField v-slot="{ field }" label="日付（From）">
+        <BaseInput
+          v-bind="field"
+          v-model="inputs.dateFrom"
+          type="date"
+          data-testid="market-holidays-date-from"
         />
-      </template>
-    </BaseCard>
+      </FormField>
+      <FormField v-slot="{ field }" label="日付（To）">
+        <BaseInput
+          v-bind="field"
+          v-model="inputs.dateTo"
+          type="date"
+          data-testid="market-holidays-date-to"
+        />
+      </FormField>
+      <FormField v-slot="{ field }" label="休場区分">
+        <BaseSelect
+          v-bind="field"
+          v-model="inputs.holidayType"
+          :options="MARKET_HOLIDAY_TYPE_OPTIONS"
+          placeholder="-- すべて --"
+          data-testid="market-holidays-holiday-type"
+        />
+      </FormField>
+    </MasterSearchCard>
 
-    <BaseModal :open="isAddOpen" title="海外休場日 新規追加" @close="closeAdd">
-      <!-- 送信ボタンはモーダルのフッタ（この form の外）にあるので、
-           ここでの submit は入力欄での Enter キーのためだけにある -->
-      <form
-        data-testid="market-holidays-add-form"
-        class="market-holiday-list__form"
-        @submit.prevent="submitAdd"
-      >
-        <BaseAlert v-if="createError" variant="error" data-testid="market-holidays-add-error">
-          {{ createError.message }}
-        </BaseAlert>
+    <MasterListCard
+      testid-prefix="market-holidays"
+      title="海外休場日一覧"
+      empty-message="該当する海外休場日はありません。"
+      :total="total"
+      :limit="limit"
+      :offset="offset"
+      :loading="loading"
+      :is-empty="isEmpty"
+      :error="error"
+      @reload="store.reload()"
+      @update:offset="goToOffset"
+    >
+      <DataTable flat data-testid="market-holidays-table" :columns="columns" :rows="items">
+        <template #cell-date="{ value }">
+          <span class="market-holiday-list__date">{{ value || '—' }}</span>
+        </template>
 
-        <FormField v-slot="{ field }" label="日付" required :error="addErrors.date">
-          <BaseInput
-            v-bind="field"
-            v-model="addDate"
-            type="date"
-            data-testid="market-holidays-add-date"
-          />
-        </FormField>
+        <template #cell-holidayType="{ value }">
+          <span class="market-holiday-list__type">{{ formatMarketHolidayType(value) }}</span>
+        </template>
 
-        <FormField v-slot="{ field }" label="休場理由" required :error="addErrors.reason">
-          <BaseInput
-            v-bind="field"
-            v-model="addReason"
-            placeholder="例: 独立記念日"
-            maxlength="100"
-            data-testid="market-holidays-add-reason"
-          />
-        </FormField>
+        <template #cell-actions="{ row }">
+          <BaseButton
+            variant="danger"
+            :data-testid="`market-holidays-delete-${row.id}`"
+            :disabled="deleting"
+            @click="openDelete(row)"
+          >
+            削除
+          </BaseButton>
+        </template>
+      </DataTable>
+    </MasterListCard>
 
-        <FormField v-slot="{ field }" label="休場区分" required>
-          <BaseSelect
-            v-bind="field"
-            v-model="addHolidayType"
-            :options="MARKET_HOLIDAY_TYPE_OPTIONS"
-            data-testid="market-holidays-add-holiday-type"
-          />
-        </FormField>
-      </form>
+    <MasterFormDialog
+      :open="isAddOpen"
+      title="海外休場日 新規追加"
+      testid-prefix="market-holidays"
+      :pending="creating"
+      :error="createError"
+      @close="closeAdd"
+      @submit="submitAdd"
+    >
+      <FormField v-slot="{ field }" label="日付" required :error="addErrors.date">
+        <BaseInput
+          v-bind="field"
+          v-model="addDate"
+          type="date"
+          data-testid="market-holidays-add-date"
+        />
+      </FormField>
 
-      <template #footer>
-        <BaseButton
-          variant="secondary"
-          data-testid="market-holidays-add-cancel"
-          :disabled="creating"
-          @click="closeAdd"
-        >
-          キャンセル
-        </BaseButton>
-        <BaseButton
-          data-testid="market-holidays-add-submit"
-          :disabled="creating"
-          @click="submitAdd"
-        >
-          {{ creating ? '追加中…' : '追加' }}
-        </BaseButton>
-      </template>
-    </BaseModal>
+      <FormField v-slot="{ field }" label="休場理由" required :error="addErrors.reason">
+        <BaseInput
+          v-bind="field"
+          v-model="addReason"
+          placeholder="例: 独立記念日"
+          maxlength="100"
+          data-testid="market-holidays-add-reason"
+        />
+      </FormField>
 
-    <!-- 削除確認。本文が短いので size="sm"（画面モックの max-width:400px 相当） -->
-    <BaseModal :open="Boolean(deleteTarget)" title="削除確認" size="sm" @close="closeDelete">
-      <BaseAlert v-if="deleteError" variant="error" data-testid="market-holidays-delete-error">
-        {{ deleteError.message }}
-      </BaseAlert>
+      <FormField v-slot="{ field }" label="休場区分" required>
+        <BaseSelect
+          v-bind="field"
+          v-model="addHolidayType"
+          :options="MARKET_HOLIDAY_TYPE_OPTIONS"
+          data-testid="market-holidays-add-holiday-type"
+        />
+      </FormField>
+    </MasterFormDialog>
 
-      <p>
-        <span class="market-holiday-list__date">{{ deleteTarget?.date }}</span> を削除しますか？
-      </p>
-      <p class="market-holiday-list__warning">この操作は元に戻せません。</p>
-
-      <template #footer>
-        <BaseButton
-          variant="secondary"
-          data-testid="market-holidays-delete-cancel"
-          :disabled="deleting"
-          @click="closeDelete"
-        >
-          キャンセル
-        </BaseButton>
-        <BaseButton
-          variant="danger"
-          data-testid="market-holidays-delete-submit"
-          :disabled="deleting"
-          @click="submitDelete"
-        >
-          {{ deleting ? '削除中…' : '削除する' }}
-        </BaseButton>
-      </template>
-    </BaseModal>
+    <ConfirmDeleteDialog
+      :open="Boolean(deleteTarget)"
+      testid-prefix="market-holidays"
+      :label="deleteTarget?.date ?? ''"
+      :pending="deleting"
+      :error="deleteError"
+      @close="closeDelete"
+      @confirm="submitDelete"
+    />
   </section>
 </template>
 
@@ -450,44 +295,6 @@ async function submitDelete() {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-}
-
-.market-holiday-list__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-
-/* モーダル内の入力欄。項目間の余白は検索カード（FormGrid）と同じ間隔に揃える */
-.market-holiday-list__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-/* 削除確認モーダルの注意書き。本文（既定色）より一段小さく、危険色で出す */
-.market-holiday-list__warning {
-  margin-top: var(--space-2);
-  color: var(--color-danger);
-  font-size: var(--font-size-xs);
-}
-
-.market-holiday-list__count {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-.market-holiday-list__status {
-  padding: var(--space-5);
-  color: var(--color-text-muted);
-}
-
-.market-holiday-list__status.is-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  color: var(--color-danger);
 }
 
 /* 休場区分は補助的な情報なので、画面モックの中間列（対象市場）と同じく一段小さく落ち着かせる */

@@ -10,6 +10,7 @@ import BasePagination from '@/components/ui/BasePagination.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
+import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { BLOCKED_DATES_PAGE_SIZE, useBlockedDatesStore } from '@/stores/blockedDates'
 
@@ -323,36 +324,15 @@ async function submitDelete() {
       </template>
     </BaseModal>
 
-    <!-- 削除確認。本文が短いので size="sm"（画面モックの max-width:400px 相当） -->
-    <BaseModal :open="Boolean(deleteTarget)" title="削除確認" size="sm" @close="closeDelete">
-      <BaseAlert v-if="deleteError" variant="error" data-testid="blocked-dates-delete-error">
-        {{ deleteError.message }}
-      </BaseAlert>
-
-      <p>
-        <span class="blocked-date-list__date">{{ deleteTarget?.date }}</span> を削除しますか？
-      </p>
-      <p class="blocked-date-list__warning">この操作は元に戻せません。</p>
-
-      <template #footer>
-        <BaseButton
-          variant="secondary"
-          data-testid="blocked-dates-delete-cancel"
-          :disabled="deleting"
-          @click="closeDelete"
-        >
-          キャンセル
-        </BaseButton>
-        <BaseButton
-          variant="danger"
-          data-testid="blocked-dates-delete-submit"
-          :disabled="deleting"
-          @click="submitDelete"
-        >
-          {{ deleting ? '削除中…' : '削除する' }}
-        </BaseButton>
-      </template>
-    </BaseModal>
+    <ConfirmDeleteDialog
+      :open="Boolean(deleteTarget)"
+      testid-prefix="blocked-dates"
+      :label="deleteTarget?.date ?? ''"
+      :pending="deleting"
+      :error="deleteError"
+      @close="closeDelete"
+      @confirm="submitDelete"
+    />
   </section>
 </template>
 
@@ -382,13 +362,6 @@ async function submitDelete() {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-/* 削除確認モーダルの注意書き。本文（既定色）より一段小さく、危険色で出す */
-.blocked-date-list__warning {
-  margin-top: var(--space-2);
-  color: var(--color-danger);
-  font-size: var(--font-size-xs);
 }
 
 .blocked-date-list__count {

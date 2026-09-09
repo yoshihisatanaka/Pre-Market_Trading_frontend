@@ -11,6 +11,7 @@ import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
+import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from '@/stores/marketHolidays'
 import {
@@ -341,36 +342,15 @@ async function submitDelete() {
       </template>
     </BaseModal>
 
-    <!-- 削除確認。本文が短いので size="sm"（画面モックの max-width:400px 相当） -->
-    <BaseModal :open="Boolean(deleteTarget)" title="削除確認" size="sm" @close="closeDelete">
-      <BaseAlert v-if="deleteError" variant="error" data-testid="market-holidays-delete-error">
-        {{ deleteError.message }}
-      </BaseAlert>
-
-      <p>
-        <span class="market-holiday-list__date">{{ deleteTarget?.date }}</span> を削除しますか？
-      </p>
-      <p class="market-holiday-list__warning">この操作は元に戻せません。</p>
-
-      <template #footer>
-        <BaseButton
-          variant="secondary"
-          data-testid="market-holidays-delete-cancel"
-          :disabled="deleting"
-          @click="closeDelete"
-        >
-          キャンセル
-        </BaseButton>
-        <BaseButton
-          variant="danger"
-          data-testid="market-holidays-delete-submit"
-          :disabled="deleting"
-          @click="submitDelete"
-        >
-          {{ deleting ? '削除中…' : '削除する' }}
-        </BaseButton>
-      </template>
-    </BaseModal>
+    <ConfirmDeleteDialog
+      :open="Boolean(deleteTarget)"
+      testid-prefix="market-holidays"
+      :label="deleteTarget?.date ?? ''"
+      :pending="deleting"
+      :error="deleteError"
+      @close="closeDelete"
+      @confirm="submitDelete"
+    />
   </section>
 </template>
 
@@ -393,13 +373,6 @@ async function submitDelete() {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-}
-
-/* 削除確認モーダルの注意書き。本文（既定色）より一段小さく、危険色で出す */
-.market-holiday-list__warning {
-  margin-top: var(--space-2);
-  color: var(--color-danger);
-  font-size: var(--font-size-xs);
 }
 
 .market-holiday-list__count {

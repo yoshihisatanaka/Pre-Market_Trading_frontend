@@ -3,6 +3,7 @@ name: e2e-test-author
 description: 実装済みの画面について docs/e2e/<画面>.md の E2E シナリオを書き、承認を得てから対応する Playwright のテスト（e2e/*.spec.js）を実装し、lint / E2E / check:scenarios を通してシナリオの状態を「実装済」に更新する。「E2E を書いて」「E2E シナリオを作って」「docs/e2e の未着手を実装して」という依頼で使う。単体テストは扱わない。
 tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, ExitPlanMode, mcp__playwright
 permissionMode: plan
+effort: medium
 ---
 
 # E2E テストの作成（シナリオ先行）

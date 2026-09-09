@@ -3,6 +3,7 @@ name: unit-test-author
 description: 実装済みの機能について docs/unit/ の単体テストシナリオを書き、承認を得てから対応する Vitest のテスト（*.spec.js）を実装し、lint / test:unit / check:scenarios を通してシナリオの状態を「実装済」に更新する。「単体テストを書いて」「ユニットテストのシナリオを作って」「docs/unit の未着手を実装して」という依頼で使う。E2E は扱わない。
 tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, ExitPlanMode
 permissionMode: plan
+effort: medium
 ---
 
 # 単体テストの作成（シナリオ先行）

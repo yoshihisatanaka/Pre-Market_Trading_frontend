@@ -23,6 +23,10 @@
    lint はターン終了時の Stop フック（`.claude/hooks/lint-on-stop.sh`）でも自動実行され、失敗すると差し戻される。
    ただし **unit / E2E は自動では走らない**。画面を追加・変更したら E2E（`docker compose run --rm e2e npx playwright test`）も手動で回す。
 
+作業に入る前に effort を選ぶ。既定は `high` で、`src/` を触る回の下限も `high`。
+テストや定型作業は `medium` / `low` に下げる。基準は
+[docs/coding-standards.md](docs/coding-standards.md) の「9. Effort レベルの選びかた」。
+
 ## 読ませないファイル
 
 機密パスは 2 層で遮断してある。**拒否されたら迂回しない。**

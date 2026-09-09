@@ -5,12 +5,12 @@ import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import BaseModal from '@/components/ui/BaseModal.vue'
 import BasePagination from '@/components/ui/BasePagination.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
 import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
+import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { BLOCKED_DATES_PAGE_SIZE, useBlockedDatesStore } from '@/stores/blockedDates'
 
@@ -265,64 +265,36 @@ async function submitDelete() {
       </template>
     </BaseCard>
 
-    <BaseModal :open="isAddOpen" title="受注不可日 新規追加" @close="closeAdd">
-      <!-- 送信ボタンはモーダルのフッタ（この form の外）にあるので、
-           ここでの submit は入力欄での Enter キーのためだけにある -->
-      <form
-        data-testid="blocked-dates-add-form"
-        class="blocked-date-list__form"
-        @submit.prevent="submitAdd"
-      >
-        <!-- サーバの事前検証が返した理由。複数返ることがあるので箇条書きで出す -->
-        <BaseAlert
-          v-if="validationErrors.length > 0"
-          variant="error"
-          data-testid="blocked-dates-add-validation-error"
-        >
-          <ul class="blocked-date-list__validation-errors">
-            <li v-for="message in validationErrors" :key="message">{{ message }}</li>
-          </ul>
-        </BaseAlert>
+    <MasterFormDialog
+      :open="isAddOpen"
+      title="受注不可日 新規追加"
+      testid-prefix="blocked-dates"
+      :pending="creating"
+      :error="createError"
+      :validation-errors="validationErrors"
+      @close="closeAdd"
+      @submit="submitAdd"
+    >
+      <FormField v-slot="{ field }" label="日付" required :error="addErrors.date">
+        <BaseInput
+          v-bind="field"
+          v-model="addDate"
+          type="date"
+          data-testid="blocked-dates-add-date"
+        />
+      </FormField>
 
-        <BaseAlert v-if="createError" variant="error" data-testid="blocked-dates-add-error">
-          {{ createError.message }}
-        </BaseAlert>
-
-        <FormField v-slot="{ field }" label="日付" required :error="addErrors.date">
-          <BaseInput
-            v-bind="field"
-            v-model="addDate"
-            type="date"
-            data-testid="blocked-dates-add-date"
-          />
-        </FormField>
-
-        <!-- maxlength は実仕様（BlackoutDateRequest の 備考）の 45 文字に合わせる -->
-        <FormField v-slot="{ field }" label="理由" required :error="addErrors.reason">
-          <BaseInput
-            v-bind="field"
-            v-model="addReason"
-            placeholder="例: GW前"
-            maxlength="45"
-            data-testid="blocked-dates-add-reason"
-          />
-        </FormField>
-      </form>
-
-      <template #footer>
-        <BaseButton
-          variant="secondary"
-          data-testid="blocked-dates-add-cancel"
-          :disabled="creating"
-          @click="closeAdd"
-        >
-          キャンセル
-        </BaseButton>
-        <BaseButton data-testid="blocked-dates-add-submit" :disabled="creating" @click="submitAdd">
-          {{ creating ? '追加中…' : '追加' }}
-        </BaseButton>
-      </template>
-    </BaseModal>
+      <!-- maxlength は実仕様（BlackoutDateRequest の 備考）の 45 文字に合わせる -->
+      <FormField v-slot="{ field }" label="理由" required :error="addErrors.reason">
+        <BaseInput
+          v-bind="field"
+          v-model="addReason"
+          placeholder="例: GW前"
+          maxlength="45"
+          data-testid="blocked-dates-add-reason"
+        />
+      </FormField>
+    </MasterFormDialog>
 
     <ConfirmDeleteDialog
       :open="Boolean(deleteTarget)"
@@ -348,20 +320,6 @@ async function submitDelete() {
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-3);
-}
-
-/* モーダル内の入力欄。項目間の余白は検索カード（FormGrid）と同じ間隔に揃える */
-.blocked-date-list__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-/* 事前検証の理由。1 件のときも箇条書きの体裁が浮かないよう、記号と字下げは付けない */
-.blocked-date-list__validation-errors {
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 .blocked-date-list__count {

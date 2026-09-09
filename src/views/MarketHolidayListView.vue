@@ -5,13 +5,13 @@ import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import BaseModal from '@/components/ui/BaseModal.vue'
 import BasePagination from '@/components/ui/BasePagination.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
 import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
+import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from '@/stores/marketHolidays'
 import {
@@ -282,65 +282,43 @@ async function submitDelete() {
       </template>
     </BaseCard>
 
-    <BaseModal :open="isAddOpen" title="海外休場日 新規追加" @close="closeAdd">
-      <!-- 送信ボタンはモーダルのフッタ（この form の外）にあるので、
-           ここでの submit は入力欄での Enter キーのためだけにある -->
-      <form
-        data-testid="market-holidays-add-form"
-        class="market-holiday-list__form"
-        @submit.prevent="submitAdd"
-      >
-        <BaseAlert v-if="createError" variant="error" data-testid="market-holidays-add-error">
-          {{ createError.message }}
-        </BaseAlert>
+    <MasterFormDialog
+      :open="isAddOpen"
+      title="海外休場日 新規追加"
+      testid-prefix="market-holidays"
+      :pending="creating"
+      :error="createError"
+      @close="closeAdd"
+      @submit="submitAdd"
+    >
+      <FormField v-slot="{ field }" label="日付" required :error="addErrors.date">
+        <BaseInput
+          v-bind="field"
+          v-model="addDate"
+          type="date"
+          data-testid="market-holidays-add-date"
+        />
+      </FormField>
 
-        <FormField v-slot="{ field }" label="日付" required :error="addErrors.date">
-          <BaseInput
-            v-bind="field"
-            v-model="addDate"
-            type="date"
-            data-testid="market-holidays-add-date"
-          />
-        </FormField>
+      <FormField v-slot="{ field }" label="休場理由" required :error="addErrors.reason">
+        <BaseInput
+          v-bind="field"
+          v-model="addReason"
+          placeholder="例: 独立記念日"
+          maxlength="100"
+          data-testid="market-holidays-add-reason"
+        />
+      </FormField>
 
-        <FormField v-slot="{ field }" label="休場理由" required :error="addErrors.reason">
-          <BaseInput
-            v-bind="field"
-            v-model="addReason"
-            placeholder="例: 独立記念日"
-            maxlength="100"
-            data-testid="market-holidays-add-reason"
-          />
-        </FormField>
-
-        <FormField v-slot="{ field }" label="休場区分" required>
-          <BaseSelect
-            v-bind="field"
-            v-model="addHolidayType"
-            :options="MARKET_HOLIDAY_TYPE_OPTIONS"
-            data-testid="market-holidays-add-holiday-type"
-          />
-        </FormField>
-      </form>
-
-      <template #footer>
-        <BaseButton
-          variant="secondary"
-          data-testid="market-holidays-add-cancel"
-          :disabled="creating"
-          @click="closeAdd"
-        >
-          キャンセル
-        </BaseButton>
-        <BaseButton
-          data-testid="market-holidays-add-submit"
-          :disabled="creating"
-          @click="submitAdd"
-        >
-          {{ creating ? '追加中…' : '追加' }}
-        </BaseButton>
-      </template>
-    </BaseModal>
+      <FormField v-slot="{ field }" label="休場区分" required>
+        <BaseSelect
+          v-bind="field"
+          v-model="addHolidayType"
+          :options="MARKET_HOLIDAY_TYPE_OPTIONS"
+          data-testid="market-holidays-add-holiday-type"
+        />
+      </FormField>
+    </MasterFormDialog>
 
     <ConfirmDeleteDialog
       :open="Boolean(deleteTarget)"
@@ -366,13 +344,6 @@ async function submitDelete() {
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-3);
-}
-
-/* モーダル内の入力欄。項目間の余白は検索カード（FormGrid）と同じ間隔に揃える */
-.market-holiday-list__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
 }
 
 .market-holiday-list__count {

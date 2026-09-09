@@ -12,9 +12,11 @@ import { apiClient } from './client'
  * @param {{ limit?: number, offset?: number, dateFrom?: string, dateTo?: string }} [params]
  *   dateFrom / dateTo は 'YYYY-MM-DD'。空文字は「条件なし」としてリクエストに載せない
  * @returns {Promise<{
- *   items: Array<{ id: string, date: string, market: string, reason: string }>,
+ *   items: Array<{
+ *     id: string, date: string, market: string, reason: string, updatedAt: string,
+ *   }>,
  *   total: number,
- * }>}
+ * }>} updatedAt は編集の楽観的ロックで送り返す合札（updateBlockedDate 参照）
  */
 export async function fetchBlockedDates({
   limit = 50,
@@ -48,12 +50,23 @@ export async function fetchBlockedDates({
  *
  * 応答の warnings / details は今回扱わない（実仕様が固まってから足す）。
  *
- * @param {{ date: string, reason: string }} params date は 'YYYY-MM-DD'
+ * 編集のときは id を渡す。日付を変えずに理由だけ直す場合に「自分自身と重複している」と
+ * 弾かれないよう、更新であることと対象をサーバへ伝える。
+ *
+ * @param {{ date: string, reason: string, id?: string }} params date は 'YYYY-MM-DD'。
+ *   id は編集のときだけ渡す（省略時は新規登録の事前検証として扱われる）
  * @returns {Promise<{ valid: boolean, errors: string[] }>}
  *   valid が false のときだけ errors に理由が入る
  */
-export async function validateBlockedDate({ date, reason }) {
-  const { data } = await apiClient.post('/blocked-dates/validate', { date, reason })
+export async function validateBlockedDate({ date, reason, id = '' }) {
+  const { data } = await apiClient.post(
+    '/blocked-dates/validate',
+    { date, reason },
+    // 実仕様の /blackout-dates/validate は is_update しか持たず、対象を渡す口が無い
+    // （兄弟 API の /market-holidays/validate は holiday_date を持つ）。
+    // 自己除外の判断にはサーバ側でも対象が必要なので、同じ場所に id を載せて補っている
+    id ? { params: { is_update: true, id } } : undefined,
+  )
 
   return {
     valid: Boolean(data?.valid),
@@ -68,8 +81,9 @@ export async function validateBlockedDate({ date, reason }) {
  * BlackoutDateRequest に対応する項目が無く、サーバ側が既定値を決める前提。
  *
  * @param {{ date: string, reason: string }} params date は 'YYYY-MM-DD'
- * @returns {Promise<{ id: string, date: string, market: string, reason: string }>}
- *   登録された 1 件
+ * @returns {Promise<{
+ *   id: string, date: string, market: string, reason: string, updatedAt: string,
+ * }>} 登録された 1 件
  */
 export async function createBlockedDate({ date, reason }) {
   const { data } = await apiClient.post('/blocked-dates', {
@@ -77,6 +91,35 @@ export async function createBlockedDate({ date, reason }) {
     // 変換の責務がこの層にあることを明示するため素通しの形でも書き出す
     date,
     reason,
+  })
+
+  return toBlockedDate(data)
+}
+
+/**
+ * 受注不可日を 1 件更新する（日付と理由の両方を変更できる）。
+ *
+ * updatedAt は一覧取得時の更新日時をそのまま送り返す楽観的ロックの合札で、
+ * サーバ側の現在値と違えば 409 で弾かれる（他の利用者が先に更新していた場合）。
+ * 値は照合するだけなので Date には通さない。
+ *
+ * 実仕様（docs/api/openapi.json の Update Blackout Date Endpoint）とのギャップ:
+ * パスは `PUT /blackout-dates/{blackout_date}` で主キーは日付の integer / 本文は日本語キーの
+ * BlackoutDateRequest / `X-User-Code` ヘッダ必須（認証方式が決まったら client.js の
+ * interceptor で全 API に付けるので、ここでは付けない）/ 応答は BlackoutDateResponse。
+ * 一覧・登録・削除が /blocked-dates のままなので、画面内の一貫性を優先して同じ形で受ける。
+ *
+ * @param {{ id: string, date: string, reason: string, updatedAt: string }} params
+ *   date は 'YYYY-MM-DD'、updatedAt は 'YYYY-MM-DD HH:MM:SS'
+ * @returns {Promise<{
+ *   id: string, date: string, market: string, reason: string, updatedAt: string,
+ * }>} 更新後の 1 件
+ */
+export async function updateBlockedDate({ id, date, reason, updatedAt }) {
+  const { data } = await apiClient.put(`/blocked-dates/${encodeURIComponent(id)}`, {
+    date,
+    reason,
+    updated_at: updatedAt,
   })
 
   return toBlockedDate(data)
@@ -106,5 +149,9 @@ function toBlockedDate(raw) {
     date: raw.date,
     market: raw.market,
     reason: raw.reason,
+    // 楽観的ロックの合札。'YYYY-MM-DD HH:MM:SS' は非 ISO でブラウザ差があるので
+    // date と同じく Date には通さない。undefined のまま持つと更新時の JSON.stringify で
+    // キーごと消え、サーバから見て「送っていない」と「空」が区別できなくなるため文字列に寄せる
+    updatedAt: raw.updated_at ?? '',
   }
 }

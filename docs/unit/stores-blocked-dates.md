@@ -1,4 +1,4 @@
-# stores/blockedDates（受注不可日マスタ ストア）
+﻿# stores/blockedDates（受注不可日マスタ ストア）
 
 - 略号: `BDS`
 - 対象: `src/stores/blockedDates.js`
@@ -31,3 +31,16 @@
 | BDS-23 | `load({ offset: 表示件数, dateFrom, dateTo })` 済み | `remove()` が成功する | 同じページ位置・同じ絞り込みのまま読み直される（1 ページ目・全件に戻らない） | 実装済 |
 | BDS-24 | `remove()` が失敗して `deleteError` が入っている | `clearDeleteError()` を呼ぶ | `deleteError` が null になる | 実装済 |
 | BDS-25 | DELETE の応答が返る前 | `remove()` を await せずに状態を見る | `deleting` が true で、一覧側の `loading` は false のまま。完了後に false に戻る | 実装済 |
+| BDS-26 | 既定モック、`load()` 済み | 先頭の行の `id` / `updatedAt` で理由だけを変えて `update({ id, date, reason, updatedAt })` を呼ぶ | 更新後の 1 件が返る（日付は元のまま、理由は渡した値）。`updateError` は null、`updateValidationErrors` は空。一覧が読み直されて `total` は変わらず、その日付の行の理由が新しい値になる | 実装済 |
+| BDS-27 | 既定モック、`load()` 済み | 先頭の行の日付を一覧に無い日付へ変えて `update()` を呼ぶ | 戻り値の日付が新しい日付になる。`total` は変わらず、`items` から元の日付が消えて新しい日付が日付昇順の位置に入る | 実装済 |
+| BDS-28 | 既定モック、`load()` 済み | 日付を変えずに（自分自身の日付のまま）`update()` を呼ぶ | 自分自身は重複と見なされず成功する。事前検証のリクエストに更新であること（`is_update`）と対象の id が載る | 実装済 |
+| BDS-29 | 既定モック、`load()` 済み | 先頭の行の日付を**別の行の日付**へ変えて `update()` を呼ぶ | 戻り値が null。`updateValidationErrors` に重複を知らせる文言が入り、`updateError` は null のまま。`items` / `total` は変わらない | 実装済 |
+| BDS-30 | 事前検証が不合格になる入力 | `update()` を呼ぶ | 更新の API（`PUT /blocked-dates/:id`）は 1 度も呼ばれない | 実装済 |
+| BDS-31 | 更新の API が 500（`message` 付き）を返す（事前検証は通る） | `update()` を呼ぶ | 戻り値が null、`updateError` に status 500 とその message が入る。`updateValidationErrors` は空のまま。`items` / `total` は変わらない | 実装済 |
+| BDS-32 | 既定モック、`load()` 済み | 行の現在値と違う（古い）`updatedAt` を渡して `update()` を呼ぶ | 戻り値が null、`updateError` に status 409 と競合を知らせる message が入る。`items` は変わらない（他の利用者の変更を上書きしない） | 実装済 |
+| BDS-33 | 既定モック | 存在しない id で `update()` を呼ぶ | 戻り値が null、`updateError` に status 404 と message が入る | 実装済 |
+| BDS-34 | `load({ offset: 表示件数, dateFrom, dateTo })` 済み | `update()` が成功する | 同じページ位置・同じ絞り込みのまま読み直される（1 ページ目・全件に戻らない） | 実装済 |
+| BDS-35 | 直前の `update()` が通信エラーで失敗した状態 / 事前検証で弾かれた状態 | それぞれで `clearUpdateError()` を呼ぶ | `updateError` が null になり、`updateValidationErrors` も空になる（どちらの失敗も残らない） | 実装済 |
+| BDS-36 | 事前検証の応答が返る前 | `update()` を await せずに状態を見る | `updating` が true で、一覧側の `loading` は false のまま。検証と更新の 2 往復が終わるまで true が続き、完了後に false に戻る | 実装済 |
+| BDS-37 | 既定モック、`update()` が 1 回成功した直後 | 読み直した一覧から取った `updatedAt` で同じ行をもう一度 `update()` する | 2 回目も成功する（更新のたびにサーバが新しい更新日時を返し、一覧経由で合札が入れ替わる） | 実装済 |
+| BDS-38 | 既定モック、`load()` 済み | 編集で事前検証に弾かれたあと、登録側の `validationErrors` を見る | 編集の理由は `updateValidationErrors` にだけ入り、`validationErrors` は空のまま。逆に登録で弾かれても `updateValidationErrors` は空のまま | 実装済 |

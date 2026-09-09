@@ -125,8 +125,7 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
-  // 受注不可日マスタ。API 仕様は未確定なので limit / offset + total の一般的な形で受ける。
-  // 編集は別コミットで足すので、いまは参照・追加・削除だけ
+  // 受注不可日マスタ。API 仕様は未確定なので limit / offset + total の一般的な形で受ける
   http.get('*/api/blocked-dates', ({ request }) => {
     const params = new URL(request.url).searchParams
     const dateFrom = params.get('date_from') ?? ''
@@ -156,10 +155,19 @@ export const handlers = [
     const date = typeof body?.date === 'string' ? body.date.trim() : ''
     const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
 
+    // 編集のときだけ付く。対象自身は重複と見なさない（日付を変えずに理由だけ直せるようにする）
+    const params = new URL(request.url).searchParams
+    const isUpdate = params.get('is_update') === 'true'
+    const selfId = params.get('id') ?? ''
+
     const errors = []
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       errors.push('日付は YYYY-MM-DD 形式で入力してください。')
-    } else if (blockedDateRows.some((blocked) => blocked.date === date)) {
+    } else if (
+      blockedDateRows.some(
+        (blocked) => blocked.date === date && !(isUpdate && blocked.id === selfId),
+      )
+    ) {
       errors.push('その日付の受注不可日はすでに登録されています。')
     }
     if (!reason) {
@@ -203,11 +211,80 @@ export const handlers = [
       date,
       market: '全市場',
       reason,
+      // 更新日時も「サーバが決める値」なのでここで埋める（編集の楽観的ロックが使う）
+      updated_at: nowTimestamp(),
     }
     // 一覧は日付の昇順を前提にしているので、追加後も並びを保つ
     blockedDateRows = [...blockedDateRows, created].sort((a, b) => a.date.localeCompare(b.date))
 
     return HttpResponse.json(created, { status: 201 })
+  }),
+
+  /*
+   * 受注不可日の更新（日付と理由の両方を変更できる）。
+   * 検査の順序が要点で、「対象が居るか → 入力の形 → 盤面が古くないか → 他の行との重複」と見る。
+   * 競合（409 conflict）を重複より先に見るのは、他の利用者が書き換えた後の行に
+   * 「その日付は既に登録されています」と返すと理由を取り違えさせるため。
+   * まず「盤面が古い」ことを伝える。
+   */
+  http.put('*/api/blocked-dates/:id', async ({ params, request }) => {
+    const id = String(params.id)
+    const body = await request.json().catch(() => null)
+    const date = typeof body?.date === 'string' ? body.date.trim() : ''
+    const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
+    const updatedAt = typeof body?.updated_at === 'string' ? body.updated_at : ''
+
+    const current = blockedDateRows.find((blocked) => blocked.id === id)
+    if (!current) {
+      return HttpResponse.json(
+        { message: '対象の受注不可日が見つかりません。', code: 'not_found' },
+        { status: 404 },
+      )
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return HttpResponse.json(
+        { message: '日付は YYYY-MM-DD 形式で入力してください。', code: 'invalid_date' },
+        { status: 400 },
+      )
+    }
+    if (!reason) {
+      return HttpResponse.json(
+        { message: '理由を入力してください。', code: 'invalid_reason' },
+        { status: 400 },
+      )
+    }
+    // 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば弾く（欠落も不一致とみなす）
+    if (updatedAt !== current.updated_at) {
+      return HttpResponse.json(
+        {
+          message: '他の担当者が先に更新しました。再読み込みしてからやり直してください。',
+          code: 'conflict',
+        },
+        { status: 409 },
+      )
+    }
+    if (blockedDateRows.some((blocked) => blocked.date === date && blocked.id !== id)) {
+      return HttpResponse.json(
+        { message: 'その日付の受注不可日はすでに登録されています。', code: 'duplicate_date' },
+        { status: 409 },
+      )
+    }
+
+    const updated = {
+      ...current,
+      // 実仕様は日付が主キーなので、日付を変えたら id も新しい日付から作り直す
+      id: `bkd_${date.replaceAll('-', '')}`,
+      date,
+      reason,
+      // 合札はサーバが新しくする（リクエストで来た値は照合に使うだけ）
+      updated_at: nowTimestamp(),
+    }
+    // 一覧は日付の昇順を前提にしているので、更新後も並びを保つ
+    blockedDateRows = blockedDateRows
+      .map((blocked) => (blocked.id === id ? updated : blocked))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    return HttpResponse.json(updated)
   }),
 
   // 受注不可日の削除。成功時は本文を返さない（204）
@@ -284,7 +361,7 @@ export const handlers = [
       大口金額閾値: amount,
       // 省略されたら現在値を保つ（勝手に有効化しない）
       スライス有効フラグ: body?.['スライス有効フラグ'] ?? hardLimitRow['スライス有効フラグ'],
-      更新日時: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      更新日時: nowTimestamp(),
       更新者: '006',
     }
 
@@ -294,6 +371,11 @@ export const handlers = [
 
 function toFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/** サーバが決める更新日時。バックエンドが返すのと同じ 'YYYY-MM-DD HH:MM:SS' 形式 */
+function nowTimestamp() {
+  return new Date().toISOString().slice(0, 19).replace('T', ' ')
 }
 
 function toNonNegativeInt(value, fallback) {

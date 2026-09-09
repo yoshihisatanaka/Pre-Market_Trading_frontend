@@ -45,7 +45,7 @@ Vue 公式スタイルガイドの **優先度 A（必須）/ B（強く推奨�
 | `src/utils/` | 状態を持たない純関数（整形・計算など） |
 | `src/mocks/` | MSW のハンドラとフィクスチャ |
 
-マスタメンテ画面（`/masters/*`）は「検索 → 一覧 → 追加 / 削除」という同じ型を共有する。
+マスタメンテ画面（`/masters/*`）は「検索 → 一覧 → 追加 / 編集 / 削除」という同じ型を共有する。
 骨格は `src/components/masters/` の 4 部品と、`src/composables/useListQuery.js` /
 `useCrudList.js` に入っているので、新しいマスタ画面はこれに乗せる（既存画面を
 コピーしない）。逆に**画面ごとに違うもの**は画面側に素で書く。
@@ -53,10 +53,10 @@ Vue 公式スタイルガイドの **優先度 A（必須）/ B（強く推奨�
 | マスタ画面が共通部品に乗せるもの | 画面側に書くもの |
 |---|---|
 | URL クエリ ↔ 検索条件の往復、ページ位置（`useListQuery`） | クエリ名とモデル名の対応（`filters`） |
-| 一覧の取得・古い応答の破棄・登録・削除（`useCrudList`） | 使う `src/api/` の関数 |
+| 一覧の取得・古い応答の破棄・登録・更新・削除（`useCrudList`） | 使う `src/api/` の関数 |
 | 検索カードの器とボタン列（`MasterSearchCard`） | 検索条件の入力欄（`FormField` 群） |
 | 件数・4 状態・ページャー（`MasterListCard`） | `columns` と `DataTable`、行ごとの操作ボタン |
-| 追加モーダルの枠とエラーの出し先（`MasterFormDialog`） | 入力項目、`maxlength`、必須エラーの文言 |
+| 追加・編集モーダルの枠とエラーの出し先（`MasterFormDialog`） | 入力項目、`maxlength`、必須エラーの文言、ボタンの文言（`submitLabel`） |
 | 削除確認（`ConfirmDeleteDialog`） | — |
 | — | ヘッダ操作の `<Teleport>`、成功通知、画面固有の説明バナー |
 

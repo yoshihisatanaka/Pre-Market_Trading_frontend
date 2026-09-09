@@ -47,6 +47,13 @@ const DELETE_TARGET = blockedDates[0]
 const MISSING_ID = `${DELETE_TARGET.id}_missing`
 const NOT_FOUND_MESSAGE = '対象の受注不可日が見つかりません。'
 
+// 編集の対象もフィクスチャから導く。合札（updated_at）は行ごとに一意なので、
+// 別の行の値を渡せば「盤面が古い」状況を再現できる
+const EDIT_TARGET = blockedDates[0]
+const OTHER_ROW = blockedDates[1]
+const EDITED_REASON = '編集後の理由'
+const CONFLICT_MESSAGE = '他の担当者が先に更新しました。再読み込みしてからやり直してください。'
+
 const ids = (items) => items.map((item) => item.id)
 const dates = (items) => items.map((item) => item.date)
 
@@ -474,5 +481,343 @@ describe('useBlockedDatesStore', () => {
 
     await pending
     expect(store.deleting).toBe(false)
+  })
+
+  it('[BDS-26] update が成功すると一覧が読み直され理由が新しい値になる', async () => {
+    const store = useBlockedDatesStore()
+    await store.load()
+    const target = store.items[0]
+
+    const updated = await store.update({
+      id: target.id,
+      date: target.date,
+      reason: EDITED_REASON,
+      updatedAt: target.updatedAt,
+    })
+
+    expect(updated).toMatchObject({ date: target.date, reason: EDITED_REASON })
+    expect(store.updateError).toBeNull()
+    expect(store.updateValidationErrors).toEqual([])
+    // 日付を変えていないので件数も並びも動かない
+    expect(store.total).toBe(TOTAL)
+    expect(ids(store.items)).toEqual(ids(firstPage))
+    expect(store.items[0].reason).toBe(EDITED_REASON)
+  })
+
+  it('[BDS-27] 日付を変えて update すると元の日付が消え新しい日付が昇順の位置に入る', async () => {
+    const store = useBlockedDatesStore()
+    await store.load()
+    const target = store.items[0]
+
+    const updated = await store.update({
+      id: target.id,
+      date: NEW_DATE,
+      reason: EDITED_REASON,
+      updatedAt: target.updatedAt,
+    })
+
+    expect(updated).toMatchObject({ date: NEW_DATE, reason: EDITED_REASON })
+    // 日付が入れ替わるだけなので件数は変わらず、一覧は日付昇順のまま
+    const expected = [
+      ...blockedDates.filter((blocked) => blocked.id !== target.id),
+      { date: NEW_DATE },
+    ].sort((a, b) => a.date.localeCompare(b.date))
+    expect(store.total).toBe(TOTAL)
+    expect(dates(store.items)).not.toContain(target.date)
+    expect(dates(store.items)).toEqual(dates(expected.slice(0, PAGE_SIZE)))
+  })
+
+  it('[BDS-28] 日付を変えない update では自分自身が重複と見なされない', async () => {
+    // 事前検証のリクエストを、既定ハンドラを差し替えずに観測する
+    const validateUrls = []
+    const record = ({ request }) => {
+      if (request.url.includes('/blocked-dates/validate')) validateUrls.push(request.url)
+    }
+    server.events.on('request:start', record)
+
+    try {
+      const store = useBlockedDatesStore()
+      await store.load()
+      const target = store.items[0]
+
+      const updated = await store.update({
+        id: target.id,
+        date: target.date,
+        reason: EDITED_REASON,
+        updatedAt: target.updatedAt,
+      })
+
+      expect(updated).toMatchObject({ date: target.date, reason: EDITED_REASON })
+      expect(store.updateValidationErrors).toEqual([])
+
+      // 自己除外の判断に必要な「更新であること」と「対象」がサーバへ渡っている
+      expect(validateUrls).toHaveLength(1)
+      const params = new URL(validateUrls[0]).searchParams
+      expect(params.get('is_update')).toBe('true')
+      expect(params.get('id')).toBe(target.id)
+    } finally {
+      server.events.removeListener('request:start', record)
+    }
+  })
+
+  it('[BDS-29] 別の行の日付へ変えると updateValidationErrors に理由が入り一覧は変わらない', async () => {
+    const store = useBlockedDatesStore()
+    await store.load()
+    const target = store.items[0]
+
+    const updated = await store.update({
+      id: target.id,
+      date: OTHER_ROW.date,
+      reason: EDITED_REASON,
+      updatedAt: target.updatedAt,
+    })
+
+    expect(updated).toBeNull()
+    // 通信自体は成功しているので、サーバ障害用の updateError には入れない
+    expect(store.updateError).toBeNull()
+    expect(store.updateValidationErrors).toEqual([DUPLICATE_MESSAGE])
+    expect(store.total).toBe(TOTAL)
+    expect(ids(store.items)).toEqual(ids(firstPage))
+  })
+
+  it('[BDS-30] 事前検証で弾かれたときは更新の API を呼ばない', async () => {
+    let updateCalls = 0
+    server.use(
+      http.put('*/api/blocked-dates/:id', () => {
+        updateCalls += 1
+        return HttpResponse.json({ id: 'unexpected', date: '', market: '', reason: '' })
+      }),
+    )
+    const store = useBlockedDatesStore()
+
+    // 日付が不正で理由も空の入力は、既定ハンドラが 2 件の理由を返す
+    const updated = await store.update({
+      id: EDIT_TARGET.id,
+      date: '',
+      reason: '',
+      updatedAt: EDIT_TARGET.updated_at,
+    })
+
+    expect(updated).toBeNull()
+    expect(updateCalls).toBe(0)
+    expect(store.updateValidationErrors).toEqual([INVALID_DATE_MESSAGE, INVALID_REASON_MESSAGE])
+  })
+
+  it('[BDS-31] 事前検証を通っても更新がサーバエラーなら updateError に入る', async () => {
+    server.use(
+      http.put('*/api/blocked-dates/:id', () =>
+        HttpResponse.json({ message: ERROR_MESSAGE }, { status: 500 }),
+      ),
+    )
+    const store = useBlockedDatesStore()
+    await store.load()
+    const target = store.items[0]
+
+    const updated = await store.update({
+      id: target.id,
+      date: target.date,
+      reason: EDITED_REASON,
+      updatedAt: target.updatedAt,
+    })
+
+    expect(updated).toBeNull()
+    expect(store.updateError).toBeInstanceOf(Error)
+    expect(store.updateError.status).toBe(500)
+    expect(store.updateError.message).toBe(ERROR_MESSAGE)
+    expect(store.updateValidationErrors).toEqual([])
+    expect(store.total).toBe(TOTAL)
+    expect(ids(store.items)).toEqual(ids(firstPage))
+  })
+
+  it('[BDS-32] 古い updatedAt で update すると 409 が updateError に入り一覧は変わらない', async () => {
+    const store = useBlockedDatesStore()
+    await store.load()
+    const target = store.items[0]
+
+    const updated = await store.update({
+      id: target.id,
+      date: target.date,
+      reason: EDITED_REASON,
+      // 別の行の合札（= 対象の現在値とは違う値）を渡して「盤面が古い」状況を作る
+      updatedAt: OTHER_ROW.updated_at,
+    })
+
+    expect(updated).toBeNull()
+    expect(store.updateError).toBeInstanceOf(Error)
+    expect(store.updateError.status).toBe(409)
+    expect(store.updateError.message).toBe(CONFLICT_MESSAGE)
+    // 他の利用者の変更を上書きしない
+    expect(store.items[0].reason).toBe(EDIT_TARGET.reason)
+    expect(ids(store.items)).toEqual(ids(firstPage))
+  })
+
+  it('[BDS-33] 存在しない id のとき updateError に 404 が入る', async () => {
+    const store = useBlockedDatesStore()
+
+    const updated = await store.update({
+      id: MISSING_ID,
+      date: NEW_DATE,
+      reason: EDITED_REASON,
+      updatedAt: EDIT_TARGET.updated_at,
+    })
+
+    expect(updated).toBeNull()
+    expect(store.updateError).toBeInstanceOf(Error)
+    expect(store.updateError.status).toBe(404)
+    expect(store.updateError.message).toBe(NOT_FOUND_MESSAGE)
+  })
+
+  it('[BDS-34] update 後の読み直しでもページ位置と絞り込みが保たれる', async () => {
+    const store = useBlockedDatesStore()
+    await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
+
+    // 対象は 1 ページ目の行なので、合札は表示中の行ではなくフィクスチャから取る
+    const updated = await store.update({
+      id: EDIT_TARGET.id,
+      date: EDIT_TARGET.date,
+      reason: EDITED_REASON,
+      updatedAt: EDIT_TARGET.updated_at,
+    })
+
+    expect(updated).not.toBeNull()
+    expect(store.offset).toBe(PAGE_SIZE)
+    expect(store.dateFrom).toBe(ALL_FROM)
+    expect(store.dateTo).toBe(ALL_TO)
+    // 日付を変えていないので件数も並びも動かない
+    expect(store.total).toBe(TOTAL)
+    expect(ids(store.items)).toEqual(ids(secondPage))
+  })
+
+  it('[BDS-35] clearUpdateError はサーバ障害と事前検証の理由をどちらも消す', async () => {
+    const store = useBlockedDatesStore()
+    await store.load()
+    const target = store.items[0]
+
+    // サーバ障害で失敗した場合
+    server.use(validateErrorHandler({ once: true }))
+    await store.update({
+      id: target.id,
+      date: target.date,
+      reason: EDITED_REASON,
+      updatedAt: target.updatedAt,
+    })
+    expect(store.updateError).not.toBeNull()
+
+    store.clearUpdateError()
+    expect(store.updateError).toBeNull()
+
+    // 事前検証で弾かれた場合
+    await store.update({
+      id: target.id,
+      date: OTHER_ROW.date,
+      reason: EDITED_REASON,
+      updatedAt: target.updatedAt,
+    })
+    expect(store.updateValidationErrors).not.toEqual([])
+
+    store.clearUpdateError()
+
+    expect(store.updateError).toBeNull()
+    expect(store.updateValidationErrors).toEqual([])
+  })
+
+  it('[BDS-36] 検証と更新の 2 往復のあいだ updating が true のままになる', async () => {
+    // 更新の応答を握って、検証が終わった時点の状態を確かめられるようにする
+    let releaseUpdate
+    let updateStarted = false
+    const updateGate = new Promise((resolve) => {
+      releaseUpdate = resolve
+    })
+    server.use(
+      http.put('*/api/blocked-dates/:id', async () => {
+        updateStarted = true
+        await updateGate
+        return HttpResponse.json({
+          id: EDIT_TARGET.id,
+          date: EDIT_TARGET.date,
+          market: EDIT_TARGET.market,
+          reason: EDITED_REASON,
+          updated_at: EDIT_TARGET.updated_at,
+        })
+      }),
+    )
+    const store = useBlockedDatesStore()
+    await store.load()
+    const target = store.items[0]
+
+    const pending = store.update({
+      id: target.id,
+      date: target.date,
+      reason: EDITED_REASON,
+      updatedAt: target.updatedAt,
+    })
+
+    // 1 段目（事前検証）の最中
+    expect(store.updating).toBe(true)
+    expect(store.loading).toBe(false)
+
+    // 検証が終わって 2 段目（更新）に入っても true のまま
+    // （固定時間の sleep にせず、更新ハンドラに入るまで待つ）
+    while (!updateStarted) {
+      await new Promise((resolve) => setTimeout(resolve, 1))
+    }
+    expect(store.updating).toBe(true)
+    expect(store.loading).toBe(false)
+
+    releaseUpdate()
+    await pending
+    expect(store.updating).toBe(false)
+  })
+
+  it('[BDS-37] 一覧を読み直せば同じ行を続けて 2 回更新できる', async () => {
+    const store = useBlockedDatesStore()
+    await store.load()
+    const target = store.items[0]
+
+    const first = await store.update({
+      id: target.id,
+      date: target.date,
+      reason: EDITED_REASON,
+      updatedAt: target.updatedAt,
+    })
+    expect(first).not.toBeNull()
+
+    // 合札はサーバが更新のたびに新しくする。読み直した一覧の値でなければ 2 回目は競合する
+    const reloaded = store.items.find((item) => item.date === target.date)
+    expect(reloaded.updatedAt).not.toBe(target.updatedAt)
+
+    const second = await store.update({
+      id: reloaded.id,
+      date: reloaded.date,
+      reason: `${EDITED_REASON}2`,
+      updatedAt: reloaded.updatedAt,
+    })
+
+    expect(second).toMatchObject({ date: target.date, reason: `${EDITED_REASON}2` })
+    expect(store.updateError).toBeNull()
+    expect(store.items.find((item) => item.date === target.date).reason).toBe(`${EDITED_REASON}2`)
+  })
+
+  it('[BDS-38] 編集と登録の事前検証の理由は互いに混ざらない', async () => {
+    const store = useBlockedDatesStore()
+    await store.load()
+    const target = store.items[0]
+
+    // 編集で弾かれても、登録側の validationErrors は空のまま
+    await store.update({
+      id: target.id,
+      date: OTHER_ROW.date,
+      reason: EDITED_REASON,
+      updatedAt: target.updatedAt,
+    })
+    expect(store.updateValidationErrors).toEqual([DUPLICATE_MESSAGE])
+    expect(store.validationErrors).toEqual([])
+
+    store.clearUpdateError()
+
+    // 逆に登録で弾かれても、編集側の updateValidationErrors は空のまま
+    await store.create({ date: DUPLICATE_DATE, reason: NEW_REASON })
+    expect(store.validationErrors).toEqual([DUPLICATE_MESSAGE])
+    expect(store.updateValidationErrors).toEqual([])
   })
 })

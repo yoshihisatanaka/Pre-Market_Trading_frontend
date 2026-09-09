@@ -67,6 +67,25 @@ const LAST_PAGE_FROM = blockedDates[0].date
 const LAST_PAGE_TO = blockedDates[PAGE_SIZE].date
 const LAST_PAGE_TARGET = blockedDates[PAGE_SIZE]
 
+// 編集の対象もフィクスチャから導く（別の行の日付へ変えれば重複で弾かれる）
+const EDIT_TARGET = blockedDates[0]
+const OTHER_TARGET = blockedDates[1]
+const EDITED_REASON = '編集後の理由'
+const CONFLICT_MESSAGE = '他の担当者が先に更新しました。再読み込みしてからやり直してください。'
+
+/*
+ * 「絞り込みの範囲外へ動かす日付」。上の LAST_PAGE_TO より後で、かつフィクスチャに無い日付を探す
+ * （範囲外に出れば total が 1 減り、最終ページが空になる）。
+ */
+const OUT_OF_RANGE_DATE = (() => {
+  const lastYear = blockedDates[TOTAL - 1].date.slice(0, 4)
+  for (let day = 1; day <= 28; day += 1) {
+    const date = `${lastYear}-06-${String(day).padStart(2, '0')}`
+    if (!existingDates.has(date) && date > LAST_PAGE_TO) return date
+  }
+  throw new Error('絞り込みの範囲外になる空き日付が見つからなかった')
+})()
+
 const Page = { render: () => h('div') }
 
 async function mountView(query = {}) {
@@ -133,6 +152,7 @@ const deleteNotFoundHandler = () =>
   )
 
 const deleteButton = (wrapper, id) => wrapper.find(`[data-testid="blocked-dates-delete-${id}"]`)
+const editButton = (wrapper, id) => wrapper.find(`[data-testid="blocked-dates-edit-${id}"]`)
 // 削除確認モーダルは表の行と同じ日付を出すので、dialog に絞ってから本文を読む
 const deleteDialog = (wrapper) => wrapper.find('[role="dialog"][aria-label="削除確認"]')
 const openDelete = async (wrapper, id) => {
@@ -158,6 +178,29 @@ const validationMessages = (wrapper) =>
   wrapper
     .findAll('[data-testid="blocked-dates-add-validation-error"] li')
     .map((item) => item.text())
+
+/*
+ * 編集モーダル。追加・削除と同時に開いていても取り違えないよう、
+ * dialog はタイトルで絞り、入力欄とボタンは -edit- の testid で引く
+ */
+const editDialog = (wrapper) => wrapper.find('[role="dialog"][aria-label="受注不可日 編集"]')
+const editDateInput = (wrapper) => wrapper.find('[data-testid="blocked-dates-edit-date"]')
+const editReasonInput = (wrapper) => wrapper.find('[data-testid="blocked-dates-edit-reason"]')
+const editSubmit = (wrapper) => wrapper.find('[data-testid="blocked-dates-edit-submit"]')
+const editCancel = (wrapper) => wrapper.find('[data-testid="blocked-dates-edit-cancel"]')
+const openEditModal = async (wrapper, id) => {
+  await editButton(wrapper, id).trigger('click')
+}
+const fillEdit = async (wrapper, date, reason) => {
+  await editDateInput(wrapper).setValue(date)
+  await editReasonInput(wrapper).setValue(reason)
+}
+const editValidationMessages = (wrapper) =>
+  wrapper
+    .findAll('[data-testid="blocked-dates-edit-validation-error"] li')
+    .map((item) => item.text())
+// 表の中だけを見る（成功メッセージにも日付が出るので、画面全体のテキストでは判定できない）
+const tableText = (wrapper) => wrapper.find('[data-testid="blocked-dates-table"]').text()
 // FormField はエラー文の id を入力欄の aria-describedby に渡すので、そこから項目単位で引く
 // （role="alert" で絞ると、同じ aria-describedby に並ぶ hint を拾わない）
 const fieldError = (wrapper, input) => {
@@ -335,7 +378,7 @@ describe('BlockedDateListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    // 行ごとの削除ボタンを置く操作列が末尾に付く。見出しは画面モックに合わせて空
+    // 行ごとの編集・削除ボタンを置く操作列が末尾に付く。見出しは画面モックに合わせて空
     expect(headers(wrapper)).toEqual(['日付', '対象市場', '理由', ''])
 
     // 期待値はフィクスチャの値そのものから作る（表示文言を並べ書きしない）。
@@ -350,7 +393,8 @@ describe('BlockedDateListView', () => {
       firstPage.map((blocked) => [blocked.date, blocked.market, blocked.reason]),
     )
 
-    // 操作列には行ごとの削除ボタンが出る
+    // 操作列には行ごとの編集・削除ボタンが出る
+    expect(firstPage.every((blocked) => editButton(wrapper, blocked.id).exists())).toBe(true)
     expect(firstPage.every((blocked) => deleteButton(wrapper, blocked.id).exists())).toBe(true)
   })
 
@@ -598,6 +642,229 @@ describe('BlockedDateListView', () => {
     await openDelete(wrapper, LAST_PAGE_TARGET.id)
     await confirmDelete(wrapper)
     // DELETE → 再取得 → 0 件を見て 1 ページ戻る → 再取得 の分だけ待つ
+    await settle()
+    await settle()
+    await settle()
+
+    // offset だけが消え、絞り込み条件は残る
+    expect(router.currentRoute.value.query).toEqual({
+      date_from: LAST_PAGE_FROM,
+      date_to: LAST_PAGE_TO,
+    })
+    expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
+    expect(countText(wrapper)).toBe(`${PAGE_SIZE} 件`)
+  })
+
+  it('[BDL-28] 行の「編集」で現在値の入った編集モーダルが開く', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    expect(editDialog(wrapper).exists()).toBe(false)
+
+    await openEditModal(wrapper, EDIT_TARGET.id)
+
+    expect(editDialog(wrapper).exists()).toBe(true)
+    expect(editDateInput(wrapper).element.value).toBe(EDIT_TARGET.date)
+    expect(editReasonInput(wrapper).element.value).toBe(EDIT_TARGET.reason)
+    // 追加モーダルは開かない（同じ部品を使い回しているので取り違えないことを確かめる）
+    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(false)
+  })
+
+  it('[BDL-29] 理由だけ変えて更新すると成功メッセージが出て件数は変わらない', async () => {
+    const { wrapper, router } = await mountView()
+    await settle()
+    await openEditModal(wrapper, EDIT_TARGET.id)
+
+    await editReasonInput(wrapper).setValue(EDITED_REASON)
+    await editSubmit(wrapper).trigger('click')
+    // 事前検証 → 更新 → 一覧の再取得 → 再描画 の往復を待つ
+    await settle()
+    await settle()
+    await settle()
+
+    expect(editDialog(wrapper).exists()).toBe(false)
+    const notice = wrapper.find('[data-testid="blocked-dates-notice"]')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain(EDIT_TARGET.date)
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+    // 日付は変えていないので同じ位置の行の理由だけが変わる
+    expect(rows(wrapper)[0].text()).toContain(EDIT_TARGET.date)
+    expect(rows(wrapper)[0].text()).toContain(EDITED_REASON)
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('[BDL-30] 日付を変えて更新すると新しい日付の行に入れ替わる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper, EDIT_TARGET.id)
+
+    await fillEdit(wrapper, NEW_DATE, EDITED_REASON)
+    await editSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+    await settle()
+
+    expect(editDialog(wrapper).exists()).toBe(false)
+    // 成功メッセージはサーバが受理した「新しい」日付を出す
+    expect(wrapper.find('[data-testid="blocked-dates-notice"]').text()).toContain(NEW_DATE)
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+    expect(tableText(wrapper)).toContain(NEW_DATE)
+    expect(tableText(wrapper)).not.toContain(EDIT_TARGET.date)
+  })
+
+  it('[BDL-31] 空のまま「更新」を押すと項目ごとのエラーが出て API を呼ばない', async () => {
+    let validateCalls = 0
+    let updateCalls = 0
+    server.use(
+      http.post('*/api/blocked-dates/validate', () => {
+        validateCalls += 1
+        return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
+      }),
+      http.put('*/api/blocked-dates/:id', () => {
+        updateCalls += 1
+        return HttpResponse.json({ id: 'unexpected', date: '', market: '', reason: '' })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper, EDIT_TARGET.id)
+
+    await fillEdit(wrapper, '', '')
+    await editSubmit(wrapper).trigger('click')
+    await settle()
+
+    expect(editDialog(wrapper).exists()).toBe(true)
+    expect(fieldError(wrapper, editDateInput(wrapper))).toBe('日付を入力してください。')
+    expect(fieldError(wrapper, editReasonInput(wrapper))).toBe('理由を入力してください。')
+    // 無駄な往復をしない（事前検証も更新も呼ばない）
+    expect(validateCalls).toBe(0)
+    expect(updateCalls).toBe(0)
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+  })
+
+  it('[BDL-32] 更新が 409 のときモーダル内に通信障害用のエラーが出る', async () => {
+    server.use(
+      http.put('*/api/blocked-dates/:id', () =>
+        HttpResponse.json({ message: CONFLICT_MESSAGE, code: 'conflict' }, { status: 409 }),
+      ),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper, EDIT_TARGET.id)
+
+    await editReasonInput(wrapper).setValue(EDITED_REASON)
+    await editSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+
+    expect(editDialog(wrapper).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="blocked-dates-edit-error"]').text()).toContain(
+      CONFLICT_MESSAGE,
+    )
+    // 事前検証の不合格ではないので箇条書きは出さない
+    expect(exists(wrapper, 'blocked-dates-edit-validation-error')).toBe(false)
+    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+    expect(rows(wrapper)[0].text()).toContain(EDIT_TARGET.reason)
+  })
+
+  it('[BDL-33] 更新中は「更新中…」になり更新もキャンセルも押せない', async () => {
+    // 事前検証の応答を握って、更新中の表示を確かめられるようにする
+    let releaseValidate
+    const validateGate = new Promise((resolve) => {
+      releaseValidate = resolve
+    })
+    server.use(
+      http.post('*/api/blocked-dates/validate', async () => {
+        await validateGate
+        return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper, EDIT_TARGET.id)
+    await editReasonInput(wrapper).setValue(EDITED_REASON)
+
+    await editSubmit(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(editSubmit(wrapper).text()).toBe('更新中…')
+    expect(editSubmit(wrapper).attributes('disabled')).toBeDefined()
+    expect(editCancel(wrapper).attributes('disabled')).toBeDefined()
+    // 閉じさせない（結果の行き先が無くなるため）
+    await editCancel(wrapper).trigger('click')
+    expect(editDialog(wrapper).exists()).toBe(true)
+
+    releaseValidate()
+    await settle()
+    await settle()
+    await settle()
+
+    expect(editDialog(wrapper).exists()).toBe(false)
+  })
+
+  it('[BDL-34] 事前検証で弾かれた後に別の行を開くと理由が消え現在値が入る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper, EDIT_TARGET.id)
+
+    // 別の行の日付へ変えると重複で弾かれる
+    await fillEdit(wrapper, OTHER_TARGET.date, EDITED_REASON)
+    await editSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+    expect(editValidationMessages(wrapper)).toEqual([DUPLICATE_MESSAGE])
+
+    await editCancel(wrapper).trigger('click')
+    await openEditModal(wrapper, OTHER_TARGET.id)
+
+    expect(exists(wrapper, 'blocked-dates-edit-validation-error')).toBe(false)
+    expect(editDateInput(wrapper).element.value).toBe(OTHER_TARGET.date)
+    expect(editReasonInput(wrapper).element.value).toBe(OTHER_TARGET.reason)
+  })
+
+  it('[BDL-35] 追加と編集の事前検証の理由は互いのモーダルに漏れない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    // 編集で弾かれた直後に追加モーダルを開く
+    await openEditModal(wrapper, EDIT_TARGET.id)
+    await fillEdit(wrapper, OTHER_TARGET.date, EDITED_REASON)
+    await editSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+    expect(editValidationMessages(wrapper)).toEqual([DUPLICATE_MESSAGE])
+
+    await openAddModal(wrapper)
+    expect(exists(wrapper, 'blocked-dates-add-validation-error')).toBe(false)
+
+    // 逆順（追加で弾かれた直後に編集モーダルを開く）
+    await fillAdd(wrapper, DUPLICATE_DATE, NEW_REASON)
+    await addSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+    expect(validationMessages(wrapper)).toEqual([DUPLICATE_MESSAGE])
+
+    await addCancel(wrapper).trigger('click')
+    await openEditModal(wrapper, OTHER_TARGET.id)
+
+    expect(exists(wrapper, 'blocked-dates-edit-validation-error')).toBe(false)
+  })
+
+  it('[BDL-36] 最終ページの 1 件を絞り込みの範囲外へ動かすと 1 ページ前に戻る', async () => {
+    const { wrapper, router } = await mountView({
+      date_from: LAST_PAGE_FROM,
+      date_to: LAST_PAGE_TO,
+      offset: String(PAGE_SIZE),
+    })
+    await settle()
+    expect(rows(wrapper)).toHaveLength(1)
+
+    await openEditModal(wrapper, LAST_PAGE_TARGET.id)
+    await fillEdit(wrapper, OUT_OF_RANGE_DATE, EDITED_REASON)
+    await editSubmit(wrapper).trigger('click')
+    // 事前検証 → 更新 → 再取得 → 0 件を見て 1 ページ戻る → 再取得 の分だけ待つ
+    await settle()
     await settle()
     await settle()
     await settle()

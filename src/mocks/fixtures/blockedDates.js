@@ -26,6 +26,16 @@ const BLOCKED_DATES_PER_YEAR = [
   { monthDay: '12-25', market: US_MARKETS, reason: 'クリスマス（市場休場）' },
 ]
 
+/*
+ * 楽観ロック用の更新日時。実仕様（BlackoutDateRequest の 更新日時）と同じ
+ * 'YYYY-MM-DD HH:MM:SS' 形式の文字列で、Date には通さない。
+ * 「取得時の値をそのまま送り返して照合する合札」なので、意味のある時刻である必要はない。
+ * 値は行の日付から作る（new Date() では実行ごとに変わりテストの期待値を固定できない）。
+ * 日付ベースなら全件が一意になり、YEARS が伸びても一意のまま
+ * = 「別の行の合札を送ると競合する」状況をテストで作れる。
+ */
+const UPDATED_AT_TIME = '09:00:00'
+
 /** 日付の昇順。YEARS もひな型も昇順なので、この生成順がそのまま昇順になる */
 export const blockedDates = YEARS.flatMap((year) =>
   BLOCKED_DATES_PER_YEAR.map(({ monthDay, market, reason }) => ({
@@ -33,5 +43,6 @@ export const blockedDates = YEARS.flatMap((year) =>
     date: `${year}-${monthDay}`,
     market,
     reason,
+    updated_at: `${year}-${monthDay} ${UPDATED_AT_TIME}`,
   })),
 )

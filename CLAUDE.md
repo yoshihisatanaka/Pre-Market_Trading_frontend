@@ -107,6 +107,11 @@ bash scripts/worktree.sh doctor                          # 配備漏れ・共有
 bash scripts/worktree.sh remove feat/market-holiday-type
 ```
 
+- 上の `bash` は **Git Bash** のこと。PowerShell / cmd で `bash ...` と打つと
+  PATH の `C:\WINDOWS\system32\bash.exe`（**WSL のランチャ**）が起動し、Windows パスも
+  git も docker も噛み合わず失敗する。ターミナルのプロファイルを Git Bash にするか、
+  PowerShell から実行するなら Git Bash を明示する:
+  `& "C:\Program Files\Git\bin\bash.exe" scripts/worktree.sh <サブコマンド>`
 - 置き場所は `C:\Users\0036\worktrees\<リポジトリ名>-<ブランチ名>` 固定。
   gitignore された `.env` / `.claude/settings.local.json` は `add` が本体からコピーする
   （シンボリックリンクにしない。compose の `.:/app` マウント越しに壊れたリンクになるため）

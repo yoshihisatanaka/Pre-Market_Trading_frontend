@@ -41,12 +41,17 @@
 `.ssh` / `.aws` などの認証情報ディレクトリ、および**プロジェクト外の絶対パス**
 （例外はスクラッチパッドと `~/.claude/`）。
 
+検査にかける文字列はツールで変える。`Read` / `Glob` / `Grep` はツール入力のペイロード全体、
+`Bash` / `PowerShell` は **`command` だけ**で、さらに **git のメッセージ本文は除外**する。
+実行されないテキスト（コミットメッセージや `description`）で機密ファイル名に触れただけの
+誤検知を止めるため。`cat <機密>` や `git commit -F <機密>` は従来どおり拒否される。
+
 読ませたくないものが増えたら **`settings.json` の `deny` とフックの両方**に足す。
-フックの動作確認は手動実行できる:
+動作確認は回帰テストで行う（ケースはスクリプトの中に置いてある。`.env` を含むコマンドは
+フック自身に拒否されるので、1 行を手で流す形の確認は成立しない）:
 
 ```bash
-echo '{"tool_name":"Bash","tool_input":{"command":"cat some/secret/path"}}' \
-  | bash .claude/hooks/guard-secret-paths.sh
+bash .claude/hooks/tests/guard-secret-paths.test.sh
 ```
 
 なお設定は事故防止であって隔離ではない。**本当に読まれてはいけない値は

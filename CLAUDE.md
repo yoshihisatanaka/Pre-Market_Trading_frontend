@@ -55,16 +55,23 @@ echo '{"tool_name":"Bash","tool_input":{"command":"cat some/secret/path"}}' \
 ## サブエージェント
 
 定型のテスト作成は `.claude/agents/` のサブエージェントに委譲する（Task ツール / `/agents`）。
-どちらも**シナリオ文書が先**の規約に従い、シナリオ提示 → 承認 → 実装 → 検証 → 状態更新まで通す。
+いずれも**シナリオ文書が先**の規約に従い、シナリオ提示 → 承認 → 実装 → 検証 → 状態更新まで通す。
 **コミットはしない**（差分を見てから呼び出し側が行う）。
 
 | エージェント | 担当 | 触る範囲 |
 |---|---|---|
 | `unit-test-author` | 単体テスト（Vitest） | `docs/unit/` と `src/**/*.spec.js` |
-| `e2e-test-author` | E2E（Playwright） | `docs/e2e/` と `e2e/` |
+| `e2e-test-author` | E2E（Playwright・MSW のモックに当てる） | `docs/e2e/` と `e2e/` |
+| `real-api-e2e-author` | E2E（Playwright・実 API に当てる） | `docs/e2e/*-real-api.md` と `e2e/*.real-api.spec.js` |
 
-どちらも `src/` の製品コードは変更しない。`data-testid` の追加が必要な場合も
+いずれも `src/` の製品コードは変更しない。`data-testid` の追加が必要な場合も
 手を止めて報告する（そこで直させない）。
+
+`real-api-e2e-author` だけは前提が 3 つある。**MSW を切る（`.env` の `VITE_ENABLE_MSW=false` に
+して `docker compose up -d --force-recreate frontend`）・バックエンドの `api` を起動する・
+Docker を排他で使う。** エージェントは `.env` を読み書きできない（deny ルールと guard フック）ので、
+呼ぶ前にユーザが整えるか、提示された手順に応じる。終わったら `.env` を戻して frontend を作り直す
+（戻すまで MSW 版の E2E とブラウザでの開発が実 API 頼みになる）。
 
 ## Git ブランチ
 

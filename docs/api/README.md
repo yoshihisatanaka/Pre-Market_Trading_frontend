@@ -91,10 +91,24 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 | `Order.side` = `buy` / `sell` | `src/views/OrderListView.vue`（`sideLabels`） | 実際の売買区分の値 |
 | `Order.status` = `working` / `filled` / `canceled` / `rejected` | `src/views/OrderListView.vue`（`statusLabels`） | 実際の注文状態の値と表示名 |
 | `Order.ordered_at` = ISO 8601 (UTC) | `src/api/orders.js`（`toOrder`）, `src/utils/format.js` | 形式とタイムゾーン |
-| エラー応答 = `{ message, code }` | `src/api/client.js`（`normalizeError`） | 実際のエラー形式（現状の 422 は `{ detail: [...] }` で不一致） |
+| エラー応答 = `{ message, code }` | `src/api/client.js`（`normalizeError`） | 実 API は `{ detail: string }`（400 / 401 / 404 / 409 / 500）と `{ detail: ValidationError[] }`（422）の 2 形。どちらも読めるようにしてあるが、`message` を返すのは**まだ切り替えていないマスタのモックだけ** |
+
+## 5. 実 API に切り替え済みのマスタ
+
+| リソース | 実 API | 切り替えた版 | 残っている暫定 |
+|---|---|---|---|
+| 海外休場日マスタ | `/holidays`（一覧・事前検証・登録・論理削除） | `src/api/marketHolidays.js` | `X-User-Code` を `.env` の `VITE_USER_CODE` から付けている（`src/api/client.js` の interceptor）。SSO が入ったら差し替える |
+
+切り替えても MSW ハンドラは**消していない**。単体テストと E2E が同じ `src/mocks/handlers/` を共用しており、
+消すとテストが実 API を叩きにいくため。代わりにハンドラとフィクスチャを**実 API と同じ形**
+（日本語キー / 休場日は integer の YYYYMMDD / 降順 / エラーは `{ detail }` / 論理削除）に寄せてある。
+実 API に当てて動かすときは `.env` の `VITE_ENABLE_MSW=false`。
+
+実 API にあってフロントがまだ持たない操作: 変更（`PUT /holidays/{holiday_date}`。楽観ロックあり）、
+履歴（`GET /holidays/{holiday_date}/history`）、CSV 入出力。
 
 ## 現状
 
-取り込み済み（55 パス / 76 オペレーション / 95 スキーマ）。ただし主要レスポンスの中身が未定義など
-**ギャップが残っている**ため、フロントエンドは当面 [src/mocks/](../../src/mocks/) の仮フィクスチャで開発を進める。
+取り込み済み（65 パス / 87 オペレーション / 104 スキーマ）。海外休場日以外は主要レスポンスの中身が
+未定義など**ギャップが残っている**ため、当面 [src/mocks/](../../src/mocks/) の仮フィクスチャで開発を進める。
 詳細は [checklist.md](../../.claude/skills/api-spec-sync/checklist.md) の実測欄を参照。

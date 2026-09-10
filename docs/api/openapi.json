@@ -203,6 +203,228 @@
         }
       }
     },
+    "/orders/csv-spec": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Get Bulk Orders Csv Spec Endpoint",
+        "description": "IFA向け注文CSVヘッダー仕様照会API\n\n- CSV一括発注における全22項目の定義（列名、必須フラグ、データ型、説明、サンプル例、許容コード値一覧）を返却\n- フロントエンド画面での入力ガイド・フォーマット説明の表示や仕様確認に利用可能",
+        "operationId": "get_bulk_orders_csv_spec_endpoint_orders_csv_spec_get",
+        "responses": {
+          "200": {
+            "description": "IFA向け注文CSVのヘッダー仕様（列名・説明・例・必須等）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvHeaderSpecResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/csv-template": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Get Bulk Orders Csv Template Endpoint",
+        "description": "IFA向け注文CSV入力用テンプレートダウンロードAPI\n\n- UTF-8 with BOM 形式（Excel対応）\n- 全22列のヘッダー定義\n- 代表的な3パターン（レギュラー買付、プレマーケット買付、レギュラー売付）のサンプル行付き",
+        "operationId": "get_bulk_orders_csv_template_endpoint_orders_csv_template_get",
+        "responses": {
+          "200": {
+            "description": "IFA向け注文CSV入力用テンプレートファイル (UTF-8 BOM付き・サンプル3行付き)",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/validate-csv": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Validate Bulk Orders Csv Endpoint",
+        "description": "IFA向けCSV一括注文事前検証API（確認画面プレビュー用・DB登録なし）\n\n- CSVヘッダー（全22項目）の網羅性チェック\n- 各行の既存注文検証（validate_order_data）の実走\n- 各行のCSV内容、エラー一覧、警告一覧、概算詳細を返却\n- 1件でもエラーがある場合は all_valid=false",
+        "operationId": "validate_bulk_orders_csv_endpoint_orders_validate_csv_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "description": "操作者社員コード",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_validate_bulk_orders_csv_endpoint_orders_validate_csv_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvOrderValidateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ヘッダー不正・ファイル解析エラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/bulk-create": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Bulk Create Orders Endpoint",
+        "description": "一括発注受付API（全行トランザクション実行）\n\n- リクエスト内の全注文を一括検証\n- 1件でもエラーがあれば全件ロールバック（DB登録件数0件）\n- 全件正常時のみ d_注文 へ一括登録・自動採番",
+        "operationId": "bulk_create_orders_endpoint_orders_bulk_create_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "description": "操作者社員コード",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkOrderCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkOrderCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "注文検証エラー（全件ロールバック）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/orders/{order_id}": {
       "get": {
         "tags": [
@@ -4350,7 +4572,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "$ref": "#/components/schemas/HolidayTypeEnum"
                 },
                 {
                   "type": "null"
@@ -4461,6 +4683,16 @@
               }
             }
           },
+          "401": {
+            "description": "未認証・セッション期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "内部サーバーエラー",
             "content": {
@@ -4490,7 +4722,7 @@
           "OverseasHolidays"
         ],
         "summary": "List Holidays Endpoint",
-        "description": "海外休場日マスタ一覧検索API\n\n- 休場日の期間指定検索 (holiday_from / holiday_to)\n- 海外休場区分フィルタ (holiday_type: 0: 終日休場, 1: 短縮取引)\n- 休場日 降順 (DESC) ソート\n- 表示件数: 初期値50件 (limit, offset ページネーション対応)\n- 削除フラグ（取消区分）およびユーザー操作フラグ連携",
+        "description": "海外休場日マスタ一覧検索API\n\n- 休場日の期間指定検索 (start_date / end_date)\n- 海外休場区分フィルタ (holiday_type: 0: 終日休場, 1: 短縮取引)\n- 休場日 降順 (DESC) ソート\n- 表示件数: 初期値50件 (limit, offset ページネーション対応)\n- 削除フラグ（取消区分）およびユーザー操作フラグ連携",
         "operationId": "list_holidays_endpoint_holidays_get",
         "parameters": [
           {
@@ -4536,7 +4768,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "$ref": "#/components/schemas/HolidayTypeEnum"
                 },
                 {
                   "type": "null"
@@ -4600,6 +4832,16 @@
           },
           "400": {
             "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
             "content": {
               "application/json": {
                 "schema": {
@@ -4675,6 +4917,16 @@
           },
           "400": {
             "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
             "content": {
               "application/json": {
                 "schema": {
@@ -4777,6 +5029,16 @@
               }
             }
           },
+          "401": {
+            "description": "未認証・セッション期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "内部サーバーエラー",
             "content": {
@@ -4832,6 +5094,16 @@
           },
           "400": {
             "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
             "content": {
               "application/json": {
                 "schema": {
@@ -4934,6 +5206,16 @@
               }
             }
           },
+          "401": {
+            "description": "未認証・セッション期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "指定された海外休場日が存在しない",
             "content": {
@@ -5020,6 +5302,16 @@
           },
           "400": {
             "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
             "content": {
               "application/json": {
                 "schema": {
@@ -5120,6 +5412,16 @@
           },
           "400": {
             "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
             "content": {
               "application/json": {
                 "schema": {
@@ -9117,6 +9419,78 @@
         ],
         "title": "Body_import_stocks_csv_endpoint_stocks_import_csv_post"
       },
+      "Body_validate_bulk_orders_csv_endpoint_orders_validate_csv_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "IFA向け注文CSVファイル"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_validate_bulk_orders_csv_endpoint_orders_validate_csv_post"
+      },
+      "BulkOrderCreateRequest": {
+        "properties": {
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/OrderRequest"
+            },
+            "type": "array",
+            "title": "Orders"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orders"
+        ],
+        "title": "BulkOrderCreateRequest",
+        "description": "一括発注受付リクエストモデル"
+      },
+      "BulkOrderCreateResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "total_orders": {
+            "type": "integer",
+            "title": "Total Orders"
+          },
+          "order_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Order Ids",
+            "default": []
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "total_orders",
+          "message"
+        ],
+        "title": "BulkOrderCreateResponse",
+        "description": "一括発注受付レスポンスモデル"
+      },
       "CADetailResponse": {
         "properties": {
           "ca": {
@@ -9764,6 +10138,110 @@
         "title": "ClosingStatusResponse",
         "description": "締め状態照会/更新レスポンス"
       },
+      "CsvAllowedValue": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "label"
+        ],
+        "title": "CsvAllowedValue",
+        "description": "CSV項目の許容値・区分定義"
+      },
+      "CsvColumnSpec": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "example": {
+            "title": "Example"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition"
+          },
+          "allowed_values": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CsvAllowedValue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "required",
+          "type",
+          "description",
+          "example"
+        ],
+        "title": "CsvColumnSpec",
+        "description": "CSV列仕様モデル"
+      },
+      "CsvHeaderSpecResponse": {
+        "properties": {
+          "total_columns": {
+            "type": "integer",
+            "title": "Total Columns"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/CsvColumnSpec"
+            },
+            "type": "array",
+            "title": "Columns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_columns",
+          "columns"
+        ],
+        "title": "CsvHeaderSpecResponse",
+        "description": "CSVヘッダー仕様一覧レスポンスモデル"
+      },
       "CsvImportErrorItem": {
         "properties": {
           "line_number": {
@@ -9845,6 +10323,99 @@
           "message"
         ],
         "title": "CsvImportResponse"
+      },
+      "CsvOrderRowResult": {
+        "properties": {
+          "row_number": {
+            "type": "integer",
+            "title": "Row Number"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors",
+            "default": []
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          },
+          "details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValidationDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_number",
+          "valid",
+          "data"
+        ],
+        "title": "CsvOrderRowResult",
+        "description": "CSV一括注文の各行検証結果モデル"
+      },
+      "CsvOrderValidateResponse": {
+        "properties": {
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "valid_count": {
+            "type": "integer",
+            "title": "Valid Count"
+          },
+          "invalid_count": {
+            "type": "integer",
+            "title": "Invalid Count"
+          },
+          "all_valid": {
+            "type": "boolean",
+            "title": "All Valid"
+          },
+          "has_error": {
+            "type": "boolean",
+            "title": "Has Error"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CsvOrderRowResult"
+            },
+            "type": "array",
+            "title": "Rows",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_count",
+          "valid_count",
+          "invalid_count",
+          "all_valid",
+          "has_error"
+        ],
+        "title": "CsvOrderValidateResponse",
+        "description": "CSV一括注文事前検証APIのレスポンスモデル"
       },
       "CustomerListResponse": {
         "properties": {
@@ -10773,8 +11344,7 @@
             "description": "休場日 (YYYYMMDD)"
           },
           "休場区分": {
-            "type": "string",
-            "title": "休場区分",
+            "$ref": "#/components/schemas/HolidayTypeEnum",
             "description": "海外休場区分コード (0: 終日休場, 1: 短縮取引)"
           },
           "休場区分名": {
@@ -10945,13 +11515,12 @@
           "休場区分": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/HolidayTypeEnum"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "休場区分",
             "description": "海外休場区分コード（0: 終日休場, 1: 短縮取引）",
             "default": "0"
           },
@@ -11014,6 +11583,15 @@
         "title": "HolidayResponse",
         "description": "海外休場日単一操作レスポンス"
       },
+      "HolidayTypeEnum": {
+        "type": "string",
+        "enum": [
+          "0",
+          "1"
+        ],
+        "title": "HolidayTypeEnum",
+        "description": "海外休場区分コード"
+      },
       "HolidayValidationDetails": {
         "properties": {
           "休場日": {
@@ -11031,13 +11609,12 @@
           "休場区分": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/HolidayTypeEnum"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "休場区分",
             "description": "休場区分コード"
           },
           "休場区分名": {
@@ -12614,7 +13191,14 @@
       "ValidationDetails": {
         "properties": {
           "stock_code": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Stock Code"
           },
           "stock_name": {
@@ -12629,7 +13213,14 @@
             "title": "Stock Name"
           },
           "order_route": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Order Route"
           },
           "available_time": {
@@ -12730,13 +13321,40 @@
               }
             ],
             "title": "Currency Type"
+          },
+          "is_slice_candidate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Slice Candidate"
+          },
+          "slice_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Slice Reasons",
+            "default": []
+          },
+          "slice_distribution": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slice Distribution"
           }
         },
         "type": "object",
-        "required": [
-          "stock_code",
-          "order_route"
-        ],
         "title": "ValidationDetails",
         "description": "注文検証の詳細情報"
       },
@@ -12779,6 +13397,20 @@
           "type"
         ],
         "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "session",
+        "description": "Onegate SSO完了後に発行されるセッションCookie（HttpOnly / Secure / SameSite=Lax）。未認証・期限切れの場合は 401 を返却。"
+      },
+      "csrfToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "更新系操作（POST/PUT/DELETE）用のダブルサブミットCSRFトークンヘッダー。"
       }
     }
   },

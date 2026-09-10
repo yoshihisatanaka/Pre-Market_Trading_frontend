@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { orderListResponse } from '../fixtures/orders'
-import { marketHolidays } from '../fixtures/marketHolidays'
+import { canceledMarketHolidays, marketHolidays } from '../fixtures/marketHolidays'
 import { blockedDates } from '../fixtures/blockedDates'
 import { hardLimitSetting } from '../fixtures/hardLimits'
 
@@ -11,6 +11,11 @@ import { hardLimitSetting } from '../fixtures/hardLimits'
  *  - パスは `* + baseURL` で始める（`*` で origin の違いを吸収し、ブラウザ/Node 双方で一致させる）
  *  - バックエンドで実装された API は、このリストから削除する。
  *    未定義のリクエストは実 API へ素通しされるため、削除するだけで本物に切り替わる。
+ *
+ * 例外は海外休場日（/holidays）。実 API は実装済みだが、単体テストと E2E がこの handlers を
+ * 共用しているのでハンドラは残し、**実 API と同じ形**（日本語キー / integer の休場日 /
+ * 降順 / エラーは { detail } / 論理削除）に寄せてある。
+ * 実 API に当てて動かすときは .env の VITE_ENABLE_MSW=false にする。
  */
 
 /*
@@ -19,7 +24,8 @@ import { hardLimitSetting } from '../fixtures/hardLimits'
  * フィクスチャ自体（fixtures/marketHolidays.js）は生の形のまま触らない。
  * テスト間で持ち越さないよう、単体テストは vitest.setup.js の afterEach で resetMockState() を呼ぶ。
  */
-let marketHolidayRows = [...marketHolidays]
+// 海外休場日は論理削除なので、取消済みの行も持ったままにする（一覧では取消区分で外す）
+let marketHolidayRows = [...marketHolidays, ...canceledMarketHolidays]
 let blockedDateRows = [...blockedDates]
 // ハードリミットは 1 件しか無いので、行の配列ではなくオブジェクトの写しを持つ
 let hardLimitRow = { ...hardLimitSetting }
@@ -31,9 +37,12 @@ let hardLimitRow = { ...hardLimitSetting }
  */
 const HOLIDAY_TYPE_CODES = ['0', '1']
 
+/** 休場区分名はサーバが付けて返す項目。フロントは使わないが、形をそろえるために持つ */
+const HOLIDAY_TYPE_NAMES = { 0: '終日休場', 1: '短縮取引' }
+
 /** モックの可変状態をフィクスチャの内容に戻す */
 export function resetMockState() {
-  marketHolidayRows = [...marketHolidays]
+  marketHolidayRows = [...marketHolidays, ...canceledMarketHolidays]
   blockedDateRows = [...blockedDates]
   hardLimitRow = { ...hardLimitSetting }
 }
@@ -41,88 +50,121 @@ export function resetMockState() {
 export const handlers = [
   http.get('*/api/orders', () => HttpResponse.json(orderListResponse)),
 
-  // 海外休場日マスタ。API 仕様は未確定なので limit / offset + total の一般的な形で受ける
-  http.get('*/api/market-holidays', ({ request }) => {
+  // 海外休場日マスタの一覧。取消済み（取消区分 1）は既定で返さない
+  http.get('*/api/holidays', ({ request }) => {
     const params = new URL(request.url).searchParams
-    const dateFrom = params.get('date_from') ?? ''
-    const dateTo = params.get('date_to') ?? ''
+    const startDate = toNonNegativeInt(params.get('start_date'), 0)
+    const endDate = toNonNegativeInt(params.get('end_date'), 0)
     const holidayType = params.get('holiday_type') ?? ''
+    const includeDeleted = params.get('include_deleted') === 'true'
     const limit = toNonNegativeInt(params.get('limit'), 50)
     const offset = toNonNegativeInt(params.get('offset'), 0)
 
-    // 'YYYY-MM-DD' は固定長なので、文字列比較がそのまま日付の大小になる
-    const filtered = marketHolidayRows.filter(
-      (holiday) =>
-        (!dateFrom || holiday.date >= dateFrom) &&
-        (!dateTo || holiday.date <= dateTo) &&
-        (!holidayType || holiday.holiday_type === holidayType),
-    )
+    // 休場日は YYYYMMDD の integer なので、数値の大小がそのまま日付の大小になる。
+    // 並べ替えは実 API と同じく読み出し側で行う（登録・再有効化のたびに並びを気にしなくてよい）
+    const filtered = marketHolidayRows
+      .filter(
+        (holiday) =>
+          (includeDeleted || holiday.取消区分 === 0) &&
+          (!startDate || holiday.休場日 >= startDate) &&
+          (!endDate || holiday.休場日 <= endDate) &&
+          (!holidayType || holiday.休場区分 === holidayType),
+      )
+      .sort((a, b) => b.休場日 - a.休場日)
 
     return HttpResponse.json({
-      items: filtered.slice(offset, offset + limit),
       // total は絞り込み後・ページ切り出し前の件数
       total: filtered.length,
+      limit,
+      offset,
+      holidays: filtered.slice(offset, offset + limit),
     })
   }),
 
-  // 海外休場日の新規追加。エラーは client.js が ApiError へ正規化できる形（message / code）で返す
-  http.post('*/api/market-holidays', async ({ request }) => {
-    const body = await request.json().catch(() => null)
-    const date = typeof body?.date === 'string' ? body.date.trim() : ''
-    const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
-    const holidayType = typeof body?.holiday_type === 'string' ? body.holiday_type : ''
+  /*
+   * 登録前の事前検証。実 API と同じく、不合格も「200 + valid: false」で返す
+   * （通信エラーと区別できるようにするため）。
+   * 取消済みの日付は登録できるが、再有効化になることを warnings で伝える。
+   */
+  http.post('*/api/holidays/validate', async ({ request }) => {
+    const { holidayDate, holidayType, reason } = await readHolidayRequest(request)
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return HttpResponse.json(
-        { message: '日付は YYYY-MM-DD 形式で入力してください。', code: 'invalid_date' },
-        { status: 400 },
-      )
-    }
-    if (!HOLIDAY_TYPE_CODES.includes(holidayType)) {
-      return HttpResponse.json(
-        { message: '休場区分を選択してください。', code: 'invalid_holiday_type' },
-        { status: 400 },
-      )
-    }
-    if (!reason) {
-      return HttpResponse.json(
-        { message: '休場理由を入力してください。', code: 'invalid_reason' },
-        { status: 400 },
-      )
-    }
-    if (marketHolidayRows.some((holiday) => holiday.date === date)) {
-      return HttpResponse.json(
-        { message: 'その日付の海外休場日はすでに登録されています。', code: 'duplicate_date' },
-        { status: 409 },
-      )
+    const errors = []
+    if (!isHolidayDate(holidayDate)) errors.push('休場日は YYYYMMDD 形式で入力してください')
+    if (!HOLIDAY_TYPE_CODES.includes(holidayType)) errors.push('休場区分を選択してください')
+    if (!reason) errors.push('休場理由を入力してください')
+
+    const existing = marketHolidayRows.find((holiday) => holiday.休場日 === holidayDate)
+    if (existing && existing.取消区分 === 0) {
+      errors.push(`休場日 ${holidayDate} は既に登録されています`)
     }
 
-    const created = {
-      id: `mhd_${date.replaceAll('-', '')}`,
-      date,
-      reason,
-      holiday_type: holidayType,
-    }
-    // 一覧は日付の昇順を前提にしているので、追加後も並びを保つ
-    marketHolidayRows = [...marketHolidayRows, created].sort((a, b) => a.date.localeCompare(b.date))
+    const warnings =
+      existing && existing.取消区分 === 1
+        ? ['この日付は以前登録され削除されています。再度有効にします']
+        : []
 
-    return HttpResponse.json(created, { status: 201 })
+    return HttpResponse.json({
+      valid: errors.length === 0,
+      errors,
+      warnings,
+      details:
+        errors.length === 0 ? toValidationDetails({ holidayDate, holidayType, reason }) : null,
+    })
   }),
 
-  // 海外休場日の削除。成功時は本文を返さない（204）
-  http.delete('*/api/market-holidays/:id', ({ params }) => {
-    const id = String(params.id)
+  // 海外休場日の新規登録。取消済みの同じ日付があれば再有効化する
+  http.post('*/api/holidays', async ({ request }) => {
+    const { holidayDate, holidayType, reason } = await readHolidayRequest(request)
 
-    if (!marketHolidayRows.some((holiday) => holiday.id === id)) {
-      return HttpResponse.json(
-        { message: '対象の海外休場日が見つかりません。', code: 'not_found' },
-        { status: 404 },
-      )
+    if (!isHolidayDate(holidayDate)) {
+      return holidayError(400, '休場日は YYYYMMDD 形式で入力してください')
+    }
+    if (!HOLIDAY_TYPE_CODES.includes(holidayType)) {
+      return holidayError(400, '休場区分を選択してください')
+    }
+    if (!reason) {
+      return holidayError(400, '休場理由を入力してください')
     }
 
-    marketHolidayRows = marketHolidayRows.filter((holiday) => holiday.id !== id)
+    const existing = marketHolidayRows.find((holiday) => holiday.休場日 === holidayDate)
+    if (existing && existing.取消区分 === 0) {
+      return holidayError(400, `休場日 ${holidayDate} は既に登録されています`)
+    }
 
-    return new HttpResponse(null, { status: 204 })
+    const created = toMockHolidayItem({ holidayDate, holidayType, reason })
+    // 取消済みの行があれば置き換える（＝再有効化。行は増えない）
+    marketHolidayRows = existing
+      ? marketHolidayRows.map((holiday) => (holiday.休場日 === holidayDate ? created : holiday))
+      : [...marketHolidayRows, created]
+
+    return HttpResponse.json(
+      { success: true, holiday: created, message: '海外休場日を登録しました' },
+      { status: 201 },
+    )
+  }),
+
+  // 海外休場日の論理削除。行は残したまま取消区分を 1 にする
+  http.delete('*/api/holidays/:holidayDate', ({ params }) => {
+    const holidayDate = Number(params.holidayDate)
+    const target = marketHolidayRows.find(
+      (holiday) => holiday.休場日 === holidayDate && holiday.取消区分 === 0,
+    )
+
+    if (!target) {
+      return holidayError(404, `指定された海外休場日が存在しません: ${params.holidayDate}`)
+    }
+
+    const deleted = { ...target, 取消区分: 1, 取消日時: '2026-09-10T10:00:00', 取消者: '702' }
+    marketHolidayRows = marketHolidayRows.map((holiday) =>
+      holiday.休場日 === holidayDate ? deleted : holiday,
+    )
+
+    return HttpResponse.json({
+      success: true,
+      holiday: deleted,
+      message: '海外休場日を削除しました',
+    })
   }),
 
   // 受注不可日マスタ。API 仕様は未確定なので limit / offset + total の一般的な形で受ける
@@ -381,4 +423,63 @@ function nowTimestamp() {
 function toNonNegativeInt(value, fallback) {
   const parsed = Number.parseInt(value ?? '', 10)
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback
+}
+
+/* ここから海外休場日（/holidays）のモック用ヘルパ。実 API の形に合わせるためだけのもの */
+
+/** HolidayRequest（日本語キー）を読み取る。型が違うものは「未入力」に寄せる */
+async function readHolidayRequest(request) {
+  const body = await request.json().catch(() => null)
+
+  return {
+    holidayDate: typeof body?.休場日 === 'number' ? body.休場日 : 0,
+    holidayType: typeof body?.休場区分 === 'string' ? body.休場区分 : '',
+    reason: typeof body?.休場理由 === 'string' ? body.休場理由.trim() : '',
+  }
+}
+
+/** YYYYMMDD として妥当か（実在日かどうかまで見る） */
+function isHolidayDate(value) {
+  if (!Number.isInteger(value) || value < 19000101 || value > 29991231) return false
+
+  const year = Math.floor(value / 10000)
+  const month = Math.floor(value / 100) % 100
+  const day = value % 100
+  const date = new Date(Date.UTC(year, month - 1, day))
+
+  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
+/** 実 API の ErrorResponse（{ detail: string }）と同じ形で返す */
+function holidayError(status, detail) {
+  return HttpResponse.json({ detail }, { status })
+}
+
+/** HolidayItem を組み立てる（登録・再有効化の応答用） */
+function toMockHolidayItem({ holidayDate, holidayType, reason }) {
+  return {
+    休場日: holidayDate,
+    休場区分: holidayType,
+    休場区分名: HOLIDAY_TYPE_NAMES[holidayType] ?? null,
+    休場理由: reason,
+    取消区分: 0,
+    // 画面からの登録なので 1（システム連携ではない）
+    ユーザー操作フラグ: 1,
+    作成日時: '2026-09-10T10:00:00',
+    作成者: '702',
+    更新日時: '2026-09-10T10:00:00',
+    更新者: '702',
+    取消日時: null,
+    取消者: null,
+  }
+}
+
+/** HolidayValidationDetails（事前検証が返す入力の解析結果） */
+function toValidationDetails({ holidayDate, holidayType, reason }) {
+  return {
+    休場日: holidayDate,
+    休場区分: holidayType,
+    休場区分名: HOLIDAY_TYPE_NAMES[holidayType] ?? null,
+    休場理由: reason,
+  }
 }

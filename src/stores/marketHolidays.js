@@ -1,5 +1,10 @@
 import { defineStore } from 'pinia'
-import { createMarketHoliday, deleteMarketHoliday, fetchMarketHolidays } from '@/api/marketHolidays'
+import {
+  createMarketHoliday,
+  deleteMarketHoliday,
+  fetchMarketHolidays,
+  validateMarketHoliday,
+} from '@/api/marketHolidays'
 import { useCrudList } from '@/composables/useCrudList'
 
 /** 一覧 1 ページあたりの表示件数 */
@@ -12,8 +17,11 @@ export const MARKET_HOLIDAYS_PAGE_SIZE = 50
  * 取得・競合防止・登録・削除の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
  * 1 件の形は src/api/marketHolidays.js の JSDoc を参照。
  *
- * この API には登録前の事前検証が無いので validateItem は渡さない
- * （そのため validationErrors は常に空配列で、画面側では使わない）。
+ * 登録は事前検証（POST /holidays/validate）を通してから行う。日付の実在性・重複・
+ * 取消済み日付の再有効化はサーバだけが判断できるので、その理由と警告を
+ * validationErrors / validationWarnings で受け取る。
+ *
+ * 行ごとの編集はまだ持たないので updateItem は渡さない。
  */
 export const useMarketHolidaysStore = defineStore('marketHolidays', () =>
   useCrudList({
@@ -21,6 +29,7 @@ export const useMarketHolidaysStore = defineStore('marketHolidays', () =>
     filterKeys: ['dateFrom', 'dateTo', 'holidayType'],
     fetchPage: fetchMarketHolidays,
     createItem: createMarketHoliday,
+    validateItem: validateMarketHoliday,
     deleteItem: deleteMarketHoliday,
   }),
 )

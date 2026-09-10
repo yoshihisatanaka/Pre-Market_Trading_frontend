@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -32,6 +32,8 @@ const {
   isEmpty,
   creating,
   createError,
+  validationErrors,
+  validationWarnings,
   deleting,
   deleteError,
 } = storeToRefs(store)
@@ -67,9 +69,11 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
  * 新規追加。ヘッダの「新規追加」からモーダルを開く形にする
  * （URL は変えない。一覧の単方向フローに触らない）。
  *
- * エラーは 2 種類あり、出し先を分ける。
- *   入力の不備   … FormField の error（項目の直下）
- *   サーバの拒否 … store.createError をモーダル内の BaseAlert（重複日付など）
+ * 出し先は 4 つに分かれる。
+ *   入力の不備      … FormField の error（項目の直下）
+ *   事前検証の不合格 … store.validationErrors をモーダル内の BaseAlert（重複日付など）
+ *   事前検証の警告   … store.validationWarnings を同じくモーダル内に（取消済み日付の再有効化）
+ *   通信・サーバ障害 … store.createError を同じくモーダル内に
  */
 const isAddOpen = ref(false)
 const addDate = ref('')
@@ -98,6 +102,16 @@ function closeAdd() {
   isAddOpen.value = false
 }
 
+/*
+ * 事前検証の警告が出ているあいだは、送信は「承知して続行」の意味になる。
+ * 文言も変えて、同じボタンを押しても結果が変わることを見せる。
+ */
+const hasAddWarnings = computed(() => validationWarnings.value.length > 0)
+const addSubmitLabel = computed(() => (hasAddWarnings.value ? '続行' : '追加'))
+
+// 日付を変えたら前回の検証結果は当てにならない。承知済みの警告も持ち越さない
+watch(addDate, () => store.clearCreateError())
+
 async function submitAdd() {
   addErrors.value = {
     date: addDate.value ? '' : '日付を入力してください。',
@@ -109,8 +123,10 @@ async function submitAdd() {
     date: addDate.value,
     reason: addReason.value.trim(),
     holidayType: addHolidayType.value,
+    // 警告を出したうえでもう一度押されたので、承知したものとして登録に進む
+    acknowledgedWarnings: hasAddWarnings.value,
   })
-  // 失敗時はモーダルを開いたままにして、入力を直せるようにする（理由は createError に出る）
+  // 失敗時と確認待ちのときはモーダルを開いたままにして、理由を読ませる
   if (!created) return
 
   isAddOpen.value = false
@@ -244,8 +260,11 @@ async function submitDelete() {
       :open="isAddOpen"
       title="海外休場日 新規追加"
       testid-prefix="market-holidays"
+      :submit-label="addSubmitLabel"
       :pending="creating"
       :error="createError"
+      :validation-errors="validationErrors"
+      :validation-warnings="validationWarnings"
       @close="closeAdd"
       @submit="submitAdd"
     >
@@ -263,7 +282,7 @@ async function submitDelete() {
           v-bind="field"
           v-model="addReason"
           placeholder="例: 独立記念日"
-          maxlength="100"
+          maxlength="45"
           data-testid="market-holidays-add-reason"
         />
       </FormField>

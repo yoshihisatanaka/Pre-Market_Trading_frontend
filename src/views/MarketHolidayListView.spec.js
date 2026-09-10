@@ -5,7 +5,7 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { marketHolidays } from '@/mocks/fixtures/marketHolidays'
+import { canceledMarketHolidays, marketHolidays } from '@/mocks/fixtures/marketHolidays'
 import { MARKET_HOLIDAYS_PAGE_SIZE } from '@/stores/marketHolidays'
 import {
   MARKET_HOLIDAY_TYPE_DEFAULT,
@@ -20,9 +20,20 @@ import MarketHolidayListView from './MarketHolidayListView.vue'
  */
 const PATH = '/masters/market-holidays'
 
+/*
+ * フィクスチャはバックエンドの生の形（日本語キー / 休場日は YYYYMMDD の integer）なので、
+ * 期待値を作るときはここで 'YYYY-MM-DD' に直す。
+ */
+const toIsoDate = (holidayDate) => {
+  const digits = String(holidayDate)
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
+}
+const toId = (holiday) => String(holiday.休場日)
+
 // 期待値はフィクスチャと表示件数から導く（56 / 50 を直接書かない）
 const PAGE_SIZE = MARKET_HOLIDAYS_PAGE_SIZE
 const TOTAL = marketHolidays.length
+// フィクスチャは実 API と同じ休場日の降順なので、この並びがそのまま 1 ページ目になる
 const firstPage = marketHolidays.slice(0, PAGE_SIZE)
 const secondPage = marketHolidays.slice(PAGE_SIZE, PAGE_SIZE * 2)
 
@@ -31,13 +42,13 @@ const ODD_OFFSET = 7
 const oddPage = marketHolidays.slice(ODD_OFFSET, ODD_OFFSET + PAGE_SIZE)
 
 // 絞り込みはフィクスチャ先頭の年をそのまま使う（年もハードコードしない）
-const YEAR = marketHolidays[0].date.slice(0, 4)
+const YEAR = String(marketHolidays[0].休場日).slice(0, 4)
 const DATE_FROM = `${YEAR}-01-01`
 const DATE_TO = `${YEAR}-12-31`
-const inYear = marketHolidays.filter((holiday) => holiday.date.startsWith(YEAR))
+const inYear = marketHolidays.filter((holiday) => String(holiday.休場日).startsWith(YEAR))
 
 // 登録に使う「フィクスチャに無い日付」もフィクスチャから導く（既存日付と衝突したら別日になる）
-const existingDates = new Set(marketHolidays.map((holiday) => holiday.date))
+const existingDates = new Set(marketHolidays.map((holiday) => toIsoDate(holiday.休場日)))
 const NEW_DATE = (() => {
   for (let day = 1; day <= 28; day += 1) {
     const date = `${YEAR}-06-${String(day).padStart(2, '0')}`
@@ -52,9 +63,7 @@ const NEW_REASON = 'テスト休場日'
  * （「短縮取引が 7 件」といった内訳を直接書かない）。
  */
 const SHORTENED = MARKET_HOLIDAY_TYPE_OPTIONS[1]
-const shortenedHolidays = marketHolidays.filter(
-  (holiday) => holiday.holiday_type === SHORTENED.value,
-)
+const shortenedHolidays = marketHolidays.filter((holiday) => holiday.休場区分 === SHORTENED.value)
 // 選択肢に無いコード（?holiday_type=9 のような外から来た値の再現用）
 const UNKNOWN_TYPE = (() => {
   for (const code of ['9', '8', '7']) {
@@ -63,21 +72,28 @@ const UNKNOWN_TYPE = (() => {
   throw new Error('選択肢に無いコードが見つからなかった')
 })()
 
-// 既定ハンドラは日付が重複すると 409 を返すので、既存日付をそのまま重複の再現に使う
-const DUPLICATE_DATE = marketHolidays[0].date
-const DUPLICATE_MESSAGE = 'その日付の海外休場日はすでに登録されています。'
+// 既定ハンドラの事前検証は既存の日付を弾くので、既存日付をそのまま重複の再現に使う
+const DUPLICATE_DATE = toIsoDate(marketHolidays[0].休場日)
+const DUPLICATE_MESSAGE = `休場日 ${marketHolidays[0].休場日} は既に登録されています`
+
+// 取消済み（論理削除）の日付。事前検証が「再有効化になる」と警告を返す
+const CANCELED_DATE = toIsoDate(canceledMarketHolidays[0].休場日)
+const REACTIVATION_WARNING = 'この日付は以前登録され削除されています。再度有効にします'
 
 // 削除の対象もフィクスチャから導く（id / 日付を直接書かない）
 const DELETE_TARGET = marketHolidays[0]
-const NOT_FOUND_MESSAGE = '対象の海外休場日が見つかりません。'
+const DELETE_TARGET_ID = toId(DELETE_TARGET)
+const DELETE_TARGET_DATE = toIsoDate(DELETE_TARGET.休場日)
+const NOT_FOUND_MESSAGE = `指定された海外休場日が存在しません: ${DELETE_TARGET_ID}`
 
 /*
  * 「最終ページが 1 件だけ」を作るための絞り込み。
- * 先頭から PAGE_SIZE + 1 件目までを範囲にすると 2 ページ目がちょうど 1 件になる。
+ * 一覧は降順なので、末尾から数えて PAGE_SIZE + 1 件目までを範囲にすると
+ * 2 ページ目がちょうど 1 件になる。
  */
-const LAST_PAGE_FROM = marketHolidays[0].date
-const LAST_PAGE_TO = marketHolidays[PAGE_SIZE].date
 const LAST_PAGE_TARGET = marketHolidays[PAGE_SIZE]
+const LAST_PAGE_FROM = toIsoDate(LAST_PAGE_TARGET.休場日)
+const LAST_PAGE_TO = toIsoDate(marketHolidays[0].休場日)
 
 const Page = { render: () => h('div') }
 
@@ -144,15 +160,19 @@ const pageButton = (wrapper, page) =>
 
 const errorHandler = (options) =>
   http.get(
-    '*/api/market-holidays',
-    () => HttpResponse.json({ message: 'サーバーでエラーが発生しました。' }, { status: 500 }),
+    '*/api/holidays',
+    () => HttpResponse.json({ detail: 'サーバーでエラーが発生しました。' }, { status: 500 }),
     options,
   )
 const emptyHandler = (options) =>
-  http.get('*/api/market-holidays', () => HttpResponse.json({ items: [], total: 0 }), options)
+  http.get(
+    '*/api/holidays',
+    () => HttpResponse.json({ total: 0, limit: PAGE_SIZE, offset: 0, holidays: [] }),
+    options,
+  )
 const deleteNotFoundHandler = () =>
-  http.delete('*/api/market-holidays/:id', () =>
-    HttpResponse.json({ message: NOT_FOUND_MESSAGE, code: 'not_found' }, { status: 404 }),
+  http.delete('*/api/holidays/:holidayDate', () =>
+    HttpResponse.json({ detail: NOT_FOUND_MESSAGE }, { status: 404 }),
   )
 
 const deleteButton = (wrapper, id) => wrapper.find(`[data-testid="market-holidays-delete-${id}"]`)
@@ -185,8 +205,8 @@ describe('MarketHolidayListView', () => {
     expect(rangeText(wrapper)).toBe(`${TOTAL} 件中 1–${PAGE_SIZE} 件`)
 
     const firstRow = rows(wrapper)[0].text()
-    expect(firstRow).toContain(firstPage[0].date)
-    expect(firstRow).toContain(firstPage[0].reason)
+    expect(firstRow).toContain(toIsoDate(firstPage[0].休場日))
+    expect(firstRow).toContain(firstPage[0].休場理由)
   })
 
   it('[MHL-03] API がエラーを返したときはメッセージと再試行ボタンを表示する', async () => {
@@ -235,7 +255,7 @@ describe('MarketHolidayListView', () => {
 
     // 端数の位置から表示件数分（ここでは残り全件）を出す。1 ページ目には戻さない
     expect(rows(wrapper)).toHaveLength(oddPage.length)
-    expect(rows(wrapper)[0].text()).toContain(oddPage[0].date)
+    expect(rows(wrapper)[0].text()).toContain(toIsoDate(oddPage[0].休場日))
     // ページャーの件数ラベルは offset ではなく現在ページ（= 1 ページ目）から導かれるため、
     // 実際に見えている行（8 件目以降）とは一致しない。これは許容する仕様
     expect(rangeText(wrapper)).toBe(`${TOTAL} 件中 1–${PAGE_SIZE} 件`)
@@ -348,7 +368,7 @@ describe('MarketHolidayListView', () => {
     expect(countText(wrapper)).toBe(`${TOTAL + 1} 件`)
   })
 
-  it('[MHL-16] 日付が重複したときはモーダル内にエラーが出て成功メッセージは出ない', async () => {
+  it('[MHL-16] 日付が重複したときはモーダル内に事前検証の理由が出て成功メッセージは出ない', async () => {
     const { wrapper } = await mountView()
     await settle()
     await wrapper.find('[data-testid="market-holidays-add"]').trigger('click')
@@ -358,10 +378,12 @@ describe('MarketHolidayListView', () => {
     await settle()
 
     expect(exists(wrapper, 'market-holidays-add-form')).toBe(true)
-    expect(wrapper.find('[data-testid="market-holidays-add-error"]').text()).toContain(
+    expect(wrapper.find('[data-testid="market-holidays-add-validation-error"]').text()).toContain(
       DUPLICATE_MESSAGE,
     )
-    // サーバの拒否は項目のエラーには混ぜない
+    // 事前検証の不合格は通信エラーではないので、サーバ障害の枠には出さない
+    expect(exists(wrapper, 'market-holidays-add-error')).toBe(false)
+    // サーバの拒否は項目のエラーにも混ぜない
     expect(fieldError(wrapper, addDateInput(wrapper))).toBe('')
     expect(exists(wrapper, 'market-holidays-notice')).toBe(false)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
@@ -374,12 +396,12 @@ describe('MarketHolidayListView', () => {
     await fillAdd(wrapper, DUPLICATE_DATE, NEW_REASON)
     await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
     await settle()
-    expect(exists(wrapper, 'market-holidays-add-error')).toBe(true)
+    expect(exists(wrapper, 'market-holidays-add-validation-error')).toBe(true)
 
     await wrapper.find('[data-testid="market-holidays-add-cancel"]').trigger('click')
     await wrapper.find('[data-testid="market-holidays-add"]').trigger('click')
 
-    expect(exists(wrapper, 'market-holidays-add-error')).toBe(false)
+    expect(exists(wrapper, 'market-holidays-add-validation-error')).toBe(false)
     expect(addDateInput(wrapper).element.value).toBe('')
     expect(addReasonInput(wrapper).element.value).toBe('')
   })
@@ -389,16 +411,16 @@ describe('MarketHolidayListView', () => {
     await settle()
     expect(deleteDialog(wrapper).exists()).toBe(false)
 
-    await openDelete(wrapper, DELETE_TARGET.id)
+    await openDelete(wrapper, DELETE_TARGET_ID)
 
     expect(deleteDialog(wrapper).exists()).toBe(true)
-    expect(deleteDialog(wrapper).text()).toContain(DELETE_TARGET.date)
+    expect(deleteDialog(wrapper).text()).toContain(DELETE_TARGET_DATE)
   })
 
   it('[MHL-19] 「キャンセル」で確認モーダルが閉じ件数は変わらない', async () => {
     const { wrapper } = await mountView()
     await settle()
-    await openDelete(wrapper, DELETE_TARGET.id)
+    await openDelete(wrapper, DELETE_TARGET_ID)
 
     await wrapper.find('[data-testid="market-holidays-delete-cancel"]').trigger('click')
     await settle()
@@ -413,7 +435,7 @@ describe('MarketHolidayListView', () => {
   it('[MHL-20] 削除が成功するとモーダルが閉じ成功メッセージと減った件数が出る', async () => {
     const { wrapper } = await mountView()
     await settle()
-    await openDelete(wrapper, DELETE_TARGET.id)
+    await openDelete(wrapper, DELETE_TARGET_ID)
 
     await confirmDelete(wrapper)
     // DELETE → 一覧の再取得 → 再描画 の 2 往復を待つ
@@ -423,16 +445,16 @@ describe('MarketHolidayListView', () => {
     expect(deleteDialog(wrapper).exists()).toBe(false)
     const notice = wrapper.find('[data-testid="market-holidays-notice"]')
     expect(notice.exists()).toBe(true)
-    expect(notice.text()).toContain(DELETE_TARGET.date)
+    expect(notice.text()).toContain(DELETE_TARGET_DATE)
     expect(countText(wrapper)).toBe(`${TOTAL - 1} 件`)
-    expect(deleteButton(wrapper, DELETE_TARGET.id).exists()).toBe(false)
+    expect(deleteButton(wrapper, DELETE_TARGET_ID).exists()).toBe(false)
   })
 
   it('[MHL-21] 削除が 404 のときモーダル内にエラーが出て成功メッセージは出ない', async () => {
     server.use(deleteNotFoundHandler())
     const { wrapper } = await mountView()
     await settle()
-    await openDelete(wrapper, DELETE_TARGET.id)
+    await openDelete(wrapper, DELETE_TARGET_ID)
 
     await confirmDelete(wrapper)
     await settle()
@@ -454,7 +476,7 @@ describe('MarketHolidayListView', () => {
     await settle()
     expect(rows(wrapper)).toHaveLength(1)
 
-    await openDelete(wrapper, LAST_PAGE_TARGET.id)
+    await openDelete(wrapper, toId(LAST_PAGE_TARGET))
     await confirmDelete(wrapper)
     // DELETE → 再取得 → 0 件を見て 1 ページ戻る → 再取得 の分だけ待つ
     await settle()
@@ -477,7 +499,7 @@ describe('MarketHolidayListView', () => {
     expect(headers(wrapper)).toContain('休場区分')
     // 期待値はフィクスチャの生の値を変換して作る（表示名を並べ書きしない）
     expect(typeCells(wrapper)).toEqual(
-      firstPage.map((holiday) => formatMarketHolidayType(holiday.holiday_type)),
+      firstPage.map((holiday) => formatMarketHolidayType(holiday.休場区分)),
     )
     // 生のコードがそのまま出ていないこと
     expect(typeCells(wrapper)).not.toContain(SHORTENED.value)
@@ -552,5 +574,47 @@ describe('MarketHolidayListView', () => {
 
     expect(rows(wrapper)).toHaveLength(shortenedHolidays.length + 1)
     expect(rows(wrapper).map((row) => row.text())).toContainEqual(expect.stringContaining(NEW_DATE))
+  })
+
+  it('[MHL-29] 取消済みの日付を追加すると警告が出てモーダルは開いたままになる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, CANCELED_DATE, NEW_REASON)
+    await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
+    await settle()
+
+    expect(exists(wrapper, 'market-holidays-add-form')).toBe(true)
+    expect(wrapper.find('[data-testid="market-holidays-add-validation-warning"]').text()).toContain(
+      REACTIVATION_WARNING,
+    )
+    // 警告はエラーではないので、理由の枠にも障害の枠にも出さない
+    expect(exists(wrapper, 'market-holidays-add-validation-error')).toBe(false)
+    expect(exists(wrapper, 'market-holidays-add-error')).toBe(false)
+    // まだ登録していない
+    expect(countText(wrapper)).toBe(`${TOTAL} 件`)
+    expect(exists(wrapper, 'market-holidays-notice')).toBe(false)
+    // 押し直せば進められることが分かる文言になっている
+    expect(wrapper.find('[data-testid="market-holidays-add-submit"]').text()).toBe('続行')
+  })
+
+  it('[MHL-30] 警告のあと「続行」を押すと登録され成功メッセージが出る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, CANCELED_DATE, NEW_REASON)
+    await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
+    await settle()
+
+    await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
+    // POST → 一覧の再取得 → 再描画 の 2 往復を待つ
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'market-holidays-add-form')).toBe(false)
+    expect(wrapper.find('[data-testid="market-holidays-notice"]').text()).toContain(CANCELED_DATE)
+    // 取消済みの行が有効に戻るので、一覧の件数は 1 件増える
+    expect(countText(wrapper)).toBe(`${TOTAL + 1} 件`)
   })
 })

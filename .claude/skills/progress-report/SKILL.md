@@ -1,15 +1,19 @@
 ---
 name: progress-report
 description: 画面 × 機能ごとの 実装 / UnitTest / E2E(MSW) / E2E(実API) の進捗を docs/progress.md に markdown の表として出力する。ルート定義・サイドメニュー・docs/e2e・docs/unit・check:scenarios・git log を突き合わせ、完了日は前回の表から引き継ぐ。「進捗を出して」「進捗一覧を更新して」「どこまで終わってるか一覧にして」という依頼で使う。実装やテストの追加は行わない。
-allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(git log *), Bash(git status *), Bash(bash scripts/worktree.sh list), Bash(docker compose ps *), Bash(docker compose up -d frontend), Bash(docker compose run --rm frontend npm run check:scenarios), mcp__playwright
+allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(git log *), Bash(git status *), Bash(bash scripts/worktree.sh list), Bash(docker compose ps *), Bash(docker compose up -d frontend), Bash(docker compose run --rm frontend npm run check:scenarios), Bash(docker image inspect us-stock-order-chrome-devtools-mcp *), Bash(docker build -t us-stock-order-chrome-devtools-mcp docker/chrome-devtools-mcp), mcp__chrome-devtools
 ---
 
 # 進捗一覧の出力
 
-「何がどこまで終わっているか」の材料は 5 か所に分散している。`src/router/index.js` のルート、
-`src/components/layout/navigation.js` の 15 項目、`docs/e2e/` と `docs/unit/` のシナリオ表、
-`e2e/*.real-api.spec.js` の有無、`git log`。このスキルはそれを突き合わせて
-**画面 × 機能の 1 枚の表**にし、`docs/progress.md` に書く。
+「何がどこまで終わっているか」の材料は分散している。公開モックの画面と機能ブロック、
+`src/router/index.js` のルート、`src/components/layout/navigation.js`、`docs/e2e/` と
+`docs/unit/` のシナリオ表、`e2e/*.real-api.spec.js` の有無、`git log`。
+このスキルはそれを突き合わせて**画面 × 機能の 1 枚の表**にし、`docs/progress.md` に書く。
+
+**分母の正はモック。** 作るべきものの一覧を持っているのはモックであって、`navigation.js` や
+`router/index.js` は「そのうちどこまで作ったか」でしかない。食い違ったらモックを正とする
+（詳細は手順 3）。
 
 **進捗を記録するだけで、実装もテストの追加もしない。** 材料を都合よく書き換えないこと
 （判定対象のファイルを触ると、そのターンの表が自己申告になる）。
@@ -27,12 +31,13 @@ git から再計算しない（実行のたびに日付が揺れるのを防ぐ�
 
 | 選択肢 | やること |
 |---|---|
-| 全画面を巡回 | 公開モック `https://uspreorder-vmbhej3k.manus.space/` のサイドバー全項目を順に開き、snapshot から画面と機能ブロック（ボタン・タブ・フォーム）を拾う。**機能名の分解までモックを正とする** |
+| 全画面を巡回 | 公開モック `https://uspreorder-vmbhej3k.manus.space/` のサイドバー全項目を順に開き、snapshot から画面と機能ブロック（ボタン・タブ・フォーム）を拾う。**画面一覧も機能名の分解もモックを正とする** |
 | サイドバーだけ | base URL を 1 回開いて snapshot し、画面一覧（分母）だけ更新する |
-| 見ない（既定） | `navigation.js` の 15 項目と `docs/mock/` の受領済みモックを分母にする。Docker も Playwright も使わない |
+| 見ない（既定） | 前回の `docs/progress.md` の行と `docs/mock/` の受領済みモックを分母にする。Docker も MCP も使わない |
 
-「全画面を巡回」「サイドバーだけ」を選ばれたときだけ Playwright MCP を使う。使う前に、
-CLAUDE.md の「Docker は排他利用」に従って現所有者を確かめる。
+「全画面を巡回」「サイドバーだけ」を選ばれたときだけ **Chrome DevTools MCP**
+（`mcp__chrome-devtools__*`）を使う。使う前に、CLAUDE.md の「Docker は排他利用」に従って
+現所有者を確かめる。
 
 ```bash
 bash scripts/worktree.sh list
@@ -41,28 +46,49 @@ bash scripts/worktree.sh list
 - 最終行の `Docker(frontend)` の所有者が**自分以外なら手を止めて報告する**。`up -d` を奪わない
   （他 worktree の dev サーバが黙って別ブランチのコードを配信し始める）
 - 所有者が自分、または誰も持っていなければ `docker compose up -d frontend` を実行する。
-  MCP コンテナはネットワーク `us-stock-order-frontend_default` に参加するので、
-  frontend が落ちていると起動できない
-- スクリーンショットの `filename` は**指定しない**。ホスト側パスとして解決され `ENOENT` になる
+  MCP コンテナは固定ネットワーク `us-stock-order-frontend_default` に参加するので、
+  そのネットワークが無い（= frontend が一度も起動していない）と MCP サーバ自体が起動しない
+- ローカルイメージが要る。無ければ 1 回だけ焼く（**ビルドは数分かかる**）
+
+  ```bash
+  docker image inspect us-stock-order-chrome-devtools-mcp >/dev/null 2>&1 \
+    || docker build -t us-stock-order-chrome-devtools-mcp docker/chrome-devtools-mcp
+  ```
+
+- 画面を開くのは `mcp__chrome-devtools__navigate_page`、構造を読むのは
+  `mcp__chrome-devtools__take_snapshot`。クリック対象は snapshot が返す uid で指す
+- `mcp__chrome-devtools__take_screenshot` の `filePath` は**指定しない**。MCP コンテナに
+  出力ディレクトリをマウントしていないので、ホストのパスは解決できない。
+  省略すれば画像が応答に返る
+- Playwright MCP と違い **セッションログのファイルは残らない**。何を見て判断したかの根拠は
+  snapshot / screenshot の応答そのものなので、**巡回した画面名を報告に列挙する**
 - 見に行くのは**外部の公開モック**であって `http://frontend:5173` ではない。コンテナから外へ出られない
-  場合は**手を止めて報告する**。別のツールで取りに行かない（何を見て判断したかが
-  `.playwright-mcp/session-<時刻>/session.md` に残らなくなる）
+  場合は**手を止めて報告する**。別のツールで取りに行かない
 
 ### 3. 画面一覧（分母）を確定する
 
-- `src/components/layout/navigation.js` の 3 セクション 15 項目を、表の `## 顧客` /
-  `## 注文` / `## マスタメンテ` にそのまま対応させる（並びも変えない）
-- 画面を持たない区分（共通レイアウト / UI 部品 / マスタ共通部品 / 共通ロジック /
-  API クライアント層 / MSW モック基盤）は `## 共通基盤` に置く。
-  **画面列にはその区分名を書く**（例: 画面 `共通レイアウト`、機能名 `サイドバー`）
-- サイドメニューに無い画面（`/` 注文一覧、`/dev/ui-catalog`）は
-  `## 対象外の画面（集計に含めない）` に置く。**状態は載せるが集計の分母から外す**
-  （注文一覧は実仕様が来たら差し替える前提の参考実装、UI カタログは開発用ページで、
-  どちらも納品対象ではない）。この 2 行を集計に混ぜると進捗率が実態より高く出る
+**モックにある画面が分母。** モックを見た回はその一覧を、見ていない回は前回の
+`docs/progress.md` と `docs/mock/` の受領済みモックを分母にする。
 
-機能名の分解は、モックを見たならモックの機能ブロックを正とする。見ていないなら
-`docs/e2e/` / `docs/unit/` のシナリオ内容と view / store の実装から起こす
-（マスタ系なら `一覧・検索` / `新規追加` / `編集` / `削除` が既定の並び）。
+- **モックにあって開発環境に無いものは、行として立てる。** `navigation.js` に項目が無い、
+  `router/index.js` にルートが無い、view が無い — いずれも「未着手」であって「対象外」ではない。
+  実装を `❌` にし、何が足りないかを補足列に書く（例: `navigation.js に項目なし・ルート未定義`）
+- **モックに無いものは表に載せない。** 開発環境側にだけ存在する画面・機能（参考実装、
+  開発用ページ、実験的な view）は行を作らない。分母にも分子にも入れない
+- セクション（`## 顧客` / `## 注文` / `## マスタメンテ`）はモックのサイドバーの区分と並びに合わせる。
+  `navigation.js` と食い違ったらモック側を採る
+- 画面を持たない区分（共通レイアウト / UI 部品 / マスタ共通部品 / 共通ロジック /
+  API クライアント層 / MSW モック基盤）だけは例外で、モックに画面として現れなくても
+  `## 共通基盤` に置く。モック画面を成立させる土台なので進捗として数える。
+  **画面列にはその区分名を書く**（例: 画面 `共通レイアウト`、機能名 `サイドバー`）
+- `## 対象外の画面（集計に含めない）` は、**モックに無いが記録として残したい行**のためだけに使う。
+  現在の対象は `/`（注文一覧・実仕様が来たら差し替える参考実装）と `/dev/ui-catalog`
+  （開発用ページ）。状態は載せるが**集計の分母には入れない**。原則はモックに無い行を
+  載せないことなので、**この節を増やさない**
+
+機能名の分解も、モックを見たならモックの機能ブロック（ボタン・タブ・フォーム）を正とする。
+見ていないなら前回の表を引き継ぎ、`docs/e2e/` / `docs/unit/` のシナリオ内容と view / store の
+実装で補う（マスタ系なら `一覧・検索` / `新規追加` / `編集` / `削除` が既定の並び）。
 
 ### 4. 4 軸の判定材料を集める
 
@@ -129,7 +155,7 @@ bash scripts/worktree.sh list
 |---|---|---|
 | 1 | 生成結果 | 行数、`✅` / `🟡` / `❌` / `—` の内訳、完了した行の数 |
 | 2 | 前回からの差分 | `git diff --stat docs/progress.md`。判定が上がった行・下がった行を一覧にする。初回ならその旨 |
-| 3 | 判定できなかった行 | 材料が足りず `❌` にした行と、その理由（シナリオ文書が無い / ルートが無い / モックが未受領） |
+| 3 | 判定できなかった行 | 材料が足りず `❌` にした行と、その理由（シナリオ文書が無い / ルートが無い / `navigation.js` に項目が無い） |
 | 4 | 進行中の作業 | 他 worktree・未コミット差分で仕掛かり中の範囲 |
 | 5 | 次の手順 | 最も安く埋まる軸を 1〜3 件だけ挙げる（例: シナリオ文書はあるがテストが無い行）。**実装の提案はしない** |
 
@@ -143,4 +169,6 @@ bash scripts/worktree.sh list
 - **材料の無い軸を推測で埋めない。** `❌` か `—` にし、根拠を補足列に書く
 - `docs/api/openapi.json` を触らない
 - Docker の `down` / `down -v` / `restart` をしない（`down -v` は共有の `node_modules` ボリュームを消す）
-- Playwright MCP を、他 worktree が Docker を持っている間に起動しない
+- Chrome DevTools MCP を、他 worktree が Docker を持っている間に起動しない
+- **モックに無い画面・機能の行を新たに足さない。** 分母が実装側に引きずられ、
+  「作るべきものの総量」が見えなくなる

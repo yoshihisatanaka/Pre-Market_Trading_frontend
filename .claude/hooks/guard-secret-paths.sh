@@ -29,7 +29,10 @@ deny() {
 payload=$(printf '%s' "$input" | sed 's/\.env\.example//g')
 
 # --- 1. 機密ファイル名・拡張子 ---------------------------------------------
-if printf '%s' "$payload" | grep -Eq '\.env([^.a-zA-Z0-9]|$)|\.env\.[a-zA-Z]'; then
+# 直前が識別子の文字（英数字・アンダースコア）なら、ファイル名ではなくプロパティ
+# アクセスとみなして見逃す（`import.meta.env` / `process.env`）。ファイル名として
+# 現れるときは、必ず先頭・空白・引用符・`/`・`\`・`=` のいずれかが直前に来る。
+if printf '%s' "$payload" | grep -Eq '(^|[^A-Za-z0-9_])\.env([^.A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])\.env\.[A-Za-z]'; then
   deny '環境変数ファイル（.env 系）へのアクセスは禁止されている。'
 fi
 

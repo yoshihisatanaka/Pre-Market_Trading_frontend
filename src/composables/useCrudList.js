@@ -15,7 +15,8 @@ import { useAsync } from '@/composables/useAsync'
  *   filterKeys?: string[],
  *   fetchPage: (params: object) => Promise<{ items: object[], total: number }>,
  *   createItem: (payload: object) => Promise<object>,
- *   validateItem?: (payload: object) => Promise<{ valid: boolean, errors: string[] }>,
+ *   validateItem?: (payload: object) =>
+ *     Promise<{ valid: boolean, errors: string[], warnings?: string[] }>,
  *   updateItem?: (payload: object) => Promise<object>,
  *   deleteItem: (id: string) => Promise<unknown>,
  * }} options
@@ -26,15 +27,20 @@ import { useAsync } from '@/composables/useAsync'
  *   throw は通信・サーバ障害として createError / updateError に入り、
  *   事前検証の不合格とは扱いが違う。
  *
+ *   warnings は「登録できるが、そのまま通してよいか確かめたいこと」（例: 取消済みの日付を
+ *   再有効化する）。登録側だけが扱い、1 回目は登録せず validationWarnings に入れて戻る。
+ *   利用者が承知して押し直すとき、画面は payload に `acknowledgedWarnings: true` を足す。
+ *   更新側は warnings を扱わない（warnings を返す事前検証を持つ編集画面がまだ無い）。
+ *
  *   updateItem は行ごとの編集を持つ一覧だけ渡す。渡さない一覧には更新系の名前を公開しない。
  * @returns {object}
  *   items / total / limit / offset / filterKeys の各 ref /
  *   loading / error / isEmpty / load / reload /
- *   creating / createError / validationErrors / create / clearCreateError /
+ *   creating / createError / validationErrors / validationWarnings / create / clearCreateError /
  *   deleting / deleteError / remove / clearDeleteError。
  *   updateItem を渡した場合はさらに
  *   updating / updateError / updateValidationErrors / update / clearUpdateError。
- *   validationErrors は validateItem を渡さない場合は常に空配列。
+ *   validationErrors / validationWarnings は validateItem を渡さない場合は常に空配列。
  *   1 件の形は各 src/api/*.js の JSDoc を参照。
  */
 export function useCrudList({
@@ -100,6 +106,16 @@ export function useCrudList({
     if (validateItem) {
       const validation = await validateItem(payload)
       if (!validation.valid) return { valid: false, errors: validation.errors }
+
+      /*
+       * 警告付きの合格。登録はできるが、黙って通すと利用者の意図と違う結果になりうるので
+       * （取消済みの日付の再有効化など）、1 回目は登録せずに理由だけ返す。
+       * 承知したうえで押し直すと payload に acknowledgedWarnings が付いて、ここを素通りする。
+       */
+      const warnings = validation.warnings ?? []
+      if (warnings.length > 0 && !payload.acknowledgedWarnings) {
+        return { valid: true, warnings }
+      }
     }
 
     const created = await createItem(payload)
@@ -115,15 +131,21 @@ export function useCrudList({
   // サーバの事前検証が返した理由（通信自体は成功しているので createError とは別に持つ）
   const validationErrors = ref([])
 
+  // 事前検証が返した警告。登録できない理由ではないので errors とは別に持つ
+  const validationWarnings = ref([])
+
   /**
    * 1 件登録し、成功したら今の条件のまま一覧を読み直す。
    *
-   * @param {object} payload api 層の createItem / validateItem へそのまま渡る
-   * @returns {Promise<object|null>} 登録された 1 件。失敗時は null
-   *   （通信・サーバエラーは createError、事前検証で弾かれた理由は validationErrors に入る）
+   * @param {object} payload api 層の createItem / validateItem へそのまま渡る。
+   *   警告を承知して押し直すときは `acknowledgedWarnings: true` を含める
+   * @returns {Promise<object|null>} 登録された 1 件。登録しなかったときは null
+   *   （通信・サーバエラーは createError、事前検証で弾かれた理由は validationErrors、
+   *   確認待ちの警告は validationWarnings に入る）
    */
   async function create(payload) {
     validationErrors.value = []
+    validationWarnings.value = []
 
     const result = await executeCreate(payload)
     // 通信・サーバエラー（理由は createError）
@@ -131,6 +153,12 @@ export function useCrudList({
 
     if (!result.valid) {
       validationErrors.value = result.errors
+      return null
+    }
+
+    // 警告付きの合格。まだ登録していないので、確認してもらうために理由を残して戻る
+    if (!result.created) {
+      validationWarnings.value = result.warnings
       return null
     }
 
@@ -142,6 +170,7 @@ export function useCrudList({
   function clearCreateError() {
     createError.value = null
     validationErrors.value = []
+    validationWarnings.value = []
   }
 
   /*
@@ -240,6 +269,7 @@ export function useCrudList({
     creating,
     createError,
     validationErrors,
+    validationWarnings,
     create,
     clearCreateError,
     // 更新は updateItem を渡した一覧だけが持つ。渡していない一覧で store.update() を

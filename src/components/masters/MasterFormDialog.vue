@@ -12,9 +12,14 @@
  *   通信・サーバ障害 … error をここで 1 行出す
  *   （楽観的ロックの競合 409 も「通信・サーバ障害」と同じ枠に出す。呼び出し側は分岐しない）
  *
+ * 事前検証の警告（validationWarnings）はエラーではない。「このまま進めてよいか」を
+ * 確かめるためのものなので、注意として出したうえで送信ボタンは押せるままにする。
+ * 押し直しで進めるかどうかは呼び出し側が決める。
+ *
  * 出す data-testid（testidPrefix が 'blocked-dates'、action が既定の 'add' なら
  * blocked-dates-add-form など。編集で開くときは action="edit" にして -edit- に振り替える）:
- *   {prefix}-{action}-form / {prefix}-{action}-validation-error / {prefix}-{action}-error
+ *   {prefix}-{action}-form / {prefix}-{action}-validation-error
+ *   / {prefix}-{action}-validation-warning / {prefix}-{action}-error
  *   / {prefix}-{action}-cancel / {prefix}-{action}-submit
  *
  * @see ConfirmDeleteDialog 削除確認のダイアログ
@@ -62,6 +67,11 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  /** サーバの事前検証が返した警告。登録は通るので、送信ボタンは押せるままにする */
+  validationWarnings: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits(['close', 'submit'])
@@ -85,8 +95,19 @@ const pendingLabel = computed(() => `${props.submitLabel}中…`)
         variant="error"
         :data-testid="`${testidPrefix}-${action}-validation-error`"
       >
-        <ul class="master-form-dialog__validation-errors">
+        <ul class="master-form-dialog__message-list">
           <li v-for="message in validationErrors" :key="message">{{ message }}</li>
+        </ul>
+      </BaseAlert>
+
+      <!-- 事前検証の警告。押し直せば進めるので、文言も含めて呼び出し側が続けかたを決める -->
+      <BaseAlert
+        v-if="validationWarnings.length > 0"
+        variant="warning"
+        :data-testid="`${testidPrefix}-${action}-validation-warning`"
+      >
+        <ul class="master-form-dialog__message-list">
+          <li v-for="message in validationWarnings" :key="message">{{ message }}</li>
         </ul>
       </BaseAlert>
 
@@ -125,8 +146,8 @@ const pendingLabel = computed(() => `${props.submitLabel}中…`)
   gap: var(--space-4);
 }
 
-/* 事前検証の理由。1 件のときも箇条書きの体裁が浮かないよう、記号と字下げは付けない */
-.master-form-dialog__validation-errors {
+/* 事前検証の理由と警告。1 件のときも箇条書きの体裁が浮かないよう、記号と字下げは付けない */
+.master-form-dialog__message-list {
   margin: 0;
   padding: 0;
   list-style: none;

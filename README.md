@@ -128,6 +128,48 @@ explorer .\.playwright-mcp
 - スクリーンショットは**ファイル名を指定させない**こと。ホスト側パスとして解決され失敗する
 - **E2E テストの代替ではない。** 合否判定は `docker compose run --rm e2e npx playwright test`
 
+## Chrome DevTools MCP（性能・ネットワークの調査）
+
+Playwright MCP が「画面を見る」担当なのに対し、こちらは **DevTools でしか取れない情報**を取る担当。
+パフォーマンストレース（Core Web Vitals・ロングタスク）、ネットワークの詳細（リクエスト単位のヘッダ・
+タイミング）、CPU / ネットワークのスロットリング、コンソールエラーの収集など。
+設定は同じく `.mcp.json`（コミット済み）。
+
+> **ホストに Node.js は無いので `npx chrome-devtools-mcp` は動かない。**
+> `command` に `npx` を指定すると起動に失敗し、Claude Code からは
+> `CONNECTION_CLOSED` に見える。MCP サーバと Chrome をまとめて焼いた
+> ローカルイメージ（[docker/chrome-devtools-mcp/Dockerfile](docker/chrome-devtools-mcp/Dockerfile)）を使う。
+
+### 実行方法
+
+```powershell
+# 1. 初回だけ（および Chrome / サーバを上げ直したいとき）: イメージをビルドする
+docker build -t us-stock-order-chrome-devtools-mcp docker/chrome-devtools-mcp
+
+# 2. 毎回: frontend を起動しておく（落ちていると MCP から接続できない）
+docker compose up -d frontend
+```
+
+3. Claude Code に **「注文一覧の初期表示のパフォーマンストレースを取って」** のように頼む。
+   接続状態は `/mcp` で確認する
+
+イメージが無い状態で Claude Code を起動すると、`docker run` が失敗して
+やはり `CONNECTION_CLOSED` になる。`/mcp` が繋がらないときは、まず上の 1. を実行する。
+
+### 注意
+
+- 接続先は Playwright MCP と同じく **`http://frontend:5173`**（`localhost:5173` では届かない）
+- headless の Chrome をコンテナ内で毎回新規に起動する（`--isolated`。プロファイルは使い捨て）。
+  ホストの Chrome のログイン状態やタブは見えない
+- コンテナ内では root で動くため `--no-sandbox` を付けている。**調査用途に限る**
+- Google への使用統計送信は `--no-usage-statistics` で切ってある
+- `--no-page-id-routing` を付けてあるので、ツール呼び出しに `pageId` は要らない
+  （上流の既定は ON で、毎回 `list_pages` で ID を調べる必要がある）。複数ページを
+  並行して操作したくなったらこの引数を外す
+- **Docker は排他利用。** 稼働中の frontend を共有するので、Playwright MCP と同様に
+  「1 worktree だけ」で使う（[CLAUDE.md](CLAUDE.md) の「Docker は排他利用」）
+- **E2E テストの代替ではない。** 合否判定は `docker compose run --rm e2e npx playwright test`
+
 ## テスト
 
 このリポジトリのテストは **「シナリオ文書が先、テストコードは後」** という運用になっている。

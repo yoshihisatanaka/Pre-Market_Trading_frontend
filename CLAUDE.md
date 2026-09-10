@@ -169,6 +169,7 @@ worktree を分けても **compose プロジェクト・コンテナ名・ポー
 | `up -d frontend` / `restart` / `down` | **1 worktree だけ** | 同じプロジェクト名なのでコンテナが**作り直され、マウント元が奪われる**。他 worktree の dev サーバが黙って別ブランチのコードを配信し始める |
 | `run --rm e2e npx playwright test` | **1 worktree だけ** | `depends_on: frontend` で frontend を起動・再作成する。接続先 `http://frontend:5173` は共有ネットワーク上の 1 個 |
 | Playwright MCP（`mcp__playwright__*`） | **1 worktree だけ** | 固定ネットワーク `us-stock-order-frontend_default` の稼働中 frontend を見る |
+| Chrome DevTools MCP（`mcp__chrome-devtools__*`） | **1 worktree だけ** | 同上。ローカルイメージ `us-stock-order-chrome-devtools-mcp` が要る（`docker build -t us-stock-order-chrome-devtools-mcp docker/chrome-devtools-mcp`） |
 | ブラウザで `http://localhost:5173` | **1 worktree だけ** | 5173 は 1 個しか無い |
 | `down -v` | **禁止** | 共有の `node_modules` ボリュームを消し、全 worktree が動かなくなる |
 

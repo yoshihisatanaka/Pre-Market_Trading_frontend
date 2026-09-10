@@ -16,6 +16,25 @@
         "/output",
         "--save-session"
       ]
+    },
+    "chrome-devtools": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--init",
+        "--network",
+        "us-stock-order-frontend_default",
+        "us-stock-order-chrome-devtools-mcp",
+        "--headless",
+        "--isolated",
+        "--chromeArg=--no-sandbox",
+        "--viewport",
+        "1280x720",
+        "--no-page-id-routing",
+        "--no-usage-statistics"
+      ]
     }
   }
 }

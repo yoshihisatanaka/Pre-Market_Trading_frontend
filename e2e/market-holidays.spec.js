@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test'
-import { marketHolidays } from '../src/mocks/fixtures/marketHolidays'
+import { canceledMarketHolidays, marketHolidays } from '../src/mocks/fixtures/marketHolidays'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/market-holidays.md（タイトル先頭の [MH-xx] が対応 ID）
 // ページ位置と検索条件は URL クエリを正とするため、URL と画面の同期をここで守る。
-// mockApi() は固定の body を返すだけで limit / offset / date_from / holiday_type を解釈しない。
+// mockApi() は固定の body を返すだけで limit / offset / start_date / holiday_type を解釈しない。
 // ページングと絞り込み（MH-02 / 03 / 04 / 07 / 18 / 19 / 20 / 21）は
 // クエリを実際に処理する既定ハンドラで検証する。
 
@@ -14,11 +14,21 @@ const PATH = '/masters/market-holidays'
 // ストアは import.meta.env を辿る api/client.js に依存しており Playwright からは import できない。
 const PAGE_SIZE = 50
 
+/*
+ * フィクスチャはバックエンドの生の形（日本語キー / 休場日は YYYYMMDD の integer）。
+ * 画面に出るのは 'YYYY-MM-DD' なので、期待値はここで直す。
+ */
+const toIsoDate = (holidayDate) => {
+  const digits = String(holidayDate)
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
+}
+const toId = (holiday) => String(holiday.休場日)
+
+// フィクスチャは実 API と同じ休場日の降順。先頭が最新で、末尾が最古
 const secondPage = marketHolidays.slice(PAGE_SIZE)
-const year2025 = marketHolidays.filter((h) => h.date >= '2025-01-01' && h.date <= '2025-12-31')
+const year2025 = marketHolidays.filter((h) => h.休場日 >= 20250101 && h.休場日 <= 20251231)
 
 const firstHoliday = marketHolidays[0]
-const lastHoliday = marketHolidays[marketHolidays.length - 1]
 
 // 休場区分。画面に出る表示名で書く（コード '0' / '1' は利用者に見えない）
 const TYPE_ALL_LABEL = '-- すべて --'
@@ -26,16 +36,23 @@ const TYPE_FULL_LABEL = '終日休場'
 const TYPE_SHORT_LABEL = '短縮取引'
 
 // 短縮取引の行はフィクスチャから数える（件数を直書きするとフィクスチャ変更で崩れる）
-const shortenedHolidays = marketHolidays.filter((holiday) => holiday.holiday_type === '1')
-const fullDayHoliday = marketHolidays.find((holiday) => holiday.holiday_type === '0')
+const shortenedHolidays = marketHolidays.filter((holiday) => holiday.休場区分 === '1')
+const fullDayHoliday = marketHolidays.find((holiday) => holiday.休場区分 === '0')
 
-// フィクスチャに無い日付。年を直書きすると YEARS が伸びたとき重複エラーになるので最終年の翌年から作る
-const NEW_DATE = `${Number(lastHoliday.date.slice(0, 4)) + 1}-01-01`
+// フィクスチャに無い日付。年を直書きすると YEARS が伸びたとき重複エラーになるので最新年の翌年から作る
+const NEW_DATE = `${Number(String(firstHoliday.休場日).slice(0, 4)) + 1}-01-01`
 const NEW_REASON = '独立記念日（テスト）'
 
-// 末尾から PAGE_SIZE + 1 件目の日付。これを date_from にすると既定ハンドラの絞り込みが
-// ちょうど 51 件になり、offset=50 の 2 ページ目が「最後の 1 件」だけになる
-const LAST_PAGE_FROM = marketHolidays[marketHolidays.length - (PAGE_SIZE + 1)].date
+// 取消済み（論理削除）の日付。事前検証が「再有効化になる」と警告を返す
+const CANCELED_DATE = toIsoDate(canceledMarketHolidays[0].休場日)
+const REACTIVATION_WARNING = 'この日付は以前登録され削除されています。再度有効にします'
+
+/*
+ * 新しい順に PAGE_SIZE + 1 件目。これを date_from にすると既定ハンドラの絞り込みが
+ * ちょうど 51 件になり、offset=50 の 2 ページ目が「最後の 1 件」だけになる
+ */
+const LAST_PAGE_TARGET = marketHolidays[PAGE_SIZE]
+const LAST_PAGE_FROM = toIsoDate(LAST_PAGE_TARGET.休場日)
 
 /** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function rowsOf(page) {
@@ -52,9 +69,9 @@ function deleteDialogOf(page) {
   return page.getByRole('dialog', { name: '削除確認' })
 }
 
-/** 行の削除ボタン。testid は行の id を含む */
+/** 行の削除ボタン。testid は行の id（= 休場日の 'YYYYMMDD'）を含む */
 function deleteButtonOf(page, holiday) {
-  return page.getByTestId(`market-holidays-delete-${holiday.id}`)
+  return page.getByTestId(`market-holidays-delete-${toId(holiday)}`)
 }
 
 test.describe('海外休場日マスタ一覧', () => {
@@ -77,8 +94,8 @@ test.describe('海外休場日マスタ一覧', () => {
 
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(PAGE_SIZE)
-    await expect(rows.first()).toContainText(marketHolidays[0].date)
-    await expect(rows.first()).toContainText(marketHolidays[0].reason)
+    await expect(rows.first()).toContainText(toIsoDate(marketHolidays[0].休場日))
+    await expect(rows.first()).toContainText(marketHolidays[0].休場理由)
   })
 
   test('[MH-02] 「次のページ」を押すと 2 ページ目が表示される', async ({ page }) => {
@@ -92,8 +109,8 @@ test.describe('海外休場日マスタ一覧', () => {
 
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(secondPage.length)
-    await expect(rows.first()).toContainText(secondPage[0].date)
-    await expect(rows.first()).toContainText(secondPage[0].reason)
+    await expect(rows.first()).toContainText(toIsoDate(secondPage[0].休場日))
+    await expect(rows.first()).toContainText(secondPage[0].休場理由)
 
     await expect(pagination.getByTestId('pagination-range')).toHaveText(
       `${marketHolidays.length} 件中 ${PAGE_SIZE + 1}–${marketHolidays.length} 件`,
@@ -116,7 +133,7 @@ test.describe('海外休場日マスタ一覧', () => {
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(year2025.length)
     for (const holiday of year2025) {
-      await expect(rows.filter({ hasText: holiday.date })).toHaveCount(1)
+      await expect(rows.filter({ hasText: toIsoDate(holiday.休場日) })).toHaveCount(1)
     }
   })
 
@@ -142,9 +159,9 @@ test.describe('海外休場日マスタ一覧', () => {
   test('[MH-05] API がエラーを返したときエラー表示と再試行ボタンが出る', async ({ page }) => {
     await mockApi(page, [
       {
-        path: '*/api/market-holidays',
+        path: '*/api/holidays',
         status: 500,
-        body: { message: 'サーバーでエラーが発生しました。' },
+        body: { detail: 'サーバーでエラーが発生しました。' },
       },
     ])
     await page.goto(PATH)
@@ -160,7 +177,9 @@ test.describe('海外休場日マスタ一覧', () => {
   })
 
   test('[MH-06] 休場日が 0 件のとき空状態が表示される', async ({ page }) => {
-    await mockApi(page, [{ path: '*/api/market-holidays', body: { items: [], total: 0 } }])
+    await mockApi(page, [
+      { path: '*/api/holidays', body: { total: 0, limit: PAGE_SIZE, offset: 0, holidays: [] } },
+    ])
     await page.goto(PATH)
 
     await expect(page.getByTestId('market-holidays-empty')).toBeVisible()
@@ -176,7 +195,7 @@ test.describe('海外休場日マスタ一覧', () => {
 
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(secondPage.length)
-    await expect(rows.first()).toContainText(secondPage[0].date)
+    await expect(rows.first()).toContainText(toIsoDate(secondPage[0].休場日))
 
     await expect(
       page.getByTestId('market-holidays-pagination').getByRole('button', { name: '2', exact: true }),
@@ -242,13 +261,15 @@ test.describe('海外休場日マスタ 新規追加', () => {
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
     await page.getByTestId('market-holidays-add').click()
-    await page.getByTestId('market-holidays-add-date').fill(firstHoliday.date)
+    await page.getByTestId('market-holidays-add-date').fill(toIsoDate(firstHoliday.休場日))
     await page.getByTestId('market-holidays-add-reason').fill(NEW_REASON)
     await page.getByTestId('market-holidays-add-submit').click()
 
-    const error = page.getByTestId('market-holidays-add-error')
+    // 重複はサーバの事前検証が返すので、通信・サーバ障害とは別の枠に出る
+    const error = page.getByTestId('market-holidays-add-validation-error')
     await expect(error).toBeVisible()
-    await expect(error).toContainText('その日付の海外休場日はすでに登録されています。')
+    await expect(error).toContainText(`休場日 ${firstHoliday.休場日} は既に登録されています`)
+    await expect(page.getByTestId('market-holidays-add-error')).toHaveCount(0)
 
     await expect(addDialogOf(page)).toBeVisible()
     await expect(page.getByTestId('market-holidays-count')).toHaveText(
@@ -274,8 +295,8 @@ test.describe('海外休場日マスタ 新規追加', () => {
     await expect(addDialogOf(page)).toBeHidden()
 
     /*
-     * 追加した日付はフィクスチャの最終年の翌年なので日付昇順では末尾に来る。
-     * 1 ページ目（50 行）には現れないため、休場区分で絞り込んで追加行を見る。
+     * 一覧は降順なので、追加した日付（最新年の翌年）は 1 ページ目の先頭に来る。
+     * それでも休場区分で絞り込んで見るのは、区分が保たれていることを一覧側でも確かめるため。
      * ページを開き直すとモックの可変状態が初期化されるので、遷移せず検索する。
      */
     await page.getByTestId('market-holidays-holiday-type').selectOption({ label: TYPE_SHORT_LABEL })
@@ -293,6 +314,51 @@ test.describe('海外休場日マスタ 新規追加', () => {
     await expect(addedRow).toContainText(NEW_REASON)
     await expect(addedRow).toContainText(TYPE_SHORT_LABEL)
   })
+
+  test('[MH-22] 取消済みの日付を追加すると警告が出て登録されない', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('market-holidays-add').click()
+    await page.getByTestId('market-holidays-add-date').fill(CANCELED_DATE)
+    await page.getByTestId('market-holidays-add-reason').fill(NEW_REASON)
+    await page.getByTestId('market-holidays-add-submit').click()
+
+    const warning = page.getByTestId('market-holidays-add-validation-warning')
+    await expect(warning).toBeVisible()
+    await expect(warning).toContainText(REACTIVATION_WARNING)
+    // 警告は登録できない理由ではないので、エラーの枠には出ない
+    await expect(page.getByTestId('market-holidays-add-validation-error')).toHaveCount(0)
+
+    // まだ登録されていない。押し直せば進められることがボタンの文言で分かる
+    await expect(addDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('market-holidays-add-submit')).toHaveText('続行')
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${marketHolidays.length} 件`,
+    )
+  })
+
+  test('[MH-23] 警告のあと「続行」を押すと再有効化されて一覧に出る', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('market-holidays-add').click()
+    await page.getByTestId('market-holidays-add-date').fill(CANCELED_DATE)
+    await page.getByTestId('market-holidays-add-reason').fill(NEW_REASON)
+    await page.getByTestId('market-holidays-add-submit').click()
+    await expect(page.getByTestId('market-holidays-add-validation-warning')).toBeVisible()
+
+    await page.getByTestId('market-holidays-add-submit').click()
+
+    await expect(addDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('market-holidays-notice')).toHaveText(
+      `${CANCELED_DATE} を追加しました。`,
+    )
+    await expect(page.getByTestId('market-holidays-count')).toHaveText(
+      `${marketHolidays.length + 1} 件`,
+    )
+    await expect(rowsOf(page).filter({ hasText: CANCELED_DATE })).toHaveCount(1)
+  })
 })
 
 // 削除（MH-12〜16）。既定ハンドラは DELETE を可変配列に反映するので、件数が減るところまで見る。
@@ -305,7 +371,7 @@ test.describe('海外休場日マスタ 削除', () => {
 
     const dialog = deleteDialogOf(page)
     await expect(dialog).toBeVisible()
-    await expect(dialog).toContainText(firstHoliday.date)
+    await expect(dialog).toContainText(toIsoDate(firstHoliday.休場日))
     await expect(dialog).toContainText('を削除しますか？')
     await expect(dialog).toContainText('この操作は元に戻せません。')
   })
@@ -322,7 +388,7 @@ test.describe('海外休場日マスタ 削除', () => {
       `${marketHolidays.length} 件`,
     )
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
-    await expect(rowsOf(page).filter({ hasText: firstHoliday.date })).toHaveCount(1)
+    await expect(rowsOf(page).filter({ hasText: toIsoDate(firstHoliday.休場日) })).toHaveCount(1)
   })
 
   test('[MH-14] 「削除する」を押すと件数が 1 減りその行が消える', async ({ page }) => {
@@ -336,21 +402,21 @@ test.describe('海外休場日マスタ 削除', () => {
 
     const notice = page.getByTestId('market-holidays-notice')
     await expect(notice).toBeVisible()
-    await expect(notice).toHaveText(`${firstHoliday.date} を削除しました。`)
+    await expect(notice).toHaveText(`${toIsoDate(firstHoliday.休場日)} を削除しました。`)
 
     await expect(page.getByTestId('market-holidays-count')).toHaveText(
       `${marketHolidays.length - 1} 件`,
     )
-    await expect(rowsOf(page).filter({ hasText: firstHoliday.date })).toHaveCount(0)
+    await expect(rowsOf(page).filter({ hasText: toIsoDate(firstHoliday.休場日) })).toHaveCount(0)
   })
 
   test('[MH-15] 削除に失敗するとモーダルは開いたままエラーが出る', async ({ page }) => {
     await mockApi(page, [
       {
         method: 'delete',
-        path: '*/api/market-holidays/:id',
+        path: '*/api/holidays/:holidayDate',
         status: 500,
-        body: { message: 'サーバーでエラーが発生しました。' },
+        body: { detail: 'サーバーでエラーが発生しました。' },
       },
     ])
     await page.goto(PATH)
@@ -367,7 +433,7 @@ test.describe('海外休場日マスタ 削除', () => {
     await expect(page.getByTestId('market-holidays-count')).toHaveText(
       `${marketHolidays.length} 件`,
     )
-    await expect(rowsOf(page).filter({ hasText: firstHoliday.date })).toHaveCount(1)
+    await expect(rowsOf(page).filter({ hasText: toIsoDate(firstHoliday.休場日) })).toHaveCount(1)
   })
 
   test('[MH-16] 最終ページの最後の 1 件を消すと 1 ページ前に戻る', async ({ page }) => {
@@ -376,9 +442,9 @@ test.describe('海外休場日マスタ 削除', () => {
 
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(1)
-    await expect(rows.first()).toContainText(lastHoliday.date)
+    await expect(rows.first()).toContainText(toIsoDate(LAST_PAGE_TARGET.休場日))
 
-    await deleteButtonOf(page, lastHoliday).click()
+    await deleteButtonOf(page, LAST_PAGE_TARGET).click()
     await page.getByTestId('market-holidays-delete-submit').click()
 
     // 戻る直前に空状態が一瞬描画されるため、最終状態だけを web-first assertion で待つ
@@ -406,12 +472,12 @@ test.describe('海外休場日マスタ 休場区分', () => {
     ])
 
     // 休場区分のセルは削除ボタンのセルより左（列の並びと同じ位置関係）
-    const fullDayRow = rowsOf(page).filter({ hasText: fullDayHoliday.date })
+    const fullDayRow = rowsOf(page).filter({ hasText: toIsoDate(fullDayHoliday.休場日) })
     await expect(fullDayRow.getByRole('cell').nth(2)).toHaveText(TYPE_FULL_LABEL)
     await expect(fullDayRow.getByRole('cell').nth(3).getByRole('button', { name: '削除' })).toBeVisible()
 
     // ボクシングデーだけ短縮取引
-    const shortenedRow = rowsOf(page).filter({ hasText: shortenedHolidays[0].date })
+    const shortenedRow = rowsOf(page).filter({ hasText: toIsoDate(shortenedHolidays[0].休場日) })
     await expect(shortenedRow.getByRole('cell').nth(2)).toHaveText(TYPE_SHORT_LABEL)
   })
 
@@ -432,7 +498,7 @@ test.describe('海外休場日マスタ 休場区分', () => {
     await expect(rows.filter({ hasText: TYPE_SHORT_LABEL })).toHaveCount(shortenedHolidays.length)
     await expect(rows.filter({ hasText: TYPE_FULL_LABEL })).toHaveCount(0)
     for (const holiday of shortenedHolidays) {
-      await expect(rows.filter({ hasText: holiday.date })).toHaveCount(1)
+      await expect(rows.filter({ hasText: toIsoDate(holiday.休場日) })).toHaveCount(1)
     }
   })
 

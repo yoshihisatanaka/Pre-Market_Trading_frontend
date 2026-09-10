@@ -4,6 +4,10 @@
 - 画面: `src/views/MarketHolidayListView.vue`
 - テスト: `e2e/market-holidays.spec.js`
 
+**当てる先は MSW のモック。** 期待値にフィクスチャの中身（56 件・特定の日付）を使うので、
+実 API に当てると通らない。実 API との噛み合わせは
+[market-holidays-real-api.md](market-holidays-real-api.md)（`MR`）が別に見る。
+
 `/masters/market-holidays` の受け入れ条件。ページ位置と検索条件は URL クエリ（`offset` / `date_from` /
 `date_to` / `holiday_type`）を正としているため、**実ブラウザでの URL と画面の同期**をここで守る。
 `?offset=7` のような端数の扱いや `?holiday_type=9` のような未知コードの無視など細かい分岐は

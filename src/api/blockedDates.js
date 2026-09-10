@@ -77,8 +77,8 @@ export async function validateBlockedDate({ date, reason, id = '' }) {
 /**
  * 受注不可日を 1 件登録する。
  *
- * 対象市場（market）は送らない。一覧には列があるが、docs/api/openapi.json の
- * BlackoutDateRequest に対応する項目が無く、サーバ側が既定値を決める前提。
+ * 対象市場（market）は送らない。docs/api/openapi.json の BlackoutDateRequest に
+ * 対応する項目が無く、サーバ側が既定値を決める前提（一覧にも列は出さない）。
  *
  * @param {{ date: string, reason: string }} params date は 'YYYY-MM-DD'
  * @returns {Promise<{

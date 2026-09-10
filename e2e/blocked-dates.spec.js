@@ -86,7 +86,6 @@ test.describe('受注不可日マスタ一覧', () => {
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(PAGE_SIZE)
     await expect(rows.first()).toContainText(firstBlockedDate.date)
-    await expect(rows.first()).toContainText(firstBlockedDate.market)
     await expect(rows.first()).toContainText(firstBlockedDate.reason)
   })
 
@@ -196,14 +195,14 @@ test.describe('受注不可日マスタ一覧', () => {
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
     // 見出しの並び。最後の列（行ごとの操作）は画面モックに合わせて見出しが空
-    await expect(table.getByRole('columnheader')).toHaveText(['日付', '対象市場', '理由', ''])
+    await expect(table.getByRole('columnheader')).toHaveText(['日付', '理由', ''])
 
     // 理由のセルは操作のセルより左（列の並びと同じ位置関係）
     const firstRow = rowsOf(page).first()
-    await expect(firstRow.getByRole('cell').nth(2)).toHaveText(firstBlockedDate.reason)
+    await expect(firstRow.getByRole('cell').nth(1)).toHaveText(firstBlockedDate.reason)
 
     // 行の操作は編集 → 削除の順。破壊的な操作を右端に置く
-    const actionCell = firstRow.getByRole('cell').nth(3)
+    const actionCell = firstRow.getByRole('cell').nth(2)
     await expect(actionCell.getByRole('button')).toHaveText(['編集', '削除'])
 
     // 追加は行ではなくヘッダのボタンから行う
@@ -553,7 +552,7 @@ test.describe('受注不可日マスタ 編集', () => {
     await expect(page.getByTestId('blocked-dates-edit-date')).toHaveValue(firstBlockedDate.date)
     await expect(page.getByTestId('blocked-dates-edit-reason')).toHaveValue(firstBlockedDate.reason)
 
-    // 入力項目は追加と同じ日付と理由の 2 つだけ（対象市場は編集できない）
+    // 入力項目は追加と同じ日付と理由の 2 つだけ（一覧に無い対象市場は編集対象でもない）
     const form = dialog.getByTestId('blocked-dates-edit-form')
     await expect(form.locator('input')).toHaveCount(2)
     await expect(form.getByRole('combobox')).toHaveCount(0)

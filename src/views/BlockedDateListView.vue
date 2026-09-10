@@ -41,7 +41,6 @@ const {
  */
 const columns = [
   { key: 'date', label: '日付' },
-  { key: 'market', label: '対象市場' },
   { key: 'reason', label: '理由' },
   // 行ごとの操作（編集・削除）。画面モックに合わせて見出しは空にする
   { key: 'actions', label: '' },
@@ -285,10 +284,6 @@ function stepBackIfPageEmpty() {
           <span class="blocked-date-list__date">{{ value || '—' }}</span>
         </template>
 
-        <template #cell-market="{ value }">
-          <span class="blocked-date-list__market">{{ value || '—' }}</span>
-        </template>
-
         <!-- 編集を左、削除を右端に置く。破壊的な操作を最後にする既存の並び
              （モーダルのフッタも キャンセル → 危険色）に合わせ、削除の位置は動かさない -->
         <template #cell-actions="{ row }">
@@ -407,10 +402,5 @@ function stepBackIfPageEmpty() {
 .blocked-date-list__row-actions {
   display: flex;
   gap: var(--space-2);
-}
-
-/* 対象市場は補足情報なので本文より一段小さく（画面モックの font-size:12px 相当） */
-.blocked-date-list__market {
-  font-size: var(--font-size-xs);
 }
 </style>

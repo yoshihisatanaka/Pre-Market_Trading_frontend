@@ -374,24 +374,22 @@ describe('BlockedDateListView', () => {
     expect(exists(emptyView.wrapper, 'blocked-dates-description')).toBe(true)
   })
 
-  it('[BDL-14] 表に日付 / 対象市場 / 理由と操作列が出て行の内容がフィクスチャと一致する', async () => {
+  it('[BDL-14] 表に日付 / 理由と操作列が出て行の内容がフィクスチャと一致する', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     // 行ごとの編集・削除ボタンを置く操作列が末尾に付く。見出しは画面モックに合わせて空
-    expect(headers(wrapper)).toEqual(['日付', '対象市場', '理由', ''])
+    expect(headers(wrapper)).toEqual(['日付', '理由', ''])
 
     // 期待値はフィクスチャの値そのものから作る（表示文言を並べ書きしない）。
-    // 操作列はボタンなので、データの 3 列だけを突き合わせる
+    // 操作列はボタンなので、データの 2 列だけを突き合わせる
     const cellTexts = rows(wrapper).map((row) =>
       row
         .findAll('td')
-        .slice(0, 3)
+        .slice(0, 2)
         .map((td) => td.text()),
     )
-    expect(cellTexts).toEqual(
-      firstPage.map((blocked) => [blocked.date, blocked.market, blocked.reason]),
-    )
+    expect(cellTexts).toEqual(firstPage.map((blocked) => [blocked.date, blocked.reason]))
 
     // 操作列には行ごとの編集・削除ボタンが出る
     expect(firstPage.every((blocked) => editButton(wrapper, blocked.id).exists())).toBe(true)

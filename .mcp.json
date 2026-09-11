@@ -1,40 +1,12 @@
 {
   "mcpServers": {
     "playwright": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "--init",
-        "--network",
-        "us-stock-order-frontend_default",
-        "-v",
-        "./.playwright-mcp:/output",
-        "mcr.microsoft.com/playwright/mcp",
-        "--output-dir",
-        "/output",
-        "--save-session"
-      ]
+      "command": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "args": ["scripts/mcp-docker.sh", "playwright"]
     },
     "chrome-devtools": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "--init",
-        "--network",
-        "us-stock-order-frontend_default",
-        "us-stock-order-chrome-devtools-mcp",
-        "--headless",
-        "--isolated",
-        "--chromeArg=--no-sandbox",
-        "--viewport",
-        "1280x720",
-        "--no-page-id-routing",
-        "--no-usage-statistics"
-      ]
+      "command": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "args": ["scripts/mcp-docker.sh", "chrome-devtools"]
     }
   }
 }

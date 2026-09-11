@@ -1,4 +1,6 @@
 dist
+# Vite の依存事前バンドル（vite.config.js の cacheDir）。生成物。
+.vite
 coverage
 playwright-report
 test-results

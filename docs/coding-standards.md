@@ -165,7 +165,8 @@ views / components  →  stores  →  api  →  (HTTP)
   **`page.route()` は使えない** — MSW がページ内で fetch を横取りするため、リクエストがネットワークに出ない
 - E2E はコンテナ間通信（`http://frontend:5173`）のため secure context にならず、
   MSW は Service Worker ではなく fallback mode で動作する（コンソールに `(fallback mode)` と出るが正常）。
-  開発者がブラウザで開く `http://localhost:5173` は secure context なので通常の Service Worker モードになる
+  開発者がブラウザで開く `http://localhost:<割当ポート>`（本体は 5173、worktree は 5174〜）は
+  secure context なので通常の Service Worker モードになる
 - **新しい画面を追加するときは、先に [docs/e2e/<画面>.md](e2e/README.md) にシナリオを書く。**
   E2E のタイトル先頭にシナリオ ID（`[OL-01]`）を付け、`docker compose run --rm frontend npm run check:scenarios` で対応漏れが無いことを確認する（単体テストも同じコマンドで検査される）。
   レビュー担当が居ないため、シナリオ文書 + E2E が回帰検知の主手段になる

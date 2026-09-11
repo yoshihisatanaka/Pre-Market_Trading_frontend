@@ -74,9 +74,11 @@ bash .claude/hooks/tests/guard-secret-paths.test.sh
 
 `real-api-e2e-author` だけは前提が 3 つある。**MSW を切る（`.env` の `VITE_ENABLE_MSW=false` に
 して `docker compose up -d --force-recreate frontend`）・バックエンドの `api` を起動する・
-Docker を排他で使う。** エージェントは `.env` を読み書きできない（deny ルールと guard フック）ので、
-呼ぶ前にユーザが整えるか、提示された手順に応じる。終わったら `.env` を戻して frontend を作り直す
-（戻すまで MSW 版の E2E とブラウザでの開発が実 API 頼みになる）。
+バックエンドの DB を排他で使う。** エージェントは `.env` を読み書きできない（deny ルールと guard
+フック）ので、呼ぶ前にユーザが整えるか、提示された手順に応じる。終わったら `.env` を戻して
+frontend を作り直す（戻すまでその worktree の MSW 版 E2E とブラウザ開発が実 API 頼みになる）。
+MSW の ON/OFF と `--force-recreate` は**自分の worktree の project にしか効かない**が、
+`api` と DB は 1 つしかないので、実 API E2E 自体は worktree 間で排他。
 
 ## Git ブランチ
 
@@ -113,10 +115,11 @@ chore/deps-update
 **`git worktree` を直接叩かない**（安全確認と設定ファイルの配備がスクリプト側に入っている）。
 
 ```bash
-bash scripts/worktree.sh add feat/market-holiday-type    # 作成＋設定の配備（冪等）
-bash scripts/worktree.sh list                            # 一覧＋Docker の現所有者
-bash scripts/worktree.sh doctor                          # 配備漏れ・共有リソースの点検
+bash scripts/worktree.sh add feat/market-holiday-type    # 作成＋設定の配備＋ポート割当（冪等）
+bash scripts/worktree.sh list                            # 一覧＋worktree ごとの Docker と URL
+bash scripts/worktree.sh doctor                          # 配備漏れ・Docker 環境・孤児の点検
 bash scripts/worktree.sh remove feat/market-holiday-type
+bash scripts/worktree.sh remove feat/market-holiday-type --docker-clean  # Docker も片付ける
 ```
 
 - 上の `bash` は **Git Bash** のこと。PowerShell / cmd で `bash ...` と打つと
@@ -126,7 +129,10 @@ bash scripts/worktree.sh remove feat/market-holiday-type
   `& "C:\Program Files\Git\bin\bash.exe" scripts/worktree.sh <サブコマンド>`
 - 置き場所は `C:\Users\0036\worktrees\<リポジトリ名>-<ブランチ名>` 固定。
   gitignore された `.env` / `.claude/settings.local.json` は `add` が本体からコピーする
-  （シンボリックリンクにしない。compose の `.:/app` マウント越しに壊れたリンクになるため）
+  （シンボリックリンクにしない。compose の `.:/app` マウント越しに壊れたリンクになるため）。
+  `add` はあわせて dev サーバのホスト公開ポート（`FRONTEND_PORT`）を `.env` に割り当てる。
+  **ディレクトリ名が compose プロジェクト名になる**ので、作成後にディレクトリを手で
+  リネーム・移動しない（別 project 扱いになり、元の project が孤児になる）
 - 作成後は worktree を **新しい VSCode ウィンドウで開き**、そこで Claude を起動する
   （`code "<worktree のパス>"`、または File > New Window でそのフォルダを開く。
   ターミナルから使うなら `cd` してから `claude`）。
@@ -168,26 +174,42 @@ echo '{"tool_name":"Bash","tool_input":{"command":"git switch -c feat/x"}}' \
   | bash .claude/hooks/guard-main-checkout.sh
 ```
 
-### Docker は排他利用
+### Docker は worktree ごとに分離
 
-compose のプロジェクト名は `us-stock-order-frontend` 固定（`docker-compose.yml` の `name:`）。
-worktree を分けても **compose プロジェクト・コンテナ名・ポート・ネットワーク・`node_modules`
-ボリュームは全 worktree で共有**される。ポートもプロジェクト名も変数化しない方針なので、**規律で守る**。
+`docker-compose.yml` に `name:` を**書かない**。compose プロジェクト名はディレクトリ名由来になり、
+worktree ごとに **project / コンテナ名 / ネットワーク / dev サーバのホスト公開ポート**が分かれる。
 
-| 操作 | 並行 | 理由 |
+```text
+本体      pre-market_trading_frontend                      localhost:5173
+worktree  pre-market_trading_frontend-<ブランチ名>          localhost:5174, 5175, ...
+```
+
+ホスト公開ポートは `${FRONTEND_PORT:-5173}` で、worktree の値は `worktree.sh add` が
+`.env` に割り当てる（5174〜5199）。**コンテナ内は常に 5173** なので、E2E の接続先
+`http://frontend:5173` は全 worktree で同じ文字列のまま（解決先が project ごとに違う）。
+
+| 操作 | 並行 | 補足 |
 |---|---|---|
-| `run --rm frontend npm run lint` / `lint:fix` / `format` / `format:check` / `test:unit` / `check:scenarios` / `build` | **可** | 一時コンテナが「実行した worktree の `.:/app`」をマウントする。稼働中の frontend には触らない |
-| `npm install` / `npm ci`、`package.json` / `package-lock.json` / `Dockerfile` の変更 | **排他** | `node_modules` は共有ボリューム、イメージも共有。追加だけなら無害だが、削除・ダウングレード・`npm ci` は他 worktree を壊す |
-| `up -d frontend` / `restart` / `down` | **1 worktree だけ** | 同じプロジェクト名なのでコンテナが**作り直され、マウント元が奪われる**。他 worktree の dev サーバが黙って別ブランチのコードを配信し始める |
-| `run --rm e2e npx playwright test` | **1 worktree だけ** | `depends_on: frontend` で frontend を起動・再作成する。接続先 `http://frontend:5173` は共有ネットワーク上の 1 個 |
-| Playwright MCP（`mcp__playwright__*`） | **1 worktree だけ** | 固定ネットワーク `us-stock-order-frontend_default` の稼働中 frontend を見る |
-| Chrome DevTools MCP（`mcp__chrome-devtools__*`） | **1 worktree だけ** | 同上。ローカルイメージ `us-stock-order-chrome-devtools-mcp` が要る（`docker build -t us-stock-order-chrome-devtools-mcp docker/chrome-devtools-mcp`） |
-| ブラウザで `http://localhost:5173` | **1 worktree だけ** | 5173 は 1 個しか無い |
-| `down -v` | **禁止** | 共有の `node_modules` ボリュームを消し、全 worktree が動かなくなる |
+| `up -d frontend` / `restart` / `down` | **可** | 自分の project にしか効かない。他 worktree の dev サーバは生きたまま |
+| `run --rm e2e npx playwright test` | **可** | 自分の project の frontend に当たる。CPU を食い合うので同時に回すときは `--workers` を絞る |
+| Playwright MCP / Chrome DevTools MCP | **可** | `scripts/mcp-docker.sh` が cwd から自分のネットワークを導出する |
+| ブラウザで `http://localhost:<割当ポート>` | **可** | 自分のポートは `worktree.sh list` の URL 列で確認する |
+| `run --rm frontend npm run lint` / `test:unit` / `check:scenarios` / `build` / `format` | **可** | 一時コンテナが「実行した worktree の `.:/app`」をマウントする |
+| `npm install` / `npm ci`、`package.json` / `package-lock.json` / `Dockerfile` の変更 | **排他** | `node_modules` は全 worktree 共有の named volume（下記） |
+| 実 API に当てる E2E（`E2E_REAL_API=1`） | **排他** | バックエンドの `api` と DB は 1 つ。データを読み書きするので worktree 間で衝突する |
+| Playwright レポートの閲覧（`-p 9323:9323`） | **排他** | 9323 は 1 個しか無い |
+| `down -v` | **禁止** | 自分の project のボリュームは消してよいが、cwd を間違えると他を壊す。掃除は `worktree.sh remove --docker-clean` に集約してある |
 
-**Docker を使う番になったら、まず `bash scripts/worktree.sh list` の最終行で現所有者を確認する。**
-自分以外が持っているなら、そのセッションのユーザに返してもらうまで `up -d` / E2E / MCP を実行しない。
-持ち主が終わるときは `docker compose down`（**`-v` は付けない**）で明け渡す。
+依然共有されるのは **`node_modules`（external な named volume
+`us-stock-order-frontend_node_modules`）** だけ。install を worktree ごとに繰り返さないための
+意図的な共有で、代償として `npm install` / `npm ci` は排他になる。`external` 宣言なので
+`docker compose down -v` でも消えない（他 worktree を壊さない）。
+Vite の依存キャッシュは共有側と奪い合うため、`vite.config.js` の `cacheDir` で worktree 配下
+（`.vite/`）に逃がしてある。
+
+**自分の project 名・ポート・稼働状態は `bash scripts/worktree.sh list`**（一覧の DOCKER / URL 列）
+**か `doctor`** で確認する。`doctor` は撤収済み worktree の孤児ネットワークも検出する。
+Docker Desktop の資源は有限なので、`usePolling` の dev サーバの同時稼働は 2〜3 本を目安にする。
 
 Stop フックの lint は一時コンテナなので各 worktree で並行しても安全。ただし複数セッションが
 同時に `docker compose run` を叩くと、ネットワーク作成の競合で稀に失敗する。
@@ -267,11 +289,15 @@ views / components  →  stores  →  api  →  (HTTP)
 `.mcp.json` に Playwright MCP（Docker 版）を定義してある。画面の見た目や DOM を
 **推測せず実物で確認する**ために使う。
 
-- **使う前に `docker compose up -d frontend` が必要。** MCP コンテナは compose の
-  ネットワーク `us-stock-order-frontend_default` に参加して動くため、frontend が落ちていると接続できない
-  （この名前は `docker-compose.yml` の `name:` 固定値。リポジトリ名 `Pre-Market_Trading_frontend` や
-  ディレクトリ名とは意図的に別物なので、旧名のまま揃えなくてよい）
-- 接続先は **`http://frontend:5173`**（`localhost:5173` ではない。コンテナ間通信のため）
+- **使う前に、その worktree で `docker compose up -d frontend` が必要。** MCP コンテナは
+  **自分の worktree の compose ネットワーク**に参加して動くため、frontend が落ちていると接続できない。
+  ネットワーク名は `.mcp.json` にハードコードせず、`scripts/mcp-docker.sh` が cwd から導出する
+  （worktree ごとに違う値になるため。解決結果は
+  `bash scripts/mcp-docker.sh print-network` で確認できる）
+- frontend を起動していない状態で `/mcp` すると接続に失敗する。**その場合は `up -d` してから
+  `/mcp` で繋ぎ直す**（ラッパーが理由を stderr に出す）
+- 接続先は **`http://frontend:5173`**（`localhost:5173` ではない。コンテナ間通信のため。
+  ホスト公開ポートが 5174 等にずれていてもコンテナ内は 5173 なので、この URL は変わらない）
 - MSW はブラウザ側で動くので、バックエンド未実装のままでも画面はモックデータで描画される
 - Docker 版は **headless chromium のみ**（Firefox / WebKit は使えない）
 - `--save-session` により、全操作のログが `.playwright-mcp/session-<時刻>/session.md` に残る。

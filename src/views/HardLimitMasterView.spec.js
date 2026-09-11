@@ -26,21 +26,26 @@ const PERCENT = toPercent(RATE)
 
 // 保存に使う「現在値とは違う、有効な範囲の %」もフィクスチャから導く
 const NEW_PERCENT = PERCENT / 2
-// モックが 400 で拒む値（市場関与率の下限は 0.0001 = 0.01%）
+// モックが 422 で拒む値（市場関与率の下限は 0.0001 = 0.01%）
 const INVALID_PERCENT = 0
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 const SAVED_MESSAGE = 'ハードリミットを保存しました。'
 const EMPTY_MESSAGE = 'ハードリミットが設定されていません。'
-const INVALID_RATE_MESSAGE = '市場関与率は 0.01%〜100% の範囲で入力してください。'
+/*
+ * 実 API（FastAPI）の 422 は項目名を含まない msg を返し、client.js が loc から項目名を補う。
+ * 文言そのものはサーバ側の資産なので、ここでは「どの項目が・なぜ駄目か」が出ることだけを見る。
+ */
+const INVALID_RATE_MESSAGE = '市場関与率: 指定できる下限を下回っています'
 
+// 実 API のエラー本文は ErrorResponse（{ detail: string }）
 const errorHandler = (options) =>
   http.get(
     '*/api/slice-settings',
-    () => HttpResponse.json({ message: ERROR_MESSAGE }, { status: 500 }),
+    () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     options,
   )
-// 本文なし（204）。未設定を表す応答
+// 本文なし（204）。実 API では起きないが、画面の 4 状態を保つための空応答
 const emptyHandler = () =>
   http.get('*/api/slice-settings', () => new HttpResponse(null, { status: 204 }))
 

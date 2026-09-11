@@ -283,15 +283,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
-              "description": "操作者社員コード",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者社員コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -317,6 +340,16 @@
           },
           "400": {
             "description": "ヘッダー不正・ファイル解析エラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -360,15 +393,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
-              "description": "操作者社員コード",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者社員コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -394,6 +450,16 @@
           },
           "400": {
             "description": "注文検証エラー（全件ロールバック）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -614,6 +680,16 @@
               "text/csv": {}
             }
           },
+          "401": {
+            "description": "未認証・セッション期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "内部サーバーエラー",
             "content": {
@@ -649,15 +725,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
-              "description": "操作者社員コード",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者社員コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -683,6 +782,16 @@
           },
           "400": {
             "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
             "content": {
               "application/json": {
                 "schema": {
@@ -767,6 +876,16 @@
               }
             }
           },
+          "401": {
+            "description": "未認証・セッション期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "内部サーバーエラー",
             "content": {
@@ -802,15 +921,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
-              "description": "操作者社員コード",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者社員コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -836,6 +978,16 @@
           },
           "400": {
             "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
             "content": {
               "application/json": {
                 "schema": {
@@ -907,6 +1059,16 @@
               }
             }
           },
+          "401": {
+            "description": "未認証・セッション期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "指定された口座情報が存在しない",
             "content": {
@@ -959,15 +1121,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
-              "description": "操作者社員コード",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者社員コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -993,6 +1178,16 @@
           },
           "400": {
             "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
             "content": {
               "application/json": {
                 "schema": {
@@ -1063,15 +1258,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
-              "description": "操作者社員コード",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者社員コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -1087,6 +1305,16 @@
           },
           "400": {
             "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
             "content": {
               "application/json": {
                 "schema": {
@@ -1173,6 +1401,16 @@
           },
           "400": {
             "description": "リクエストパラメータ不正・業務バリデーションエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
             "content": {
               "application/json": {
                 "schema": {
@@ -1318,6 +1556,16 @@
               "text/csv": {}
             }
           },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal Server Error",
             "content": {
@@ -1353,13 +1601,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -1385,6 +1658,16 @@
           },
           "400": {
             "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -1621,13 +1904,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -1653,6 +1961,16 @@
           },
           "400": {
             "description": "Bad Request (バリデーションエラー・重複エラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -1780,6 +2098,16 @@
               }
             }
           },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found (指定された銘柄が存在しない)",
             "content": {
@@ -1832,13 +2160,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -1864,6 +2217,16 @@
           },
           "400": {
             "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -1934,13 +2297,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -1950,6 +2338,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StockResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2168,6 +2566,16 @@
               "text/csv": {}
             }
           },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal Server Error",
             "content": {
@@ -2203,13 +2611,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -2235,6 +2668,16 @@
           },
           "400": {
             "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -2418,13 +2861,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -2450,6 +2918,16 @@
           },
           "400": {
             "description": "Bad Request (バリデーションエラー・重複エラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -2673,6 +3151,16 @@
               }
             }
           },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found (指定された為替データが存在しない)",
             "content": {
@@ -2737,13 +3225,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -2769,6 +3282,16 @@
           },
           "400": {
             "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -2851,13 +3374,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -2867,6 +3415,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ExchangeRateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3078,6 +3636,16 @@
               "text/csv": {}
             }
           },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal Server Error",
             "content": {
@@ -3113,13 +3681,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -3145,6 +3738,16 @@
           },
           "400": {
             "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -3309,13 +3912,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -3341,6 +3969,16 @@
           },
           "400": {
             "description": "Bad Request (バリデーションエラー・重複エラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -3468,6 +4106,16 @@
               }
             }
           },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found (指定された受注不可日が存在しない)",
             "content": {
@@ -3520,13 +4168,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -3552,6 +4225,16 @@
           },
           "400": {
             "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -3622,13 +4305,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -3638,6 +4346,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BlackoutDateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3819,6 +4537,16 @@
               "text/csv": {}
             }
           },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal Server Error",
             "content": {
@@ -3854,13 +4582,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -3886,6 +4639,16 @@
           },
           "400": {
             "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -4046,13 +4809,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -4078,6 +4866,16 @@
           },
           "400": {
             "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -4223,6 +5021,16 @@
               }
             }
           },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
@@ -4275,13 +5083,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -4307,6 +5140,16 @@
           },
           "400": {
             "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -4377,13 +5220,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -4393,6 +5261,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CAResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -4641,15 +5519,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
-              "description": "操作者社員コード",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者社員コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -4883,15 +5784,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
-              "description": "操作者社員コード",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者社員コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -5164,15 +6088,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
-              "description": "操作者社員コード",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者社員コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -5227,7 +6174,7 @@
             }
           },
           "409": {
-            "description": "楽観的ロック競合（他ユーザーによる更新）",
+            "description": "排他制御競合（楽観的ロック）: 他のユーザーにより更新済",
             "content": {
               "application/json": {
                 "schema": {
@@ -5278,15 +6225,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
-              "description": "操作者社員コード",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者社員コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -5567,6 +6537,16 @@
               "text/csv": {}
             }
           },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal Server Error",
             "content": {
@@ -5602,13 +6582,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -5634,6 +6639,16 @@
           },
           "400": {
             "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -5830,13 +6845,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -5862,6 +6902,16 @@
           },
           "400": {
             "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -6015,6 +7065,16 @@
               }
             }
           },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
@@ -6067,13 +7127,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -6107,6 +7192,16 @@
           },
           "400": {
             "description": "Bad Request (バリデーションエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -6177,13 +7272,38 @@
           {
             "name": "X-User-Code",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20,
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
-            }
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -6199,6 +7319,16 @@
           },
           "400": {
             "description": "Bad Request (バッチ作成明細削除不可エラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
             "content": {
               "application/json": {
                 "schema": {
@@ -6571,14 +7701,14 @@
         }
       }
     },
-    "/slice-settings": {
+    "/hard-limits": {
       "get": {
         "tags": [
-          "SliceSettings"
+          "HardLimits"
         ],
         "summary": "Get Slice Setting Endpoint",
         "description": "スライス注文判定設定照会 API\n\n- 現在有効なスライス注文設定（市場関与率、大口数量閾値、大口金額閾値、有効フラグ）を取得します。",
-        "operationId": "get_slice_setting_endpoint_slice_settings_get",
+        "operationId": "get_slice_setting_endpoint_hard_limits_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6594,11 +7724,11 @@
       },
       "put": {
         "tags": [
-          "SliceSettings"
+          "HardLimits"
         ],
         "summary": "Update Slice Setting Endpoint",
         "description": "スライス注文判定設定変更 API\n\n- 市場関与率、大口数量閾値、大口金額閾値、有効フラグ等を更新します。\n- 楽観的ロック（更新日時照合による同時更新競合防止・409 Conflict）に対応しています。\n- 変更前後の差分diffを `d_スライス注文設定履歴` に自動記録します。",
-        "operationId": "update_slice_setting_endpoint_slice_settings_put",
+        "operationId": "update_slice_setting_endpoint_hard_limits_put",
         "parameters": [
           {
             "name": "X-User-Code",
@@ -6613,11 +7743,28 @@
                   "type": "null"
                 }
               ],
-              "description": "操作者コード",
-              "default": "SYSTEM",
+              "description": "操作者社員コード（Swagger/開発テスト用）",
               "title": "X-User-Code"
             },
-            "description": "操作者コード"
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "requestBody": {
@@ -6654,14 +7801,14 @@
         }
       }
     },
-    "/slice-settings/history": {
+    "/hard-limits/history": {
       "get": {
         "tags": [
-          "SliceSettings"
+          "HardLimits"
         ],
         "summary": "Get Slice Setting History Endpoint",
         "description": "スライス注文設定変更履歴照会 API\n\n- スライス注文設定の変更履歴一覧（変更前データ、変更後データ、差分diff、操作者、操作日時）を取得します。",
-        "operationId": "get_slice_setting_history_endpoint_slice_settings_history_get",
+        "operationId": "get_slice_setting_history_endpoint_hard_limits_history_get",
         "parameters": [
           {
             "name": "limit",
@@ -6715,14 +7862,14 @@
         }
       }
     },
-    "/slice-settings/simulate": {
+    "/hard-limits/simulate": {
       "post": {
         "tags": [
-          "SliceSettings"
+          "HardLimits"
         ],
         "summary": "Simulate Slice Calculation Endpoint",
         "description": "スライス判定・分割計算シミュレーション API\n\n- 注文パラメータ（数量・価格・出来高など）を元に、現在の設定でスライス対象となるか、どのように均等案分＋端数先頭寄せされるかをシミュレーションして返却します（DB更新なし）。",
-        "operationId": "simulate_slice_calculation_endpoint_slice_settings_simulate_post",
+        "operationId": "simulate_slice_calculation_endpoint_hard_limits_simulate_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7280,6 +8427,30 @@
         }
       }
     },
+    "/codes": {
+      "get": {
+        "tags": [
+          "Masters"
+        ],
+        "summary": "Get All Codes Endpoint",
+        "description": "全コードマスタ一括取得API。",
+        "operationId": "get_all_codes_endpoint_codes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get All Codes Endpoint Codes Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Root",
@@ -7299,6 +8470,14 @@
   },
   "components": {
     "schemas": {
+      "AccidentAccountTypeEnum": {
+        "type": "string",
+        "enum": [
+          "0",
+          "1"
+        ],
+        "title": "AccidentAccountTypeEnum"
+      },
       "AccountBalanceResponse": {
         "properties": {
           "account_no": {
@@ -7532,13 +8711,12 @@
           "法人区分": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/CorporateTypeEnum"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "法人区分",
             "description": "法人区分 (0: 個人, 1: 法人)"
           },
           "法人区分名": {
@@ -7604,14 +8782,13 @@
           "コンプラランク": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ComplianceRankEnum"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "コンプラランク",
-            "description": "コンプラランク (A/B/C/D)"
+            "description": "コンプラランク"
           },
           "コンプラランク名": {
             "anyOf": [
@@ -7736,14 +8913,13 @@
           "NISA契約": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/NisaContractEnum"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Nisa契約",
-            "description": "NISA契約区分 (0: 無, 1: 有)"
+            "description": "NISA契約区分 (0: 未契約, 1: 契約, 9: 解約済)"
           },
           "NISA契約名": {
             "anyOf": [
@@ -7937,14 +9113,13 @@
           "特定口座区分": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/SpecificAccountTypeEnum"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "特定口座区分",
-            "description": "特定口座区分 (0: 一般, 1: 源泉あり, 2: 源泉なし, 3: 対象外(法人))"
+            "description": "特定口座区分 (0: 未登録, 1: 源泉あり, 2: 源泉なし, 3: 非特定)"
           },
           "特定口座区分名": {
             "anyOf": [
@@ -7957,6 +9132,54 @@
             ],
             "title": "特定口座区分名",
             "description": "特定口座区分名"
+          },
+          "口座区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "口座区分 (0: 一般, 1: 自己, 2: 同業者)",
+            "default": "0"
+          },
+          "口座区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "口座区分名",
+            "description": "口座区分名"
+          },
+          "事故処理口座区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccidentAccountTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "事故処理口座区分 (0: 通常, 1: 事故処理)",
+            "default": "0"
+          },
+          "事故処理口座区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "事故処理口座区分名",
+            "description": "事故処理口座区分名"
           },
           "取消区分": {
             "type": "integer",
@@ -8072,8 +9295,7 @@
             "description": "扱者コード (100〜999)"
           },
           "法人区分": {
-            "type": "string",
-            "title": "法人区分",
+            "$ref": "#/components/schemas/CorporateTypeEnum",
             "description": "法人区分 (0: 個人, 1: 法人)"
           },
           "顧客名": {
@@ -8099,9 +9321,8 @@
             "description": "生年月日 (個人: YYYYMMDD形式, 法人: '0')"
           },
           "コンプラランク": {
-            "type": "string",
-            "title": "コンプラランク",
-            "description": "コンプラランク (A/B/C/D)"
+            "$ref": "#/components/schemas/ComplianceRankEnum",
+            "description": "コンプラランク"
           },
           "投資方針": {
             "anyOf": [
@@ -8138,9 +9359,8 @@
             "description": "総預り資産"
           },
           "NISA契約": {
-            "type": "string",
-            "title": "Nisa契約",
-            "description": "NISA契約区分 (0/1)"
+            "$ref": "#/components/schemas/NisaContractEnum",
+            "description": "NISA契約区分 (0/1/9)"
           },
           "NISA買付可能額_当年": {
             "type": "integer",
@@ -8210,9 +9430,32 @@
             "description": "取引停止区分_リスク商品取引_買 (0/1)"
           },
           "特定口座区分": {
-            "type": "string",
-            "title": "特定口座区分",
+            "$ref": "#/components/schemas/SpecificAccountTypeEnum",
             "description": "特定口座区分 (0/1/2/3)"
+          },
+          "口座区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "口座区分 (0: 一般, 1: 自己, 2: 同業者)",
+            "default": "0"
+          },
+          "事故処理口座区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccidentAccountTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "事故処理口座区分 (0: 通常, 1: 事故処理)",
+            "default": "0"
           },
           "更新日時": {
             "anyOf": [
@@ -8276,6 +9519,15 @@
         ],
         "title": "AccountResponse",
         "description": "口座マスタ単一操作レスポンス"
+      },
+      "AccountTypeEnum": {
+        "type": "string",
+        "enum": [
+          "0",
+          "1",
+          "2"
+        ],
+        "title": "AccountTypeEnum"
       },
       "AccountValidationResponse": {
         "properties": {
@@ -8503,8 +9755,7 @@
             "description": "銘柄コード"
           },
           "特定預り区分": {
-            "type": "string",
-            "title": "特定預り区分",
+            "$ref": "#/components/schemas/SpecificDepositEnum",
             "description": "特定預り区分"
           },
           "特定預り区分名": {
@@ -8781,9 +10032,7 @@
             "description": "銘柄コード"
           },
           "特定預り区分": {
-            "type": "string",
-            "maxLength": 2,
-            "title": "特定預り区分",
+            "$ref": "#/components/schemas/SpecificDepositEnum",
             "description": "特定預り区分（0: 非特定, 1: 特定, 4: NISA, 6: 成長投資枠, 8: 継続管理勘定）"
           },
           "残高": {
@@ -9568,14 +10817,15 @@
           "操作日時": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date-time"
               },
               {
                 "type": "null"
               }
             ],
             "title": "操作日時",
-            "description": "操作日時"
+            "description": "操作日時 (ISO8601形式)"
           }
         },
         "type": "object",
@@ -9640,8 +10890,7 @@
             "description": "Tickerコード"
           },
           "CA種別": {
-            "type": "string",
-            "title": "Ca種別",
+            "$ref": "#/components/schemas/CATypeEnum",
             "description": "CA種別コード（codes.json参照）"
           },
           "CA種別名": {
@@ -9755,14 +11004,15 @@
           "作成日時": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date-time"
               },
               {
                 "type": "null"
               }
             ],
             "title": "作成日時",
-            "description": "作成日時 (ISO8601形式 または YYYY-MM-DD HH:MM:SS)"
+            "description": "作成日時 (ISO8601形式)"
           },
           "作成者": {
             "anyOf": [
@@ -9779,14 +11029,15 @@
           "更新日時": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date-time"
               },
               {
                 "type": "null"
               }
             ],
             "title": "更新日時",
-            "description": "更新日時 (ISO8601形式 または YYYY-MM-DD HH:MM:SS)"
+            "description": "更新日時 (ISO8601形式)"
           },
           "更新者": {
             "anyOf": [
@@ -9803,14 +11054,15 @@
           "取消日時": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date-time"
               },
               {
                 "type": "null"
               }
             ],
             "title": "取消日時",
-            "description": "取消日時 (ISO8601形式 または YYYY-MM-DD HH:MM:SS)"
+            "description": "取消日時 (ISO8601形式)"
           },
           "取消者": {
             "anyOf": [
@@ -9876,10 +11128,7 @@
             "description": "当社銘柄コード"
           },
           "CA種別": {
-            "type": "string",
-            "maxLength": 10,
-            "minLength": 1,
-            "title": "Ca種別",
+            "$ref": "#/components/schemas/CATypeEnum",
             "description": "CA種別コード（codes.json参照）"
           },
           "権利付最終日": {
@@ -9999,6 +11248,24 @@
         "title": "CAResponse",
         "description": "CA単一操作レスポンス"
       },
+      "CATypeEnum": {
+        "type": "string",
+        "enum": [
+          "110",
+          "112",
+          "120",
+          "121",
+          "122",
+          "123",
+          "125",
+          "130",
+          "131",
+          "140",
+          "142",
+          "220"
+        ],
+        "title": "CATypeEnum"
+      },
       "CAValidationResponse": {
         "properties": {
           "valid": {
@@ -10068,6 +11335,15 @@
         "title": "CashBalanceDetail",
         "description": "買付余力詳細モデル"
       },
+      "CashDeliveryEnum": {
+        "type": "string",
+        "enum": [
+          "000",
+          "100",
+          "200"
+        ],
+        "title": "CashDeliveryEnum"
+      },
       "ClosingActionRequest": {
         "properties": {
           "実行者": {
@@ -10090,7 +11366,14 @@
       "ClosingStatusResponse": {
         "properties": {
           "基準日": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
             "title": "基準日"
           },
           "締め種別": {
@@ -10107,6 +11390,10 @@
           },
           "更新日時": {
             "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
               {
                 "type": "string"
               },
@@ -10137,6 +11424,33 @@
         ],
         "title": "ClosingStatusResponse",
         "description": "締め状態照会/更新レスポンス"
+      },
+      "ComplianceRankEnum": {
+        "type": "string",
+        "enum": [
+          "A",
+          "B",
+          "C",
+          "D",
+          "E",
+          "F",
+          "G",
+          "H",
+          "I",
+          "J",
+          "X",
+          "Y",
+          "Z"
+        ],
+        "title": "ComplianceRankEnum"
+      },
+      "CorporateTypeEnum": {
+        "type": "string",
+        "enum": [
+          "0",
+          "1"
+        ],
+        "title": "CorporateTypeEnum"
       },
       "CsvAllowedValue": {
         "properties": {
@@ -10439,6 +11753,17 @@
         ],
         "title": "CustomerListResponse",
         "description": "顧客検索APIのレスポンスモデル"
+      },
+      "DepositCategoryEnum": {
+        "type": "string",
+        "enum": [
+          "0",
+          "1",
+          "4",
+          "6",
+          "8"
+        ],
+        "title": "DepositCategoryEnum"
       },
       "ErrorResponse": {
         "properties": {
@@ -10863,6 +12188,26 @@
         ],
         "title": "ExchangeRateValidationResponse",
         "description": "為替マスタ事前検証レスポンス"
+      },
+      "ExecutionScopeEnum": {
+        "type": "string",
+        "enum": [
+          "01",
+          "02",
+          "03",
+          "04",
+          "05",
+          "06"
+        ],
+        "title": "ExecutionScopeEnum"
+      },
+      "FundNatureEnum": {
+        "type": "string",
+        "enum": [
+          "1",
+          "2"
+        ],
+        "title": "FundNatureEnum"
       },
       "HTTPValidationError": {
         "properties": {
@@ -11589,8 +12934,7 @@
           "0",
           "1"
         ],
-        "title": "HolidayTypeEnum",
-        "description": "海外休場区分コード"
+        "title": "HolidayTypeEnum"
       },
       "HolidayValidationDetails": {
         "properties": {
@@ -11733,6 +13077,15 @@
         "title": "MasterListResponse",
         "description": "マスタ取得APIのレスポンスモデル"
       },
+      "NisaContractEnum": {
+        "type": "string",
+        "enum": [
+          "0",
+          "1",
+          "9"
+        ],
+        "title": "NisaContractEnum"
+      },
       "OrderCancelRequest": {
         "properties": {
           "取消者": {
@@ -11807,6 +13160,15 @@
         ],
         "title": "OrderCancelResponse",
         "description": "注文取消APIのレスポンスモデル"
+      },
+      "OrderChannelEnum": {
+        "type": "string",
+        "enum": [
+          "EGY",
+          "CC",
+          "HT"
+        ],
+        "title": "OrderChannelEnum"
       },
       "OrderCreateResponse": {
         "properties": {
@@ -11910,6 +13272,15 @@
         "title": "OrderListResponse",
         "description": "注文一覧照会APIのレスポンスモデル"
       },
+      "OrderMethodEnum": {
+        "type": "string",
+        "enum": [
+          "1",
+          "2",
+          "3"
+        ],
+        "title": "OrderMethodEnum"
+      },
       "OrderRequest": {
         "properties": {
           "元注文ID": {
@@ -11936,16 +13307,14 @@
             "title": "銘柄コード"
           },
           "売買区分": {
-            "type": "string",
-            "title": "売買区分"
+            "$ref": "#/components/schemas/SideEnum"
           },
           "数量": {
             "type": "integer",
             "title": "数量"
           },
           "指成区分": {
-            "type": "string",
-            "title": "指成区分"
+            "$ref": "#/components/schemas/OrderTypeEnum"
           },
           "指値単価": {
             "anyOf": [
@@ -11959,32 +13328,25 @@
             "title": "指値単価"
           },
           "決済通貨区分": {
-            "type": "string",
-            "title": "決済通貨区分"
+            "$ref": "#/components/schemas/SettlementCurrencyEnum"
           },
           "証券受渡方法": {
-            "type": "string",
-            "title": "証券受渡方法"
+            "$ref": "#/components/schemas/SecuritiesDeliveryEnum"
           },
           "預り売買区分": {
-            "type": "string",
-            "title": "預り売買区分"
+            "$ref": "#/components/schemas/DepositCategoryEnum"
           },
           "取引": {
-            "type": "string",
-            "title": "取引"
+            "$ref": "#/components/schemas/TransactionTypeEnum"
           },
           "勧誘区分": {
-            "type": "string",
-            "title": "勧誘区分"
+            "$ref": "#/components/schemas/SolicitationEnum"
           },
           "受注方法": {
-            "type": "string",
-            "title": "受注方法"
+            "$ref": "#/components/schemas/OrderMethodEnum"
           },
           "資金性格": {
-            "type": "string",
-            "title": "資金性格"
+            "$ref": "#/components/schemas/FundNatureEnum"
           },
           "有効期限": {
             "anyOf": [
@@ -11998,12 +13360,10 @@
             "title": "有効期限"
           },
           "注文チャネル": {
-            "type": "string",
-            "title": "注文チャネル"
+            "$ref": "#/components/schemas/OrderChannelEnum"
           },
           "金銭受渡方法": {
-            "type": "string",
-            "title": "金銭受渡方法"
+            "$ref": "#/components/schemas/CashDeliveryEnum"
           },
           "受注日": {
             "type": "string",
@@ -12041,8 +13401,7 @@
             "default": 0
           },
           "発注範囲": {
-            "type": "string",
-            "title": "発注範囲"
+            "$ref": "#/components/schemas/ExecutionScopeEnum"
           },
           "作成者": {
             "type": "string",
@@ -12078,6 +13437,14 @@
         ],
         "title": "OrderRequest",
         "description": "注文受付APIの入力モデル"
+      },
+      "OrderTypeEnum": {
+        "type": "string",
+        "enum": [
+          "LO",
+          "MO"
+        ],
+        "title": "OrderTypeEnum"
       },
       "OrderValidationResponse": {
         "properties": {
@@ -12118,6 +13485,30 @@
         ],
         "title": "OrderValidationResponse",
         "description": "注文検証APIのレスポンスモデル"
+      },
+      "SecuritiesDeliveryEnum": {
+        "type": "string",
+        "enum": [
+          "100",
+          "500"
+        ],
+        "title": "SecuritiesDeliveryEnum"
+      },
+      "SettlementCurrencyEnum": {
+        "type": "string",
+        "enum": [
+          "0",
+          "1"
+        ],
+        "title": "SettlementCurrencyEnum"
+      },
+      "SideEnum": {
+        "type": "string",
+        "enum": [
+          "1",
+          "3"
+        ],
+        "title": "SideEnum"
       },
       "SliceSettingHistoryItem": {
         "properties": {
@@ -12493,6 +13884,35 @@
           "max_slice_quantity"
         ],
         "title": "SliceSimulateResponse"
+      },
+      "SolicitationEnum": {
+        "type": "string",
+        "enum": [
+          "1",
+          "2"
+        ],
+        "title": "SolicitationEnum"
+      },
+      "SpecificAccountTypeEnum": {
+        "type": "string",
+        "enum": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "title": "SpecificAccountTypeEnum"
+      },
+      "SpecificDepositEnum": {
+        "type": "string",
+        "enum": [
+          "0",
+          "1",
+          "4",
+          "6",
+          "8"
+        ],
+        "title": "SpecificDepositEnum"
       },
       "StockDetailResponse": {
         "properties": {
@@ -13188,6 +14608,15 @@
         "title": "StockValidationResponse",
         "description": "銘柄事前検証レスポンス"
       },
+      "TransactionTypeEnum": {
+        "type": "string",
+        "enum": [
+          "100",
+          "300",
+          "900"
+        ],
+        "title": "TransactionTypeEnum"
+      },
       "ValidationDetails": {
         "properties": {
           "stock_code": {
@@ -13452,8 +14881,8 @@
       "description": "【検証済 / Verified】預り残高・評価額・損益・CA検索 API"
     },
     {
-      "name": "SliceSettings",
-      "description": "【Step 1】スライス注文判定設定マスタ（照会・変更・履歴・計算シミュレーション）API"
+      "name": "HardLimits",
+      "description": "【Step 1】ハードリミット設定マスタ（照会・変更・履歴・計算シミュレーション）API"
     },
     {
       "name": "Customers",

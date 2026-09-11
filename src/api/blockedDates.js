@@ -1,75 +1,91 @@
 import { apiClient } from './client'
 
+/*
+ * 受注不可日マスタ（実 API `/blackout-dates`）。
+ *
+ * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次の 6 点。
+ *   - プロパティ名が日本語（受注不可日 / 備考 / 取消区分 …）
+ *   - 受注不可日は integer の YYYYMMDD（20260101）。アプリ内は 'YYYY-MM-DD'
+ *   - id が無い。主キーは受注不可日そのもの
+ *   - 一覧は受注不可日の降順で、1 ページ 50 件固定（`limit` を受け付けない）
+ *   - 削除は論理削除（取消区分=1）。一覧は既定で取消済みを返さない
+ *   - 対象市場に相当する項目が無い（一覧にも列を出さない）
+ * 更新系は `X-User-Code` ヘッダが必須。付与は client.js の interceptor が全 API 共通で行う。
+ */
+
+/** 1 件のアプリ内モデル（このファイルの JSDoc で使う） */
+/**
+ * @typedef {{ id: string, date: string, reason: string, updatedAt: string }} BlockedDate
+ *   id は受注不可日を文字列にしたもの（'20260101'）。date は 'YYYY-MM-DD'、
+ *   reason は実 API の 備考。updatedAt は編集の楽観的ロックで送り返す合札
+ */
+
 /**
  * 受注不可日の一覧を取得する。
  *
  * ページャーを持つ一覧なので、配列ではなく `{ items, total }` を返す。
  * （ページングの無い一覧は fetchOrders のように配列を返してよい）
  *
- * API 仕様は未確定。docs/api/openapi.json の /blackout-dates は要素のスキーマが未定義なので、
- * limit / offset + total の一般的な形で受ける（海外休場日と同じ判断）。
+ * 取消済み（論理削除）の行は含めない。実 API の include_deleted は既定 false なので送らない。
+ *
+ * `limit` は受け取るが送らない。実 API の一覧は 1 ページ 50 件で固定されており
+ * `limit` というクエリを持たない（応答の limit は常に 50）。ページャーの表示件数は
+ * stores/blockedDates.js の BLOCKED_DATES_PAGE_SIZE 側で 50 に合わせてある。
  *
  * @param {{ limit?: number, offset?: number, dateFrom?: string, dateTo?: string }} [params]
  *   dateFrom / dateTo は 'YYYY-MM-DD'。空文字は「条件なし」としてリクエストに載せない
- * @returns {Promise<{
- *   items: Array<{
- *     id: string, date: string, market: string, reason: string, updatedAt: string,
- *   }>,
- *   total: number,
- * }>} updatedAt は編集の楽観的ロックで送り返す合札（updateBlockedDate 参照）
+ * @returns {Promise<{ items: BlockedDate[], total: number }>} 受注不可日の降順
  */
-export async function fetchBlockedDates({
-  limit = 50,
-  offset = 0,
-  dateFrom = '',
-  dateTo = '',
-} = {}) {
-  const { data } = await apiClient.get('/blocked-dates', {
-    // クエリ名が snake_case であることを知ってよいのは、この層だけ。
+export async function fetchBlockedDates({ offset = 0, dateFrom = '', dateTo = '' } = {}) {
+  const { data } = await apiClient.get('/blackout-dates', {
+    // クエリ名と日付が integer であることを知ってよいのは、この層だけ。
     // 値が undefined のパラメータは axios が送らない
     params: {
-      limit,
       offset,
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
+      start_date: toApiDate(dateFrom),
+      end_date: toApiDate(dateTo),
     },
   })
 
   return {
-    items: (data.items ?? []).map(toBlockedDate),
+    items: (data.blackout_dates ?? []).map(toBlockedDate),
     total: data.total ?? 0,
   }
 }
 
 /**
- * 受注不可日の入力内容を事前検証する（DB には登録しない）。
+ * 受注不可日の入力内容を事前検証する（DB には登録・更新しない）。
  *
- * 実仕様（docs/api/openapi.json の Validate Blackout Date Endpoint）では、登録は
- * 「事前検証を通過した内容を登録する」前提になっている。日付の実在性や重複はサーバだけが
- * 判断できるので、登録の前にこれを呼ぶ。
+ * 実 API は「事前検証を通過した内容を登録する」前提で、日付の実在性や重複はサーバだけが
+ * 判断できる。登録・更新の前にこれを呼び、不合格ならそこへ進まない。
  *
- * 応答の warnings / details は今回扱わない（実仕様が固まってから足す）。
+ * 不合格は例外にしない（`{ valid: false, errors }` を返す）。通信・サーバ障害だけが throw される。
+ * warnings は実 API が常に空配列を返すため受け取らない（海外休場日と違い、取消済みの日付を
+ * 登録し直しても実 API は警告を出さず、そのまま再有効化する）。
  *
- * 編集のときは id を渡す。日付を変えずに理由だけ直す場合に「自分自身と重複している」と
- * 弾かれないよう、更新であることと対象をサーバへ伝える。
+ * `is_update` の使いかたに注意がある。実 API の変更検証は「本文の受注不可日が実在し、かつ
+ * 取消済みでないこと」を確かめるものなので、**日付を変えるときに使うと「存在しません」で弾かれる**。
+ * 一方、日付を変えないときに新規検証を使うと自分自身が重複として弾かれる。
+ * そこで日付を変えたかどうかで使い分ける（id は変更前の受注不可日そのもの）。
  *
  * @param {{ date: string, reason: string, id?: string }} params date は 'YYYY-MM-DD'。
- *   id は編集のときだけ渡す（省略時は新規登録の事前検証として扱われる）
+ *   id は編集のときだけ渡す（変更前の受注不可日。'20260101'）
  * @returns {Promise<{ valid: boolean, errors: string[] }>}
  *   valid が false のときだけ errors に理由が入る
  */
 export async function validateBlockedDate({ date, reason, id = '' }) {
+  const isUpdate = Boolean(id) && id === toApiKey(date)
+
   const { data } = await apiClient.post(
-    '/blocked-dates/validate',
-    { date, reason },
-    // 実仕様の /blackout-dates/validate は is_update しか持たず、対象を渡す口が無い
-    // （兄弟 API の /market-holidays/validate は holiday_date を持つ）。
-    // 自己除外の判断にはサーバ側でも対象が必要なので、同じ場所に id を載せて補っている
-    id ? { params: { is_update: true, id } } : undefined,
+    '/blackout-dates/validate',
+    toBlackoutDateRequest({ date, reason }),
+    // 既定が新規検証なので、変更検証のときだけクエリを付ける
+    isUpdate ? { params: { is_update: true } } : undefined,
   )
 
   return {
     valid: Boolean(data?.valid),
+    // errors は default_factory 付きだが、実 API 以外（プロキシのエラー等）に備える
     errors: Array.isArray(data?.errors) ? data.errors : [],
   }
 }
@@ -77,81 +93,108 @@ export async function validateBlockedDate({ date, reason, id = '' }) {
 /**
  * 受注不可日を 1 件登録する。
  *
- * 対象市場（market）は送らない。docs/api/openapi.json の BlackoutDateRequest に
- * 対応する項目が無く、サーバ側が既定値を決める前提（一覧にも列は出さない）。
+ * 取消済みの同じ日付があるときは、実 API 側が再有効化として扱う（新規行は増えない）。
+ * 海外休場日と違い事前検証は警告を返さないので、画面はその区別をしない。
  *
  * @param {{ date: string, reason: string }} params date は 'YYYY-MM-DD'
- * @returns {Promise<{
- *   id: string, date: string, market: string, reason: string, updatedAt: string,
- * }>} 登録された 1 件
+ * @returns {Promise<BlockedDate>} 登録された 1 件
  */
 export async function createBlockedDate({ date, reason }) {
-  const { data } = await apiClient.post('/blocked-dates', {
-    // date / reason は 1 語なので snake_case との差は無いが、
-    // 変換の責務がこの層にあることを明示するため素通しの形でも書き出す
-    date,
-    reason,
-  })
+  const { data } = await apiClient.post('/blackout-dates', toBlackoutDateRequest({ date, reason }))
 
-  return toBlockedDate(data)
+  return toBlockedDate(data.blackout_date)
 }
 
 /**
  * 受注不可日を 1 件更新する（日付と理由の両方を変更できる）。
  *
+ * パスは変更前の受注不可日、本文の 受注不可日 が変更後の日付になる。
+ *
  * updatedAt は一覧取得時の更新日時をそのまま送り返す楽観的ロックの合札で、
  * サーバ側の現在値と違えば 409 で弾かれる（他の利用者が先に更新していた場合）。
- * 値は照合するだけなので Date には通さない。
- *
- * 実仕様（docs/api/openapi.json の Update Blackout Date Endpoint）とのギャップ:
- * パスは `PUT /blackout-dates/{blackout_date}` で主キーは日付の integer / 本文は日本語キーの
- * BlackoutDateRequest / `X-User-Code` ヘッダ必須（認証方式が決まったら client.js の
- * interceptor で全 API に付けるので、ここでは付けない）/ 応答は BlackoutDateResponse。
- * 一覧・登録・削除が /blocked-dates のままなので、画面内の一貫性を優先して同じ形で受ける。
+ * 値は照合するだけなので Date には通さない。空のときはキーごと送らない
+ * （登録直後の行は実 API 側の更新日時が未設定で、照合する相手が無い）。
  *
  * @param {{ id: string, date: string, reason: string, updatedAt: string }} params
- *   date は 'YYYY-MM-DD'、updatedAt は 'YYYY-MM-DD HH:MM:SS'
- * @returns {Promise<{
- *   id: string, date: string, market: string, reason: string, updatedAt: string,
- * }>} 更新後の 1 件
+ *   id は変更前の受注不可日（'20260101'）、date は変更後の 'YYYY-MM-DD'
+ * @returns {Promise<BlockedDate>} 更新後の 1 件
  */
 export async function updateBlockedDate({ id, date, reason, updatedAt }) {
-  const { data } = await apiClient.put(`/blocked-dates/${encodeURIComponent(id)}`, {
-    date,
-    reason,
-    updated_at: updatedAt,
-  })
+  const { data } = await apiClient.put(
+    `/blackout-dates/${encodeURIComponent(id)}`,
+    toBlackoutDateRequest({ date, reason, updatedAt }),
+  )
 
-  return toBlockedDate(data)
+  return toBlockedDate(data.blackout_date)
 }
 
 /**
- * 受注不可日を 1 件削除する。
+ * 受注不可日を 1 件削除する（実 API は論理削除。取消区分=1 になる）。
  *
- * 実仕様（docs/api/openapi.json の Delete Blackout Date Endpoint）は論理削除で 200 + 本文だが、
- * 一覧・登録が /blocked-dates のままなので、画面内の一貫性を優先して海外休場日と同じ
- * 「204 で本文なし」の形で受ける（API が固まったら 3 本まとめて直す）。
+ * 応答は削除後の 1 件（BlackoutDateResponse）だが、画面は削除前の行を使ってメッセージを出すので
+ * 使い道が無い。呼び出し側が useAsync で成否を判定できるよう、削除した id を返す。
  *
- * @param {string} id 削除対象の id
+ * @param {string} id 削除対象の id（= 受注不可日の 'YYYYMMDD'）
  * @returns {Promise<string>} 削除した id
  */
 export async function deleteBlockedDate(id) {
-  await apiClient.delete(`/blocked-dates/${encodeURIComponent(id)}`)
-  // 204 は本文が無いので、呼び出し側（useAsync）が成功を判定できるよう id を返す
+  await apiClient.delete(`/blackout-dates/${encodeURIComponent(id)}`)
   return id
 }
 
+/** アプリ内モデル → BlackoutDateRequest（登録・更新・事前検証で共用する入力の形） */
+function toBlackoutDateRequest({ date, reason, updatedAt = '' }) {
+  return {
+    受注不可日: toApiDate(date),
+    備考: reason,
+    // 合札が無いときはキーごと送らない（実 API 側は未指定を「照合しない」と解釈する）
+    ...(updatedAt ? { 更新日時: updatedAt } : {}),
+  }
+}
+
+/** BlackoutDateItem → アプリ内モデル */
 function toBlockedDate(raw) {
   return {
-    id: raw.id,
-    // 'YYYY-MM-DD' のまま持つ。Date に通すと UTC 深夜として解釈され、
-    // UTC より西のタイムゾーンで前日にずれる
-    date: raw.date,
-    market: raw.market,
-    reason: raw.reason,
-    // 楽観的ロックの合札。'YYYY-MM-DD HH:MM:SS' は非 ISO でブラウザ差があるので
-    // date と同じく Date には通さない。undefined のまま持つと更新時の JSON.stringify で
-    // キーごと消え、サーバから見て「送っていない」と「空」が区別できなくなるため文字列に寄せる
-    updatedAt: raw.updated_at ?? '',
+    // 実 API に id は無く、主キーは受注不可日そのもの。
+    // 画面と URL では文字列の id として扱うので、ここで 'YYYYMMDD' に寄せる
+    id: toApiKey(toIsoDate(raw?.受注不可日)),
+    date: toIsoDate(raw?.受注不可日),
+    // 備考は nullable。空文字に寄せて、画面が null を出さないようにする
+    reason: raw?.備考 ?? '',
+    /*
+     * 楽観的ロックの合札。実 API は ISO の日時（'2026-09-11T10:00:00'）を返し、
+     * 登録直後の行では null になる。照合はサーバが行うので Date には通さず素の文字列で持つ。
+     * undefined のまま持つと更新時の JSON.stringify でキーごと消え、サーバから見て
+     * 「送っていない」と「空」が区別できなくなるため文字列に寄せる。
+     */
+    updatedAt: raw?.更新日時 ?? '',
   }
+}
+
+/**
+ * 'YYYY-MM-DD' → 20260101。
+ * 空文字や形の違うものは undefined にして、クエリに載せない・本文に入れない。
+ */
+function toApiDate(date) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date ?? '') ? Number(date.replaceAll('-', '')) : undefined
+}
+
+/**
+ * 'YYYY-MM-DD' → '20260101'（主キーとして使う文字列）。
+ * 形の違うものは空文字にする。toApiDate と違い、パスや id の比較に使うので文字列で返す。
+ */
+function toApiKey(date) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date ?? '') ? date.replaceAll('-', '') : ''
+}
+
+/**
+ * 20260101 → '2026-01-01'。
+ *
+ * Date には通さない。UTC 深夜として解釈され、UTC より西のタイムゾーンで前日にずれる。
+ */
+function toIsoDate(value) {
+  const digits = String(value ?? '')
+  if (!/^\d{8}$/.test(digits)) return ''
+
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }

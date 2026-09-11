@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { orderListResponse } from '../fixtures/orders'
 import { canceledMarketHolidays, marketHolidays } from '../fixtures/marketHolidays'
-import { blockedDates } from '../fixtures/blockedDates'
+import { blockedDates, canceledBlockedDates } from '../fixtures/blockedDates'
 import { hardLimitSetting } from '../fixtures/hardLimits'
 
 /*
@@ -12,10 +12,11 @@ import { hardLimitSetting } from '../fixtures/hardLimits'
  *  - バックエンドで実装された API は、このリストから削除する。
  *    未定義のリクエストは実 API へ素通しされるため、削除するだけで本物に切り替わる。
  *
- * 例外は海外休場日（/holidays）とハードリミット（/hard-limits）。実 API は実装済みだが、
- * 単体テストと E2E がこの handlers を共用しているのでハンドラは残し、**実 API と同じ形**に寄せてある。
- *   /holidays     … 日本語キー / integer の休場日 / 降順 / エラーは { detail } / 論理削除
- *   /hard-limits  … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
+ * 例外は海外休場日（/holidays）・受注不可日（/blackout-dates）・ハードリミット（/hard-limits）。
+ * 実 API は実装済みだが、単体テストと E2E がこの handlers を共用しているのでハンドラは残し、
+ * **実 API と同じ形**に寄せてある。
+ *   /holidays / /blackout-dates … 日本語キー / integer の日付 / 降順 / エラーは { detail } / 論理削除
+ *   /hard-limits                … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
  * 実 API に当てて動かすときは .env の VITE_ENABLE_MSW=false にする。
  */
 
@@ -25,9 +26,9 @@ import { hardLimitSetting } from '../fixtures/hardLimits'
  * フィクスチャ自体（fixtures/marketHolidays.js）は生の形のまま触らない。
  * テスト間で持ち越さないよう、単体テストは vitest.setup.js の afterEach で resetMockState() を呼ぶ。
  */
-// 海外休場日は論理削除なので、取消済みの行も持ったままにする（一覧では取消区分で外す）
+// 海外休場日と受注不可日は論理削除なので、取消済みの行も持ったままにする（一覧では取消区分で外す）
 let marketHolidayRows = [...marketHolidays, ...canceledMarketHolidays]
-let blockedDateRows = [...blockedDates]
+let blockedDateRows = [...blockedDates, ...canceledBlockedDates]
 // ハードリミットは 1 件しか無いので、行の配列ではなくオブジェクトの写しを持つ
 let hardLimitRow = { ...hardLimitSetting }
 
@@ -41,10 +42,17 @@ const HOLIDAY_TYPE_CODES = ['0', '1']
 /** 休場区分名はサーバが付けて返す項目。フロントは使わないが、形をそろえるために持つ */
 const HOLIDAY_TYPE_NAMES = { 0: '終日休場', 1: '短縮取引' }
 
+/**
+ * 受注不可日の一覧が 1 ページで返す件数。
+ * 実 API 側はクエリで変えられない固定値なので、モックも定数で持つ
+ * （海外休場日は limit を受け付けるので、そちらはクエリから読む）。
+ */
+const BLACKOUT_DATES_PER_PAGE = 50
+
 /** モックの可変状態をフィクスチャの内容に戻す */
 export function resetMockState() {
   marketHolidayRows = [...marketHolidays, ...canceledMarketHolidays]
-  blockedDateRows = [...blockedDates]
+  blockedDateRows = [...blockedDates, ...canceledBlockedDates]
   hardLimitRow = { ...hardLimitSetting }
 }
 
@@ -119,18 +127,18 @@ export const handlers = [
     const { holidayDate, holidayType, reason } = await readHolidayRequest(request)
 
     if (!isHolidayDate(holidayDate)) {
-      return holidayError(400, '休場日は YYYYMMDD 形式で入力してください')
+      return detailError(400, '休場日は YYYYMMDD 形式で入力してください')
     }
     if (!HOLIDAY_TYPE_CODES.includes(holidayType)) {
-      return holidayError(400, '休場区分を選択してください')
+      return detailError(400, '休場区分を選択してください')
     }
     if (!reason) {
-      return holidayError(400, '休場理由を入力してください')
+      return detailError(400, '休場理由を入力してください')
     }
 
     const existing = marketHolidayRows.find((holiday) => holiday.休場日 === holidayDate)
     if (existing && existing.取消区分 === 0) {
-      return holidayError(400, `休場日 ${holidayDate} は既に登録されています`)
+      return detailError(400, `休場日 ${holidayDate} は既に登録されています`)
     }
 
     const created = toMockHolidayItem({ holidayDate, holidayType, reason })
@@ -153,7 +161,7 @@ export const handlers = [
     )
 
     if (!target) {
-      return holidayError(404, `指定された海外休場日が存在しません: ${params.holidayDate}`)
+      return detailError(404, `指定された海外休場日が存在しません: ${params.holidayDate}`)
     }
 
     const deleted = { ...target, 取消区分: 1, 取消日時: '2026-09-10T10:00:00', 取消者: '702' }
@@ -168,182 +176,191 @@ export const handlers = [
     })
   }),
 
-  // 受注不可日マスタ。API 仕様は未確定なので limit / offset + total の一般的な形で受ける
-  http.get('*/api/blocked-dates', ({ request }) => {
+  /*
+   * 受注不可日マスタの一覧。取消済み（取消区分 1）は既定で返さない。
+   * 実 API は 1 ページ 50 件で固定されていて limit というクエリを持たないので、
+   * ここも limit を読まない（応答の limit は常に 50）。
+   */
+  http.get('*/api/blackout-dates', ({ request }) => {
     const params = new URL(request.url).searchParams
-    const dateFrom = params.get('date_from') ?? ''
-    const dateTo = params.get('date_to') ?? ''
-    const limit = toNonNegativeInt(params.get('limit'), 50)
+    const startDate = toNonNegativeInt(params.get('start_date'), 0)
+    const endDate = toNonNegativeInt(params.get('end_date'), 0)
+    const blackoutDate = toNonNegativeInt(params.get('blackout_date'), 0)
+    const includeDeleted = params.get('include_deleted') === 'true'
     const offset = toNonNegativeInt(params.get('offset'), 0)
 
-    // 'YYYY-MM-DD' は固定長なので、文字列比較がそのまま日付の大小になる
-    const filtered = blockedDateRows.filter(
-      (blocked) => (!dateFrom || blocked.date >= dateFrom) && (!dateTo || blocked.date <= dateTo),
-    )
+    // 受注不可日は YYYYMMDD の integer なので、数値の大小がそのまま日付の大小になる。
+    // 並べ替えは実 API と同じく読み出し側で行う（登録・再有効化のたびに並びを気にしなくてよい）
+    const filtered = blockedDateRows
+      .filter(
+        (blocked) =>
+          (includeDeleted || blocked.取消区分 === 0) &&
+          (!startDate || blocked.受注不可日 >= startDate) &&
+          (!endDate || blocked.受注不可日 <= endDate) &&
+          (!blackoutDate || blocked.受注不可日 === blackoutDate),
+      )
+      .sort((a, b) => b.受注不可日 - a.受注不可日)
 
     return HttpResponse.json({
-      items: filtered.slice(offset, offset + limit),
       // total は絞り込み後・ページ切り出し前の件数
       total: filtered.length,
+      limit: BLACKOUT_DATES_PER_PAGE,
+      offset,
+      blackout_dates: filtered.slice(offset, offset + BLACKOUT_DATES_PER_PAGE),
     })
   }),
 
   /*
-   * 受注不可日の事前検証。実仕様（Validate Blackout Date Endpoint）に倣い、
-   * 入力が不正でも HTTP は 200 で返し、可否は valid / errors で表す。
-   * warnings はフロントが今回扱わないので空配列で返す。
+   * 登録・更新前の事前検証。実 API と同じく、不合格も「200 + valid: false」で返す
+   * （通信エラーと区別できるようにするため）。warnings は実 API が常に空を返す
+   * （取消済みの日付を登録し直しても警告は出ず、そのまま再有効化される）。
+   *
+   * is_update で見るものが変わる。新規検証は「その日付が空いているか」、
+   * 変更検証は「その日付が実在し取消済みでないか」。実 API は最初に見つけた理由で
+   * 打ち切るので、errors も 1 件までにそろえる。
    */
-  http.post('*/api/blocked-dates/validate', async ({ request }) => {
-    const body = await request.json().catch(() => null)
-    const date = typeof body?.date === 'string' ? body.date.trim() : ''
-    const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
+  http.post('*/api/blackout-dates/validate', async ({ request }) => {
+    const { blackoutDate, reason } = await readBlackoutDateRequest(request)
+    const violation = blackoutDateRequestViolation({ blackoutDate, reason })
+    if (violation) return violation
 
-    // 編集のときだけ付く。対象自身は重複と見なさない（日付を変えずに理由だけ直せるようにする）
-    const params = new URL(request.url).searchParams
-    const isUpdate = params.get('is_update') === 'true'
-    const selfId = params.get('id') ?? ''
+    const isUpdate = new URL(request.url).searchParams.get('is_update') === 'true'
+    const existing = blockedDateRows.find((blocked) => blocked.受注不可日 === blackoutDate)
 
-    const errors = []
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      errors.push('日付は YYYY-MM-DD 形式で入力してください。')
-    } else if (
-      blockedDateRows.some(
-        (blocked) => blocked.date === date && !(isUpdate && blocked.id === selfId),
-      )
-    ) {
-      errors.push('その日付の受注不可日はすでに登録されています。')
+    let error = blackoutDateFormatError(blackoutDate)
+    if (!error && isUpdate && (!existing || existing.取消区分 === 1)) {
+      error = `指定された受注不可日(${blackoutDate})は存在しません`
     }
-    if (!reason) {
-      errors.push('理由を入力してください。')
+    if (!error && !isUpdate && existing && existing.取消区分 === 0) {
+      error = `受注不可日(${blackoutDate})は既に登録されています`
     }
 
-    return HttpResponse.json({ valid: errors.length === 0, errors, warnings: [], details: null })
+    return HttpResponse.json({
+      valid: !error,
+      errors: error ? [error] : [],
+      warnings: [],
+      details: error ? null : { 受注不可日: blackoutDate, 備考: reason },
+    })
   }),
 
-  // 受注不可日の新規追加。事前検証を通った入力が来る前提だが、
-  // サーバ側の防御として同じ検証を行う。エラーは client.js が ApiError へ
-  // 正規化できる形（message / code）で返す
-  http.post('*/api/blocked-dates', async ({ request }) => {
-    const body = await request.json().catch(() => null)
-    const date = typeof body?.date === 'string' ? body.date.trim() : ''
-    const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
+  // 受注不可日の新規登録。取消済みの同じ日付があれば再有効化する（行は増えない）
+  http.post('*/api/blackout-dates', async ({ request }) => {
+    const { blackoutDate, reason } = await readBlackoutDateRequest(request)
+    const violation = blackoutDateRequestViolation({ blackoutDate, reason })
+    if (violation) return violation
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return HttpResponse.json(
-        { message: '日付は YYYY-MM-DD 形式で入力してください。', code: 'invalid_date' },
-        { status: 400 },
-      )
-    }
-    if (!reason) {
-      return HttpResponse.json(
-        { message: '理由を入力してください。', code: 'invalid_reason' },
-        { status: 400 },
-      )
-    }
-    if (blockedDateRows.some((blocked) => blocked.date === date)) {
-      return HttpResponse.json(
-        { message: 'その日付の受注不可日はすでに登録されています。', code: 'duplicate_date' },
-        { status: 409 },
-      )
+    const formatError = blackoutDateFormatError(blackoutDate)
+    if (formatError) return detailError(400, formatError)
+
+    const existing = blockedDateRows.find((blocked) => blocked.受注不可日 === blackoutDate)
+    if (existing && existing.取消区分 === 0) {
+      return detailError(400, `受注不可日(${blackoutDate})は既に登録されています`)
     }
 
-    // 対象市場はリクエストに無い（実仕様の BlackoutDateRequest に該当項目が無い）ので、
-    // 「サーバが既定値を決める」という想定でモック側が埋める
-    const created = {
-      id: `bkd_${date.replaceAll('-', '')}`,
-      date,
-      market: '全市場',
+    const created = toMockBlackoutDateItem({
+      blackoutDate,
       reason,
-      // 更新日時も「サーバが決める値」なのでここで埋める（編集の楽観的ロックが使う）
-      updated_at: nowTimestamp(),
-    }
-    // 一覧は日付の昇順を前提にしているので、追加後も並びを保つ
-    blockedDateRows = [...blockedDateRows, created].sort((a, b) => a.date.localeCompare(b.date))
+      reactivated: Boolean(existing),
+    })
+    // 取消済みの行があれば置き換える（＝再有効化。行は増えない）
+    blockedDateRows = existing
+      ? blockedDateRows.map((blocked) => (blocked.受注不可日 === blackoutDate ? created : blocked))
+      : [...blockedDateRows, created]
 
-    return HttpResponse.json(created, { status: 201 })
+    return HttpResponse.json(
+      { success: true, blackout_date: created, message: '受注不可日を登録しました' },
+      { status: 201 },
+    )
   }),
 
   /*
    * 受注不可日の更新（日付と理由の両方を変更できる）。
+   * パスが変更前の日付、本文の 受注不可日 が変更後の日付。
+   *
    * 検査の順序が要点で、「対象が居るか → 入力の形 → 盤面が古くないか → 他の行との重複」と見る。
-   * 競合（409 conflict）を重複より先に見るのは、他の利用者が書き換えた後の行に
+   * 競合（409）を重複より先に見るのは、他の利用者が書き換えた後の行に
    * 「その日付は既に登録されています」と返すと理由を取り違えさせるため。
    * まず「盤面が古い」ことを伝える。
    */
-  http.put('*/api/blocked-dates/:id', async ({ params, request }) => {
-    const id = String(params.id)
-    const body = await request.json().catch(() => null)
-    const date = typeof body?.date === 'string' ? body.date.trim() : ''
-    const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
-    const updatedAt = typeof body?.updated_at === 'string' ? body.updated_at : ''
+  http.put('*/api/blackout-dates/:blackoutDate', async ({ params, request }) => {
+    const targetDate = Number(params.blackoutDate)
+    const { blackoutDate, reason, updatedAt } = await readBlackoutDateRequest(request)
+    const violation = blackoutDateRequestViolation({ blackoutDate, reason })
+    if (violation) return violation
 
-    const current = blockedDateRows.find((blocked) => blocked.id === id)
+    const current = blockedDateRows.find(
+      (blocked) => blocked.受注不可日 === targetDate && blocked.取消区分 === 0,
+    )
     if (!current) {
-      return HttpResponse.json(
-        { message: '対象の受注不可日が見つかりません。', code: 'not_found' },
-        { status: 404 },
+      return detailError(404, '指定された受注不可日データが存在しません')
+    }
+
+    const formatError = blackoutDateFormatError(blackoutDate)
+    if (formatError) return detailError(400, formatError)
+
+    // 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば弾く
+    if (!isSameTimestamp(updatedAt, current.更新日時)) {
+      return detailError(
+        409,
+        '他のユーザーによって受注不可日データが更新されています。最新データを再取得してください。',
       )
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return HttpResponse.json(
-        { message: '日付は YYYY-MM-DD 形式で入力してください。', code: 'invalid_date' },
-        { status: 400 },
+
+    if (
+      blackoutDate !== targetDate &&
+      blockedDateRows.some(
+        (blocked) => blocked.受注不可日 === blackoutDate && blocked.取消区分 === 0,
       )
-    }
-    if (!reason) {
-      return HttpResponse.json(
-        { message: '理由を入力してください。', code: 'invalid_reason' },
-        { status: 400 },
-      )
-    }
-    // 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば弾く（欠落も不一致とみなす）
-    if (updatedAt !== current.updated_at) {
-      return HttpResponse.json(
-        {
-          message: '他の担当者が先に更新しました。再読み込みしてからやり直してください。',
-          code: 'conflict',
-        },
-        { status: 409 },
-      )
-    }
-    if (blockedDateRows.some((blocked) => blocked.date === date && blocked.id !== id)) {
-      return HttpResponse.json(
-        { message: 'その日付の受注不可日はすでに登録されています。', code: 'duplicate_date' },
-        { status: 409 },
-      )
+    ) {
+      return detailError(400, `受注不可日(${blackoutDate})は既に登録されています`)
     }
 
     const updated = {
       ...current,
-      // 実仕様は日付が主キーなので、日付を変えたら id も新しい日付から作り直す
-      id: `bkd_${date.replaceAll('-', '')}`,
-      date,
-      reason,
+      受注不可日: blackoutDate,
+      備考: reason,
+      ユーザー操作フラグ: 1,
       // 合札はサーバが新しくする（リクエストで来た値は照合に使うだけ）
-      updated_at: nowTimestamp(),
+      更新日時: nowIsoTimestamp(),
+      更新者: '006',
     }
-    // 一覧は日付の昇順を前提にしているので、更新後も並びを保つ
-    blockedDateRows = blockedDateRows
-      .map((blocked) => (blocked.id === id ? updated : blocked))
-      .sort((a, b) => a.date.localeCompare(b.date))
+    /*
+     * 日付が主キーなので、日付を変えた更新は「元の日付の行を消して、新しい日付の行を置く」ことになる。
+     * 一覧は読み出し側で並べ替えるので、ここでの位置は気にしない。
+     */
+    blockedDateRows = [
+      ...blockedDateRows.filter((blocked) => blocked.受注不可日 !== targetDate),
+      updated,
+    ]
 
-    return HttpResponse.json(updated)
+    return HttpResponse.json({
+      success: true,
+      blackout_date: updated,
+      message: '受注不可日を更新しました',
+    })
   }),
 
-  // 受注不可日の削除。成功時は本文を返さない（204）
-  http.delete('*/api/blocked-dates/:id', ({ params }) => {
-    const id = String(params.id)
+  // 受注不可日の論理削除。行は残したまま取消区分を 1 にする
+  http.delete('*/api/blackout-dates/:blackoutDate', ({ params }) => {
+    const targetDate = Number(params.blackoutDate)
+    const target = blockedDateRows.find(
+      (blocked) => blocked.受注不可日 === targetDate && blocked.取消区分 === 0,
+    )
 
-    if (!blockedDateRows.some((blocked) => blocked.id === id)) {
-      return HttpResponse.json(
-        { message: '対象の受注不可日が見つかりません。', code: 'not_found' },
-        { status: 404 },
-      )
+    if (!target) {
+      return detailError(404, '指定された受注不可日が存在しないか、既に削除されています')
     }
 
-    blockedDateRows = blockedDateRows.filter((blocked) => blocked.id !== id)
+    const deleted = { ...target, 取消区分: 1, 取消日時: nowIsoTimestamp(), 取消者: '006' }
+    blockedDateRows = blockedDateRows.map((blocked) =>
+      blocked.受注不可日 === targetDate ? deleted : blocked,
+    )
 
-    return new HttpResponse(null, { status: 204 })
+    return HttpResponse.json({
+      success: true,
+      blackout_date: deleted,
+      message: '受注不可日を削除しました',
+    })
   }),
 
   // ハードリミット（バックエンドの呼称は「スライス注文設定」）。1 件だけの設定なので一覧ではない
@@ -371,7 +388,7 @@ export const handlers = [
     // 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば弾く
     const updatedAt = body?.['更新日時'] ?? null
     if (updatedAt && updatedAt !== hardLimitRow['更新日時']) {
-      return HttpResponse.json({ detail: SLICE_CONFLICT_DETAIL }, { status: 409 })
+      return detailError(409, SLICE_CONFLICT_DETAIL)
     }
 
     hardLimitRow = {
@@ -400,9 +417,43 @@ function nowTimestamp() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ')
 }
 
+/**
+ * サーバが決める日時。実 API が datetime を返すときの形（'2026-09-11T10:00:00'）。
+ * nowTimestamp と違って T 区切りなのは、FastAPI が datetime を ISO で直列化するため。
+ */
+function nowIsoTimestamp() {
+  return new Date().toISOString().slice(0, 19)
+}
+
 function toNonNegativeInt(value, fallback) {
   const parsed = Number.parseInt(value ?? '', 10)
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback
+}
+
+/**
+ * 実 API の ErrorResponse（`{ detail: string }`）と同じ形で返す。
+ * 実 API 側は共通のモデルなので、マスタごとに分けず 1 つで使う。
+ */
+function detailError(status, detail) {
+  return HttpResponse.json({ detail }, { status })
+}
+
+/**
+ * FastAPI の 422（HTTPValidationError）と同じ形で返す。
+ * 本文のスキーマ（pydantic）で弾かれるものはサービス層の検証へ進まず、この形になる。
+ */
+function requestValidationError(loc, msg, type) {
+  return HttpResponse.json({ detail: [{ loc, msg, type }] }, { status: 422 })
+}
+
+/** YYYYMMDD の integer が実在する日か（範囲は見ない） */
+function isRealYmd(value) {
+  const year = Math.floor(value / 10000)
+  const month = Math.floor(value / 100) % 100
+  const day = value % 100
+  const date = new Date(Date.UTC(year, month - 1, day))
+
+  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }
 
 /* ここからハードリミット（/hard-limits）のモック用ヘルパ。実 API の 422 を模すためだけのもの */
@@ -480,17 +531,7 @@ async function readHolidayRequest(request) {
 function isHolidayDate(value) {
   if (!Number.isInteger(value) || value < 19000101 || value > 29991231) return false
 
-  const year = Math.floor(value / 10000)
-  const month = Math.floor(value / 100) % 100
-  const day = value % 100
-  const date = new Date(Date.UTC(year, month - 1, day))
-
-  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-}
-
-/** 実 API の ErrorResponse（{ detail: string }）と同じ形で返す */
-function holidayError(status, detail) {
-  return HttpResponse.json({ detail }, { status })
+  return isRealYmd(value)
 }
 
 /** HolidayItem を組み立てる（登録・再有効化の応答用） */
@@ -519,5 +560,110 @@ function toValidationDetails({ holidayDate, holidayType, reason }) {
     休場区分: holidayType,
     休場区分名: HOLIDAY_TYPE_NAMES[holidayType] ?? null,
     休場理由: reason,
+  }
+}
+
+/* ここから受注不可日（/blackout-dates）のモック用ヘルパ。実 API の形に合わせるためだけのもの */
+
+/**
+ * BlackoutDateRequest（日本語キー）を読み取る。
+ *
+ * 備考は trim しない（実 API 側も trim せずそのまま保存する）。
+ * 更新日時は「キーが無い」と「空文字」を区別する。前者は楽観的ロックの合札を送っていない
+ * ことを意味し、照合を行わない（登録直後の行は実 API 側の更新日時が未設定）。
+ */
+async function readBlackoutDateRequest(request) {
+  const body = await request.json().catch(() => null)
+
+  return {
+    blackoutDate: typeof body?.受注不可日 === 'number' ? body.受注不可日 : null,
+    reason: typeof body?.備考 === 'string' ? body.備考 : '',
+    updatedAt: typeof body?.更新日時 === 'string' ? body.更新日時 : null,
+  }
+}
+
+/**
+ * pydantic（BlackoutDateRequest）が本文を受け取る前に弾くもの。
+ * 実 API はここで FastAPI の 422 を返し、サービス層の検証には進まない。
+ * 画面はこの経路に入らない入力しか送らないが、モックが「サーバ側の検証」を模す以上
+ * 素通しさせない（形の違う本文が 200 で通ると、api 層の取り違えに気づけない）。
+ *
+ * @returns {Response|null} 違反が無ければ null
+ */
+function blackoutDateRequestViolation({ blackoutDate, reason }) {
+  if (!Number.isInteger(blackoutDate)) {
+    return requestValidationError(['body', '受注不可日'], 'Field required', 'missing')
+  }
+  if (blackoutDate < 19000101) {
+    return requestValidationError(
+      ['body', '受注不可日'],
+      'Input should be greater than or equal to 19000101',
+      'greater_than_equal',
+    )
+  }
+  if (blackoutDate > 29991231) {
+    return requestValidationError(
+      ['body', '受注不可日'],
+      'Input should be less than or equal to 29991231',
+      'less_than_equal',
+    )
+  }
+  if (reason.length > 45) {
+    return requestValidationError(
+      ['body', '備考'],
+      'String should have at most 45 characters',
+      'string_too_long',
+    )
+  }
+  return null
+}
+
+/**
+ * サービス層（_validate_blackout_date）が見る日付の妥当性。
+ * 8 桁と範囲は pydantic 側で弾かれるので、ここに来るのは 20260230 のような実在しない日だけ。
+ *
+ * @returns {string|null} 問題が無ければ null
+ */
+function blackoutDateFormatError(blackoutDate) {
+  return isRealYmd(blackoutDate) ? null : '受注不可日に有効な日付（YYYYMMDD）を指定してください'
+}
+
+/**
+ * 楽観的ロックの合札を照合する。
+ *
+ * 実 API は T と半角空白の差を吸収し、どちらかがもう一方の先頭に一致すれば同じ値と見なす
+ * （秒未満の桁が付くかどうかがクライアントによって違うため）。
+ * 合札を送っていない（null）ときと、サーバ側に更新日時が無いときは照合しない。
+ */
+function isSameTimestamp(provided, current) {
+  if (provided === null || current === null || current === undefined) return true
+
+  const normalizedProvided = String(provided).replace('T', ' ')
+  const normalizedCurrent = String(current).replace('T', ' ')
+
+  return (
+    normalizedProvided.startsWith(normalizedCurrent) ||
+    normalizedCurrent.startsWith(normalizedProvided)
+  )
+}
+
+/** BlackoutDateItem を組み立てる（登録・再有効化の応答用） */
+function toMockBlackoutDateItem({ blackoutDate, reason, reactivated = false }) {
+  return {
+    受注不可日: blackoutDate,
+    備考: reason,
+    取消区分: 0,
+    // 画面からの登録なので 1（システム連携ではない）
+    ユーザー操作フラグ: 1,
+    作成日時: nowIsoTimestamp(),
+    作成者: '006',
+    /*
+     * 新規登録では実 API 側も更新日時を入れない（INSERT の対象外）。
+     * 取消済みの行の再有効化は UPDATE なので、そのときだけ入る。
+     */
+    更新日時: reactivated ? nowIsoTimestamp() : null,
+    更新者: reactivated ? '006' : null,
+    取消日時: null,
+    取消者: null,
   }
 }

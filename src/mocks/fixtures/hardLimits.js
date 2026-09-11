@@ -1,7 +1,12 @@
 /*
  * ハードリミット（バックエンドの呼称は「スライス注文設定」）。
  * GET /slice-settings が返す生の形。キーは openapi.json の SliceSettingResponse のまま日本語。
- * 値は画面モック（/masters/hard-limits）の 5.00% / 10,000 株 / USD 1,000,000 に合わせる。
+ * 値は画面モック（/masters/hard-limits）の 5.00% / 10,000 株 / USD 1,000,000 に合わせる
+ * （実 API のローカル DB の値ではない。あちらはいつでも変わるので追いかけない）。
+ *
+ * 大口金額閾値は openapi.json では number で、実 API は 300000.0 と小数付きで返す。
+ * JS は整数と実数を区別しないため、この形では書き分けられない（表示側の formatQuantity は
+ * 小数が乗っても通る）。
  */
 export const hardLimitSetting = {
   ID: 1,
@@ -10,7 +15,8 @@ export const hardLimitSetting = {
   大口数量閾値: 10000,
   大口金額閾値: 1000000,
   スライス有効フラグ: 1,
-  備考: null,
+  // 画面に出さない項目。更新のたびに消えていないことをテストで守りたいので non-null にしておく
+  備考: '初期標準スライス設定',
   ユーザー操作フラグ: 0,
   作成日時: '2026-01-05 09:00:00',
   作成者: 'SYSTEM',

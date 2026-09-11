@@ -10,7 +10,13 @@ import { apiClient } from './client'
  * 市場関与率は比率（0.05 = 5%）。% への換算は表示側の関心なので、ここでは変換しない。
  */
 
-/** 現在のハードリミットを取得する。未設定なら null */
+/**
+ * 現在のハードリミットを取得する。
+ *
+ * 実 API は必ず 200 + SliceSettingResponse を返す（ID 以下 6 項目が required）ので
+ * 空にはならないが、本文なしで来ても落ちないよう null を返す防御は残す。
+ * 画面はこれを「未設定」として 4 状態のひとつに出す。
+ */
 export async function fetchHardLimits() {
   const { data } = await apiClient.get('/slice-settings')
   return data ? toHardLimits(data) : null
@@ -22,15 +28,20 @@ export async function updateHardLimits({
   maxQuantity,
   maxAmount,
   sliceEnabled,
+  note,
   updatedAt,
 }) {
   const { data } = await apiClient.put('/slice-settings', {
     市場関与率: participationRate,
     大口数量閾値: maxQuantity,
     大口金額閾値: maxAmount,
-    // 画面に出さない項目。省略するとサーバ側の既定（1）に落ちて勝手に有効化されるため、
-    // 取得した現在値をそのまま送り返して保持する
+    /*
+     * どちらも画面に出さない項目。SliceSettingUpdateRequest では optional だが、
+     * 省略すると実 API はサーバ側の既定に落とす（実測: スライス有効フラグは 1 に、
+     * 備考は NULL になる）。取得した現在値をそのまま送り返して保持する。
+     */
     スライス有効フラグ: sliceEnabled ? 1 : 0,
+    備考: note,
     // 楽観的ロック用。他の担当者が先に更新していれば 409 で弾かれる
     更新日時: updatedAt,
   })
@@ -45,7 +56,8 @@ function toHardLimits(raw) {
     maxQuantity: raw['大口数量閾値'],
     maxAmount: raw['大口金額閾値'],
     sliceEnabled: raw['スライス有効フラグ'] === 1,
-    note: raw['備考'] ?? '',
+    // 画面に出さないので '' に丸めない。更新時にそのまま送り返すため NULL は NULL のまま持つ
+    note: raw['備考'] ?? null,
     updatedAt: raw['更新日時'] ?? null,
     updatedBy: raw['更新者'] ?? null,
   }

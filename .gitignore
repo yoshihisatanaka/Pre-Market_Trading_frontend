@@ -47,3 +47,6 @@ Desktop.ini
 # logs
 *.log
 npm-debug.log*
+
+# モンキーテストの出力（monkey/ のランナーが書く。再実行できるのでコミットしない）
+monkey-report/

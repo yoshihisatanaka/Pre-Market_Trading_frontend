@@ -14,11 +14,11 @@ import { useAsync } from '@/composables/useAsync'
  *   pageSize: number,
  *   filterKeys?: string[],
  *   fetchPage: (params: object) => Promise<{ items: object[], total: number }>,
- *   createItem: (payload: object) => Promise<object>,
+ *   createItem?: (payload: object) => Promise<object>,
  *   validateItem?: (payload: object) =>
  *     Promise<{ valid: boolean, errors: string[], warnings?: string[] }>,
  *   updateItem?: (payload: object) => Promise<object>,
- *   deleteItem: (id: string) => Promise<unknown>,
+ *   deleteItem?: (id: string) => Promise<unknown>,
  * }} options
  *   filterKeys は検索条件の名前。同名の ref をそのまま公開する（画面が storeToRefs で読む）。
  *
@@ -32,14 +32,17 @@ import { useAsync } from '@/composables/useAsync'
  *   利用者が承知して押し直すとき、画面は payload に `acknowledgedWarnings: true` を足す。
  *   更新側は warnings を扱わない（warnings を返す事前検証を持つ編集画面がまだ無い）。
  *
- *   updateItem は行ごとの編集を持つ一覧だけ渡す。渡さない一覧には更新系の名前を公開しない。
+ *   createItem / updateItem / deleteItem は、その操作を持つ一覧だけ渡す。
+ *   渡さない一覧にはその系統の名前を公開しない（読むだけの一覧を、登録も削除も
+ *   できるように見せない。呼べば「関数が無い」で落ちる）。
  * @returns {object}
  *   items / total / limit / offset / filterKeys の各 ref /
- *   loading / error / isEmpty / load / reload /
- *   creating / createError / validationErrors / validationWarnings / create / clearCreateError /
- *   deleting / deleteError / remove / clearDeleteError。
+ *   loading / error / isEmpty / load / reload。
+ *   createItem を渡した場合はさらに
+ *   creating / createError / validationErrors / validationWarnings / create / clearCreateError。
  *   updateItem を渡した場合はさらに
  *   updating / updateError / updateValidationErrors / update / clearUpdateError。
+ *   deleteItem を渡した場合はさらに deleting / deleteError / remove / clearDeleteError。
  *   validationErrors / validationWarnings は validateItem を渡さない場合は常に空配列。
  *   1 件の形は各 src/api/*.js の JSDoc を参照。
  */
@@ -266,20 +269,23 @@ export function useCrudList({
     isEmpty,
     load,
     reload,
-    creating,
-    createError,
-    validationErrors,
-    validationWarnings,
-    create,
-    clearCreateError,
-    // 更新は updateItem を渡した一覧だけが持つ。渡していない一覧で store.update() を
-    // 呼んだら「関数が無い」で落ちるようにしたいので、キーごと出さない
+    /*
+     * 更新系は、その操作を持つ一覧だけが持つ。渡していない一覧で store.create() などを
+     * 呼んだら「関数が無い」で落ちるようにしたいので、キーごと出さない。
+     */
+    ...(createItem
+      ? {
+          creating,
+          createError,
+          validationErrors,
+          validationWarnings,
+          create,
+          clearCreateError,
+        }
+      : {}),
     ...(updateItem
       ? { updating, updateError, updateValidationErrors, update, clearUpdateError }
       : {}),
-    deleting,
-    deleteError,
-    remove,
-    clearDeleteError,
+    ...(deleteItem ? { deleting, deleteError, remove, clearDeleteError } : {}),
   }
 }

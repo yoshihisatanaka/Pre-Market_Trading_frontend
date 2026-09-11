@@ -30,6 +30,12 @@ const routes = [
     meta: { title: '受注不可日マスタ' },
   },
   {
+    path: '/masters/ca',
+    name: 'corporate-action-list',
+    component: () => import('@/views/CorporateActionListView.vue'),
+    meta: { title: 'CAマスタ' },
+  },
+  {
     path: '/masters/hard-limits',
     name: 'hard-limit-master',
     component: () => import('@/views/HardLimitMasterView.vue'),

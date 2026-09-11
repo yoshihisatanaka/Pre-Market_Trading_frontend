@@ -15,26 +15,43 @@ import BlockedDateListView from './BlockedDateListView.vue'
  */
 const PATH = '/masters/blocked-dates'
 
-// 期待値はフィクスチャと表示件数から導く（件数を直接書かない）
+/*
+ * フィクスチャはバックエンドの生の形（日本語キー / 受注不可日は YYYYMMDD の integer）なので、
+ * 期待値は toRow でアプリ内モデルの形（api 層が返す形）に直してから使う。
+ * これ以降のテスト本体は id / date / reason だけを見る。
+ */
+const toIsoDate = (blackoutDate) => {
+  const digits = String(blackoutDate)
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
+}
+const toRow = (blocked) => ({
+  id: String(blocked.受注不可日),
+  date: toIsoDate(blocked.受注不可日),
+  reason: blocked.備考 ?? '',
+})
+
+// 期待値はフィクスチャと表示件数から導く（56 / 50 を直接書かない）
 const PAGE_SIZE = BLOCKED_DATES_PAGE_SIZE
 const TOTAL = blockedDates.length
-const firstPage = blockedDates.slice(0, PAGE_SIZE)
-const secondPage = blockedDates.slice(PAGE_SIZE, PAGE_SIZE * 2)
+// フィクスチャは実 API と同じ受注不可日の降順なので、この並びがそのまま 1 ページ目になる
+const allRows = blockedDates.map(toRow)
+const firstPage = allRows.slice(0, PAGE_SIZE)
+const secondPage = allRows.slice(PAGE_SIZE, PAGE_SIZE * 2)
 
 // 表示件数の倍数でない offset（丸めを廃止したので、この位置から表示件数分が出る）
 const ODD_OFFSET = 7
-const oddPage = blockedDates.slice(ODD_OFFSET, ODD_OFFSET + PAGE_SIZE)
+const oddPage = allRows.slice(ODD_OFFSET, ODD_OFFSET + PAGE_SIZE)
 
 // 絞り込みはフィクスチャ先頭の年をそのまま使う（年もハードコードしない）
-const YEAR = blockedDates[0].date.slice(0, 4)
+const YEAR = allRows[0].date.slice(0, 4)
 const DATE_FROM = `${YEAR}-01-01`
 const DATE_TO = `${YEAR}-12-31`
-const inYear = blockedDates.filter((blocked) => blocked.date.startsWith(YEAR))
+const inYear = allRows.filter((blocked) => blocked.date.startsWith(YEAR))
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
 // 登録に使う「フィクスチャに無い日付」もフィクスチャから導く（既存日付と衝突したら別日になる）
-const existingDates = new Set(blockedDates.map((blocked) => blocked.date))
+const existingDates = new Set(allRows.map((blocked) => blocked.date))
 const NEW_DATE = (() => {
   for (let day = 1; day <= 28; day += 1) {
     const date = `${YEAR}-06-${String(day).padStart(2, '0')}`
@@ -44,47 +61,45 @@ const NEW_DATE = (() => {
 })()
 const NEW_REASON = 'テスト受注不可日'
 
-// 既定の事前検証は既存の日付を重複として弾くので、フィクスチャ先頭の日付をそのまま使う
-const DUPLICATE_DATE = blockedDates[0].date
+// 既定ハンドラの事前検証は既存の日付を重複として弾くので、先頭の行の日付をそのまま使う
+const DUPLICATE_DATE = allRows[0].date
+/** 実 API（とモック）が重複を知らせる文言。対象の日付が本文に入る */
+const duplicateMessage = (row) => `受注不可日(${row.id})は既に登録されています`
 
-// 事前検証ハンドラが返す文言（src/mocks/handlers/index.js と共有する定数）
-const DUPLICATE_MESSAGE = 'その日付の受注不可日はすでに登録されています。'
-const INVALID_DATE_MESSAGE = '日付は YYYY-MM-DD 形式で入力してください。'
-
-// 複数の理由が並ぶ表示を確かめるための応答。既定ハンドラは日付の不正と重複を排他で返すため、
-// 「2 件同時」は差し替えで作る
-const MULTI_MESSAGES = [INVALID_DATE_MESSAGE, DUPLICATE_MESSAGE]
+/*
+ * 複数の理由が並ぶ表示を確かめるための応答。
+ * 実 API は最初に見つけた 1 件で打ち切るので、「2 件同時」は差し替えで作る。
+ */
+const MULTI_MESSAGES = [
+  '受注不可日に有効な日付（YYYYMMDD）を指定してください',
+  '理由・備考は45文字以内で指定してください',
+]
 
 // 削除の対象もフィクスチャから導く（id / 日付を直接書かない）
-const DELETE_TARGET = blockedDates[0]
-const NOT_FOUND_MESSAGE = '対象の受注不可日が見つかりません。'
+const DELETE_TARGET = allRows[0]
+const NOT_FOUND_MESSAGE = '指定された受注不可日が存在しないか、既に削除されています'
 
 /*
  * 「最終ページが 1 件だけ」を作るための絞り込み。
- * 先頭から PAGE_SIZE + 1 件目までを範囲にすると 2 ページ目がちょうど 1 件になる。
+ * 一覧は日付の降順なので、先頭（最新）から PAGE_SIZE + 1 件目までを範囲に取ると
+ * 2 ページ目がちょうど 1 件になる（From が古い側 = その 1 件、To が最新の日付）。
  */
-const LAST_PAGE_FROM = blockedDates[0].date
-const LAST_PAGE_TO = blockedDates[PAGE_SIZE].date
-const LAST_PAGE_TARGET = blockedDates[PAGE_SIZE]
+const LAST_PAGE_TARGET = allRows[PAGE_SIZE]
+const LAST_PAGE_FROM = LAST_PAGE_TARGET.date
+const LAST_PAGE_TO = allRows[0].date
 
 // 編集の対象もフィクスチャから導く（別の行の日付へ変えれば重複で弾かれる）
-const EDIT_TARGET = blockedDates[0]
-const OTHER_TARGET = blockedDates[1]
+const EDIT_TARGET = allRows[0]
+const OTHER_TARGET = allRows[1]
 const EDITED_REASON = '編集後の理由'
-const CONFLICT_MESSAGE = '他の担当者が先に更新しました。再読み込みしてからやり直してください。'
+const CONFLICT_MESSAGE =
+  '他のユーザーによって受注不可日データが更新されています。最新データを再取得してください。'
 
 /*
- * 「絞り込みの範囲外へ動かす日付」。上の LAST_PAGE_TO より後で、かつフィクスチャに無い日付を探す
- * （範囲外に出れば total が 1 減り、最終ページが空になる）。
+ * 「絞り込みの範囲外へ動かす日付」。降順の先頭が最新なので YEAR はフィクスチャの最終年で、
+ * その翌年はフィクスチャに無く LAST_PAGE_TO より後になる（= 範囲から出て total が 1 減る）。
  */
-const OUT_OF_RANGE_DATE = (() => {
-  const lastYear = blockedDates[TOTAL - 1].date.slice(0, 4)
-  for (let day = 1; day <= 28; day += 1) {
-    const date = `${lastYear}-06-${String(day).padStart(2, '0')}`
-    if (!existingDates.has(date) && date > LAST_PAGE_TO) return date
-  }
-  throw new Error('絞り込みの範囲外になる空き日付が見つからなかった')
-})()
+const OUT_OF_RANGE_DATE = `${Number(YEAR) + 1}-06-01`
 
 const Page = { render: () => h('div') }
 
@@ -128,27 +143,38 @@ const headers = (wrapper) => wrapper.findAll('th').map((th) => th.text())
 const pageButton = (wrapper, page) =>
   wrapper.find(`[data-testid="pagination-page"][data-page="${page}"]`)
 
+/** BlackoutDateListResponse の形で返す */
+const listBody = (items, total = TOTAL) => ({
+  total,
+  limit: PAGE_SIZE,
+  offset: 0,
+  blackout_dates: items,
+})
+
+/** BlackoutDateResponse の形で返す（登録・更新・削除の応答） */
+const itemBody = (item) => ({ success: true, blackout_date: item, message: 'ok' })
+
 const errorHandler = (options) =>
   http.get(
-    '*/api/blocked-dates',
-    () => HttpResponse.json({ message: ERROR_MESSAGE }, { status: 500 }),
+    '*/api/blackout-dates',
+    () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     options,
   )
 const emptyHandler = (options) =>
-  http.get('*/api/blocked-dates', () => HttpResponse.json({ items: [], total: 0 }), options)
+  http.get('*/api/blackout-dates', () => HttpResponse.json(listBody([], 0)), options)
 
 // 事前検証は HTTP 200 で valid / errors を返す契約なので、不合格も 200 で作る
 const validateInvalidHandler = (errors) =>
-  http.post('*/api/blocked-dates/validate', () =>
+  http.post('*/api/blackout-dates/validate', () =>
     HttpResponse.json({ valid: false, errors, warnings: [], details: null }),
   )
 const validateErrorHandler = () =>
-  http.post('*/api/blocked-dates/validate', () =>
-    HttpResponse.json({ message: ERROR_MESSAGE }, { status: 500 }),
+  http.post('*/api/blackout-dates/validate', () =>
+    HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
   )
 const deleteNotFoundHandler = () =>
-  http.delete('*/api/blocked-dates/:id', () =>
-    HttpResponse.json({ message: NOT_FOUND_MESSAGE, code: 'not_found' }, { status: 404 }),
+  http.delete('*/api/blackout-dates/:blackoutDate', () =>
+    HttpResponse.json({ detail: NOT_FOUND_MESSAGE }, { status: 404 }),
   )
 
 const deleteButton = (wrapper, id) => wrapper.find(`[data-testid="blocked-dates-delete-${id}"]`)
@@ -412,16 +438,13 @@ describe('BlockedDateListView', () => {
     let validateCalls = 0
     let createCalls = 0
     server.use(
-      http.post('*/api/blocked-dates/validate', () => {
+      http.post('*/api/blackout-dates/validate', () => {
         validateCalls += 1
         return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
       }),
-      http.post('*/api/blocked-dates', () => {
+      http.post('*/api/blackout-dates', () => {
         createCalls += 1
-        return HttpResponse.json(
-          { id: 'unexpected', date: '', market: '', reason: '' },
-          { status: 201 },
-        )
+        return HttpResponse.json(itemBody(blockedDates[0]), { status: 201 })
       }),
     )
     const { wrapper } = await mountView()
@@ -473,7 +496,7 @@ describe('BlockedDateListView', () => {
     await settle()
 
     expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
-    expect(validationMessages(wrapper)).toEqual([DUPLICATE_MESSAGE])
+    expect(validationMessages(wrapper)).toEqual([duplicateMessage(allRows[0])])
     // サーバの拒否は項目のエラーにも通信障害用の表示にも混ぜない
     expect(fieldError(wrapper, addDateInput(wrapper))).toBe('')
     expect(exists(wrapper, 'blocked-dates-add-error')).toBe(false)
@@ -539,7 +562,7 @@ describe('BlockedDateListView', () => {
       releaseValidate = resolve
     })
     server.use(
-      http.post('*/api/blocked-dates/validate', async () => {
+      http.post('*/api/blackout-dates/validate', async () => {
         await validateGate
         return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
       }),
@@ -713,13 +736,13 @@ describe('BlockedDateListView', () => {
     let validateCalls = 0
     let updateCalls = 0
     server.use(
-      http.post('*/api/blocked-dates/validate', () => {
+      http.post('*/api/blackout-dates/validate', () => {
         validateCalls += 1
         return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
       }),
-      http.put('*/api/blocked-dates/:id', () => {
+      http.put('*/api/blackout-dates/:blackoutDate', () => {
         updateCalls += 1
-        return HttpResponse.json({ id: 'unexpected', date: '', market: '', reason: '' })
+        return HttpResponse.json(itemBody(blockedDates[0]))
       }),
     )
     const { wrapper } = await mountView()
@@ -742,8 +765,8 @@ describe('BlockedDateListView', () => {
 
   it('[BDL-32] 更新が 409 のときモーダル内に通信障害用のエラーが出る', async () => {
     server.use(
-      http.put('*/api/blocked-dates/:id', () =>
-        HttpResponse.json({ message: CONFLICT_MESSAGE, code: 'conflict' }, { status: 409 }),
+      http.put('*/api/blackout-dates/:blackoutDate', () =>
+        HttpResponse.json({ detail: CONFLICT_MESSAGE }, { status: 409 }),
       ),
     )
     const { wrapper } = await mountView()
@@ -773,7 +796,7 @@ describe('BlockedDateListView', () => {
       releaseValidate = resolve
     })
     server.use(
-      http.post('*/api/blocked-dates/validate', async () => {
+      http.post('*/api/blackout-dates/validate', async () => {
         await validateGate
         return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
       }),
@@ -811,7 +834,7 @@ describe('BlockedDateListView', () => {
     await editSubmit(wrapper).trigger('click')
     await settle()
     await settle()
-    expect(editValidationMessages(wrapper)).toEqual([DUPLICATE_MESSAGE])
+    expect(editValidationMessages(wrapper)).toEqual([duplicateMessage(OTHER_TARGET)])
 
     await editCancel(wrapper).trigger('click')
     await openEditModal(wrapper, OTHER_TARGET.id)
@@ -831,7 +854,7 @@ describe('BlockedDateListView', () => {
     await editSubmit(wrapper).trigger('click')
     await settle()
     await settle()
-    expect(editValidationMessages(wrapper)).toEqual([DUPLICATE_MESSAGE])
+    expect(editValidationMessages(wrapper)).toEqual([duplicateMessage(OTHER_TARGET)])
 
     await openAddModal(wrapper)
     expect(exists(wrapper, 'blocked-dates-add-validation-error')).toBe(false)
@@ -841,7 +864,7 @@ describe('BlockedDateListView', () => {
     await addSubmit(wrapper).trigger('click')
     await settle()
     await settle()
-    expect(validationMessages(wrapper)).toEqual([DUPLICATE_MESSAGE])
+    expect(validationMessages(wrapper)).toEqual([duplicateMessage(allRows[0])])
 
     await addCancel(wrapper).trigger('click')
     await openEditModal(wrapper, OTHER_TARGET.id)

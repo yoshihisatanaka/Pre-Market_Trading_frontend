@@ -4,38 +4,63 @@ import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/blocked-dates.md（タイトル先頭の [BD-xx] が対応 ID）
 // ページ位置と検索条件は URL クエリを正とするため、URL と画面の同期をここで守る。
-// mockApi() は固定の body を返すだけで limit / offset / date_from / date_to を解釈しない。
+// mockApi() は固定の body を返すだけで offset / start_date / end_date を解釈しない。
 // ページングと絞り込み（BD-02 / 03 / 04 / 07 / 10）は
 // クエリを実際に処理する既定ハンドラで検証する。
 
 const PATH = '/masters/blocked-dates'
 
-// src/stores/blockedDates.js の BLOCKED_DATES_PAGE_SIZE と同じ値。
+// src/stores/blockedDates.js の BLOCKED_DATES_PAGE_SIZE と同じ値（実 API 側の 1 ページ 50 件）。
 // ストアは import.meta.env を辿る api/client.js に依存しており Playwright からは import できない。
 const PAGE_SIZE = 50
 
-const secondPage = blockedDates.slice(PAGE_SIZE)
-const year2025 = blockedDates.filter((d) => d.date >= '2025-01-01' && d.date <= '2025-12-31')
+/*
+ * フィクスチャはバックエンドの生の形（日本語キー / 受注不可日は YYYYMMDD の integer）なので、
+ * 期待値は api 層と同じ変換でアプリ内モデルの形に直してから使う。
+ */
+const toRow = (blocked) => {
+  const digits = String(blocked.受注不可日)
+  return {
+    id: digits,
+    date: `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`,
+    reason: blocked.備考 ?? '',
+  }
+}
 
-const firstBlockedDate = blockedDates[0]
-const lastBlockedDate = blockedDates[blockedDates.length - 1]
+// フィクスチャは実 API と同じ受注不可日の降順なので、この並びがそのまま 1 ページ目になる
+const allRows = blockedDates.map(toRow)
+const secondPage = allRows.slice(PAGE_SIZE)
+const year2025 = allRows.filter((row) => row.date >= '2025-01-01' && row.date <= '2025-12-31')
 
-// フィクスチャに無い日付。年を直書きすると YEARS が伸びたとき重複エラーになるので最終年の翌年から作る
-const NEW_DATE = `${Number(lastBlockedDate.date.slice(0, 4)) + 1}-01-01`
+const firstBlockedDate = allRows[0]
+
+// フィクスチャに無い日付。年を直書きすると YEARS が伸びたとき重複エラーになるので最新年の翌年から作る
+const NEW_DATE = `${Number(firstBlockedDate.date.slice(0, 4)) + 1}-01-01`
 const NEW_REASON = '年末年始休業（テスト）'
 
 // 編集で入れ直す理由。フィクスチャのどの行の理由とも重ならない文言にする
 const EDITED_REASON = '受注停止（テストで変更）'
 
-// BD-29 で差し替える 409 の message。サーバが返す文言をそのまま出すことを見るための値
-const CONFLICT_MESSAGE = '他の担当者が先に更新しました。再読み込みしてからやり直してください。'
+// BD-29 で差し替える 409 の detail。サーバが返す文言をそのまま出すことを見るための値
+const CONFLICT_MESSAGE =
+  '他のユーザーによって受注不可日データが更新されています。最新データを再取得してください。'
 
-// 理由の maxlength。src/views/BlockedDateListView.vue の入力欄（実仕様 BlackoutDateRequest の備考）と同じ値
+/** 実 API（とモック）が重複を知らせる文言。対象の受注不可日が本文に入る */
+const duplicateMessage = (row) => `受注不可日(${row.id})は既に登録されています`
+
+// 理由の maxlength。src/views/BlockedDateListView.vue の入力欄（実 API の BlackoutDateRequest.備考）と同じ値
 const REASON_MAX_LENGTH = 45
 
-// 末尾から PAGE_SIZE + 1 件目の日付。これを date_from にすると既定ハンドラの絞り込みが
-// ちょうど 51 件になり、offset=50 の 2 ページ目が「最後の 1 件」だけになる
-const LAST_PAGE_FROM = blockedDates[blockedDates.length - (PAGE_SIZE + 1)].date
+/*
+ * 降順の先頭から PAGE_SIZE + 1 件目の行。その日付を date_from にすると
+ * 既定ハンドラの絞り込みがちょうど 51 件になり、offset=50 の 2 ページ目が
+ * 「最後の 1 件」＝ この行だけになる（BD-23）。
+ */
+const LAST_PAGE_TARGET = allRows[PAGE_SIZE]
+const LAST_PAGE_FROM = LAST_PAGE_TARGET.date
+
+/** 0 件の応答（BlackoutDateListResponse の形） */
+const EMPTY_LIST = { total: 0, limit: PAGE_SIZE, offset: 0, blackout_dates: [] }
 
 /** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function rowsOf(page) {
@@ -148,9 +173,9 @@ test.describe('受注不可日マスタ一覧', () => {
   test('[BD-05] API がエラーを返したときエラー表示と再試行ボタンが出る', async ({ page }) => {
     await mockApi(page, [
       {
-        path: '*/api/blocked-dates',
+        path: '*/api/blackout-dates',
         status: 500,
-        body: { message: 'サーバーでエラーが発生しました。' },
+        body: { detail: 'サーバーでエラーが発生しました。' },
       },
     ])
     await page.goto(PATH)
@@ -166,7 +191,7 @@ test.describe('受注不可日マスタ一覧', () => {
   })
 
   test('[BD-06] 受注不可日が 0 件のとき空状態が表示される', async ({ page }) => {
-    await mockApi(page, [{ path: '*/api/blocked-dates', body: { items: [], total: 0 } }])
+    await mockApi(page, [{ path: '*/api/blackout-dates', body: EMPTY_LIST }])
     await page.goto(PATH)
 
     const empty = page.getByTestId('blocked-dates-empty')
@@ -215,7 +240,7 @@ test.describe('受注不可日マスタ一覧', () => {
     await expect(page.getByTestId('blocked-dates-description')).toBeVisible()
 
     // 0 件でも 4 状態の外なので消えない
-    await mockApi(page, [{ path: '*/api/blocked-dates', body: { items: [], total: 0 } }])
+    await mockApi(page, [{ path: '*/api/blackout-dates', body: EMPTY_LIST }])
     await page.goto(PATH)
 
     await expect(page.getByTestId('blocked-dates-empty')).toBeVisible()
@@ -245,7 +270,7 @@ test.describe('受注不可日マスタ一覧', () => {
  *   必須未入力       … FormField の error（BD-12）
  *   事前検証の不合格 … blocked-dates-add-validation-error の箇条書き（BD-14 / 15）
  *   通信・サーバ障害 … blocked-dates-add-error（BD-16）
- * 事前検証と登録は別パス（/blocked-dates/validate と /blocked-dates）なので、
+ * 事前検証と登録は別パス（/blackout-dates/validate と /blackout-dates）なので、
  * mockApi() で一方だけを差し替えられる。
  */
 test.describe('受注不可日マスタ 新規追加', () => {
@@ -323,7 +348,7 @@ test.describe('受注不可日マスタ 新規追加', () => {
     const validationError = page.getByTestId('blocked-dates-add-validation-error')
     await expect(validationError).toBeVisible()
     await expect(validationError.getByRole('listitem')).toHaveText([
-      'その日付の受注不可日はすでに登録されています。',
+      duplicateMessage(firstBlockedDate),
     ])
 
     // 事前検証の不合格は通信障害ではないので、専用の表示には出ない
@@ -335,14 +360,15 @@ test.describe('受注不可日マスタ 新規追加', () => {
   })
 
   test('[BD-15] 事前検証が理由を複数返すと全て箇条書きに並ぶ', async ({ page }) => {
+    // 実 API は最初に見つけた 1 件で打ち切るので、「2 件同時」は差し替えで作る
     const errors = [
-      '日付は YYYY-MM-DD 形式で入力してください。',
-      'その日付の受注不可日はすでに登録されています。',
+      '受注不可日に有効な日付（YYYYMMDD）を指定してください',
+      '理由・備考は45文字以内で指定してください',
     ]
     await mockApi(page, [
       {
         method: 'post',
-        path: '*/api/blocked-dates/validate',
+        path: '*/api/blackout-dates/validate',
         body: { valid: false, errors, warnings: [], details: null },
       },
     ])
@@ -363,13 +389,13 @@ test.describe('受注不可日マスタ 新規追加', () => {
   })
 
   test('[BD-16] 登録に失敗するとモーダルは開いたままエラーが出る', async ({ page }) => {
-    // 事前検証（*/api/blocked-dates/validate）はパスが別なので既定ハンドラのまま通る
+    // 事前検証（*/api/blackout-dates/validate）はパスが別なので既定ハンドラのまま通る
     await mockApi(page, [
       {
         method: 'post',
-        path: '*/api/blocked-dates',
+        path: '*/api/blackout-dates',
         status: 500,
-        body: { message: 'サーバーでエラーが発生しました。' },
+        body: { detail: 'サーバーでエラーが発生しました。' },
       },
     ])
     await page.goto(PATH)
@@ -489,9 +515,9 @@ test.describe('受注不可日マスタ 削除', () => {
     await mockApi(page, [
       {
         method: 'delete',
-        path: '*/api/blocked-dates/:id',
+        path: '*/api/blackout-dates/:blackoutDate',
         status: 500,
-        body: { message: 'サーバーでエラーが発生しました。' },
+        body: { detail: 'サーバーでエラーが発生しました。' },
       },
     ])
     await page.goto(PATH)
@@ -517,9 +543,9 @@ test.describe('受注不可日マスタ 削除', () => {
 
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(1)
-    await expect(rows.first()).toContainText(lastBlockedDate.date)
+    await expect(rows.first()).toContainText(LAST_PAGE_TARGET.date)
 
-    await deleteButtonOf(page, lastBlockedDate).click()
+    await deleteButtonOf(page, LAST_PAGE_TARGET).click()
     await page.getByTestId('blocked-dates-delete-submit').click()
 
     // 戻る直前に空状態が一瞬描画されるため、最終状態だけを web-first assertion で待つ
@@ -607,13 +633,13 @@ test.describe('受注不可日マスタ 編集', () => {
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
     await editButtonOf(page, firstBlockedDate).click()
-    await page.getByTestId('blocked-dates-edit-date').fill(blockedDates[1].date)
+    await page.getByTestId('blocked-dates-edit-date').fill(allRows[1].date)
     await page.getByTestId('blocked-dates-edit-submit').click()
 
     const validationError = page.getByTestId('blocked-dates-edit-validation-error')
     await expect(validationError).toBeVisible()
     await expect(validationError.getByRole('listitem')).toHaveText([
-      'その日付の受注不可日はすでに登録されています。',
+      duplicateMessage(allRows[1]),
     ])
 
     // 事前検証の不合格は通信障害ではないので、専用の表示には出ない
@@ -646,14 +672,14 @@ test.describe('受注不可日マスタ 編集', () => {
 
   test('[BD-29] 更新が競合するとモーダルは開いたままエラーが出る', async ({ page }) => {
     // 実ブラウザで「他の利用者」を作れないので、競合の応答そのものを差し替える。
-    // 事前検証（*/api/blocked-dates/validate）はパスが別なので既定ハンドラのまま通る。
-    // message を入れるのは、client.js が 409 の既定文言を持たないため（無いと汎用の文言になる）
+    // 事前検証（*/api/blackout-dates/validate）はパスが別なので既定ハンドラのまま通る。
+    // detail を入れるのは、client.js が 409 の既定文言を持たないため（無いと汎用の文言になる）
     await mockApi(page, [
       {
         method: 'put',
-        path: '*/api/blocked-dates/:id',
+        path: '*/api/blackout-dates/:blackoutDate',
         status: 409,
-        body: { message: CONFLICT_MESSAGE, code: 'conflict' },
+        body: { detail: CONFLICT_MESSAGE },
       },
     ])
     await page.goto(PATH)
@@ -684,7 +710,7 @@ test.describe('受注不可日マスタ 編集', () => {
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
     await editButtonOf(page, firstBlockedDate).click()
-    await page.getByTestId('blocked-dates-edit-date').fill(blockedDates[1].date)
+    await page.getByTestId('blocked-dates-edit-date').fill(allRows[1].date)
     await page.getByTestId('blocked-dates-edit-submit').click()
     await expect(page.getByTestId('blocked-dates-edit-validation-error')).toBeVisible()
 

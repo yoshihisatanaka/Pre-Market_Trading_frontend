@@ -49,7 +49,7 @@ const columns = [
 /*
  * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
  * URL 上のクエリ名（date_from / date_to）は画面モックの form と同じ契約で、
- * この filters 定義にだけ現れる。
+ * この filters 定義にだけ現れる（実 API 側の start_date / end_date への読み替えは api 層が行う）。
  */
 const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
   filters: [
@@ -171,6 +171,7 @@ async function submitEdit() {
    * 絞り込み中に対象外の日付へ変えると total が 1 減り、最終ページが空になり得る。
    * 行が別ページへ移ったことそのものは追わない（サーバが新しいインデックスを返さないため）。
    * 成功メッセージが新しい日付を含むので、ユーザはその日付で検索できる。
+   * 一覧は日付の降順なので、日付を変えた行は同じページに留まらないことがある。
    */
   stepBackIfPageEmpty()
 }
@@ -328,7 +329,7 @@ function stepBackIfPageEmpty() {
         />
       </FormField>
 
-      <!-- maxlength は実仕様（BlackoutDateRequest の 備考）の 45 文字に合わせる -->
+      <!-- maxlength は実 API（BlackoutDateRequest の 備考）の 45 文字に合わせる -->
       <FormField v-slot="{ field }" label="理由" required :error="addErrors.reason">
         <BaseInput
           v-bind="field"
@@ -361,7 +362,7 @@ function stepBackIfPageEmpty() {
         />
       </FormField>
 
-      <!-- maxlength は追加と同じく実仕様（BlackoutDateRequest の 備考）の 45 文字に合わせる -->
+      <!-- maxlength は追加と同じく実 API（BlackoutDateRequest の 備考）の 45 文字に合わせる -->
       <FormField v-slot="{ field }" label="理由" required :error="editErrors.reason">
         <BaseInput
           v-bind="field"

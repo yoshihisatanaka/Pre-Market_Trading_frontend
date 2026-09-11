@@ -1,11 +1,12 @@
-# compose プロジェクト名を固定する（既定のディレクトリ名由来にしない）。
-# Docker ネットワーク名 us-stock-order-frontend_default はここで決まり、
-# .mcp.json の --network がこれを参照する。
-# ディレクトリ名を変えてもネットワーク名がずれないように明示している。
-# リポジトリ名は Pre-Market_Trading_frontend だが、この compose 名は旧名のまま据え置く。
-# 変えると既存のネットワークと named volume（node_modules）が作り直しになるため。
-name: us-stock-order-frontend
-
+# compose プロジェクト名は意図的に固定しない（name: を書かない）。
+# 既定の「ディレクトリ名由来」に任せることで、worktree ごとに
+# project / コンテナ名 / ネットワーク（<project>_default）が自動的に分かれ、
+# dev サーバと E2E を worktree 間で並列に動かせる。
+#   本体:     pre-market_trading_frontend
+#   worktree: pre-market_trading_frontend-<ブランチ名>
+# ネットワーク名を推測して書き込む場所を作らないこと（compose は小文字化と
+# 許可外文字の除去を行う）。正は docker compose config の name。
+# MCP は scripts/mcp-docker.sh が cwd からネットワーク名を導出する。
 services:
   frontend:
     build:
@@ -13,8 +14,11 @@ services:
       target: dev
     working_dir: /app
     command: npm run dev
+    # ホスト公開ポートだけを worktree ごとに変える。コンテナ内は常に 5173 なので、
+    # E2E の http://frontend:5173 も vite.config.js の strictPort もそのまま使える。
+    # 本体は既定の 5173。worktree の値は scripts/worktree.sh add が .env に書く。
     ports:
-      - '5173:5173'
+      - '${FRONTEND_PORT:-5173}:5173'
     volumes:
       # リポジトリ全体をマウントする。docs/ も /app/docs として見えるため、
       # npm run check:scenarios はここからシナリオ文書を読む（別マウントは不要）。
@@ -60,4 +64,11 @@ services:
   # 取り決めは README の「バックエンドとの連携」を参照。
 
 volumes:
+  # node_modules は全 worktree で共有する（project が分かれても install は 1 回で済む）。
+  # external なので docker compose down -v でも消えない＝他 worktree を壊さない。
+  # 逆に「共有」の代償として npm install / npm ci / package.json の変更は排他。
+  # 無い場合は作る: docker volume create us-stock-order-frontend_node_modules
+  # （scripts/worktree.sh add / doctor が存在を確認する）
   node_modules:
+    external: true
+    name: us-stock-order-frontend_node_modules

@@ -7,6 +7,10 @@ export default [
   {
     ignores: [
       'dist/**',
+      // Vite の依存事前バンドル（vite.config.js の cacheDir）。生成物なので検査しない。
+      // node_modules は共有ボリュームなので cacheDir をここへ移した経緯は CLAUDE.md の
+      // 「Docker は worktree ごとに分離」節にある。
+      '.vite/**',
       'coverage/**',
       'playwright-report/**',
       'test-results/**',

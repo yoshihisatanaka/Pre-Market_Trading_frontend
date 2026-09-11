@@ -1,6 +1,6 @@
 ---
 description: 並行セッション用の git worktree を作成 / 撤収 / 点検する
-argument-hint: add <type>/<kebab> | remove <type>/<kebab> [--force] [--delete-branch] | list | doctor
+argument-hint: add <type>/<kebab> | remove <type>/<kebab> [--force] [--delete-branch] [--docker-clean] | list | doctor
 allowed-tools: Bash(bash scripts/worktree.sh), Bash(bash scripts/worktree.sh *), Bash(git worktree list), Bash(git worktree list *), Bash(git status), Bash(git status *), Bash(git log *)
 ---
 
@@ -29,9 +29,13 @@ allowed-tools: Bash(bash scripts/worktree.sh), Bash(bash scripts/worktree.sh *),
    - **いまのウィンドウで新しいセッションを開いたり、`cd` して作業を続けたりしてはいけない。**
      `CLAUDE_PROJECT_DIR` は変わらないため、フックと設定が本体リポジトリを向いたままになる
    - その worktree の `CLAUDE.local.md` に「この worktree の目的」を書くこと
-   - **Docker は排他利用。** `docker compose up -d frontend` / E2E / Playwright MCP /
-     `localhost:5173` を使えるのは同時に 1 worktree だけで、現所有者は `list` の
-     最終行に出る（詳細は CLAUDE.md の「Git worktree（並行セッション）」節）
-5. `add` / `remove` の直後に `docker compose` 系のコマンドを実行しない。
+   - **Docker は worktree ごとに分離されている。** `docker compose up -d frontend` / E2E /
+     Playwright MCP は他 worktree と並行して使える。その worktree の compose プロジェクト名と
+     dev サーバの URL（ホスト公開ポートは 5174〜 が割り当てられる）は `add` の出力末尾と
+     `list` の DOCKER / URL 列に出る（詳細は CLAUDE.md の「Docker は worktree ごとに分離」節）
+   - 共有は `node_modules` だけなので、**`npm install` / `npm ci` は排他**。
+     実 API に当てる E2E もバックエンドの DB を共有するので排他
+5. `add` / `remove` の直後に、このセッションから `docker compose` 系のコマンドを実行しない
+   （cwd は本体のままなので、本体の project を触ることになる）。
 6. worktree のファイルを、このセッションから絶対パスで直接編集しない。
    編集はその worktree で起動した Claude セッションの担当。

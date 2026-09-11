@@ -22,6 +22,12 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [vue()],
+    // 依存の事前バンドルキャッシュを node_modules の外へ出す。
+    // node_modules は全 worktree で共有する named volume なので、既定の
+    // node_modules/.vite のままだと dev サーバを複数 worktree で同時に起動したときに
+    // 同じキャッシュを奪い合う（504 Outdated Optimize Dep の温床）。
+    // .vite/ は gitignore 済み。worktree ごとの初回起動が少し遅いのは事前バンドルのため。
+    cacheDir: '.vite',
     resolve: {
       // jsconfig.json の paths と必ず対で維持すること
       alias: {
@@ -36,6 +42,11 @@ export default defineConfig(({ mode }) => {
       // E2E コンテナは http://frontend:5173 でアクセスするため明示的に許可する
       // （'frontend' は docker-compose.yml のサービス名 = DNS 名。対で維持すること）。
       allowedHosts: ['frontend', 'localhost'],
+      // hmr は明示設定しないこと。未設定なら HMR クライアントは
+      // 「ブラウザが読み込んだ origin」へ WebSocket を張るので、worktree ごとに
+      // ホスト公開ポートが 5174 / 5175 とずれても成立する。
+      // hmr.clientPort を書くとホスト（localhost:517x）と E2E コンテナ（frontend:5173）の
+      // どちらか片方が必ず壊れる。
       watch: {
         // Windows ホスト → Linux コンテナの bind mount では
         // ファイル変更イベントが伝播しないため HMR にポーリングが必須
@@ -45,6 +56,7 @@ export default defineConfig(({ mode }) => {
         // テスト成果物や MCP の出力でページリロードが走らないようにする狙いも兼ねる。
         ignored: [
           '**/node_modules/**',
+          '**/.vite/**',
           '**/.git/**',
           '**/.idea/**',
           '**/.claude/**',

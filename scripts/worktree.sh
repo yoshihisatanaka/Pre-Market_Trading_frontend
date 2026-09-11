@@ -124,45 +124,155 @@ dir_of_branch() {
 }
 
 # --- Docker -----------------------------------------------------------------
-# compose プロジェクト名は docker-compose.yml の name: が正。ハードコードしない。
-compose_project() {
-  sed -n 's/^name:[[:space:]]*\([^[:space:]#]*\).*/\1/p' "$main_repo/docker-compose.yml" 2>/dev/null | head -n1
+# docker-compose.yml に name: を書かないので、compose プロジェクトはディレクトリ名由来＝
+# worktree ごとに別になる（project / コンテナ名 / ネットワークが分離される）。
+# よってここの関数は「共有資源の所有者を見張る」のではなく
+# 「worktree ごとの Docker の状態を並べる」ためにある。
+#
+# 唯一の共有は node_modules（external な named volume）。install は 1 回で済むが排他。
+NODE_MODULES_VOLUME='us-stock-order-frontend_node_modules'
+# ホスト公開ポートの割当帯。5173 は本体リポジトリの予約。
+PORT_MIN=5174
+PORT_MAX=5199
+
+docker_ready() {
+  command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1
 }
 
-# 稼働中の frontend コンテナがどの worktree をマウントしているか。
-# compose プロジェクト名もポートも全 worktree で共有なので、これが「排他利用の見張り」になる。
-# 出力: "" 停止中 / "-" Docker 未起動・判定不能 / それ以外は working_dir
-docker_owner() {
-  command -v docker >/dev/null 2>&1 || {
-    printf '%s' '-'
-    return
-  }
-  docker info >/dev/null 2>&1 || {
-    printf '%s' '-'
-    return
-  }
-  proj=$(compose_project)
-  [ -n "$proj" ] || {
-    printf '%s' '-'
-    return
-  }
-  cid=$(docker ps -q \
-    --filter "label=com.docker.compose.project=$proj" \
-    --filter "label=com.docker.compose.service=frontend" 2>/dev/null | head -n1)
-  [ -n "$cid" ] || return 0
-  docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$cid" 2>/dev/null || printf '%s' '-'
+# 表示用の高速な推定（compose の正規化に合わせて小文字化と許可外文字の除去だけ行う）。
+# 停止中の worktree にまで docker compose config を走らせると list が遅くなるため。
+guess_project_for_dir() {
+  basename "$1" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9_-'
 }
 
-print_docker_owner() {
-  owner=$(docker_owner)
-  case "$owner" in
-  '') printf 'Docker(frontend): 停止中。使いたい worktree で docker compose up -d frontend\n' ;;
-  '-') printf 'Docker(frontend): 判定不能（Docker Desktop が起動していない）\n' ;;
-  *)
-    printf 'Docker(frontend): 稼働中 — 所有者は %s\n' "$(win_path "$owner")"
-    printf '  他 worktree では up -d / restart / down / E2E / Playwright MCP を実行しないこと。\n'
-    ;;
-  esac
+# 正の compose プロジェクト名。compose 自身に解決させる（推定に依存しない）。
+# down のように壊しうる操作と doctor の点検ではこちらを使う。
+compose_project_for_dir() {
+  d="$1"
+  p=''
+  if [ -f "$d/docker-compose.yml" ] && docker_ready; then
+    p=$(docker compose -f "$d/docker-compose.yml" config 2>/dev/null |
+      sed -n 's/^name:[[:space:]]*\([^[:space:]#]*\).*/\1/p' | head -n1)
+  fi
+  [ -n "$p" ] || p=$(guess_project_for_dir "$d")
+  printf '%s' "$p"
+}
+
+# そのディレクトリの compose を叩く。-f を渡すので project dir も .env の読み場所も
+# そのディレクトリになる（--project-directory だけでは compose ファイル探索が cwd 基準）。
+compose_in_dir() {
+  d="$1"
+  shift
+  docker compose -f "$d/docker-compose.yml" "$@"
+}
+
+# 稼働中の frontend コンテナを 1 回の docker ps でまとめて取る。
+# "<project>\t<working_dir>\t<ports>" を 1 行ずつ返す。
+frontend_snapshot() {
+  docker_ready || return 0
+  docker ps --filter 'label=com.docker.compose.service=frontend' \
+    --format '{{.Label "com.docker.compose.project"}}	{{.Label "com.docker.compose.project.working_dir"}}	{{.Ports}}' 2>/dev/null
+}
+
+# スナップショットから指定ディレクトリの行を引く（working_dir で突き合わせる）。
+snapshot_row_for_dir() {
+  snap="$1"
+  nd=$(norm_path "$2")
+  printf '%s\n' "$snap" | while IFS="$(printf '\t')" read -r p w ports; do
+    [ -n "${w:-}" ] || continue
+    if [ "$(norm_path "$w")" = "$nd" ]; then
+      printf '%s\t%s\t%s' "$p" "$w" "${ports:-}"
+      break
+    fi
+  done
+}
+
+# .env は機密扱いで Claude から読めない。ファイル名は ENV_FILE 定数に閉じ込め、
+# 読み出しはこの関数だけで行う（コマンド引数に名前を出すと guard フックが拒否する）。
+env_port_of_dir() {
+  p=$(sed -n 's/^[[:space:]]*FRONTEND_PORT[[:space:]]*=[[:space:]]*\([0-9]\{1,5\}\).*/\1/p' \
+    "$1/$ENV_FILE" 2>/dev/null | tail -n1)
+  [ -n "$p" ] || p=5173
+  printf '%s' "$p"
+}
+
+# 使用中とみなすポート（割当の除外条件）。
+used_ports() {
+  # wt_pairs は本体リポジトリも 1 行目に含む（git worktree list の仕様）。
+  wt_pairs | cut -f1 | while read -r d; do
+    [ -d "$d" ] && printf '%s\n' "$(env_port_of_dir "$d")"
+  done
+  if docker_ready; then
+    docker ps --format '{{.Ports}}' 2>/dev/null |
+      grep -o '0\.0\.0\.0:[0-9]\{1,5\}' | cut -d: -f2
+  fi
+  # OS のリスナー（Windows の netstat）。Hyper-V の動的予約帯までは分からないので、
+  # ここで空いて見えても bind に失敗することはある（その場合は add をやり直す）。
+  netstat -an 2>/dev/null | grep -i 'listen' |
+    grep -o ':[0-9]\{1,5\}[[:space:]]' | tr -d ': \t' || true
+}
+
+alloc_frontend_port() {
+  used=$(used_ports | sort -u)
+  p="$PORT_MIN"
+  while [ "$p" -le "$PORT_MAX" ]; do
+    if ! printf '%s\n' "$used" | grep -qx "$p"; then
+      printf '%s' "$p"
+      return 0
+    fi
+    p=$((p + 1))
+  done
+  return 1
+}
+
+# 共有の node_modules ボリューム（compose 側で external: true）。
+ensure_node_modules_volume() {
+  docker_ready || return 0
+  docker volume inspect "$NODE_MODULES_VOLUME" >/dev/null 2>&1 && return 0
+  if docker volume create "$NODE_MODULES_VOLUME" >/dev/null 2>&1; then
+    info "共有ボリュームを作成した: $NODE_MODULES_VOLUME"
+    warn "中身は空なので、どこか 1 つの worktree で一度だけ実行すること:
+    docker compose run --rm frontend npm ci"
+  else
+    warn "共有ボリュームを作成できなかった。手で実行すること:
+    docker volume create $NODE_MODULES_VOLUME"
+  fi
+}
+
+# その worktree の Docker 環境（project / ネットワーク / ポート）を表示する。
+print_docker_env() {
+  d="$1"
+  if ! docker_ready; then
+    printf 'Docker: 判定不能（Docker Desktop が起動していない）\n'
+    return 0
+  fi
+  row=$(snapshot_row_for_dir "$(frontend_snapshot)" "$d")
+  proj=$(compose_project_for_dir "$d")
+  printf 'Docker（この worktree 専用。他 worktree と並行して使える）:\n'
+  printf '  compose プロジェクト: %s\n' "$proj"
+  printf '  ネットワーク:         %s_default\n' "$proj"
+  if [ -n "$row" ]; then
+    printf '  frontend:             稼働中 — http://localhost:%s\n' "$(frontend_port_of_dir "$d")"
+  else
+    printf '  frontend:             停止中 — docker compose up -d frontend で http://localhost:%s\n' \
+      "$(env_port_of_dir "$d")"
+  fi
+  printf '  node_modules:         %s（全 worktree 共有。npm install だけは排他）\n' "$NODE_MODULES_VOLUME"
+}
+
+# 稼働中なら実際の公開ポート、停止中なら .env の設定値。
+frontend_port_of_dir() {
+  d="$1"
+  row=$(snapshot_row_for_dir "$(frontend_snapshot)" "$d")
+  if [ -n "$row" ]; then
+    p=$(printf '%s' "$row" | cut -f3 |
+      grep -o '0\.0\.0\.0:[0-9]\{1,5\}->5173' | head -n1 | cut -d: -f2 | cut -d- -f1)
+    [ -n "$p" ] && {
+      printf '%s' "$p"
+      return 0
+    }
+  fi
+  env_port_of_dir "$d"
 }
 
 # 本体リポジトリが main 以外を掴んでいたら警告する。
@@ -215,6 +325,34 @@ deploy_configs() {
     write_local_memo "$dir" "$3"
     info "生成: $LOCAL_MEMO（「この worktree の目的」を書くこと）"
   fi
+
+  # 4. dev サーバのホスト公開ポート（docker-compose.yml の ${FRONTEND_PORT} 用）。
+  #    worktree ごとに別のポートを割り当てないと 2 つ目の up -d が
+  #    port is already allocated で落ちる。既存値は --overwrite-config でも温存する。
+  ensure_frontend_port "$dir"
+}
+
+ensure_frontend_port() {
+  dir="$1"
+  if [ ! -f "$dir/$ENV_FILE" ]; then
+    warn "ホスト公開ポートを割り当てられなかった（$ENV_FILE が無い）。
+    既定の 5173 は本体リポジトリと衝突するので、$ENV_FILE を作ってから add をやり直すこと"
+    return 0
+  fi
+  if grep -q '^[[:space:]]*FRONTEND_PORT[[:space:]]*=' "$dir/$ENV_FILE" 2>/dev/null; then
+    info "既存を維持: ホスト公開ポート $(env_port_of_dir "$dir")"
+    return 0
+  fi
+  if port=$(alloc_frontend_port); then
+    {
+      printf '\n# dev サーバのホスト公開ポート（worktree.sh add が割り当てた。compose 専用）。\n'
+      printf '# コンテナ内は常に 5173 なので E2E の http://frontend:5173 は変わらない。\n'
+      printf 'FRONTEND_PORT=%s\n' "$port"
+    } >>"$dir/$ENV_FILE"
+    info "ホスト公開ポートを割り当てた: $port（http://localhost:$port）"
+  else
+    warn "$PORT_MIN〜$PORT_MAX に空きが無い。手で $ENV_FILE の FRONTEND_PORT を設定すること"
+  fi
 }
 
 write_local_memo() {
@@ -233,11 +371,16 @@ write_local_memo() {
 
 ## 並行運用の制約（詳細は CLAUDE.md の「Git worktree（並行セッション）」節）
 
-- **Docker は排他利用。** \`docker compose up -d frontend\` / E2E / Playwright MCP /
-  \`localhost:5173\` を使う前に \`bash scripts/worktree.sh list\` で現所有者を確認する。
-  自分以外が持っていたら手を出さない。明け渡しは \`docker compose down\`（\`-v\` は付けない）
-- \`npm install\` は排他（node_modules は全 worktree 共有のボリューム）。
-  \`lint\` / \`test:unit\` / \`check:scenarios\` / \`build\` は並行してよい
+- **Docker はこの worktree 専用。** compose プロジェクト・コンテナ・ネットワーク・
+  ホスト公開ポートが worktree ごとに分かれているので、\`docker compose up -d frontend\` /
+  E2E / Playwright MCP は他 worktree と**並行して使える**。
+  自分の project 名・ポート・URL は \`bash scripts/worktree.sh list\` で確認する
+  （dev サーバの URL は \`localhost:5173\` ではなく割り当てられたポート）
+- \`npm install\` / \`npm ci\` / \`package.json\` / \`package-lock.json\` / \`Dockerfile\` の変更は
+  **排他**（node_modules は全 worktree 共有の named volume）。
+  \`lint\` / \`test:unit\` / \`check:scenarios\` / \`build\` / E2E は並行してよい
+- **実 API に当てる E2E は排他。** バックエンドの api と DB は 1 つしかなく、
+  データを読み書きするので worktree 間で衝突する
 - **\`git stash\` を使わない**（stash はリポジトリ共通で、別 worktree から pop できてしまう）。
   中断するときは WIP コミットで退避する
 - \`main\` へのマージとブランチ削除は**本体セッション**で行う
@@ -313,6 +456,7 @@ cmd_add() {
 
   head2 '設定ファイルの配備:'
   deploy_configs "$dir" "$overwrite" "$branch"
+  ensure_node_modules_volume
 
   head2 '次にやること:'
   cat <<EOF
@@ -323,11 +467,11 @@ cmd_add() {
      いまの VSCode ウィンドウで新しいセッションを開いても cwd は本体のままで、
      CLAUDE_PROJECT_DIR も変わらず、フックと設定が本体側を向く。
   2. その worktree の $LOCAL_MEMO に「この worktree の目的」を書く
-  3. Docker を使う前に現所有者を確認する
-       bash scripts/worktree.sh list
+  3. その worktree で dev サーバを起動する（他 worktree と並行して動く）
+       docker compose up -d frontend
 
 EOF
-  print_docker_owner
+  print_docker_env "$dir"
 }
 
 # --- remove -----------------------------------------------------------------
@@ -338,11 +482,13 @@ cmd_remove() {
 
   force=0
   del_branch=0
+  docker_clean=0
   for a in "$@"; do
     case "$a" in
     --force) force=1 ;;
     --delete-branch) del_branch=1 ;;
-    *) die "不明なオプション: $a（--force / --delete-branch）" 2 ;;
+    --docker-clean) docker_clean=1 ;;
+    *) die "不明なオプション: $a（--force / --delete-branch / --docker-clean）" 2 ;;
     esac
   done
 
@@ -389,11 +535,27 @@ cmd_remove() {
     fi
   fi
 
-  # 3. Docker を掴んだままの撤収を防ぐ。
-  owner=$(docker_owner)
-  if [ -n "$owner" ] && [ "$owner" != '-' ] && [ "$(norm_path "$owner")" = "$ndir" ]; then
-    die "この worktree が frontend コンテナを掴んでいる。
-  先にその worktree で docker compose down を実行すること（-v は付けない）。" 4
+  # 3. この worktree の Docker 環境を片付ける。他 worktree の project には触らない。
+  #    コンテナが生きているとバインドマウントがディレクトリを掴み、
+  #    Windows では git worktree remove がディレクトリを消せない。必ず remove の前に行う。
+  proj=$(compose_project_for_dir "$dir")
+  running=$(snapshot_row_for_dir "$(frontend_snapshot)" "$dir")
+  if [ "$docker_clean" -eq 1 ]; then
+    if docker_ready; then
+      head2 "Docker 環境を片付ける（compose プロジェクト: $proj）:"
+      # -v は「この project の」匿名・named ボリューム。共有の node_modules は
+      # external 宣言なので消えない（他 worktree を壊さない）。
+      compose_in_dir "$dir" down --remove-orphans -v ||
+        warn 'down に失敗した。docker ps で残っているコンテナを確認すること'
+    else
+      warn 'Docker Desktop が起動していないので片付けを飛ばす'
+    fi
+  elif [ -n "$running" ]; then
+    die "この worktree の frontend コンテナが稼働中（compose プロジェクト: $proj）。
+  掴んだままだとディレクトリを削除できない。次のどちらかを行うこと:
+    - この撤収コマンドに --docker-clean を付け直す（コンテナとネットワークを片付けてから撤収する）
+    - その worktree で docker compose down を実行してからやり直す
+  他 worktree の Docker は無関係なので止めなくてよい。" 4
   fi
 
   if [ "$force" -eq 1 ]; then
@@ -412,6 +574,14 @@ cmd_remove() {
     fi
   fi
 
+  if [ "$docker_clean" -eq 0 ] && docker_ready; then
+    head2 'Docker の残留物:'
+    info "compose プロジェクト '$proj' のネットワーク等は残っている。掃除するなら:"
+    info "  docker network rm ${proj}_default"
+    info "共有の node_modules（$NODE_MODULES_VOLUME）は消さないこと（全 worktree が使う）。"
+    info "次からは remove に --docker-clean を付けるとまとめて片付く。"
+  fi
+
   if [ -e "$dir" ]; then
     warn "ディレクトリが残っている（Docker のバインドマウントやエディタが掴んでいる可能性）:
     $(win_path "$dir")
@@ -421,8 +591,11 @@ cmd_remove() {
 
 # --- list -------------------------------------------------------------------
 cmd_list() {
+  snap=$(frontend_snapshot)
   head2 'worktree 一覧:'
-  printf '  %-52s %-34s %-12s %s\n' 'DIR' 'BRANCH' 'STATE' 'AHEAD/BEHIND(main)'
+  # DIR 列は共通の接頭辞（リポジトリ名）を落として並びを崩さないようにする。
+  printf '  %-30s %-30s %-10s %-9s %-8s %s\n' \
+    "DIR($repo_name-)" 'BRANCH' 'STATE' 'A/B(main)' 'DOCKER' 'URL'
   wt_pairs | while IFS="$(printf '\t')" read -r d b; do
     state='clean'
     if [ -d "$d" ]; then
@@ -440,11 +613,31 @@ cmd_list() {
         ab="+$ahead/-$behind"
       fi
     fi
-    printf '  %-52s %-34s %-12s %s\n' "$(basename "$d")" "$b" "$state" "$ab"
+    dstate='-'
+    url='-'
+    if [ -d "$d" ]; then
+      if [ -n "$(snapshot_row_for_dir "$snap" "$d")" ]; then
+        dstate='running'
+        url="http://localhost:$(frontend_port_of_dir "$d")"
+      else
+        dstate='stopped'
+        url="(http://localhost:$(env_port_of_dir "$d"))"
+      fi
+    fi
+    name=$(basename "$d")
+    short=${name#"$repo_name"-}
+    [ "$short" = "$repo_name" ] && short='(本体)'
+    printf '  %-30s %-30s %-10s %-9s %-8s %s\n' \
+      "$short" "$b" "$state" "$ab" "$dstate" "$url"
   done
   printf '\n'
+  printf 'Docker は worktree ごとに分離されている（compose プロジェクト＝ディレクトリ名）。\n'
+  printf 'up -d / E2E / Playwright MCP は他 worktree と並行して実行してよい。\n'
+  printf '停止中の URL は括弧付き（%s の FRONTEND_PORT の設定値）。\n' "$ENV_FILE"
+  printf '共有は node_modules（%s）だけ。npm install / npm ci は排他。\n' "$NODE_MODULES_VOLUME"
+  docker_ready || printf '! Docker Desktop が起動していないため DOCKER 列は判定していない。\n'
+  printf '\n'
   print_main_head
-  print_docker_owner
 }
 
 # --- doctor -----------------------------------------------------------------
@@ -488,16 +681,54 @@ cmd_doctor() {
     fi
   done
 
-  head2 '共有リソース（全 worktree で共有。並行実行の注意点）:'
-  printf '  compose プロジェクト: %s\n' "$(compose_project)"
-  printf '  node_modules: named volume（%s_node_modules）\n' "$(compose_project)"
-  if [ -d "$main_repo/.vite" ]; then
-    printf '  ! 本体に .vite/ がある。Vite の依存キャッシュ既定は node_modules/.vite（共有側）なので\n'
-    printf '    重い npm タスク（build / test:unit）の同時実行は避ける\n'
+  head2 'Docker 環境（worktree ごとに分離。project 名は compose に解決させた正の値）:'
+  if ! docker_ready; then
+    printf '  判定不能（Docker Desktop が起動していない）\n'
+  else
+    snap=$(frontend_snapshot)
+    projects=''
+    # 孤児判定に project 名を集めるので、パイプ（サブシェル）ではなく for で回す。
+    # 置き場所は $HOME/worktrees 固定なのでパスに空白は入らない。
+    for d in $(wt_pairs | cut -f1); do
+      [ -d "$d" ] || continue
+      p=$(compose_project_for_dir "$d")
+      projects="$projects $p"
+      if [ -n "$(snapshot_row_for_dir "$snap" "$d")" ]; then
+        printf '  %-34s running  %s\n' "$p" "http://localhost:$(frontend_port_of_dir "$d")"
+      else
+        printf '  %-34s stopped  （割当ポート %s）\n' "$p" "$(env_port_of_dir "$d")"
+      fi
+    done
+
+    printf '\n  共有リソース:\n'
+    if docker volume inspect "$NODE_MODULES_VOLUME" >/dev/null 2>&1; then
+      printf '    ok   node_modules: %s（npm install / npm ci は排他）\n' "$NODE_MODULES_VOLUME"
+    else
+      printf '    MISS node_modules: %s が無い。作ってから npm ci すること:\n' "$NODE_MODULES_VOLUME"
+      printf '           docker volume create %s\n' "$NODE_MODULES_VOLUME"
+      printf '           docker compose run --rm frontend npm ci\n'
+    fi
+
+    # 孤児の検出。撤収済み worktree のネットワークや、旧構成の固定名が残っていないか。
+    nets=$(docker network ls --format '{{.Name}}' 2>/dev/null |
+      grep -i 'pre-market_trading_frontend\|us-stock-order-frontend' || true)
+    orphans=''
+    for n in $nets; do
+      base=${n%_default}
+      case " $projects " in
+      *" $base "*) ;;
+      *) orphans="$orphans $n" ;;
+      esac
+    done
+    if [ -n "$orphans" ]; then
+      printf '\n  ! どの worktree にも対応しない Docker ネットワークが残っている:%s\n' "$orphans"
+      printf '    掴んでいるコンテナ（異常終了した MCP など）を止めてから消すこと:\n'
+      printf '      docker network rm <名前>\n'
+      printf '    旧構成の us-stock-order-frontend_default が残っている場合も同じ手順で消す。\n'
+    fi
   fi
   printf '\n'
   print_main_head
-  print_docker_owner
 }
 
 # --- help -------------------------------------------------------------------
@@ -514,14 +745,18 @@ usage() {
 置き場所: $(win_path "$wt_root")\\$repo_name-<ブランチ名>
 
   add     worktree を作り、gitignore された設定（$ENV_FILE / $LOCAL_SETTINGS /
-          $LOCAL_MEMO）を配備する。2 回目以降は既存を壊さない（冪等）。
-          --overwrite-config で本体の設定を上書きコピーする
+          $LOCAL_MEMO）を配備し、dev サーバのホスト公開ポートを割り当てる。
+          2 回目以降は既存を壊さない（冪等）。
+          --overwrite-config で本体の設定を上書きコピーする（ポートは温存）
   remove  撤収する。未コミット・未マージがあれば止まる（捨てるなら --force）。
           --delete-branch でブランチも削除する（-d 相当。強制はしない）
-  list    一覧と「いま Docker を掴んでいる worktree」を表示する
-  doctor  配備漏れ・gitignore・共有リソースを点検する
+          --docker-clean でその worktree の compose プロジェクトを片付ける
+          （共有の node_modules は external なので消えない）
+  list    一覧＋worktree ごとの Docker の状態と dev サーバ URL を表示する
+  doctor  配備漏れ・gitignore・worktree ごとの Docker 環境・孤児リソースを点検する
 
-Docker は排他利用（compose のプロジェクト名・ポート・node_modules は全 worktree 共有）。
+Docker は worktree ごとに分離される（compose プロジェクト＝ディレクトリ名）。
+up -d / E2E / Playwright MCP は並行可。共有は node_modules だけで、npm install は排他。
 詳細は CLAUDE.md の「Git worktree（並行セッション）」節。
 EOF
 }

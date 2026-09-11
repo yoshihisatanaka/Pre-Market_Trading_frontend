@@ -46,21 +46,26 @@ effort: medium
 実 API に当てるには 3 つの前提が要る。**自分では整えられないものがある**ので、
 先に状態を確認し、足りないものを手順として提示して手を止める。
 
-**まず Docker の現所有者を確認する。**
+**まず自分の worktree の Docker の状態を確認する。**
 
 ```bash
 bash scripts/worktree.sh list
 ```
 
-最終行に `Docker(frontend): 稼働中 — 所有者は <パス>` が出る。**自分以外が持っているなら
-`up -d` / `--force-recreate` / E2E / Playwright MCP を実行しない。** そのセッションのユーザに
-返してもらう必要がある旨を報告して待つ。
+Docker は worktree ごとに分離されている（compose プロジェクト＝ディレクトリ名）ので、
+`up -d` / `--force-recreate` / E2E / Playwright MCP は**他 worktree と並行して実行してよい**。
+DOCKER / URL 列で自分の行の稼働状態と割当ポートを確認する。
+
+**ただしバックエンドの `api` と DB は 1 つしかない。** 実 API に当てる E2E は
+データを読み書きするので、**worktree 間で排他**。他セッションが実 API E2E を回している
+可能性があるときは、ユーザに確認してから進める。
 
 **次に、ユーザに次の準備を依頼する。**
 
 1. `.env` の `VITE_ENABLE_MSW` を `false` にする
 2. `docker compose up -d --force-recreate frontend`
-   （`.env` の変更は再起動では反映されない。**他 worktree の dev サーバのマウント元を奪う**ので排他）
+   （`.env` の変更は再起動では反映されない。作り直すのは**自分の worktree の frontend だけ**で、
+   他 worktree の dev サーバには影響しない）
 3. バックエンドを起動する: `(cd ../Pre-Market_Trading && docker compose up -d api)`
 4. `.env` の `VITE_USER_CODE` が設定されていること
    （未設定だと `X-User-Code` が飛ばず、実 API の更新系が 422 で弾かれる。一覧・詳細は読める）
@@ -74,8 +79,8 @@ bash scripts/worktree.sh list
 ユーザに確認が取れるまで書き込み系のシナリオを実行しない。
 
 **片付けまで自分の責任範囲。** 終了時の報告に、`.env` の `VITE_ENABLE_MSW` を `true` に戻して
-`docker compose up -d --force-recreate frontend` する手順を必ず書く（戻さないと MSW 版の E2E と
-ブラウザでの開発が実 API 頼みになる）。
+`docker compose up -d --force-recreate frontend` する手順を必ず書く（戻さないとこの worktree の
+MSW 版 E2E とブラウザでの開発が実 API 頼みになる）。
 
 ### 1. 対象の特定
 
@@ -169,7 +174,7 @@ Playwright MCP で `http://frontend:5173/<画面の path>` を開き（`localhos
 - 追記する文書のパス（新規作成か既存への追記か）と略号
 - 実装するテストファイルのパス
 - **実 DB に何を書き、何を残すか**（使う年・値の選びかた・後片付け・1 回の実行で残るもの）
-- 実行に必要な環境（0.5 の準備が済んでいるか、Docker の所有者は誰か）
+- 実行に必要な環境（0.5 の準備が済んでいるか、バックエンドの `api` を他が使っていないか）
 - 3.5 で実画面を見て確認できたこと / できなかったこと
 
 **承認前にファイルを書かない。** plan モードで動いていない場合（auto モード実行中は
@@ -274,8 +279,8 @@ docker compose run --rm e2e npx playwright test <画面>.real-api
   `VITE_ENABLE_MSW` の切り替えはユーザに依頼する
 - **共有・本番環境の API に当てない。** ローカルの開発 DB 限定。接続先が確認できないなら
   書き込み系を実行せず、手を止めて確認する
-- **`docker compose down -v` を実行しない**（共有の `node_modules` ボリュームが消え、全 worktree が動かなくなる）。
-  `up -d --force-recreate` / `restart` / `down` は、Docker の現所有者が自分だと確認できたときだけ
+- **`docker compose down -v` を実行しない**（掃除は `worktree.sh remove --docker-clean` の担当）。
+  `up -d --force-recreate` / `restart` / `down` は自分の worktree の project にだけ効くので使ってよい
 - **git の書き込み操作をしない。** `commit` / `add` / `switch` / `branch` / `merge` / `push` は禁止。
   参照してよい `git` は `status` / `diff` / `log` だけ
 - **`src/` の製品コードを変更しない。** テストが通らないときに実装を書き換えて通さない。

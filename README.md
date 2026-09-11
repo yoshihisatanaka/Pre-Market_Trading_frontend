@@ -43,7 +43,9 @@
 #    バックエンドの場所が既定（ホストの 8000 番）と違うなら VITE_PROXY_TARGET を書き換える
 Copy-Item .env.example .env
 
-# 2. 依存をインストール（コンテナ内の node_modules ボリュームに入る）
+# 2. 依存をインストール（共有の node_modules ボリュームに入る）
+#    ボリュームが無ければ作る（compose 側で external 宣言してある）
+docker volume create us-stock-order-frontend_node_modules
 docker compose run --rm frontend npm install
 
 # 3. MSW の Service Worker を public/ に生成する（初回のみ）
@@ -54,6 +56,10 @@ docker compose up frontend
 ```
 
 → http://localhost:5173 で注文一覧（MSW のモックデータ3件）が表示される。
+
+> ポートは本体リポジトリが 5173。git worktree では `scripts/worktree.sh add` が
+> `.env` の `FRONTEND_PORT` に 5174〜 を割り当てるので、URL は
+> `bash scripts/worktree.sh list` の URL 列で確認する（コンテナ内は常に 5173）。
 
 ## よく使うコマンド
 
@@ -84,11 +90,17 @@ docker compose up frontend
 Claude Code が実際にブラウザで画面を開き、スクリーンショットや DOM 構造を取れる。
 E2E のセレクタ調査や、画面の 4 状態（ローディング / エラー / 空 / データあり）の目視確認に使う。
 設定はリポジトリ直下の `.mcp.json`（コミット済み）。
-MCP コンテナが参加する Docker ネットワーク名 `us-stock-order-frontend_default` は
-`docker-compose.yml` の `name:` で固定してあるので、リポジトリのディレクトリ名を変えてもずれない。
-この名前はリポジトリ名 `Pre-Market_Trading_frontend` とは**意図的に別物**で、旧名のまま据え置いている
-（既存のネットワークと named volume を壊さないため）。改名したくなったら `docker-compose.yml` の
-`name:` と `.mcp.json` の `--network` を同時に変え、`docker compose down -v` からやり直す。
+
+`.mcp.json` は `docker run` を直接呼ばず、ラッパー `scripts/mcp-docker.sh` を Git Bash で起動する。
+compose プロジェクト名がディレクトリ名由来（= worktree ごとに別）で、参加すべき Docker
+ネットワーク名も worktree ごとに変わるため、ラッパーが cwd の稼働中 `frontend` から実物を導出する。
+
+```bash
+bash scripts/mcp-docker.sh print-network   # いま解決されるネットワーク名を確認する
+```
+
+これにより **MCP も worktree ごとに並行して使える**。frontend を起動していないと
+ネットワークが無く MCP サーバは起動しないので、`up -d` してから `/mcp` で繋ぎ直す。
 
 ### 実行方法
 
@@ -96,7 +108,7 @@ MCP コンテナが参加する Docker ネットワーク名 `us-stock-order-fro
 # 1. 初回だけ: イメージを取得する
 docker pull mcr.microsoft.com/playwright/mcp
 
-# 2. 毎回: frontend を起動しておく（落ちていると MCP から接続できない）
+# 2. 毎回: その worktree で frontend を起動しておく（落ちていると MCP から接続できない）
 docker compose up -d frontend
 ```
 
@@ -166,8 +178,10 @@ docker compose up -d frontend
 - `--no-page-id-routing` を付けてあるので、ツール呼び出しに `pageId` は要らない
   （上流の既定は ON で、毎回 `list_pages` で ID を調べる必要がある）。複数ページを
   並行して操作したくなったらこの引数を外す
-- **Docker は排他利用。** 稼働中の frontend を共有するので、Playwright MCP と同様に
-  「1 worktree だけ」で使う（[CLAUDE.md](CLAUDE.md) の「Docker は排他利用」）
+- **Docker は worktree ごとに分離されている。** Playwright MCP と同様に、ラッパー
+  `scripts/mcp-docker.sh` が cwd の worktree のネットワークへ参加するので**並行して使える**
+  （[CLAUDE.md](CLAUDE.md) の「Docker は worktree ごとに分離」）。
+  ローカルイメージ自体は全 worktree 共通なので、`Dockerfile` を変えて焼き直すときだけ排他
 - **E2E テストの代替ではない。** 合否判定は `docker compose run --rm e2e npx playwright test`
 
 ## テスト
@@ -254,6 +268,10 @@ docker compose run --rm -p 9323:9323 e2e npx playwright show-report --host 0.0.0
 ```
 
 → http://localhost:9323 で開く。終了は `Ctrl+C`。
+
+> 9323 は worktree ごとに分かれていない（ad-hoc な `-p` 指定）。**レポート閲覧は
+> 同時に 1 worktree だけ**。別の worktree で開きたいときは `-p 9324:9323` のように
+> 別のポートを指定する。
 
 ### 3. 失敗時の生データ（`test-results/`）
 

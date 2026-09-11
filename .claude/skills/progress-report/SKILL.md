@@ -36,18 +36,18 @@ git から再計算しない（実行のたびに日付が揺れるのを防ぐ�
 | 見ない（既定） | 前回の `docs/progress.md` の行と `docs/mock/` の受領済みモックを分母にする。Docker も MCP も使わない |
 
 「全画面を巡回」「サイドバーだけ」を選ばれたときだけ **Chrome DevTools MCP**
-（`mcp__chrome-devtools__*`）を使う。使う前に、CLAUDE.md の「Docker は排他利用」に従って
-現所有者を確かめる。
+（`mcp__chrome-devtools__*`）を使う。Docker は worktree ごとに分離されているので
+（CLAUDE.md の「Docker は worktree ごとに分離」）、他セッションに断る必要はない。
+自分の worktree の状態だけ確かめる。
 
 ```bash
 bash scripts/worktree.sh list
 ```
 
-- 最終行の `Docker(frontend)` の所有者が**自分以外なら手を止めて報告する**。`up -d` を奪わない
-  （他 worktree の dev サーバが黙って別ブランチのコードを配信し始める）
-- 所有者が自分、または誰も持っていなければ `docker compose up -d frontend` を実行する。
-  MCP コンテナは固定ネットワーク `us-stock-order-frontend_default` に参加するので、
-  そのネットワークが無い（= frontend が一度も起動していない）と MCP サーバ自体が起動しない
+- 自分の行の DOCKER 列が `stopped` なら `docker compose up -d frontend` を実行する。
+  MCP コンテナは**その worktree の compose ネットワーク**に参加するので、
+  frontend が起動していないと MCP サーバ自体が起動しない
+  （`scripts/mcp-docker.sh` が理由を stderr に出す。起動後は `/mcp` で繋ぎ直す）
 - ローカルイメージが要る。無ければ 1 回だけ焼く（**ビルドは数分かかる**）
 
   ```bash

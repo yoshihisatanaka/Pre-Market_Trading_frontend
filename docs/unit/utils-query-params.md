@@ -6,7 +6,7 @@
 
 一覧画面はページ位置を URL クエリを正として持つため、`?offset=` は手で書き換えられる。
 `toOffset()` はその値を 0 以上の整数に正規化する唯一の入口で、`MarketHolidayListView` /
-`BlockedDateListView` の `paramsFromQuery()` が共通で通す。
+`BlackoutDateListView` の `paramsFromQuery()` が共通で通す。
 
 **表示件数の倍数への丸めはしない**（`?offset=7` は 7 のまま通す）。端数の位置から
 表示件数分を表示するのはユーザ判断として許容する仕様で、以前 `MarketHolidayListView` に

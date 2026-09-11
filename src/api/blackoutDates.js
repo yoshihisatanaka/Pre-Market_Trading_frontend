@@ -15,7 +15,7 @@ import { apiClient } from './client'
 
 /** 1 件のアプリ内モデル（このファイルの JSDoc で使う） */
 /**
- * @typedef {{ id: string, date: string, reason: string, updatedAt: string }} BlockedDate
+ * @typedef {{ id: string, date: string, reason: string, updatedAt: string }} BlackoutDate
  *   id は受注不可日を文字列にしたもの（'20260101'）。date は 'YYYY-MM-DD'、
  *   reason は実 API の 備考。updatedAt は編集の楽観的ロックで送り返す合札
  */
@@ -30,13 +30,13 @@ import { apiClient } from './client'
  *
  * `limit` は受け取るが送らない。実 API の一覧は 1 ページ 50 件で固定されており
  * `limit` というクエリを持たない（応答の limit は常に 50）。ページャーの表示件数は
- * stores/blockedDates.js の BLOCKED_DATES_PAGE_SIZE 側で 50 に合わせてある。
+ * stores/blackoutDates.js の BLACKOUT_DATES_PAGE_SIZE 側で 50 に合わせてある。
  *
  * @param {{ limit?: number, offset?: number, dateFrom?: string, dateTo?: string }} [params]
  *   dateFrom / dateTo は 'YYYY-MM-DD'。空文字は「条件なし」としてリクエストに載せない
- * @returns {Promise<{ items: BlockedDate[], total: number }>} 受注不可日の降順
+ * @returns {Promise<{ items: BlackoutDate[], total: number }>} 受注不可日の降順
  */
-export async function fetchBlockedDates({ offset = 0, dateFrom = '', dateTo = '' } = {}) {
+export async function fetchBlackoutDates({ offset = 0, dateFrom = '', dateTo = '' } = {}) {
   const { data } = await apiClient.get('/blackout-dates', {
     // クエリ名と日付が integer であることを知ってよいのは、この層だけ。
     // 値が undefined のパラメータは axios が送らない
@@ -48,7 +48,7 @@ export async function fetchBlockedDates({ offset = 0, dateFrom = '', dateTo = ''
   })
 
   return {
-    items: (data.blackout_dates ?? []).map(toBlockedDate),
+    items: (data.blackout_dates ?? []).map(toBlackoutDate),
     total: data.total ?? 0,
   }
 }
@@ -73,7 +73,7 @@ export async function fetchBlockedDates({ offset = 0, dateFrom = '', dateTo = ''
  * @returns {Promise<{ valid: boolean, errors: string[] }>}
  *   valid が false のときだけ errors に理由が入る
  */
-export async function validateBlockedDate({ date, reason, id = '' }) {
+export async function validateBlackoutDate({ date, reason, id = '' }) {
   const isUpdate = Boolean(id) && id === toApiKey(date)
 
   const { data } = await apiClient.post(
@@ -97,12 +97,12 @@ export async function validateBlockedDate({ date, reason, id = '' }) {
  * 海外休場日と違い事前検証は警告を返さないので、画面はその区別をしない。
  *
  * @param {{ date: string, reason: string }} params date は 'YYYY-MM-DD'
- * @returns {Promise<BlockedDate>} 登録された 1 件
+ * @returns {Promise<BlackoutDate>} 登録された 1 件
  */
-export async function createBlockedDate({ date, reason }) {
+export async function createBlackoutDate({ date, reason }) {
   const { data } = await apiClient.post('/blackout-dates', toBlackoutDateRequest({ date, reason }))
 
-  return toBlockedDate(data.blackout_date)
+  return toBlackoutDate(data.blackout_date)
 }
 
 /**
@@ -117,15 +117,15 @@ export async function createBlockedDate({ date, reason }) {
  *
  * @param {{ id: string, date: string, reason: string, updatedAt: string }} params
  *   id は変更前の受注不可日（'20260101'）、date は変更後の 'YYYY-MM-DD'
- * @returns {Promise<BlockedDate>} 更新後の 1 件
+ * @returns {Promise<BlackoutDate>} 更新後の 1 件
  */
-export async function updateBlockedDate({ id, date, reason, updatedAt }) {
+export async function updateBlackoutDate({ id, date, reason, updatedAt }) {
   const { data } = await apiClient.put(
     `/blackout-dates/${encodeURIComponent(id)}`,
     toBlackoutDateRequest({ date, reason, updatedAt }),
   )
 
-  return toBlockedDate(data.blackout_date)
+  return toBlackoutDate(data.blackout_date)
 }
 
 /**
@@ -137,7 +137,7 @@ export async function updateBlockedDate({ id, date, reason, updatedAt }) {
  * @param {string} id 削除対象の id（= 受注不可日の 'YYYYMMDD'）
  * @returns {Promise<string>} 削除した id
  */
-export async function deleteBlockedDate(id) {
+export async function deleteBlackoutDate(id) {
   await apiClient.delete(`/blackout-dates/${encodeURIComponent(id)}`)
   return id
 }
@@ -153,7 +153,7 @@ function toBlackoutDateRequest({ date, reason, updatedAt = '' }) {
 }
 
 /** BlackoutDateItem → アプリ内モデル */
-function toBlockedDate(raw) {
+function toBlackoutDate(raw) {
   return {
     // 実 API に id は無く、主キーは受注不可日そのもの。
     // 画面と URL では文字列の id として扱うので、ここで 'YYYYMMDD' に寄せる

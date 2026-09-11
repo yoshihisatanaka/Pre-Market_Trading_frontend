@@ -98,7 +98,7 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 | リソース | 実 API | 切り替えた版 | 残っている暫定 |
 |---|---|---|---|
 | 海外休場日マスタ | `/holidays`（一覧・事前検証・登録・論理削除） | `src/api/marketHolidays.js` | `X-User-Code` を `.env` の `VITE_USER_CODE` から付けている（`src/api/client.js` の interceptor）。SSO が入ったら差し替える |
-| 受注不可日マスタ | `/blackout-dates`（一覧・事前検証・登録・変更・論理削除） | `src/api/blockedDates.js` | `X-User-Code` は上と同じ。日付を変更する更新はバックエンド側の対応待ち（後述） |
+| 受注不可日マスタ | `/blackout-dates`（一覧・事前検証・登録・変更・論理削除） | `src/api/blackoutDates.js` | `X-User-Code` は上と同じ。日付を変更する更新はバックエンド側の対応待ち（後述） |
 | ハードリミットマスタ（スライス注文設定） | `/hard-limits`（照会・変更） | `src/api/hardLimits.js` | 楽観ロックの 409 が `openapi.json` に未宣言（PUT の description にだけ記載。実 API では実装済み）。`備考` と `スライス有効フラグ` は**省略するとサーバ既定に落ちる**（備考は NULL、有効フラグは 1）ので、現在値を送り返して保持している |
 
 切り替えても MSW ハンドラは**消していない**。単体テストと E2E が同じ `src/mocks/handlers/` を共用しており、
@@ -128,10 +128,10 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 実 API の作りが海外休場日と違う点が 3 つある。取り違えると静かに壊れる。
 
 1. **一覧は `limit` を受け付けない。** 1 ページ 50 件で固定（応答の `limit` は常に 50）。
-   `src/stores/blockedDates.js` の `BLOCKED_DATES_PAGE_SIZE` はこれに合わせた値で、変えられない
+   `src/stores/blackoutDates.js` の `BLACKOUT_DATES_PAGE_SIZE` はこれに合わせた値で、変えられない
 2. **事前検証の `is_update` は「日付を変えたか」で決まる。** 変更検証は「本文の受注不可日が実在し
    取消済みでないこと」を見るので、新しい日付に使うと「存在しません」で弾かれる。
-   日付を変えないときだけ変更検証にする（切り替えは `src/api/blockedDates.js` が行う）
+   日付を変えないときだけ変更検証にする（切り替えは `src/api/blackoutDates.js` が行う）
 3. **取消済みの日付の再登録に警告が出ない。** 海外休場日は事前検証が warnings を返して
    利用者に確認を求めるが、受注不可日は黙って再有効化される
 

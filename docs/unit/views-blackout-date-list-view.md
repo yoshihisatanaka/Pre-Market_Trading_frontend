@@ -1,12 +1,12 @@
-﻿# views/BlockedDateListView（受注不可日マスタ一覧画面）
+﻿# views/BlackoutDateListView（受注不可日マスタ一覧画面）
 
 - 略号: `BDL`
-- 対象: `src/views/BlockedDateListView.vue`
-- テスト: `src/views/BlockedDateListView.spec.js`
+- 対象: `src/views/BlackoutDateListView.vue`
+- テスト: `src/views/BlackoutDateListView.spec.js`
 
 一覧は実 API と同じ**受注不可日の降順**なので、「先頭行」はフィクスチャで最も新しい日付の行になる。
 api 層が吸収するバックエンドの形（パス・クエリ名・日本語キー）は
-[api-blocked-dates.md](api-blocked-dates.md) に分けてある。
+[api-blackout-dates.md](api-blackout-dates.md) に分けてある。
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|

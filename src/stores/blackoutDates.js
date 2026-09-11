@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia'
 import {
-  createBlockedDate,
-  deleteBlockedDate,
-  fetchBlockedDates,
-  updateBlockedDate,
-  validateBlockedDate,
-} from '@/api/blockedDates'
+  createBlackoutDate,
+  deleteBlackoutDate,
+  fetchBlackoutDates,
+  updateBlackoutDate,
+  validateBlackoutDate,
+} from '@/api/blackoutDates'
 import { useCrudList } from '@/composables/useCrudList'
 
 /**
@@ -15,14 +15,14 @@ import { useCrudList } from '@/composables/useCrudList'
  * `GET /blackout-dates` は limit というクエリを持たず 50 件で固定されているため、
  * ここを別の値にするとページャーの見た目と実際の返却件数がずれる。
  */
-export const BLOCKED_DATES_PAGE_SIZE = 50
+export const BLACKOUT_DATES_PAGE_SIZE = 50
 
 /**
  * 受注不可日マスタのストア。
  *
  * ページ位置・検索条件は URL クエリが正で、ここはその写しを持つだけ（画面側が load で渡す）。
  * 取得・競合防止・登録・更新・削除の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
- * 1 件の形は src/api/blockedDates.js の JSDoc を参照。
+ * 1 件の形は src/api/blackoutDates.js の JSDoc を参照。
  *
  * 登録も編集も「事前検証 → 登録 / 更新」の 2 段（実 API がその前提で分かれている）。検証の不合格は
  * 例外ではなく validationErrors / updateValidationErrors に入り、通信・サーバ障害だけが
@@ -36,14 +36,14 @@ export const BLOCKED_DATES_PAGE_SIZE = 50
  *
  * 一覧は実 API と同じ**受注不可日の降順**で返る（並べ替えはサーバの責務。ここでは触らない）。
  */
-export const useBlockedDatesStore = defineStore('blockedDates', () =>
+export const useBlackoutDatesStore = defineStore('blackoutDates', () =>
   useCrudList({
-    pageSize: BLOCKED_DATES_PAGE_SIZE,
+    pageSize: BLACKOUT_DATES_PAGE_SIZE,
     filterKeys: ['dateFrom', 'dateTo'],
-    fetchPage: fetchBlockedDates,
-    createItem: createBlockedDate,
-    validateItem: validateBlockedDate,
-    updateItem: updateBlockedDate,
-    deleteItem: deleteBlockedDate,
+    fetchPage: fetchBlackoutDates,
+    createItem: createBlackoutDate,
+    validateItem: validateBlackoutDate,
+    updateItem: updateBlackoutDate,
+    deleteItem: deleteBlackoutDate,
   }),
 )

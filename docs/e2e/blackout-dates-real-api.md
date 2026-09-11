@@ -1,10 +1,10 @@
 # 受注不可日マスタ（実 API 接続）
 
 - 略号: `BDR`
-- 画面: `src/views/BlockedDateListView.vue`
-- テスト: `e2e/blocked-dates.real-api.spec.js`
+- 画面: `src/views/BlackoutDateListView.vue`
+- テスト: `e2e/blackout-dates.real-api.spec.js`
 
-[blocked-dates.md](blocked-dates.md)（`BD`）と対象画面は同じだが、**当てる先が違う**。
+[blackout-dates.md](blackout-dates.md)（`BD`）と対象画面は同じだが、**当てる先が違う**。
 `BD` は MSW のモックに当てて画面の細かい挙動を固定する。こちらは**実 API
 （`/blackout-dates`）に当てて、フロントとバックエンドの噛み合わせだけ**を見る。
 
@@ -35,7 +35,7 @@
 2. バックエンドを起動しておく（`(cd ../Pre-Market_Trading && docker compose up -d api)`）
 
 ```powershell
-docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test blocked-dates.real-api
+docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test blackout-dates.real-api
 ```
 
 MSW が有効なままだと実 API を見ていないので、各シナリオの冒頭で検出して失敗させる。

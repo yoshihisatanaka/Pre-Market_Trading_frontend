@@ -89,11 +89,11 @@ API クライアント層 / MSW モック基盤）。モック画面を成立さ
 
 ```bash
 git log -1 --date=short --pretty=format:'%ad %s' -- \
-  src/views/BlockedDateListView.vue \
-  src/views/BlockedDateListView.spec.js \
-  src/stores/blockedDates.js \
-  docs/e2e/blocked-dates.md \
-  docs/unit/views-blocked-date-list-view.md
+  src/views/BlackoutDateListView.vue \
+  src/views/BlackoutDateListView.spec.js \
+  src/stores/blackoutDates.js \
+  docs/e2e/blackout-dates.md \
+  docs/unit/views-blackout-date-list-view.md
 ```
 
 - `--pretty=format:'%ad %s'` は**クオートする**。`%ad|%s` のようにパイプを裸で書くと

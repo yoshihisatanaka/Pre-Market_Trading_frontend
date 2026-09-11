@@ -24,9 +24,9 @@ const routes = [
     meta: { title: '海外休場日マスタ' },
   },
   {
-    path: '/masters/blocked-dates',
-    name: 'blocked-date-list',
-    component: () => import('@/views/BlockedDateListView.vue'),
+    path: '/masters/blackout-dates',
+    name: 'blackout-date-list',
+    component: () => import('@/views/BlackoutDateListView.vue'),
     meta: { title: '受注不可日マスタ' },
   },
   {

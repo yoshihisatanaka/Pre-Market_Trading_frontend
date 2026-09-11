@@ -21,6 +21,17 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  /*
+   * 行ごとに足すクラス。`(row) => string | string[] | object` の関数で渡す
+   * （Vue の :class に渡せる形ならそのまま使える）。
+   *
+   * 「どの行を目立たせるか」は画面ごとのドメイン知識なので、判定も見た目も呼び出し側に置く。
+   * ここが受け取るのはクラス名だけで、この部品は条件を一切知らない。
+   */
+  rowClass: {
+    type: Function,
+    default: null,
+  },
 })
 </script>
 
@@ -35,7 +46,12 @@ defineProps({
         </tr>
       </thead>
       <tbody>
-        <tr v-for="row in rows" :key="row[rowKey]" data-testid="data-table-row">
+        <tr
+          v-for="row in rows"
+          :key="row[rowKey]"
+          :class="rowClass ? rowClass(row) : null"
+          data-testid="data-table-row"
+        >
           <td v-for="column in columns" :key="column.key" :class="{ numeric: column.numeric }">
             <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]">
               {{ row[column.key] }}

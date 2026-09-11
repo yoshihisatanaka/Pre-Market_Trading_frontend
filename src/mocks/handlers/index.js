@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { orderListResponse } from '../fixtures/orders'
 import { canceledMarketHolidays, marketHolidays } from '../fixtures/marketHolidays'
 import { blackoutDates, canceledBlackoutDates } from '../fixtures/blackoutDates'
+import { canceledCorporateActions, corporateActions } from '../fixtures/ca'
 import { hardLimitSetting } from '../fixtures/hardLimits'
 
 /*
@@ -49,6 +50,22 @@ const HOLIDAY_TYPE_NAMES = { 0: '終日休場', 1: '短縮取引' }
  */
 const BLACKOUT_DATES_PER_PAGE = 50
 
+/**
+ * CAマスタの行。いまは読むだけ（登録・更新・削除はまだ無い）なので、
+ * 書き換え可能な状態にはせずフィクスチャをそのまま使う。
+ * 取消済みも持つのは、一覧が取消区分で外していることを確かめられるようにするため。
+ */
+const caRows = [...corporateActions, ...canceledCorporateActions]
+
+/**
+ * CA の並び順。実 API（ca_repository.list）の
+ * `ORDER BY COALESCE(効力発生日, 権利付最終日, 99999999) DESC, ID DESC` と同じ。
+ * 日付は YYYYMMDD の integer なので、数値の大小がそのまま日付の大小になる。
+ */
+function caSortKey(ca) {
+  return ca.効力発生日 ?? ca.権利付最終日 ?? 99999999
+}
+
 /** モックの可変状態をフィクスチャの内容に戻す */
 export function resetMockState() {
   marketHolidayRows = [...marketHolidays, ...canceledMarketHolidays]
@@ -58,6 +75,41 @@ export function resetMockState() {
 
 export const handlers = [
   http.get('*/api/orders', () => HttpResponse.json(orderListResponse)),
+
+  /*
+   * CAマスタ（コーポレートアクション）の一覧。取消済み（取消区分 1）は既定で返さない。
+   * 銘柄コードの絞り込みは実 API と同じ**部分一致**で、銘柄コードか Ticker のどちらかに当たればよい
+   * （実 API は `銘柄コード LIKE %s OR Ticker LIKE %s`）。
+   * CSV 入出力と更新履歴（/ca/export-csv ほか）は画面が使わないのでモックしない。
+   */
+  http.get('*/api/ca', ({ request }) => {
+    const params = new URL(request.url).searchParams
+    // DB 照合は大文字小文字を区別しないので、モックも大文字に寄せてから比べる
+    const stockCode = (params.get('stock_code') ?? '').trim().toUpperCase()
+    const caType = params.get('ca_type') ?? ''
+    const includeDeleted = params.get('include_deleted') === 'true'
+    const limit = toNonNegativeInt(params.get('limit'), 50)
+    const offset = toNonNegativeInt(params.get('offset'), 0)
+
+    const filtered = caRows
+      .filter(
+        (ca) =>
+          (includeDeleted || ca.取消区分 === 0) &&
+          (!stockCode ||
+            ca.銘柄コード.toUpperCase().includes(stockCode) ||
+            ca.Ticker.toUpperCase().includes(stockCode)) &&
+          (!caType || ca.CA種別 === caType),
+      )
+      .sort((a, b) => caSortKey(b) - caSortKey(a) || b.ID - a.ID)
+
+    return HttpResponse.json({
+      // total は絞り込み後・ページ切り出し前の件数
+      total: filtered.length,
+      limit,
+      offset,
+      ca_list: filtered.slice(offset, offset + limit),
+    })
+  }),
 
   // 海外休場日マスタの一覧。取消済み（取消区分 1）は既定で返さない
   http.get('*/api/holidays', ({ request }) => {

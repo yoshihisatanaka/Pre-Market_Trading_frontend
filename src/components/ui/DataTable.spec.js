@@ -52,4 +52,27 @@ describe('DataTable', () => {
 
     expect(wrapper.findAll('[data-testid="data-table-row"]')).toHaveLength(1)
   })
+
+  it('[DTB-05] rowClass が返したクラスが行に付く', () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns,
+        rows,
+        // 「どの行を目立たせるか」の判定は呼び出し側にある。この部品は戻り値を付けるだけ
+        rowClass: (row) => (row.symbol === 'AAPL' ? 'is-marked' : null),
+      },
+    })
+
+    const [first, second] = wrapper.findAll('[data-testid="data-table-row"]')
+    expect(first.classes()).toContain('is-marked')
+    expect(second.classes()).not.toContain('is-marked')
+  })
+
+  it('[DTB-06] rowClass を渡さないと行に追加のクラスが付かない', () => {
+    const wrapper = mount(DataTable, { props: { columns, rows } })
+
+    for (const row of wrapper.findAll('[data-testid="data-table-row"]')) {
+      expect(row.classes()).toEqual([])
+    }
+  })
 })

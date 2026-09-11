@@ -17,9 +17,9 @@ test.describe('ハードリミットマスタ', () => {
   test('[HL-02] 取得が失敗したときエラー表示と再試行ボタンが出る', async ({ page }) => {
     await mockApi(page, [
       {
-        path: '*/api/slice-settings',
+        path: '*/api/hard-limits',
         status: 500,
-        body: { message: 'サーバーでエラーが発生しました。' },
+        body: { detail: 'サーバーでエラーが発生しました。' },
       },
     ])
     await page.goto('/masters/hard-limits')
@@ -67,5 +67,26 @@ test.describe('ハードリミットマスタ', () => {
 
     await expect(page).toHaveURL(/\/masters\/hard-limits$/)
     await expect(page.getByTestId('hard-limits-current')).toBeVisible()
+  })
+
+  test('[HL-06] 他の担当者が先に更新していると競合が出て現在値は変わらない', async ({ page }) => {
+    // GET は既定のまま（画面は正常に開く）。PUT だけを 409 に差し替える
+    await mockApi(page, [
+      {
+        method: 'put',
+        path: '*/api/hard-limits',
+        status: 409,
+        body: { detail: '他のユーザーによってスライス設定が更新されました。' },
+      },
+    ])
+    await page.goto('/masters/hard-limits')
+    await expect(page.getByTestId('hard-limits-rate')).toHaveText('5.00%')
+
+    await page.getByTestId('hard-limits-rate-input').fill('3')
+    await page.getByTestId('hard-limits-save').click()
+
+    await expect(page.getByTestId('hard-limits-save-error')).toContainText('更新されました')
+    await expect(page.getByTestId('hard-limits-notice')).toHaveCount(0)
+    await expect(page.getByTestId('hard-limits-rate')).toHaveText('5.00%')
   })
 })

@@ -12,27 +12,30 @@ import { useHardLimitsStore } from './hardLimits'
 const RATE = hardLimitSetting['市場関与率']
 const QUANTITY = hardLimitSetting['大口数量閾値']
 const AMOUNT = hardLimitSetting['大口金額閾値']
+// 画面に出さない項目。保存で消えていないことの確認に使う
+const NOTE = hardLimitSetting['備考']
 
 // 保存に使う「現在値とは違う、有効な範囲の値」もフィクスチャから導く
 const NEW_RATE = RATE / 2
 const NEW_QUANTITY = QUANTITY / 2
 const NEW_AMOUNT = AMOUNT / 2
 
-// モックが 400 で拒む値（市場関与率の下限は 0.0001）
+// モックが 422 で拒む値（市場関与率の下限は 0.0001）
 const INVALID_RATE = 0
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
+// 実 API のエラー本文は ErrorResponse（{ detail: string }）
 const errorHandler = () =>
-  http.get('*/api/slice-settings', () =>
-    HttpResponse.json({ message: ERROR_MESSAGE }, { status: 500 }),
+  http.get('*/api/hard-limits', () =>
+    HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
   )
-// 本文なし（204）。未設定を表す応答
+// 本文なし（204）。実 API では起きないが、画面の 4 状態を保つための空応答
 const emptyHandler = () =>
-  http.get('*/api/slice-settings', () => new HttpResponse(null, { status: 204 }))
+  http.get('*/api/hard-limits', () => new HttpResponse(null, { status: 204 }))
 // スライス有効フラグだけを 0 にした設定（画面に無い項目が保存で書き換わらないことの確認用）
 const sliceDisabledHandler = () =>
-  http.get('*/api/slice-settings', () =>
+  http.get('*/api/hard-limits', () =>
     HttpResponse.json({ ...hardLimitSetting, スライス有効フラグ: 0 }),
   )
 
@@ -114,7 +117,9 @@ describe('useHardLimitsStore', () => {
 
     expect(updated).toBeNull()
     expect(store.saveError).toBeInstanceOf(Error)
-    expect(store.saveError.status).toBe(400)
+    expect(store.saveError.status).toBe(422)
+    // 実 API の msg は項目名を含まないので、client.js が loc から補っている
+    expect(store.saveError.message).toContain('市場関与率')
     expect(store.settings.participationRate).toBe(RATE)
     expect(store.settings.maxQuantity).toBe(QUANTITY)
   })
@@ -148,5 +153,21 @@ describe('useHardLimitsStore', () => {
     store.clearSaveError()
 
     expect(store.saveError).toBeNull()
+  })
+
+  it('[HLS-08] 画面に無い備考は save で書き換わらない', async () => {
+    const store = useHardLimitsStore()
+    await store.load()
+    expect(store.settings.note).toBe(NOTE)
+
+    const updated = await store.save({
+      participationRate: NEW_RATE,
+      maxQuantity: NEW_QUANTITY,
+      maxAmount: NEW_AMOUNT,
+    })
+
+    // 送らないと実 API は備考を NULL に落とす。ストアが現在値を補っていることの確認
+    expect(updated.note).toBe(NOTE)
+    expect(store.settings.note).toBe(NOTE)
   })
 })

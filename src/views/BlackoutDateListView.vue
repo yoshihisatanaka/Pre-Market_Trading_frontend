@@ -11,10 +11,10 @@ import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
-import { BLOCKED_DATES_PAGE_SIZE, useBlockedDatesStore } from '@/stores/blockedDates'
+import { BLACKOUT_DATES_PAGE_SIZE, useBlackoutDatesStore } from '@/stores/blackoutDates'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
-const store = useBlockedDatesStore()
+const store = useBlackoutDatesStore()
 const {
   items,
   total,
@@ -128,14 +128,14 @@ const editDate = ref('')
 const editReason = ref('')
 const editErrors = ref({ date: '', reason: '' })
 
-function openEdit(blocked) {
-  editDate.value = blocked.date
-  editReason.value = blocked.reason
+function openEdit(blackout) {
+  editDate.value = blackout.date
+  editReason.value = blackout.reason
   editErrors.value = { date: '', reason: '' }
   // 前回の失敗と成功をどちらも持ち込まない
   store.clearUpdateError()
   noticeMessage.value = ''
-  editTarget.value = blocked
+  editTarget.value = blackout
 }
 
 function closeEdit() {
@@ -182,10 +182,10 @@ async function submitEdit() {
  */
 const deleteTarget = ref(null)
 
-function openDelete(blocked) {
+function openDelete(blackout) {
   store.clearDeleteError()
   noticeMessage.value = ''
-  deleteTarget.value = blocked
+  deleteTarget.value = blackout
 }
 
 function closeDelete() {
@@ -214,37 +214,37 @@ async function submitDelete() {
  */
 function stepBackIfPageEmpty() {
   if (items.value.length === 0 && offset.value > 0) {
-    goToOffset(offset.value - BLOCKED_DATES_PAGE_SIZE)
+    goToOffset(offset.value - BLACKOUT_DATES_PAGE_SIZE)
   }
 }
 </script>
 
 <template>
-  <section class="blocked-date-list">
+  <section class="blackout-date-list">
     <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
     <Teleport defer to="#topbar-actions">
       <BaseButton
         variant="secondary"
-        data-testid="blocked-dates-reload"
+        data-testid="blackout-dates-reload"
         :disabled="loading"
         @click="store.reload()"
       >
         再読み込み
       </BaseButton>
-      <BaseButton data-testid="blocked-dates-add" @click="openAdd">新規追加</BaseButton>
+      <BaseButton data-testid="blackout-dates-add" @click="openAdd">新規追加</BaseButton>
     </Teleport>
 
-    <BaseAlert v-if="noticeMessage" variant="success" data-testid="blocked-dates-notice">
+    <BaseAlert v-if="noticeMessage" variant="success" data-testid="blackout-dates-notice">
       {{ noticeMessage }}
     </BaseAlert>
 
     <!-- 画面の説明。4 状態や検索結果に関わらず常時出す（画面モックの info バナー相当） -->
-    <BaseAlert variant="info" data-testid="blocked-dates-description">
+    <BaseAlert variant="info" data-testid="blackout-dates-description">
       国内の営業日・受注停止日を管理します。ゴールデンウィーク、シルバーウィーク、年末年始など、国内拠点で受注を停止する日を登録してください。
     </BaseAlert>
 
     <MasterSearchCard
-      testid-prefix="blocked-dates"
+      testid-prefix="blackout-dates"
       :disabled="loading"
       @submit="submitSearch"
       @clear="clearSearch"
@@ -254,7 +254,7 @@ function stepBackIfPageEmpty() {
           v-bind="field"
           v-model="inputs.dateFrom"
           type="date"
-          data-testid="blocked-dates-date-from"
+          data-testid="blackout-dates-date-from"
         />
       </FormField>
       <FormField v-slot="{ field }" label="日付（To）">
@@ -262,13 +262,13 @@ function stepBackIfPageEmpty() {
           v-bind="field"
           v-model="inputs.dateTo"
           type="date"
-          data-testid="blocked-dates-date-to"
+          data-testid="blackout-dates-date-to"
         />
       </FormField>
     </MasterSearchCard>
 
     <MasterListCard
-      testid-prefix="blocked-dates"
+      testid-prefix="blackout-dates"
       title="受注不可日一覧"
       empty-message="該当する受注不可日はありません。"
       :total="total"
@@ -280,18 +280,18 @@ function stepBackIfPageEmpty() {
       @reload="store.reload()"
       @update:offset="goToOffset"
     >
-      <DataTable flat data-testid="blocked-dates-table" :columns="columns" :rows="items">
+      <DataTable flat data-testid="blackout-dates-table" :columns="columns" :rows="items">
         <template #cell-date="{ value }">
-          <span class="blocked-date-list__date">{{ value || '—' }}</span>
+          <span class="blackout-date-list__date">{{ value || '—' }}</span>
         </template>
 
         <!-- 編集を左、削除を右端に置く。破壊的な操作を最後にする既存の並び
              （モーダルのフッタも キャンセル → 危険色）に合わせ、削除の位置は動かさない -->
         <template #cell-actions="{ row }">
-          <div class="blocked-date-list__row-actions">
+          <div class="blackout-date-list__row-actions">
             <BaseButton
               variant="secondary"
-              :data-testid="`blocked-dates-edit-${row.id}`"
+              :data-testid="`blackout-dates-edit-${row.id}`"
               :disabled="updating"
               @click="openEdit(row)"
             >
@@ -299,7 +299,7 @@ function stepBackIfPageEmpty() {
             </BaseButton>
             <BaseButton
               variant="danger"
-              :data-testid="`blocked-dates-delete-${row.id}`"
+              :data-testid="`blackout-dates-delete-${row.id}`"
               :disabled="deleting"
               @click="openDelete(row)"
             >
@@ -313,7 +313,7 @@ function stepBackIfPageEmpty() {
     <MasterFormDialog
       :open="isAddOpen"
       title="受注不可日 新規追加"
-      testid-prefix="blocked-dates"
+      testid-prefix="blackout-dates"
       :pending="creating"
       :error="createError"
       :validation-errors="validationErrors"
@@ -325,7 +325,7 @@ function stepBackIfPageEmpty() {
           v-bind="field"
           v-model="addDate"
           type="date"
-          data-testid="blocked-dates-add-date"
+          data-testid="blackout-dates-add-date"
         />
       </FormField>
 
@@ -336,7 +336,7 @@ function stepBackIfPageEmpty() {
           v-model="addReason"
           placeholder="例: GW前"
           maxlength="45"
-          data-testid="blocked-dates-add-reason"
+          data-testid="blackout-dates-add-reason"
         />
       </FormField>
     </MasterFormDialog>
@@ -344,7 +344,7 @@ function stepBackIfPageEmpty() {
     <MasterFormDialog
       :open="Boolean(editTarget)"
       title="受注不可日 編集"
-      testid-prefix="blocked-dates"
+      testid-prefix="blackout-dates"
       action="edit"
       submit-label="更新"
       :pending="updating"
@@ -358,7 +358,7 @@ function stepBackIfPageEmpty() {
           v-bind="field"
           v-model="editDate"
           type="date"
-          data-testid="blocked-dates-edit-date"
+          data-testid="blackout-dates-edit-date"
         />
       </FormField>
 
@@ -369,14 +369,14 @@ function stepBackIfPageEmpty() {
           v-model="editReason"
           placeholder="例: GW前"
           maxlength="45"
-          data-testid="blocked-dates-edit-reason"
+          data-testid="blackout-dates-edit-reason"
         />
       </FormField>
     </MasterFormDialog>
 
     <ConfirmDeleteDialog
       :open="Boolean(deleteTarget)"
-      testid-prefix="blocked-dates"
+      testid-prefix="blackout-dates"
       :label="deleteTarget?.date ?? ''"
       :pending="deleting"
       :error="deleteError"
@@ -387,20 +387,20 @@ function stepBackIfPageEmpty() {
 </template>
 
 <style scoped>
-.blocked-date-list {
+.blackout-date-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
 }
 
 /* 日付は等幅にはせず、桁を揃えて少し強調する（画面モックの ui-code-strong 相当） */
-.blocked-date-list__date {
+.blackout-date-list__date {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 /* 行ごとの操作（編集・削除）。横に並べ、間隔は他の並列ボタンと同じトークンで取る */
-.blocked-date-list__row-actions {
+.blackout-date-list__row-actions {
   display: flex;
   gap: var(--space-2);
 }

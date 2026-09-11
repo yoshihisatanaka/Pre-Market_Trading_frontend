@@ -11,9 +11,12 @@
  * @param {import('@playwright/test').Page} page
  * @param {Array<{ method?: 'get'|'post'|'put'|'patch'|'delete', path: string, status?: number, body?: unknown }>} overrides
  *
+ * 本文は実 API（FastAPI）の形で書く。エラーは `{ detail: string }`（ErrorResponse）か
+ * `{ detail: [{ loc, msg, type }, …] }`（422 の HTTPValidationError）。
+ *
  * @example
  *   await mockApi(page, [
- *     { path: '*\/api/orders', status: 500, body: { message: 'サーバーでエラーが発生しました。' } },
+ *     { path: '*\/api/orders', status: 500, body: { detail: 'サーバーでエラーが発生しました。' } },
  *   ])
  *   await page.goto('/')
  */

@@ -65,7 +65,7 @@ function normalizeError(error) {
  *
  * 実 API（FastAPI）の本文は 2 形ある。
  *   ErrorResponse         … `{ detail: '休場日 20260101 は既に登録されています' }`（400 / 401 / 404 / 409 / 500）
- *   HTTPValidationError   … `{ detail: [{ loc, msg, type }, …] }`（422。msg は日本語化済み）
+ *   HTTPValidationError   … `{ detail: [{ loc, msg, type }, …] }`（422。msg はおおむね日本語化済み）
  * どちらも同じ `detail` キーなので、文字列か配列かで見分ける。
  *
  * `message` も見るのは、まだ実 API に切り替えていないマスタのモックが
@@ -82,12 +82,30 @@ function messageFrom(data) {
   if (typeof detail === 'string') return detail
   if (Array.isArray(detail)) {
     // 422 は項目ごとに 1 件返る。どれも直すべき理由なので、全部つなげて出す
-    return detail
-      .map((item) => item?.msg)
-      .filter((msg) => typeof msg === 'string' && msg)
-      .join(' / ')
+    return detail.map(toValidationMessage).filter(Boolean).join(' / ')
   }
   return ''
+}
+
+/**
+ * ValidationError 1 件を、画面に出す 1 行にする。
+ *
+ * 実 API の `msg` は日本語化されているが**項目名を含まない**
+ * （実測: 市場関与率が下限未満 → 「指定できる下限を下回っています」だけ）。
+ * 複数の入力欄がある画面ではどれの話か分からないので、`loc` の末尾を前に付ける。
+ * `loc` は `['body', '市場関与率']` / `['query', 'limit']` の形で、
+ * 先頭の「値の出所」は利用者に見せる情報ではないので落とす。
+ *
+ * @param {unknown} item ValidationError 1 件
+ * @returns {string} 取り出せなければ空文字（呼び出し側が filter で捨てる）
+ */
+function toValidationMessage(item) {
+  if (typeof item?.msg !== 'string' || !item.msg) return ''
+
+  const field = Array.isArray(item.loc) ? item.loc.at(-1) : null
+  const named = typeof field === 'string' && field !== 'body' && field !== 'query'
+
+  return named ? `${field}: ${item.msg}` : item.msg
 }
 
 function defaultMessageFor(status) {

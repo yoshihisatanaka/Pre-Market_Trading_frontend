@@ -5,15 +5,15 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { blockedDates } from '@/mocks/fixtures/blockedDates'
-import { BLOCKED_DATES_PAGE_SIZE } from '@/stores/blockedDates'
-import BlockedDateListView from './BlockedDateListView.vue'
+import { blackoutDates } from '@/mocks/fixtures/blackoutDates'
+import { BLACKOUT_DATES_PAGE_SIZE } from '@/stores/blackoutDates'
+import BlackoutDateListView from './BlackoutDateListView.vue'
 
 /*
  * 画面テスト。実際の Pinia ストア + vue-router + MSW(node) を通し、
  * 4状態の出し分けと「URL クエリが正」の単方向フローを検証する。
  */
-const PATH = '/masters/blocked-dates'
+const PATH = '/masters/blackout-dates'
 
 /*
  * フィクスチャはバックエンドの生の形（日本語キー / 受注不可日は YYYYMMDD の integer）なので、
@@ -24,17 +24,17 @@ const toIsoDate = (blackoutDate) => {
   const digits = String(blackoutDate)
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
-const toRow = (blocked) => ({
-  id: String(blocked.受注不可日),
-  date: toIsoDate(blocked.受注不可日),
-  reason: blocked.備考 ?? '',
+const toRow = (blackout) => ({
+  id: String(blackout.受注不可日),
+  date: toIsoDate(blackout.受注不可日),
+  reason: blackout.備考 ?? '',
 })
 
 // 期待値はフィクスチャと表示件数から導く（56 / 50 を直接書かない）
-const PAGE_SIZE = BLOCKED_DATES_PAGE_SIZE
-const TOTAL = blockedDates.length
+const PAGE_SIZE = BLACKOUT_DATES_PAGE_SIZE
+const TOTAL = blackoutDates.length
 // フィクスチャは実 API と同じ受注不可日の降順なので、この並びがそのまま 1 ページ目になる
-const allRows = blockedDates.map(toRow)
+const allRows = blackoutDates.map(toRow)
 const firstPage = allRows.slice(0, PAGE_SIZE)
 const secondPage = allRows.slice(PAGE_SIZE, PAGE_SIZE * 2)
 
@@ -46,12 +46,12 @@ const oddPage = allRows.slice(ODD_OFFSET, ODD_OFFSET + PAGE_SIZE)
 const YEAR = allRows[0].date.slice(0, 4)
 const DATE_FROM = `${YEAR}-01-01`
 const DATE_TO = `${YEAR}-12-31`
-const inYear = allRows.filter((blocked) => blocked.date.startsWith(YEAR))
+const inYear = allRows.filter((blackout) => blackout.date.startsWith(YEAR))
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
 // 登録に使う「フィクスチャに無い日付」もフィクスチャから導く（既存日付と衝突したら別日になる）
-const existingDates = new Set(allRows.map((blocked) => blocked.date))
+const existingDates = new Set(allRows.map((blackout) => blackout.date))
 const NEW_DATE = (() => {
   for (let day = 1; day <= 28; day += 1) {
     const date = `${YEAR}-06-${String(day).padStart(2, '0')}`
@@ -116,7 +116,7 @@ async function mountView(query = {}) {
   // mount 前に遷移を済ませておけば router.isReady() を待たなくてよい
   await router.push({ path: PATH, query })
 
-  const wrapper = mount(BlockedDateListView, {
+  const wrapper = mount(BlackoutDateListView, {
     global: {
       plugins: [createPinia(), router],
       // teleport を stub して、ヘッダへ差し込むボタンを wrapper 内に描画させる
@@ -137,7 +137,7 @@ async function settle() {
 
 const rows = (wrapper) => wrapper.findAll('[data-testid="data-table-row"]')
 const rangeText = (wrapper) => wrapper.find('[data-testid="pagination-range"]').text()
-const countText = (wrapper) => wrapper.find('[data-testid="blocked-dates-count"]').text()
+const countText = (wrapper) => wrapper.find('[data-testid="blackout-dates-count"]').text()
 const exists = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`).exists()
 const headers = (wrapper) => wrapper.findAll('th').map((th) => th.text())
 const pageButton = (wrapper, page) =>
@@ -177,23 +177,23 @@ const deleteNotFoundHandler = () =>
     HttpResponse.json({ detail: NOT_FOUND_MESSAGE }, { status: 404 }),
   )
 
-const deleteButton = (wrapper, id) => wrapper.find(`[data-testid="blocked-dates-delete-${id}"]`)
-const editButton = (wrapper, id) => wrapper.find(`[data-testid="blocked-dates-edit-${id}"]`)
+const deleteButton = (wrapper, id) => wrapper.find(`[data-testid="blackout-dates-delete-${id}"]`)
+const editButton = (wrapper, id) => wrapper.find(`[data-testid="blackout-dates-edit-${id}"]`)
 // 削除確認モーダルは表の行と同じ日付を出すので、dialog に絞ってから本文を読む
 const deleteDialog = (wrapper) => wrapper.find('[role="dialog"][aria-label="削除確認"]')
 const openDelete = async (wrapper, id) => {
   await deleteButton(wrapper, id).trigger('click')
 }
 const confirmDelete = async (wrapper) => {
-  await wrapper.find('[data-testid="blocked-dates-delete-submit"]').trigger('click')
+  await wrapper.find('[data-testid="blackout-dates-delete-submit"]').trigger('click')
 }
 
-const addDateInput = (wrapper) => wrapper.find('[data-testid="blocked-dates-add-date"]')
-const addReasonInput = (wrapper) => wrapper.find('[data-testid="blocked-dates-add-reason"]')
-const addSubmit = (wrapper) => wrapper.find('[data-testid="blocked-dates-add-submit"]')
-const addCancel = (wrapper) => wrapper.find('[data-testid="blocked-dates-add-cancel"]')
+const addDateInput = (wrapper) => wrapper.find('[data-testid="blackout-dates-add-date"]')
+const addReasonInput = (wrapper) => wrapper.find('[data-testid="blackout-dates-add-reason"]')
+const addSubmit = (wrapper) => wrapper.find('[data-testid="blackout-dates-add-submit"]')
+const addCancel = (wrapper) => wrapper.find('[data-testid="blackout-dates-add-cancel"]')
 const openAddModal = async (wrapper) => {
-  await wrapper.find('[data-testid="blocked-dates-add"]').trigger('click')
+  await wrapper.find('[data-testid="blackout-dates-add"]').trigger('click')
 }
 const fillAdd = async (wrapper, date, reason) => {
   await addDateInput(wrapper).setValue(date)
@@ -202,7 +202,7 @@ const fillAdd = async (wrapper, date, reason) => {
 // 事前検証の理由は箇条書きで出るので、行ごとのテキストで取り出す
 const validationMessages = (wrapper) =>
   wrapper
-    .findAll('[data-testid="blocked-dates-add-validation-error"] li')
+    .findAll('[data-testid="blackout-dates-add-validation-error"] li')
     .map((item) => item.text())
 
 /*
@@ -210,10 +210,10 @@ const validationMessages = (wrapper) =>
  * dialog はタイトルで絞り、入力欄とボタンは -edit- の testid で引く
  */
 const editDialog = (wrapper) => wrapper.find('[role="dialog"][aria-label="受注不可日 編集"]')
-const editDateInput = (wrapper) => wrapper.find('[data-testid="blocked-dates-edit-date"]')
-const editReasonInput = (wrapper) => wrapper.find('[data-testid="blocked-dates-edit-reason"]')
-const editSubmit = (wrapper) => wrapper.find('[data-testid="blocked-dates-edit-submit"]')
-const editCancel = (wrapper) => wrapper.find('[data-testid="blocked-dates-edit-cancel"]')
+const editDateInput = (wrapper) => wrapper.find('[data-testid="blackout-dates-edit-date"]')
+const editReasonInput = (wrapper) => wrapper.find('[data-testid="blackout-dates-edit-reason"]')
+const editSubmit = (wrapper) => wrapper.find('[data-testid="blackout-dates-edit-submit"]')
+const editCancel = (wrapper) => wrapper.find('[data-testid="blackout-dates-edit-cancel"]')
 const openEditModal = async (wrapper, id) => {
   await editButton(wrapper, id).trigger('click')
 }
@@ -223,10 +223,10 @@ const fillEdit = async (wrapper, date, reason) => {
 }
 const editValidationMessages = (wrapper) =>
   wrapper
-    .findAll('[data-testid="blocked-dates-edit-validation-error"] li')
+    .findAll('[data-testid="blackout-dates-edit-validation-error"] li')
     .map((item) => item.text())
 // 表の中だけを見る（成功メッセージにも日付が出るので、画面全体のテキストでは判定できない）
-const tableText = (wrapper) => wrapper.find('[data-testid="blocked-dates-table"]').text()
+const tableText = (wrapper) => wrapper.find('[data-testid="blackout-dates-table"]').text()
 // FormField はエラー文の id を入力欄の aria-describedby に渡すので、そこから項目単位で引く
 // （role="alert" で絞ると、同じ aria-describedby に並ぶ hint を拾わない）
 const fieldError = (wrapper, input) => {
@@ -235,21 +235,21 @@ const fieldError = (wrapper, input) => {
   return found ? found.text() : ''
 }
 
-// シナリオ: docs/unit/views-blocked-date-list-view.md
-describe('BlockedDateListView', () => {
+// シナリオ: docs/unit/views-blackout-date-list-view.md
+describe('BlackoutDateListView', () => {
   it('[BDL-01] 取得中はローディングを表示する', async () => {
     // watch(immediate) は setup 中に同期で走るので、最初の描画が既にローディング状態
     const { wrapper } = await mountView()
 
-    expect(exists(wrapper, 'blocked-dates-loading')).toBe(true)
-    expect(exists(wrapper, 'blocked-dates-table')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-loading')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-table')).toBe(false)
   })
 
   it('[BDL-02] 取得成功時は 1 ページ目と件数・ページャーを表示する', async () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(exists(wrapper, 'blocked-dates-loading')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-loading')).toBe(false)
     expect(rows(wrapper)).toHaveLength(firstPage.length)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
     expect(rangeText(wrapper)).toBe(`${TOTAL} 件中 1–${PAGE_SIZE} 件`)
@@ -264,11 +264,11 @@ describe('BlockedDateListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    const error = wrapper.find('[data-testid="blocked-dates-error"]')
+    const error = wrapper.find('[data-testid="blackout-dates-error"]')
     expect(error.exists()).toBe(true)
     expect(error.text()).toContain(ERROR_MESSAGE)
     expect(error.find('button').text()).toBe('再試行')
-    expect(exists(wrapper, 'blocked-dates-table')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-table')).toBe(false)
   })
 
   it('[BDL-04] 受注不可日が 0 件のときは空状態を表示する', async () => {
@@ -276,9 +276,9 @@ describe('BlockedDateListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(exists(wrapper, 'blocked-dates-empty')).toBe(true)
-    expect(exists(wrapper, 'blocked-dates-table')).toBe(false)
-    expect(exists(wrapper, 'blocked-dates-pagination')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-empty')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-table')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-pagination')).toBe(false)
   })
 
   it('[BDL-05] エラーのときも検索フォームは表示され続ける', async () => {
@@ -286,10 +286,10 @@ describe('BlockedDateListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(exists(wrapper, 'blocked-dates-error')).toBe(true)
-    expect(exists(wrapper, 'blocked-dates-search')).toBe(true)
-    expect(exists(wrapper, 'blocked-dates-date-from')).toBe(true)
-    expect(exists(wrapper, 'blocked-dates-date-to')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-error')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-search')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-date-from')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-date-to')).toBe(true)
   })
 
   it('[BDL-06] offset 付きの URL で開くとそのページを復元する', async () => {
@@ -328,9 +328,9 @@ describe('BlockedDateListView', () => {
     const { wrapper, router } = await mountView()
     await settle()
 
-    await wrapper.find('[data-testid="blocked-dates-date-from"]').setValue(DATE_FROM)
-    await wrapper.find('[data-testid="blocked-dates-date-to"]').setValue(DATE_TO)
-    await wrapper.find('[data-testid="blocked-dates-search"]').trigger('submit')
+    await wrapper.find('[data-testid="blackout-dates-date-from"]').setValue(DATE_FROM)
+    await wrapper.find('[data-testid="blackout-dates-date-to"]').setValue(DATE_TO)
+    await wrapper.find('[data-testid="blackout-dates-search"]').trigger('submit')
     await settle()
 
     expect(router.currentRoute.value.query).toEqual({ date_from: DATE_FROM, date_to: DATE_TO })
@@ -343,7 +343,7 @@ describe('BlockedDateListView', () => {
     await settle()
     expect(rows(wrapper)).toHaveLength(inYear.length)
 
-    await wrapper.find('[data-testid="blocked-dates-search-clear"]').trigger('click')
+    await wrapper.find('[data-testid="blackout-dates-search-clear"]').trigger('click')
     await settle()
 
     expect(router.currentRoute.value.query).toEqual({})
@@ -355,8 +355,8 @@ describe('BlockedDateListView', () => {
     const { wrapper } = await mountView({ date_from: DATE_FROM, date_to: DATE_TO })
     await settle()
 
-    expect(wrapper.find('[data-testid="blocked-dates-date-from"]').element.value).toBe(DATE_FROM)
-    expect(wrapper.find('[data-testid="blocked-dates-date-to"]').element.value).toBe(DATE_TO)
+    expect(wrapper.find('[data-testid="blackout-dates-date-from"]').element.value).toBe(DATE_FROM)
+    expect(wrapper.find('[data-testid="blackout-dates-date-to"]').element.value).toBe(DATE_TO)
   })
 
   it('[BDL-12] 再読み込みは URL を変えずに取り直す', async () => {
@@ -364,10 +364,10 @@ describe('BlockedDateListView', () => {
     server.use(emptyHandler({ once: true }))
     const { wrapper, router } = await mountView()
     await settle()
-    expect(exists(wrapper, 'blocked-dates-empty')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-empty')).toBe(true)
 
     // reload は router を経由しないのでナビゲーション待ちは要らない
-    await wrapper.find('[data-testid="blocked-dates-reload"]').trigger('click')
+    await wrapper.find('[data-testid="blackout-dates-reload"]').trigger('click')
     await flushPromises()
 
     expect(rows(wrapper)).toHaveLength(firstPage.length)
@@ -377,27 +377,27 @@ describe('BlockedDateListView', () => {
   it('[BDL-13] 説明バナーは 4 状態のいずれでも表示される', async () => {
     // ローディング中
     const loadingView = await mountView()
-    expect(exists(loadingView.wrapper, 'blocked-dates-loading')).toBe(true)
-    expect(exists(loadingView.wrapper, 'blocked-dates-description')).toBe(true)
+    expect(exists(loadingView.wrapper, 'blackout-dates-loading')).toBe(true)
+    expect(exists(loadingView.wrapper, 'blackout-dates-description')).toBe(true)
 
     // データあり
     await settle()
     expect(rows(loadingView.wrapper)).toHaveLength(firstPage.length)
-    expect(exists(loadingView.wrapper, 'blocked-dates-description')).toBe(true)
+    expect(exists(loadingView.wrapper, 'blackout-dates-description')).toBe(true)
 
     // エラー
     server.use(errorHandler({ once: true }))
     const errorView = await mountView()
     await settle()
-    expect(exists(errorView.wrapper, 'blocked-dates-error')).toBe(true)
-    expect(exists(errorView.wrapper, 'blocked-dates-description')).toBe(true)
+    expect(exists(errorView.wrapper, 'blackout-dates-error')).toBe(true)
+    expect(exists(errorView.wrapper, 'blackout-dates-description')).toBe(true)
 
     // 空
     server.use(emptyHandler({ once: true }))
     const emptyView = await mountView()
     await settle()
-    expect(exists(emptyView.wrapper, 'blocked-dates-empty')).toBe(true)
-    expect(exists(emptyView.wrapper, 'blocked-dates-description')).toBe(true)
+    expect(exists(emptyView.wrapper, 'blackout-dates-empty')).toBe(true)
+    expect(exists(emptyView.wrapper, 'blackout-dates-description')).toBe(true)
   })
 
   it('[BDL-14] 表に日付 / 理由と操作列が出て行の内容がフィクスチャと一致する', async () => {
@@ -415,21 +415,21 @@ describe('BlockedDateListView', () => {
         .slice(0, 2)
         .map((td) => td.text()),
     )
-    expect(cellTexts).toEqual(firstPage.map((blocked) => [blocked.date, blocked.reason]))
+    expect(cellTexts).toEqual(firstPage.map((blackout) => [blackout.date, blackout.reason]))
 
     // 操作列には行ごとの編集・削除ボタンが出る
-    expect(firstPage.every((blocked) => editButton(wrapper, blocked.id).exists())).toBe(true)
-    expect(firstPage.every((blocked) => deleteButton(wrapper, blocked.id).exists())).toBe(true)
+    expect(firstPage.every((blackout) => editButton(wrapper, blackout.id).exists())).toBe(true)
+    expect(firstPage.every((blackout) => deleteButton(wrapper, blackout.id).exists())).toBe(true)
   })
 
   it('[BDL-15] 「新規追加」で空の追加モーダルが開く', async () => {
     const { wrapper } = await mountView()
     await settle()
-    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-add-form')).toBe(false)
 
     await openAddModal(wrapper)
 
-    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-add-form')).toBe(true)
     expect(addDateInput(wrapper).element.value).toBe('')
     expect(addReasonInput(wrapper).element.value).toBe('')
   })
@@ -444,7 +444,7 @@ describe('BlockedDateListView', () => {
       }),
       http.post('*/api/blackout-dates', () => {
         createCalls += 1
-        return HttpResponse.json(itemBody(blockedDates[0]), { status: 201 })
+        return HttpResponse.json(itemBody(blackoutDates[0]), { status: 201 })
       }),
     )
     const { wrapper } = await mountView()
@@ -454,14 +454,14 @@ describe('BlockedDateListView', () => {
     await addSubmit(wrapper).trigger('click')
     await settle()
 
-    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-add-form')).toBe(true)
     expect(fieldError(wrapper, addDateInput(wrapper))).toBe('日付を入力してください。')
     expect(fieldError(wrapper, addReasonInput(wrapper))).toBe('理由を入力してください。')
     // 無駄な往復をしない（事前検証も登録も呼ばない）
     expect(validateCalls).toBe(0)
     expect(createCalls).toBe(0)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
-    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-notice')).toBe(false)
   })
 
   it('[BDL-17] 追加が成功するとモーダルが閉じ成功メッセージと増えた件数が出る', async () => {
@@ -476,8 +476,8 @@ describe('BlockedDateListView', () => {
     await settle()
     await settle()
 
-    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(false)
-    const notice = wrapper.find('[data-testid="blocked-dates-notice"]')
+    expect(exists(wrapper, 'blackout-dates-add-form')).toBe(false)
+    const notice = wrapper.find('[data-testid="blackout-dates-notice"]')
     expect(notice.exists()).toBe(true)
     expect(notice.text()).toContain(NEW_DATE)
     expect(countText(wrapper)).toBe(`${TOTAL + 1} 件`)
@@ -495,12 +495,12 @@ describe('BlockedDateListView', () => {
     await settle()
     await settle()
 
-    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-add-form')).toBe(true)
     expect(validationMessages(wrapper)).toEqual([duplicateMessage(allRows[0])])
     // サーバの拒否は項目のエラーにも通信障害用の表示にも混ぜない
     expect(fieldError(wrapper, addDateInput(wrapper))).toBe('')
-    expect(exists(wrapper, 'blocked-dates-add-error')).toBe(false)
-    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-add-error')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-notice')).toBe(false)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
   })
 
@@ -529,11 +529,11 @@ describe('BlockedDateListView', () => {
     await settle()
     await settle()
 
-    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
-    expect(wrapper.find('[data-testid="blocked-dates-add-error"]').text()).toContain(ERROR_MESSAGE)
+    expect(exists(wrapper, 'blackout-dates-add-form')).toBe(true)
+    expect(wrapper.find('[data-testid="blackout-dates-add-error"]').text()).toContain(ERROR_MESSAGE)
     // 事前検証の不合格ではないので箇条書きは出さない
-    expect(exists(wrapper, 'blocked-dates-add-validation-error')).toBe(false)
-    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-add-validation-error')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-notice')).toBe(false)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
   })
 
@@ -545,12 +545,12 @@ describe('BlockedDateListView', () => {
     await addSubmit(wrapper).trigger('click')
     await settle()
     await settle()
-    expect(exists(wrapper, 'blocked-dates-add-validation-error')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-add-validation-error')).toBe(true)
 
     await addCancel(wrapper).trigger('click')
     await openAddModal(wrapper)
 
-    expect(exists(wrapper, 'blocked-dates-add-validation-error')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-add-validation-error')).toBe(false)
     expect(addDateInput(wrapper).element.value).toBe('')
     expect(addReasonInput(wrapper).element.value).toBe('')
   })
@@ -580,14 +580,14 @@ describe('BlockedDateListView', () => {
     expect(addCancel(wrapper).attributes('disabled')).toBeDefined()
     // 閉じさせない（結果の行き先が無くなるため）
     await addCancel(wrapper).trigger('click')
-    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-add-form')).toBe(true)
 
     releaseValidate()
     await settle()
     await settle()
     await settle()
 
-    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-add-form')).toBe(false)
   })
 
   it('[BDL-23] 行の「削除」で対象の日付を示す確認モーダルが開く', async () => {
@@ -606,14 +606,14 @@ describe('BlockedDateListView', () => {
     await settle()
     await openDelete(wrapper, DELETE_TARGET.id)
 
-    await wrapper.find('[data-testid="blocked-dates-delete-cancel"]').trigger('click')
+    await wrapper.find('[data-testid="blackout-dates-delete-cancel"]').trigger('click')
     await settle()
 
     expect(deleteDialog(wrapper).exists()).toBe(false)
     // API を呼んでいないので一覧の件数も行数も動かない
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
     expect(rows(wrapper)).toHaveLength(firstPage.length)
-    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-notice')).toBe(false)
   })
 
   it('[BDL-25] 削除が成功するとモーダルが閉じ成功メッセージと減った件数が出る', async () => {
@@ -627,7 +627,7 @@ describe('BlockedDateListView', () => {
     await settle()
 
     expect(deleteDialog(wrapper).exists()).toBe(false)
-    const notice = wrapper.find('[data-testid="blocked-dates-notice"]')
+    const notice = wrapper.find('[data-testid="blackout-dates-notice"]')
     expect(notice.exists()).toBe(true)
     expect(notice.text()).toContain(DELETE_TARGET.date)
     expect(countText(wrapper)).toBe(`${TOTAL - 1} 件`)
@@ -644,10 +644,10 @@ describe('BlockedDateListView', () => {
     await settle()
 
     expect(deleteDialog(wrapper).exists()).toBe(true)
-    expect(wrapper.find('[data-testid="blocked-dates-delete-error"]').text()).toContain(
+    expect(wrapper.find('[data-testid="blackout-dates-delete-error"]').text()).toContain(
       NOT_FOUND_MESSAGE,
     )
-    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-notice')).toBe(false)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
   })
 
@@ -687,7 +687,7 @@ describe('BlockedDateListView', () => {
     expect(editDateInput(wrapper).element.value).toBe(EDIT_TARGET.date)
     expect(editReasonInput(wrapper).element.value).toBe(EDIT_TARGET.reason)
     // 追加モーダルは開かない（同じ部品を使い回しているので取り違えないことを確かめる）
-    expect(exists(wrapper, 'blocked-dates-add-form')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-add-form')).toBe(false)
   })
 
   it('[BDL-29] 理由だけ変えて更新すると成功メッセージが出て件数は変わらない', async () => {
@@ -703,7 +703,7 @@ describe('BlockedDateListView', () => {
     await settle()
 
     expect(editDialog(wrapper).exists()).toBe(false)
-    const notice = wrapper.find('[data-testid="blocked-dates-notice"]')
+    const notice = wrapper.find('[data-testid="blackout-dates-notice"]')
     expect(notice.exists()).toBe(true)
     expect(notice.text()).toContain(EDIT_TARGET.date)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
@@ -726,7 +726,7 @@ describe('BlockedDateListView', () => {
 
     expect(editDialog(wrapper).exists()).toBe(false)
     // 成功メッセージはサーバが受理した「新しい」日付を出す
-    expect(wrapper.find('[data-testid="blocked-dates-notice"]').text()).toContain(NEW_DATE)
+    expect(wrapper.find('[data-testid="blackout-dates-notice"]').text()).toContain(NEW_DATE)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
     expect(tableText(wrapper)).toContain(NEW_DATE)
     expect(tableText(wrapper)).not.toContain(EDIT_TARGET.date)
@@ -742,7 +742,7 @@ describe('BlockedDateListView', () => {
       }),
       http.put('*/api/blackout-dates/:blackoutDate', () => {
         updateCalls += 1
-        return HttpResponse.json(itemBody(blockedDates[0]))
+        return HttpResponse.json(itemBody(blackoutDates[0]))
       }),
     )
     const { wrapper } = await mountView()
@@ -760,7 +760,7 @@ describe('BlockedDateListView', () => {
     expect(validateCalls).toBe(0)
     expect(updateCalls).toBe(0)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
-    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-notice')).toBe(false)
   })
 
   it('[BDL-32] 更新が 409 のときモーダル内に通信障害用のエラーが出る', async () => {
@@ -779,12 +779,12 @@ describe('BlockedDateListView', () => {
     await settle()
 
     expect(editDialog(wrapper).exists()).toBe(true)
-    expect(wrapper.find('[data-testid="blocked-dates-edit-error"]').text()).toContain(
+    expect(wrapper.find('[data-testid="blackout-dates-edit-error"]').text()).toContain(
       CONFLICT_MESSAGE,
     )
     // 事前検証の不合格ではないので箇条書きは出さない
-    expect(exists(wrapper, 'blocked-dates-edit-validation-error')).toBe(false)
-    expect(exists(wrapper, 'blocked-dates-notice')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-edit-validation-error')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-notice')).toBe(false)
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
     expect(rows(wrapper)[0].text()).toContain(EDIT_TARGET.reason)
   })
@@ -839,7 +839,7 @@ describe('BlockedDateListView', () => {
     await editCancel(wrapper).trigger('click')
     await openEditModal(wrapper, OTHER_TARGET.id)
 
-    expect(exists(wrapper, 'blocked-dates-edit-validation-error')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-edit-validation-error')).toBe(false)
     expect(editDateInput(wrapper).element.value).toBe(OTHER_TARGET.date)
     expect(editReasonInput(wrapper).element.value).toBe(OTHER_TARGET.reason)
   })
@@ -857,7 +857,7 @@ describe('BlockedDateListView', () => {
     expect(editValidationMessages(wrapper)).toEqual([duplicateMessage(OTHER_TARGET)])
 
     await openAddModal(wrapper)
-    expect(exists(wrapper, 'blocked-dates-add-validation-error')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-add-validation-error')).toBe(false)
 
     // 逆順（追加で弾かれた直後に編集モーダルを開く）
     await fillAdd(wrapper, DUPLICATE_DATE, NEW_REASON)
@@ -869,7 +869,7 @@ describe('BlockedDateListView', () => {
     await addCancel(wrapper).trigger('click')
     await openEditModal(wrapper, OTHER_TARGET.id)
 
-    expect(exists(wrapper, 'blocked-dates-edit-validation-error')).toBe(false)
+    expect(exists(wrapper, 'blackout-dates-edit-validation-error')).toBe(false)
   })
 
   it('[BDL-36] 最終ページの 1 件を絞り込みの範囲外へ動かすと 1 ページ前に戻る', async () => {

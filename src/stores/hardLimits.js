@@ -18,8 +18,8 @@ export const useHardLimitsStore = defineStore('hardLimits', () => {
   const { error: saveError, loading: saving, execute: executeSave } = useAsync(updateHardLimits)
 
   /**
-   * 3 つの上限を更新する。画面に出さない項目（有効フラグ）と楽観的ロックの
-   * 更新日時は、現在値からここで補う。
+   * 3 つの上限を更新する。画面に出さない項目（有効フラグ・備考）と楽観的ロックの
+   * 更新日時は、現在値からここで補う。送らないとサーバ側の既定に落ちて消えるため。
    */
   async function save({ participationRate, maxQuantity, maxAmount }) {
     const current = data.value
@@ -31,6 +31,7 @@ export const useHardLimitsStore = defineStore('hardLimits', () => {
       maxQuantity,
       maxAmount,
       sliceEnabled: current.sliceEnabled,
+      note: current.note,
       updatedAt: current.updatedAt,
     })
     if (!updated) return null

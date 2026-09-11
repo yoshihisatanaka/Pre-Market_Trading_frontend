@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { orderListResponse } from '../fixtures/orders'
 import { canceledMarketHolidays, marketHolidays } from '../fixtures/marketHolidays'
-import { blockedDates, canceledBlockedDates } from '../fixtures/blockedDates'
+import { blackoutDates, canceledBlackoutDates } from '../fixtures/blackoutDates'
 import { hardLimitSetting } from '../fixtures/hardLimits'
 
 /*
@@ -26,7 +26,7 @@ import { hardLimitSetting } from '../fixtures/hardLimits'
  */
 // 海外休場日と受注不可日は論理削除なので、取消済みの行も持ったままにする（一覧では取消区分で外す）
 let marketHolidayRows = [...marketHolidays, ...canceledMarketHolidays]
-let blockedDateRows = [...blockedDates, ...canceledBlockedDates]
+let blackoutDateRows = [...blackoutDates, ...canceledBlackoutDates]
 // ハードリミットは 1 件しか無いので、行の配列ではなくオブジェクトの写しを持つ
 let hardLimitRow = { ...hardLimitSetting }
 
@@ -50,7 +50,7 @@ const BLACKOUT_DATES_PER_PAGE = 50
 /** モックの可変状態をフィクスチャの内容に戻す */
 export function resetMockState() {
   marketHolidayRows = [...marketHolidays, ...canceledMarketHolidays]
-  blockedDateRows = [...blockedDates, ...canceledBlockedDates]
+  blackoutDateRows = [...blackoutDates, ...canceledBlackoutDates]
   hardLimitRow = { ...hardLimitSetting }
 }
 
@@ -189,13 +189,13 @@ export const handlers = [
 
     // 受注不可日は YYYYMMDD の integer なので、数値の大小がそのまま日付の大小になる。
     // 並べ替えは実 API と同じく読み出し側で行う（登録・再有効化のたびに並びを気にしなくてよい）
-    const filtered = blockedDateRows
+    const filtered = blackoutDateRows
       .filter(
-        (blocked) =>
-          (includeDeleted || blocked.取消区分 === 0) &&
-          (!startDate || blocked.受注不可日 >= startDate) &&
-          (!endDate || blocked.受注不可日 <= endDate) &&
-          (!blackoutDate || blocked.受注不可日 === blackoutDate),
+        (blackout) =>
+          (includeDeleted || blackout.取消区分 === 0) &&
+          (!startDate || blackout.受注不可日 >= startDate) &&
+          (!endDate || blackout.受注不可日 <= endDate) &&
+          (!blackoutDate || blackout.受注不可日 === blackoutDate),
       )
       .sort((a, b) => b.受注不可日 - a.受注不可日)
 
@@ -223,7 +223,7 @@ export const handlers = [
     if (violation) return violation
 
     const isUpdate = new URL(request.url).searchParams.get('is_update') === 'true'
-    const existing = blockedDateRows.find((blocked) => blocked.受注不可日 === blackoutDate)
+    const existing = blackoutDateRows.find((blackout) => blackout.受注不可日 === blackoutDate)
 
     let error = blackoutDateFormatError(blackoutDate)
     if (!error && isUpdate && (!existing || existing.取消区分 === 1)) {
@@ -250,7 +250,7 @@ export const handlers = [
     const formatError = blackoutDateFormatError(blackoutDate)
     if (formatError) return detailError(400, formatError)
 
-    const existing = blockedDateRows.find((blocked) => blocked.受注不可日 === blackoutDate)
+    const existing = blackoutDateRows.find((blackout) => blackout.受注不可日 === blackoutDate)
     if (existing && existing.取消区分 === 0) {
       return detailError(400, `受注不可日(${blackoutDate})は既に登録されています`)
     }
@@ -261,9 +261,9 @@ export const handlers = [
       reactivated: Boolean(existing),
     })
     // 取消済みの行があれば置き換える（＝再有効化。行は増えない）
-    blockedDateRows = existing
-      ? blockedDateRows.map((blocked) => (blocked.受注不可日 === blackoutDate ? created : blocked))
-      : [...blockedDateRows, created]
+    blackoutDateRows = existing
+      ? blackoutDateRows.map((blackout) => (blackout.受注不可日 === blackoutDate ? created : blackout))
+      : [...blackoutDateRows, created]
 
     return HttpResponse.json(
       { success: true, blackout_date: created, message: '受注不可日を登録しました' },
@@ -286,8 +286,8 @@ export const handlers = [
     const violation = blackoutDateRequestViolation({ blackoutDate, reason })
     if (violation) return violation
 
-    const current = blockedDateRows.find(
-      (blocked) => blocked.受注不可日 === targetDate && blocked.取消区分 === 0,
+    const current = blackoutDateRows.find(
+      (blackout) => blackout.受注不可日 === targetDate && blackout.取消区分 === 0,
     )
     if (!current) {
       return detailError(404, '指定された受注不可日データが存在しません')
@@ -306,8 +306,8 @@ export const handlers = [
 
     if (
       blackoutDate !== targetDate &&
-      blockedDateRows.some(
-        (blocked) => blocked.受注不可日 === blackoutDate && blocked.取消区分 === 0,
+      blackoutDateRows.some(
+        (blackout) => blackout.受注不可日 === blackoutDate && blackout.取消区分 === 0,
       )
     ) {
       return detailError(400, `受注不可日(${blackoutDate})は既に登録されています`)
@@ -326,8 +326,8 @@ export const handlers = [
      * 日付が主キーなので、日付を変えた更新は「元の日付の行を消して、新しい日付の行を置く」ことになる。
      * 一覧は読み出し側で並べ替えるので、ここでの位置は気にしない。
      */
-    blockedDateRows = [
-      ...blockedDateRows.filter((blocked) => blocked.受注不可日 !== targetDate),
+    blackoutDateRows = [
+      ...blackoutDateRows.filter((blackout) => blackout.受注不可日 !== targetDate),
       updated,
     ]
 
@@ -341,8 +341,8 @@ export const handlers = [
   // 受注不可日の論理削除。行は残したまま取消区分を 1 にする
   http.delete('*/api/blackout-dates/:blackoutDate', ({ params }) => {
     const targetDate = Number(params.blackoutDate)
-    const target = blockedDateRows.find(
-      (blocked) => blocked.受注不可日 === targetDate && blocked.取消区分 === 0,
+    const target = blackoutDateRows.find(
+      (blackout) => blackout.受注不可日 === targetDate && blackout.取消区分 === 0,
     )
 
     if (!target) {
@@ -350,8 +350,8 @@ export const handlers = [
     }
 
     const deleted = { ...target, 取消区分: 1, 取消日時: nowIsoTimestamp(), 取消者: '006' }
-    blockedDateRows = blockedDateRows.map((blocked) =>
-      blocked.受注不可日 === targetDate ? deleted : blocked,
+    blackoutDateRows = blackoutDateRows.map((blackout) =>
+      blackout.受注不可日 === targetDate ? deleted : blackout,
     )
 
     return HttpResponse.json({

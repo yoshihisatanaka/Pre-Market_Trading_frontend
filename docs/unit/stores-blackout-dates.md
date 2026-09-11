@@ -1,12 +1,12 @@
-﻿# stores/blockedDates（受注不可日マスタ ストア）
+﻿# stores/blackoutDates（受注不可日マスタ ストア）
 
 - 略号: `BDS`
-- 対象: `src/stores/blockedDates.js`
-- テスト: `src/stores/blockedDates.spec.js`
+- 対象: `src/stores/blackoutDates.js`
+- テスト: `src/stores/blackoutDates.spec.js`
 
 一覧は実 API と同じ**受注不可日の降順**で返る。削除は論理削除だが、既定の一覧は取消済みを
 返さないので画面からは 1 件減って見える。api 層が吸収するバックエンドの形（パス・クエリ名・
-日本語キー）は [api-blocked-dates.md](api-blocked-dates.md) に分けてある。
+日本語キー）は [api-blackout-dates.md](api-blackout-dates.md) に分けてある。
 
 海外休場日と違い `validationWarnings` は使わない。実 API の事前検証が警告を返さず、
 取消済みの日付を登録し直しても黙って再有効化されるため（BDS-39）。

@@ -16,8 +16,8 @@
  * 確かめるためのものなので、注意として出したうえで送信ボタンは押せるままにする。
  * 押し直しで進めるかどうかは呼び出し側が決める。
  *
- * 出す data-testid（testidPrefix が 'blocked-dates'、action が既定の 'add' なら
- * blocked-dates-add-form など。編集で開くときは action="edit" にして -edit- に振り替える）:
+ * 出す data-testid（testidPrefix が 'blackout-dates'、action が既定の 'add' なら
+ * blackout-dates-add-form など。編集で開くときは action="edit" にして -edit- に振り替える）:
  *   {prefix}-{action}-form / {prefix}-{action}-validation-error
  *   / {prefix}-{action}-validation-warning / {prefix}-{action}-error
  *   / {prefix}-{action}-cancel / {prefix}-{action}-submit

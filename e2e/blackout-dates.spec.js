@@ -1,16 +1,16 @@
 import { expect, test } from '@playwright/test'
-import { blockedDates } from '../src/mocks/fixtures/blockedDates'
+import { blackoutDates } from '../src/mocks/fixtures/blackoutDates'
 import { mockApi } from './helpers/mockApi'
 
-// シナリオ: docs/e2e/blocked-dates.md（タイトル先頭の [BD-xx] が対応 ID）
+// シナリオ: docs/e2e/blackout-dates.md（タイトル先頭の [BD-xx] が対応 ID）
 // ページ位置と検索条件は URL クエリを正とするため、URL と画面の同期をここで守る。
 // mockApi() は固定の body を返すだけで offset / start_date / end_date を解釈しない。
 // ページングと絞り込み（BD-02 / 03 / 04 / 07 / 10）は
 // クエリを実際に処理する既定ハンドラで検証する。
 
-const PATH = '/masters/blocked-dates'
+const PATH = '/masters/blackout-dates'
 
-// src/stores/blockedDates.js の BLOCKED_DATES_PAGE_SIZE と同じ値（実 API 側の 1 ページ 50 件）。
+// src/stores/blackoutDates.js の BLACKOUT_DATES_PAGE_SIZE と同じ値（実 API 側の 1 ページ 50 件）。
 // ストアは import.meta.env を辿る api/client.js に依存しており Playwright からは import できない。
 const PAGE_SIZE = 50
 
@@ -18,24 +18,24 @@ const PAGE_SIZE = 50
  * フィクスチャはバックエンドの生の形（日本語キー / 受注不可日は YYYYMMDD の integer）なので、
  * 期待値は api 層と同じ変換でアプリ内モデルの形に直してから使う。
  */
-const toRow = (blocked) => {
-  const digits = String(blocked.受注不可日)
+const toRow = (blackout) => {
+  const digits = String(blackout.受注不可日)
   return {
     id: digits,
     date: `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`,
-    reason: blocked.備考 ?? '',
+    reason: blackout.備考 ?? '',
   }
 }
 
 // フィクスチャは実 API と同じ受注不可日の降順なので、この並びがそのまま 1 ページ目になる
-const allRows = blockedDates.map(toRow)
+const allRows = blackoutDates.map(toRow)
 const secondPage = allRows.slice(PAGE_SIZE)
 const year2025 = allRows.filter((row) => row.date >= '2025-01-01' && row.date <= '2025-12-31')
 
-const firstBlockedDate = allRows[0]
+const firstBlackoutDate = allRows[0]
 
 // フィクスチャに無い日付。年を直書きすると YEARS が伸びたとき重複エラーになるので最新年の翌年から作る
-const NEW_DATE = `${Number(firstBlockedDate.date.slice(0, 4)) + 1}-01-01`
+const NEW_DATE = `${Number(firstBlackoutDate.date.slice(0, 4)) + 1}-01-01`
 const NEW_REASON = '年末年始休業（テスト）'
 
 // 編集で入れ直す理由。フィクスチャのどの行の理由とも重ならない文言にする
@@ -48,7 +48,7 @@ const CONFLICT_MESSAGE =
 /** 実 API（とモック）が重複を知らせる文言。対象の受注不可日が本文に入る */
 const duplicateMessage = (row) => `受注不可日(${row.id})は既に登録されています`
 
-// 理由の maxlength。src/views/BlockedDateListView.vue の入力欄（実 API の BlackoutDateRequest.備考）と同じ値
+// 理由の maxlength。src/views/BlackoutDateListView.vue の入力欄（実 API の BlackoutDateRequest.備考）と同じ値
 const REASON_MAX_LENGTH = 45
 
 /*
@@ -64,7 +64,7 @@ const EMPTY_LIST = { total: 0, limit: PAGE_SIZE, offset: 0, blackout_dates: [] }
 
 /** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function rowsOf(page) {
-  return page.getByTestId('blocked-dates-table').getByTestId('data-table-row')
+  return page.getByTestId('blackout-dates-table').getByTestId('data-table-row')
 }
 
 /** 追加モーダル。role=dialog の aria-label はモーダルのタイトル（BaseModal） */
@@ -83,13 +83,13 @@ function deleteDialogOf(page) {
 }
 
 /** 行の編集ボタン。testid は行の id を含む（日付を変えると id も作り直される点に注意） */
-function editButtonOf(page, blocked) {
-  return page.getByTestId(`blocked-dates-edit-${blocked.id}`)
+function editButtonOf(page, blackout) {
+  return page.getByTestId(`blackout-dates-edit-${blackout.id}`)
 }
 
 /** 行の削除ボタン。testid は行の id を含む */
-function deleteButtonOf(page, blocked) {
-  return page.getByTestId(`blocked-dates-delete-${blocked.id}`)
+function deleteButtonOf(page, blackout) {
+  return page.getByTestId(`blackout-dates-delete-${blackout.id}`)
 }
 
 test.describe('受注不可日マスタ一覧', () => {
@@ -104,21 +104,21 @@ test.describe('受注不可日マスタ一覧', () => {
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '受注不可日マスタ', exact: true })).toBeVisible()
     // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている
-    await expect(page.getByTestId('blocked-dates-reload')).toBeVisible()
+    await expect(page.getByTestId('blackout-dates-reload')).toBeVisible()
 
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
 
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(PAGE_SIZE)
-    await expect(rows.first()).toContainText(firstBlockedDate.date)
-    await expect(rows.first()).toContainText(firstBlockedDate.reason)
+    await expect(rows.first()).toContainText(firstBlackoutDate.date)
+    await expect(rows.first()).toContainText(firstBlackoutDate.reason)
   })
 
   test('[BD-02] 「次のページ」を押すと 2 ページ目が表示される', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    const pagination = page.getByTestId('blocked-dates-pagination')
+    const pagination = page.getByTestId('blackout-dates-pagination')
     await pagination.getByRole('button', { name: '次のページ' }).click()
 
     await expect(page).toHaveURL(new RegExp(`offset=${PAGE_SIZE}`))
@@ -129,7 +129,7 @@ test.describe('受注不可日マスタ一覧', () => {
     await expect(rows.first()).toContainText(secondPage[0].reason)
 
     await expect(pagination.getByTestId('pagination-range')).toHaveText(
-      `${blockedDates.length} 件中 ${PAGE_SIZE + 1}–${blockedDates.length} 件`,
+      `${blackoutDates.length} 件中 ${PAGE_SIZE + 1}–${blackoutDates.length} 件`,
     )
   })
 
@@ -137,37 +137,37 @@ test.describe('受注不可日マスタ一覧', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await page.getByTestId('blocked-dates-date-from').fill('2025-01-01')
-    await page.getByTestId('blocked-dates-date-to').fill('2025-12-31')
-    await page.getByTestId('blocked-dates-search-submit').click()
+    await page.getByTestId('blackout-dates-date-from').fill('2025-01-01')
+    await page.getByTestId('blackout-dates-date-to').fill('2025-12-31')
+    await page.getByTestId('blackout-dates-search-submit').click()
 
     await expect(page).toHaveURL(/date_from=2025-01-01/)
     await expect(page).toHaveURL(/date_to=2025-12-31/)
 
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${year2025.length} 件`)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${year2025.length} 件`)
 
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(year2025.length)
-    for (const blocked of year2025) {
-      await expect(rows.filter({ hasText: blocked.date })).toHaveCount(1)
+    for (const blackout of year2025) {
+      await expect(rows.filter({ hasText: blackout.date })).toHaveCount(1)
     }
   })
 
   test('[BD-04] 「クリア」を押すと絞り込みが解除される', async ({ page }) => {
     await page.goto(PATH)
 
-    await page.getByTestId('blocked-dates-date-from').fill('2025-01-01')
-    await page.getByTestId('blocked-dates-date-to').fill('2025-12-31')
-    await page.getByTestId('blocked-dates-search-submit').click()
+    await page.getByTestId('blackout-dates-date-from').fill('2025-01-01')
+    await page.getByTestId('blackout-dates-date-to').fill('2025-12-31')
+    await page.getByTestId('blackout-dates-search-submit').click()
     await expect(rowsOf(page)).toHaveCount(year2025.length)
 
-    await page.getByTestId('blocked-dates-search-clear').click()
+    await page.getByTestId('blackout-dates-search-clear').click()
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
-    await expect(page.getByTestId('blocked-dates-date-from')).toHaveValue('')
-    await expect(page.getByTestId('blocked-dates-date-to')).toHaveValue('')
+    await expect(page.getByTestId('blackout-dates-date-from')).toHaveValue('')
+    await expect(page.getByTestId('blackout-dates-date-to')).toHaveValue('')
   })
 
   test('[BD-05] API がエラーを返したときエラー表示と再試行ボタンが出る', async ({ page }) => {
@@ -180,25 +180,25 @@ test.describe('受注不可日マスタ一覧', () => {
     ])
     await page.goto(PATH)
 
-    const error = page.getByTestId('blocked-dates-error')
+    const error = page.getByTestId('blackout-dates-error')
     await expect(error).toBeVisible()
     await expect(error).toContainText('サーバーでエラーが発生しました。')
     await expect(error.getByRole('button', { name: '再試行' })).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-table')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-table')).toHaveCount(0)
 
     // 検索フォームは 4 状態の外。条件を直せるよう消えない
-    await expect(page.getByTestId('blocked-dates-search')).toBeVisible()
+    await expect(page.getByTestId('blackout-dates-search')).toBeVisible()
   })
 
   test('[BD-06] 受注不可日が 0 件のとき空状態が表示される', async ({ page }) => {
     await mockApi(page, [{ path: '*/api/blackout-dates', body: EMPTY_LIST }])
     await page.goto(PATH)
 
-    const empty = page.getByTestId('blocked-dates-empty')
+    const empty = page.getByTestId('blackout-dates-empty')
     await expect(empty).toBeVisible()
     await expect(empty).toContainText('該当する受注不可日はありません。')
     await expect(page.getByTestId('data-table-row')).toHaveCount(0)
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText('0 件')
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText('0 件')
   })
 
   test('[BD-07] offset 付きの URL を直接開くと 2 ページ目が復元される', async ({ page }) => {
@@ -209,14 +209,14 @@ test.describe('受注不可日マスタ一覧', () => {
     await expect(rows.first()).toContainText(secondPage[0].date)
 
     await expect(
-      page.getByTestId('blocked-dates-pagination').getByRole('button', { name: '2', exact: true }),
+      page.getByTestId('blackout-dates-pagination').getByRole('button', { name: '2', exact: true }),
     ).toHaveAttribute('aria-current', 'page')
   })
 
   test('[BD-08] 一覧の右端に編集・削除の操作列がある', async ({ page }) => {
     await page.goto(PATH)
 
-    const table = page.getByTestId('blocked-dates-table')
+    const table = page.getByTestId('blackout-dates-table')
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
     // 見出しの並び。最後の列（行ごとの操作）は画面モックに合わせて見出しが空
@@ -224,41 +224,41 @@ test.describe('受注不可日マスタ一覧', () => {
 
     // 理由のセルは操作のセルより左（列の並びと同じ位置関係）
     const firstRow = rowsOf(page).first()
-    await expect(firstRow.getByRole('cell').nth(1)).toHaveText(firstBlockedDate.reason)
+    await expect(firstRow.getByRole('cell').nth(1)).toHaveText(firstBlackoutDate.reason)
 
     // 行の操作は編集 → 削除の順。破壊的な操作を右端に置く
     const actionCell = firstRow.getByRole('cell').nth(2)
     await expect(actionCell.getByRole('button')).toHaveText(['編集', '削除'])
 
     // 追加は行ではなくヘッダのボタンから行う
-    await expect(page.getByTestId('blocked-dates-add')).toBeVisible()
+    await expect(page.getByTestId('blackout-dates-add')).toBeVisible()
   })
 
   test('[BD-09] 説明バナーはデータの有無に関わらず表示される', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
-    await expect(page.getByTestId('blocked-dates-description')).toBeVisible()
+    await expect(page.getByTestId('blackout-dates-description')).toBeVisible()
 
     // 0 件でも 4 状態の外なので消えない
     await mockApi(page, [{ path: '*/api/blackout-dates', body: EMPTY_LIST }])
     await page.goto(PATH)
 
-    await expect(page.getByTestId('blocked-dates-empty')).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-description')).toBeVisible()
+    await expect(page.getByTestId('blackout-dates-empty')).toBeVisible()
+    await expect(page.getByTestId('blackout-dates-description')).toBeVisible()
   })
 
   test('[BD-10] 「再読み込み」を押しても絞り込みが保たれる', async ({ page }) => {
     await page.goto(`${PATH}?date_from=2025-01-01&date_to=2025-12-31`)
     await expect(rowsOf(page)).toHaveCount(year2025.length)
 
-    await page.getByTestId('blocked-dates-reload').click()
+    await page.getByTestId('blackout-dates-reload').click()
 
     // reload() は URL を変えない契約
     await expect(page).toHaveURL(/date_from=2025-01-01/)
     await expect(page).toHaveURL(/date_to=2025-12-31/)
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${year2025.length} 件`)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${year2025.length} 件`)
     await expect(rowsOf(page)).toHaveCount(year2025.length)
-    await expect(page.getByTestId('blocked-dates-date-from')).toHaveValue('2025-01-01')
+    await expect(page.getByTestId('blackout-dates-date-from')).toHaveValue('2025-01-01')
   })
 })
 
@@ -268,8 +268,8 @@ test.describe('受注不可日マスタ一覧', () => {
  *
  * 登録は「事前検証 → 登録」の 2 段で、エラーの出し先が 3 系統に分かれる。
  *   必須未入力       … FormField の error（BD-12）
- *   事前検証の不合格 … blocked-dates-add-validation-error の箇条書き（BD-14 / 15）
- *   通信・サーバ障害 … blocked-dates-add-error（BD-16）
+ *   事前検証の不合格 … blackout-dates-add-validation-error の箇条書き（BD-14 / 15）
+ *   通信・サーバ障害 … blackout-dates-add-error（BD-16）
  * 事前検証と登録は別パス（/blackout-dates/validate と /blackout-dates）なので、
  * mockApi() で一方だけを差し替えられる。
  */
@@ -278,15 +278,15 @@ test.describe('受注不可日マスタ 新規追加', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await page.getByTestId('blocked-dates-add').click()
+    await page.getByTestId('blackout-dates-add').click()
 
     const dialog = addDialogOf(page)
     await expect(dialog).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-add-date')).toHaveValue('')
-    await expect(page.getByTestId('blocked-dates-add-reason')).toHaveValue('')
+    await expect(page.getByTestId('blackout-dates-add-date')).toHaveValue('')
+    await expect(page.getByTestId('blackout-dates-add-reason')).toHaveValue('')
 
     // 入力項目は日付と理由の 2 つだけ（休場区分のような選択項目は持たない）
-    const form = dialog.getByTestId('blocked-dates-add-form')
+    const form = dialog.getByTestId('blackout-dates-add-form')
     await expect(form.locator('input')).toHaveCount(2)
     await expect(form.getByRole('combobox')).toHaveCount(0)
     // その 2 つが「日付」と「理由」であることはラベル（アクセシブルネーム）で確かめる
@@ -296,40 +296,40 @@ test.describe('受注不可日マスタ 新規追加', () => {
 
   test('[BD-12] 未入力のまま「追加」を押すと項目ごとにエラーが出る', async ({ page }) => {
     await page.goto(PATH)
-    await page.getByTestId('blocked-dates-add').click()
+    await page.getByTestId('blackout-dates-add').click()
 
     const dialog = addDialogOf(page)
-    await page.getByTestId('blocked-dates-add-submit').click()
+    await page.getByTestId('blackout-dates-add-submit').click()
 
     await expect(dialog.getByText('日付を入力してください。')).toBeVisible()
     await expect(dialog.getByText('理由を入力してください。')).toBeVisible()
 
     // 3 系統のうち項目直下だけに出る。サーバへは行かないので他の 2 つは出ない
-    await expect(page.getByTestId('blocked-dates-add-validation-error')).toHaveCount(0)
-    await expect(page.getByTestId('blocked-dates-add-error')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-add-validation-error')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-add-error')).toHaveCount(0)
 
     // 入力を直せるようモーダルは閉じない。一覧にも影響しない
     await expect(dialog).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
   })
 
   test('[BD-13] 一覧に無い日付を追加すると件数が 1 増える', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await page.getByTestId('blocked-dates-add').click()
-    await page.getByTestId('blocked-dates-add-date').fill(NEW_DATE)
-    await page.getByTestId('blocked-dates-add-reason').fill(NEW_REASON)
-    await page.getByTestId('blocked-dates-add-submit').click()
+    await page.getByTestId('blackout-dates-add').click()
+    await page.getByTestId('blackout-dates-add-date').fill(NEW_DATE)
+    await page.getByTestId('blackout-dates-add-reason').fill(NEW_REASON)
+    await page.getByTestId('blackout-dates-add-submit').click()
 
     await expect(addDialogOf(page)).toBeHidden()
 
-    const notice = page.getByTestId('blocked-dates-notice')
+    const notice = page.getByTestId('blackout-dates-notice')
     await expect(notice).toBeVisible()
     await expect(notice).toHaveText(`${NEW_DATE} を追加しました。`)
 
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(
-      `${blockedDates.length + 1} 件`,
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(
+      `${blackoutDates.length + 1} 件`,
     )
 
     // 登録は一覧の単方向フローに触らない（URL は変わらない）
@@ -340,23 +340,23 @@ test.describe('受注不可日マスタ 新規追加', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await page.getByTestId('blocked-dates-add').click()
-    await page.getByTestId('blocked-dates-add-date').fill(firstBlockedDate.date)
-    await page.getByTestId('blocked-dates-add-reason').fill(NEW_REASON)
-    await page.getByTestId('blocked-dates-add-submit').click()
+    await page.getByTestId('blackout-dates-add').click()
+    await page.getByTestId('blackout-dates-add-date').fill(firstBlackoutDate.date)
+    await page.getByTestId('blackout-dates-add-reason').fill(NEW_REASON)
+    await page.getByTestId('blackout-dates-add-submit').click()
 
-    const validationError = page.getByTestId('blocked-dates-add-validation-error')
+    const validationError = page.getByTestId('blackout-dates-add-validation-error')
     await expect(validationError).toBeVisible()
     await expect(validationError.getByRole('listitem')).toHaveText([
-      duplicateMessage(firstBlockedDate),
+      duplicateMessage(firstBlackoutDate),
     ])
 
     // 事前検証の不合格は通信障害ではないので、専用の表示には出ない
-    await expect(page.getByTestId('blocked-dates-add-error')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-add-error')).toHaveCount(0)
 
     await expect(addDialogOf(page)).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-notice')).toHaveCount(0)
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
+    await expect(page.getByTestId('blackout-dates-notice')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
   })
 
   test('[BD-15] 事前検証が理由を複数返すと全て箇条書きに並ぶ', async ({ page }) => {
@@ -375,17 +375,17 @@ test.describe('受注不可日マスタ 新規追加', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await page.getByTestId('blocked-dates-add').click()
-    await page.getByTestId('blocked-dates-add-date').fill(NEW_DATE)
-    await page.getByTestId('blocked-dates-add-reason').fill(NEW_REASON)
-    await page.getByTestId('blocked-dates-add-submit').click()
+    await page.getByTestId('blackout-dates-add').click()
+    await page.getByTestId('blackout-dates-add-date').fill(NEW_DATE)
+    await page.getByTestId('blackout-dates-add-reason').fill(NEW_REASON)
+    await page.getByTestId('blackout-dates-add-submit').click()
 
-    const validationError = page.getByTestId('blocked-dates-add-validation-error')
+    const validationError = page.getByTestId('blackout-dates-add-validation-error')
     await expect(validationError).toBeVisible()
     await expect(validationError.getByRole('listitem')).toHaveText(errors)
 
     await expect(addDialogOf(page)).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
   })
 
   test('[BD-16] 登録に失敗するとモーダルは開いたままエラーが出る', async ({ page }) => {
@@ -401,49 +401,49 @@ test.describe('受注不可日マスタ 新規追加', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await page.getByTestId('blocked-dates-add').click()
-    await page.getByTestId('blocked-dates-add-date').fill(NEW_DATE)
-    await page.getByTestId('blocked-dates-add-reason').fill(NEW_REASON)
-    await page.getByTestId('blocked-dates-add-submit').click()
+    await page.getByTestId('blackout-dates-add').click()
+    await page.getByTestId('blackout-dates-add-date').fill(NEW_DATE)
+    await page.getByTestId('blackout-dates-add-reason').fill(NEW_REASON)
+    await page.getByTestId('blackout-dates-add-submit').click()
 
-    const error = page.getByTestId('blocked-dates-add-error')
+    const error = page.getByTestId('blackout-dates-add-error')
     await expect(error).toBeVisible()
     await expect(error).toContainText('サーバーでエラーが発生しました。')
 
     // 事前検証は通っているので箇条書きは出ない
-    await expect(page.getByTestId('blocked-dates-add-validation-error')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-add-validation-error')).toHaveCount(0)
 
     await expect(addDialogOf(page)).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-notice')).toHaveCount(0)
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
+    await expect(page.getByTestId('blackout-dates-notice')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
   })
 
   test('[BD-17] 開き直すと前回のエラーと入力が残らない', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await page.getByTestId('blocked-dates-add').click()
-    await page.getByTestId('blocked-dates-add-date').fill(firstBlockedDate.date)
-    await page.getByTestId('blocked-dates-add-reason').fill(NEW_REASON)
-    await page.getByTestId('blocked-dates-add-submit').click()
-    await expect(page.getByTestId('blocked-dates-add-validation-error')).toBeVisible()
+    await page.getByTestId('blackout-dates-add').click()
+    await page.getByTestId('blackout-dates-add-date').fill(firstBlackoutDate.date)
+    await page.getByTestId('blackout-dates-add-reason').fill(NEW_REASON)
+    await page.getByTestId('blackout-dates-add-submit').click()
+    await expect(page.getByTestId('blackout-dates-add-validation-error')).toBeVisible()
 
-    await page.getByTestId('blocked-dates-add-cancel').click()
+    await page.getByTestId('blackout-dates-add-cancel').click()
     await expect(addDialogOf(page)).toBeHidden()
 
-    await page.getByTestId('blocked-dates-add').click()
+    await page.getByTestId('blackout-dates-add').click()
 
     await expect(addDialogOf(page)).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-add-validation-error')).toHaveCount(0)
-    await expect(page.getByTestId('blocked-dates-add-date')).toHaveValue('')
-    await expect(page.getByTestId('blocked-dates-add-reason')).toHaveValue('')
+    await expect(page.getByTestId('blackout-dates-add-validation-error')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-add-date')).toHaveValue('')
+    await expect(page.getByTestId('blackout-dates-add-reason')).toHaveValue('')
   })
 
   test('[BD-18] 理由は 45 文字を超えて入力できない', async ({ page }) => {
     await page.goto(PATH)
-    await page.getByTestId('blocked-dates-add').click()
+    await page.getByTestId('blackout-dates-add').click()
 
-    const reason = page.getByTestId('blocked-dates-add-reason')
+    const reason = page.getByTestId('blackout-dates-add-reason')
     // fill() は値を流し込むだけで maxlength を通らない経路があるため、1 文字ずつ入力する
     await reason.pressSequentially('あ'.repeat(REASON_MAX_LENGTH + 1))
 
@@ -455,7 +455,7 @@ test.describe('受注不可日マスタ 新規追加', () => {
  * 削除（BD-19〜23）。既定ハンドラは DELETE を可変配列に反映するので、件数が減るところまで見る。
  * モックの可変状態はページを開き直すと初期化されるため、テスト間で持ち越さない。
  *
- * サーバの拒否は blocked-dates-delete-error（モーダル内）に出る。新規追加と違い
+ * サーバの拒否は blackout-dates-delete-error（モーダル内）に出る。新規追加と違い
  * 事前検証の 2 段は無いので、エラーの系統はこの 1 つだけ。
  */
 test.describe('受注不可日マスタ 削除', () => {
@@ -463,11 +463,11 @@ test.describe('受注不可日マスタ 削除', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await deleteButtonOf(page, firstBlockedDate).click()
+    await deleteButtonOf(page, firstBlackoutDate).click()
 
     const dialog = deleteDialogOf(page)
     await expect(dialog).toBeVisible()
-    await expect(dialog).toContainText(firstBlockedDate.date)
+    await expect(dialog).toContainText(firstBlackoutDate.date)
     await expect(dialog).toContainText('を削除しますか？')
     await expect(dialog).toContainText('この操作は元に戻せません。')
   })
@@ -476,36 +476,36 @@ test.describe('受注不可日マスタ 削除', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await deleteButtonOf(page, firstBlockedDate).click()
+    await deleteButtonOf(page, firstBlackoutDate).click()
     await expect(deleteDialogOf(page)).toBeVisible()
 
-    await page.getByTestId('blocked-dates-delete-cancel').click()
+    await page.getByTestId('blackout-dates-delete-cancel').click()
 
     await expect(deleteDialogOf(page)).toBeHidden()
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
-    await expect(rowsOf(page).filter({ hasText: firstBlockedDate.date })).toHaveCount(1)
-    await expect(page.getByTestId('blocked-dates-notice')).toHaveCount(0)
+    await expect(rowsOf(page).filter({ hasText: firstBlackoutDate.date })).toHaveCount(1)
+    await expect(page.getByTestId('blackout-dates-notice')).toHaveCount(0)
   })
 
   test('[BD-21] 「削除する」を押すと件数が 1 減りその行が消える', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await deleteButtonOf(page, firstBlockedDate).click()
-    await page.getByTestId('blocked-dates-delete-submit').click()
+    await deleteButtonOf(page, firstBlackoutDate).click()
+    await page.getByTestId('blackout-dates-delete-submit').click()
 
     await expect(deleteDialogOf(page)).toBeHidden()
 
     // 成功メッセージの枠は追加と削除で共用
-    const notice = page.getByTestId('blocked-dates-notice')
+    const notice = page.getByTestId('blackout-dates-notice')
     await expect(notice).toBeVisible()
-    await expect(notice).toHaveText(`${firstBlockedDate.date} を削除しました。`)
+    await expect(notice).toHaveText(`${firstBlackoutDate.date} を削除しました。`)
 
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(
-      `${blockedDates.length - 1} 件`,
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(
+      `${blackoutDates.length - 1} 件`,
     )
-    await expect(rowsOf(page).filter({ hasText: firstBlockedDate.date })).toHaveCount(0)
+    await expect(rowsOf(page).filter({ hasText: firstBlackoutDate.date })).toHaveCount(0)
 
     // 削除は一覧の単方向フローに触らない（URL は変わらない）
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
@@ -523,18 +523,18 @@ test.describe('受注不可日マスタ 削除', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await deleteButtonOf(page, firstBlockedDate).click()
-    await page.getByTestId('blocked-dates-delete-submit').click()
+    await deleteButtonOf(page, firstBlackoutDate).click()
+    await page.getByTestId('blackout-dates-delete-submit').click()
 
-    const error = page.getByTestId('blocked-dates-delete-error')
+    const error = page.getByTestId('blackout-dates-delete-error')
     await expect(error).toBeVisible()
     await expect(error).toContainText('サーバーでエラーが発生しました。')
 
     // 消せていないので閉じない。一覧も通知も変わらない
     await expect(deleteDialogOf(page)).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
-    await expect(rowsOf(page).filter({ hasText: firstBlockedDate.date })).toHaveCount(1)
-    await expect(page.getByTestId('blocked-dates-notice')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
+    await expect(rowsOf(page).filter({ hasText: firstBlackoutDate.date })).toHaveCount(1)
+    await expect(page.getByTestId('blackout-dates-notice')).toHaveCount(0)
   })
 
   test('[BD-23] 最終ページの最後の 1 件を消すと 1 ページ前に戻る', async ({ page }) => {
@@ -546,12 +546,12 @@ test.describe('受注不可日マスタ 削除', () => {
     await expect(rows.first()).toContainText(LAST_PAGE_TARGET.date)
 
     await deleteButtonOf(page, LAST_PAGE_TARGET).click()
-    await page.getByTestId('blocked-dates-delete-submit').click()
+    await page.getByTestId('blackout-dates-delete-submit').click()
 
     // 戻る直前に空状態が一瞬描画されるため、最終状態だけを web-first assertion で待つ
     await expect(page).toHaveURL(new RegExp(`\\${PATH}\\?date_from=${LAST_PAGE_FROM}$`))
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${PAGE_SIZE} 件`)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${PAGE_SIZE} 件`)
   })
 })
 
@@ -571,15 +571,15 @@ test.describe('受注不可日マスタ 編集', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await editButtonOf(page, firstBlockedDate).click()
+    await editButtonOf(page, firstBlackoutDate).click()
 
     const dialog = editDialogOf(page)
     await expect(dialog).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-edit-date')).toHaveValue(firstBlockedDate.date)
-    await expect(page.getByTestId('blocked-dates-edit-reason')).toHaveValue(firstBlockedDate.reason)
+    await expect(page.getByTestId('blackout-dates-edit-date')).toHaveValue(firstBlackoutDate.date)
+    await expect(page.getByTestId('blackout-dates-edit-reason')).toHaveValue(firstBlackoutDate.reason)
 
     // 入力項目は追加と同じ日付と理由の 2 つだけ（一覧に無い対象市場は編集対象でもない）
-    const form = dialog.getByTestId('blocked-dates-edit-form')
+    const form = dialog.getByTestId('blackout-dates-edit-form')
     await expect(form.locator('input')).toHaveCount(2)
     await expect(form.getByRole('combobox')).toHaveCount(0)
     await expect(form.getByLabel(/日付/)).toHaveCount(1)
@@ -590,20 +590,20 @@ test.describe('受注不可日マスタ 編集', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await editButtonOf(page, firstBlockedDate).click()
-    await page.getByTestId('blocked-dates-edit-reason').fill(EDITED_REASON)
-    await page.getByTestId('blocked-dates-edit-submit').click()
+    await editButtonOf(page, firstBlackoutDate).click()
+    await page.getByTestId('blackout-dates-edit-reason').fill(EDITED_REASON)
+    await page.getByTestId('blackout-dates-edit-submit').click()
 
     await expect(editDialogOf(page)).toBeHidden()
 
     // 成功メッセージの枠は追加・削除と共用
-    const notice = page.getByTestId('blocked-dates-notice')
+    const notice = page.getByTestId('blackout-dates-notice')
     await expect(notice).toBeVisible()
-    await expect(notice).toHaveText(`${firstBlockedDate.date} を更新しました。`)
+    await expect(notice).toHaveText(`${firstBlackoutDate.date} を更新しました。`)
 
     // 日付を変えていないので件数も並びも動かない（自分自身の日付は重複として弾かれない）
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
-    const row = rowsOf(page).filter({ hasText: firstBlockedDate.date })
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
+    const row = rowsOf(page).filter({ hasText: firstBlackoutDate.date })
     await expect(row).toHaveCount(1)
     await expect(row).toContainText(EDITED_REASON)
   })
@@ -612,62 +612,62 @@ test.describe('受注不可日マスタ 編集', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await editButtonOf(page, firstBlockedDate).click()
-    await page.getByTestId('blocked-dates-edit-date').fill(NEW_DATE)
-    await page.getByTestId('blocked-dates-edit-submit').click()
+    await editButtonOf(page, firstBlackoutDate).click()
+    await page.getByTestId('blackout-dates-edit-date').fill(NEW_DATE)
+    await page.getByTestId('blackout-dates-edit-submit').click()
 
     await expect(editDialogOf(page)).toBeHidden()
 
     // 成功メッセージはサーバが受理した（＝新しい）日付を出す
-    const notice = page.getByTestId('blocked-dates-notice')
+    const notice = page.getByTestId('blackout-dates-notice')
     await expect(notice).toBeVisible()
     await expect(notice).toHaveText(`${NEW_DATE} を更新しました。`)
 
     // 付け替えなので件数は増えない。元の日付は一覧から消える
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
-    await expect(rowsOf(page).filter({ hasText: firstBlockedDate.date })).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
+    await expect(rowsOf(page).filter({ hasText: firstBlackoutDate.date })).toHaveCount(0)
   })
 
   test('[BD-27] 別の行の日付へ変えると事前検証の理由が箇条書きで出る', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await editButtonOf(page, firstBlockedDate).click()
-    await page.getByTestId('blocked-dates-edit-date').fill(allRows[1].date)
-    await page.getByTestId('blocked-dates-edit-submit').click()
+    await editButtonOf(page, firstBlackoutDate).click()
+    await page.getByTestId('blackout-dates-edit-date').fill(allRows[1].date)
+    await page.getByTestId('blackout-dates-edit-submit').click()
 
-    const validationError = page.getByTestId('blocked-dates-edit-validation-error')
+    const validationError = page.getByTestId('blackout-dates-edit-validation-error')
     await expect(validationError).toBeVisible()
     await expect(validationError.getByRole('listitem')).toHaveText([
       duplicateMessage(allRows[1]),
     ])
 
     // 事前検証の不合格は通信障害ではないので、専用の表示には出ない
-    await expect(page.getByTestId('blocked-dates-edit-error')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-edit-error')).toHaveCount(0)
 
     await expect(editDialogOf(page)).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-notice')).toHaveCount(0)
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
+    await expect(page.getByTestId('blackout-dates-notice')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
   })
 
   test('[BD-28] 理由を空にして「更新」を押すと項目の直下にエラーが出る', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await editButtonOf(page, firstBlockedDate).click()
-    await page.getByTestId('blocked-dates-edit-reason').fill('')
+    await editButtonOf(page, firstBlackoutDate).click()
+    await page.getByTestId('blackout-dates-edit-reason').fill('')
 
     const dialog = editDialogOf(page)
-    await page.getByTestId('blocked-dates-edit-submit').click()
+    await page.getByTestId('blackout-dates-edit-submit').click()
 
     await expect(dialog.getByText('理由を入力してください。')).toBeVisible()
 
     // 3 系統のうち項目直下だけに出る。サーバへは行かないので他の 2 つは出ない
-    await expect(page.getByTestId('blocked-dates-edit-validation-error')).toHaveCount(0)
-    await expect(page.getByTestId('blocked-dates-edit-error')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-edit-validation-error')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-edit-error')).toHaveCount(0)
 
     await expect(dialog).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-notice')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-notice')).toHaveCount(0)
   })
 
   test('[BD-29] 更新が競合するとモーダルは開いたままエラーが出る', async ({ page }) => {
@@ -685,44 +685,44 @@ test.describe('受注不可日マスタ 編集', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await editButtonOf(page, firstBlockedDate).click()
-    await page.getByTestId('blocked-dates-edit-reason').fill(EDITED_REASON)
-    await page.getByTestId('blocked-dates-edit-submit').click()
+    await editButtonOf(page, firstBlackoutDate).click()
+    await page.getByTestId('blackout-dates-edit-reason').fill(EDITED_REASON)
+    await page.getByTestId('blackout-dates-edit-submit').click()
 
     // 409 も通信・サーバ障害と同じ枠に出る（画面は 409 を特別扱いしない）
-    const error = page.getByTestId('blocked-dates-edit-error')
+    const error = page.getByTestId('blackout-dates-edit-error')
     await expect(error).toBeVisible()
     await expect(error).toContainText(CONFLICT_MESSAGE)
 
     // 事前検証は通っているので箇条書きは出ない
-    await expect(page.getByTestId('blocked-dates-edit-validation-error')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-edit-validation-error')).toHaveCount(0)
 
     // 更新できていないので閉じない。一覧も通知も変わらない（自動で読み直さない）
     await expect(editDialogOf(page)).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-count')).toHaveText(`${blockedDates.length} 件`)
-    const row = rowsOf(page).filter({ hasText: firstBlockedDate.date })
-    await expect(row).toContainText(firstBlockedDate.reason)
-    await expect(page.getByTestId('blocked-dates-notice')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
+    const row = rowsOf(page).filter({ hasText: firstBlackoutDate.date })
+    await expect(row).toContainText(firstBlackoutDate.reason)
+    await expect(page.getByTestId('blackout-dates-notice')).toHaveCount(0)
   })
 
   test('[BD-30] 開き直すと前回のエラーが消え現在値に戻る', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await editButtonOf(page, firstBlockedDate).click()
-    await page.getByTestId('blocked-dates-edit-date').fill(allRows[1].date)
-    await page.getByTestId('blocked-dates-edit-submit').click()
-    await expect(page.getByTestId('blocked-dates-edit-validation-error')).toBeVisible()
+    await editButtonOf(page, firstBlackoutDate).click()
+    await page.getByTestId('blackout-dates-edit-date').fill(allRows[1].date)
+    await page.getByTestId('blackout-dates-edit-submit').click()
+    await expect(page.getByTestId('blackout-dates-edit-validation-error')).toBeVisible()
 
-    await page.getByTestId('blocked-dates-edit-cancel').click()
+    await page.getByTestId('blackout-dates-edit-cancel').click()
     await expect(editDialogOf(page)).toBeHidden()
 
-    await editButtonOf(page, firstBlockedDate).click()
+    await editButtonOf(page, firstBlackoutDate).click()
 
     await expect(editDialogOf(page)).toBeVisible()
-    await expect(page.getByTestId('blocked-dates-edit-validation-error')).toHaveCount(0)
+    await expect(page.getByTestId('blackout-dates-edit-validation-error')).toHaveCount(0)
     // 入力は「前回いじった値」ではなくその行の現在値に戻る
-    await expect(page.getByTestId('blocked-dates-edit-date')).toHaveValue(firstBlockedDate.date)
-    await expect(page.getByTestId('blocked-dates-edit-reason')).toHaveValue(firstBlockedDate.reason)
+    await expect(page.getByTestId('blackout-dates-edit-date')).toHaveValue(firstBlackoutDate.date)
+    await expect(page.getByTestId('blackout-dates-edit-reason')).toHaveValue(firstBlackoutDate.reason)
   })
 })

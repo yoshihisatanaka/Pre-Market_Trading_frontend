@@ -68,7 +68,7 @@
 | マスタ共通部品 | 検索カード / 一覧カード / 追加ダイアログ / 削除確認 | ✅ | ❌ | — | — | - | - | `src/components/masters/` の 4 本に spec も `docs/unit/` も無い。挙動は各マスタ画面の E2E・単体を通じて担保されている |
 | 共通ロジック | `composables/`（useAsync / useCrudList / useListQuery / useMarketStatus） | ✅ | ❌ | — | — | - | - | 4 本とも spec も `docs/unit/` も無い。画面側の単体テスト経由でのみ通っている |
 | ユーティリティ | `utils/` | ✅ | 🟡 | — | — | - | - | `marketStatus` / `queryParams` / `marketHolidayTypes` は単体済。`format.js` に spec 無し |
-| API クライアント層 | `api/`（client / orders / blockedDates / hardLimits / marketHolidays） | ✅ | 🟡 | — | — | - | - | spec があるのは `marketHolidays.js`（`MHA`）だけ。`client.js` の `normalizeError` も未担保 |
+| API クライアント層 | `api/`（client / orders / blackoutDates / hardLimits / marketHolidays） | ✅ | 🟡 | — | — | - | - | spec があるのは `marketHolidays.js`（`MHA`）だけ。`client.js` の `normalizeError` も未担保 |
 | MSW モック基盤 | handlers / fixtures | ✅ | — | — | — | - | - | ブラウザ・単体・E2E で共用。API が実装されたら該当ハンドラを削除する（`marketHolidays` は削除済） |
 
 ## 対象外の画面（集計に含めない）
@@ -111,5 +111,5 @@
    間接的に通っている。`docs/unit/` を 4 本足せば `❌` が 1 行ぶん解消する
 2. **`composables/` の単体テスト** — 同上。`useCrudList` / `useListQuery` は 2 画面で共用しているので、
    ここが埋まると受注不可日・海外休場日の両方の土台が固くなる
-3. **受注不可日マスタの実 API E2E** — `docs/e2e/blocked-dates-real-api.md` を書けば、
+3. **受注不可日マスタの実 API E2E** — `docs/e2e/blackout-dates-real-api.md` を書けば、
    `海外休場日マスタ` と同じ形で 4 行が完了に到達する（`real-api-e2e-author` の担当）

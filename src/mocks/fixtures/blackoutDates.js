@@ -13,7 +13,7 @@
  */
 const YEARS = [2023, 2024, 2025, 2026, 2027, 2028, 2029]
 
-const BLOCKED_DATES_PER_YEAR = [
+const BLACKOUT_DATES_PER_YEAR = [
   { monthDay: '0101', reason: '元日（市場休場）' },
   { monthDay: '0102', reason: '年末年始休業' },
   { monthDay: '0504', reason: 'ゴールデンウィーク休業' },
@@ -55,8 +55,8 @@ function toBlackoutDateItem({ blackoutDate, reason, canceled = false }) {
  * 有効な行（取消区分 0）。実 API と同じく受注不可日の降順。
  * YEARS もひな型も昇順なので、生成してから反転する。
  */
-export const blockedDates = YEARS.flatMap((year) =>
-  BLOCKED_DATES_PER_YEAR.map(({ monthDay, reason }) =>
+export const blackoutDates = YEARS.flatMap((year) =>
+  BLACKOUT_DATES_PER_YEAR.map(({ monthDay, reason }) =>
     toBlackoutDateItem({ blackoutDate: Number(`${year}${monthDay}`), reason }),
   ),
 ).reverse()
@@ -68,6 +68,6 @@ export const blockedDates = YEARS.flatMap((year) =>
  * 事前検証は警告を返さず黙って通るので、その違いを単体テスト・E2E で通せるように 1 件だけ置く。
  * ひな型の 8 件と重ならない月日を選んでいる。
  */
-export const canceledBlockedDates = [
+export const canceledBlackoutDates = [
   toBlackoutDateItem({ blackoutDate: 20260429, reason: '臨時休業（取消済み）', canceled: true }),
 ]

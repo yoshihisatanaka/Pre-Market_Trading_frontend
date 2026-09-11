@@ -13,7 +13,7 @@
 既定モックは 市場関与率 5.00% / 数量 10,000 株 / 金額 USD 1,000,000。
 入力欄の市場関与率は % で扱う（比率 0.05 ↔ 入力 5）。
 
-実 API（`/slice-settings`）に切り替え済み。MSW のハンドラは残してあり、実 API と同じ形で拒否する
+実 API（`/hard-limits`）に切り替え済み。MSW のハンドラは残してあり、実 API と同じ形で拒否する
 （入力エラーは 422 の `HTTPValidationError`、楽観的ロックの競合は 409 の `ErrorResponse`）。
 **拒否の文言はサーバ側の資産なので、ここでは固定しない**（文言そのものは単体側 `HLV-07` が持つ）。
 実 API に当てる版は [hard-limits-real-api.md](hard-limits-real-api.md)（`HR`）。

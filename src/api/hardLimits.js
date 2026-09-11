@@ -3,9 +3,12 @@ import { apiClient } from './client'
 /*
  * ハードリミット（注文の自動分割を決める 3 つの上限）。
  *
- * 画面名は「ハードリミットマスタ」だが、バックエンドの呼称は「スライス注文設定」で
- * エンドポイントは /slice-settings、レスポンスのキーも日本語のまま返る（docs/api/openapi.json）。
+ * エンドポイントは /hard-limits。レスポンスのキーは日本語のまま返る（docs/api/openapi.json）。
  * その差はこの層だけで吸収し、外へは camelCase のアプリ内モデルで返す。
+ *
+ * バックエンドの内部呼称は「スライス注文設定」で、パスだけが 2026-09-11 に
+ * /slice-settings から /hard-limits へ変わった。スキーマ名（SliceSettingResponse /
+ * SliceSettingUpdateRequest）と 409 の文言には旧称が残っているので、混乱しないこと。
  *
  * 市場関与率は比率（0.05 = 5%）。% への換算は表示側の関心なので、ここでは変換しない。
  */
@@ -18,7 +21,7 @@ import { apiClient } from './client'
  * 画面はこれを「未設定」として 4 状態のひとつに出す。
  */
 export async function fetchHardLimits() {
-  const { data } = await apiClient.get('/slice-settings')
+  const { data } = await apiClient.get('/hard-limits')
   return data ? toHardLimits(data) : null
 }
 
@@ -31,7 +34,7 @@ export async function updateHardLimits({
   note,
   updatedAt,
 }) {
-  const { data } = await apiClient.put('/slice-settings', {
+  const { data } = await apiClient.put('/hard-limits', {
     市場関与率: participationRate,
     大口数量閾値: maxQuantity,
     大口金額閾値: maxAmount,

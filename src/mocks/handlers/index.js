@@ -12,10 +12,10 @@ import { hardLimitSetting } from '../fixtures/hardLimits'
  *  - バックエンドで実装された API は、このリストから削除する。
  *    未定義のリクエストは実 API へ素通しされるため、削除するだけで本物に切り替わる。
  *
- * 例外は海外休場日（/holidays）とハードリミット（/slice-settings）。実 API は実装済みだが、
+ * 例外は海外休場日（/holidays）とハードリミット（/hard-limits）。実 API は実装済みだが、
  * 単体テストと E2E がこの handlers を共用しているのでハンドラは残し、**実 API と同じ形**に寄せてある。
- *   /holidays        … 日本語キー / integer の休場日 / 降順 / エラーは { detail } / 論理削除
- *   /slice-settings  … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
+ *   /holidays     … 日本語キー / integer の休場日 / 降順 / エラーは { detail } / 論理削除
+ *   /hard-limits  … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
  * 実 API に当てて動かすときは .env の VITE_ENABLE_MSW=false にする。
  */
 
@@ -347,7 +347,7 @@ export const handlers = [
   }),
 
   // ハードリミット（バックエンドの呼称は「スライス注文設定」）。1 件だけの設定なので一覧ではない
-  http.get('*/api/slice-settings', () => HttpResponse.json(hardLimitRow)),
+  http.get('*/api/hard-limits', () => HttpResponse.json(hardLimitRow)),
 
   /*
    * ハードリミットの更新。拒否の形は実 API（FastAPI）に合わせる。
@@ -359,7 +359,7 @@ export const handlers = [
    * 409 Conflict）に対応」と書かれた宣言漏れ）が、実 API では実装されている。
    * 画面側では検証しない方針なので、拒否の理由はここが持つ。
    */
-  http.put('*/api/slice-settings', async ({ request }) => {
+  http.put('*/api/hard-limits', async ({ request }) => {
     const body = await request.json().catch(() => null)
 
     // pydantic は不合格の項目を全部まとめて返す（先勝ちで 1 件ではない）
@@ -405,7 +405,7 @@ function toNonNegativeInt(value, fallback) {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback
 }
 
-/* ここからハードリミット（/slice-settings）のモック用ヘルパ。実 API の 422 を模すためだけのもの */
+/* ここからハードリミット（/hard-limits）のモック用ヘルパ。実 API の 422 を模すためだけのもの */
 
 /**
  * SliceSettingUpdateRequest の制約（openapi.json）。

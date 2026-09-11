@@ -4,7 +4,7 @@
 - 対象: `src/stores/hardLimits.js`
 - テスト: `src/stores/hardLimits.spec.js`
 
-バックエンドの呼称は「スライス注文設定」（`GET` / `PUT /slice-settings`）で、レスポンスのキーは
+バックエンドの呼称は「スライス注文設定」（`GET` / `PUT /hard-limits`）で、レスポンスのキーは
 日本語のまま返る。ストアから外に出るのは `src/api/hardLimits.js` が畳んだ camelCase のモデル。
 API 層のリクエストの形そのものは [api-hard-limits.md](api-hard-limits.md)（`HLA`）が守る。
 

@@ -10,7 +10,7 @@ import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { useStocksStore } from '@/stores/stocks'
-import { formatQuantity, formatUsd } from '@/utils/format'
+import { formatJpyUnit, formatUsdUnit } from '@/utils/format'
 import {
   ORDER_ROUTE_OPTIONS,
   REGULATION_OPTIONS,
@@ -197,10 +197,10 @@ function rowClass(row) {
           <span class="stock-list__name">{{ value || '—' }}</span>
         </template>
 
-        <!-- 相場の 3 列。未取得（null）は formatUsd / formatQuantity が '—' にする -->
-        <template #cell-previousClose="{ value }">{{ formatUsd(value) }}</template>
-        <template #cell-previousVolume="{ value }">{{ formatQuantity(value) }}</template>
-        <template #cell-averageVolume="{ value }">{{ formatQuantity(value) }}</template>
+        <!-- 相場の 3 列。未取得（null）は formatUsdUnit / formatJpyUnit が '—' にする -->
+        <template #cell-previousClose="{ value }">{{ formatUsdUnit(value) }}</template>
+        <template #cell-previousVolume="{ value }">{{ formatJpyUnit(value) }}</template>
+        <template #cell-averageVolume="{ value }">{{ formatJpyUnit(value) }}</template>
 
         <!-- 取引可否は可否が一目で分かるように色を変える（画面モックと同じ扱い） -->
         <template #cell-regulation="{ row }">

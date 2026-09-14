@@ -36,12 +36,6 @@ export function formatUsdUnit(value) {
   return `${usdDecimal.format(value)} ドル`
 }
 
-/** 円建ての金額を「43,820,000 円」の形に整形する */
-export function formatJpyUnit(value) {
-  if (value === null || value === undefined || Number.isNaN(value)) return '—'
-  return `${decimal.format(value)} 円`
-}
-
 /** 株数などの整数を表示用に整形する */
 export function formatQuantity(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'

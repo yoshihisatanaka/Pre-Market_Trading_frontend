@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -6,6 +7,8 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
+import FormGrid from '@/components/ui/FormGrid.vue'
+import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
@@ -14,14 +17,25 @@ import { CA_TYPE_OPTIONS, formatCaType, isCaType } from '@/utils/caTypes'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useCaStore()
-const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(store)
+const {
+  items,
+  total,
+  limit,
+  offset,
+  loading,
+  error,
+  isEmpty,
+  creating,
+  createError,
+  validationErrors,
+} = storeToRefs(store)
 
 /*
  * 列は画面モック（https://uspreorder-vmbhej3k.manus.space/masters/ca）に合わせつつ、
  * 実 API（docs/api/openapi.json の CAItem）が持つ項目だけを出す。
  *   - ステータスは実 API に無い（モックにはあるが、対応する列も値も無いので出さない）
  *   - モックの「権利確定日」も実 API に無い。日付は 権利付最終日 / 効力発生日 / 支払日 の 3 つ
- *   - 操作列（編集・削除）は別途。この画面はいま読むだけ
+ *   - 操作列（編集・削除）は別途。新規追加はヘッダのボタンから開くので、列は増えない
  */
 const columns = [
   { key: 'stockCode', label: '銘柄' },
@@ -65,6 +79,131 @@ function caTypeLabel(row) {
 function rowClass(row) {
   return row.userModified ? 'is-user-modified' : null
 }
+
+/*
+ * 新規追加。ヘッダの「新規追加」からモーダルを開く（受注不可日マスタと同じ形）。
+ * URL は変えない（一覧の単方向フローに触らない）。
+ *
+ * 登録は store 側で「サーバの事前検証 → 登録」の 2 段になっている。ここでの検証は
+ * 必須の未入力を弾いて無駄な往復を防ぐためのもので、銘柄コードが銘柄マスタに実在するか・
+ * 日付が妥当かはサーバが見る。
+ *
+ * エラーは 3 種類あり、出し先を分ける。
+ *   入力の不備      … FormField の error（項目の直下）
+ *   事前検証の不合格 … store.validationErrors をモーダル内の BaseAlert
+ *   通信・サーバ障害 … store.createError を同じ位置の BaseAlert
+ */
+const isAddOpen = ref(false)
+
+// 項目が 8 つあるので、受注不可日のように ref を項目ごとに分けず 1 つのオブジェクトで持つ
+const addForm = ref(emptyForm())
+const addErrors = ref(emptyErrors())
+
+// 成功メッセージ（追加・編集・削除で同じ枠に出す。同時に成功することは無い）
+const noticeMessage = ref('')
+
+function emptyForm() {
+  return {
+    stockCode: '',
+    // CA種別 に中立な既定値は無いので未選択から始める（placeholder を出して必須にする）
+    caType: '',
+    exRightsDate: '',
+    effectiveDate: '',
+    paymentDate: '',
+    denominator: '',
+    numerator: '',
+    note: '',
+  }
+}
+
+function emptyErrors() {
+  return { stockCode: '', caType: '', denominator: '', numerator: '' }
+}
+
+function openAdd() {
+  addForm.value = emptyForm()
+  addErrors.value = emptyErrors()
+  // 前回の失敗と成功をどちらも持ち込まない
+  store.clearCreateError()
+  noticeMessage.value = ''
+  isAddOpen.value = true
+}
+
+function closeAdd() {
+  // 登録中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (creating.value) return
+  isAddOpen.value = false
+}
+
+async function submitAdd() {
+  const form = addForm.value
+  addErrors.value = {
+    stockCode: form.stockCode.trim() ? '' : '銘柄コードを入力してください。',
+    caType: form.caType ? '' : 'CA種別を選択してください。',
+    ...ratioErrors(form),
+  }
+  if (Object.values(addErrors.value).some(Boolean)) return
+
+  const created = await store.create({
+    ...form,
+    stockCode: form.stockCode.trim(),
+    note: form.note.trim(),
+  })
+  // 失敗時はモーダルを開いたままにして、入力を直せるようにする（理由は createError に出る）
+  if (!created) return
+
+  isAddOpen.value = false
+  /*
+   * 一覧は効力発生日の降順なので、追加した行が 1 ページ目に出るとは限らない
+   * （日付を空にした行はサーバ側で先頭に来る）。行を追いかけることはせず、
+   * どの行が増えたのかをメッセージで示して、ユーザがその条件で検索できるようにする。
+   */
+  noticeMessage.value = `${caLabel(created)} を追加しました。`
+}
+
+/**
+ * 比率（分母・分子）の入力検証。
+ *
+ * サーバは 分母 と 分子 がそろって初めて「1:2」を組むので、片方だけ送ると 201 で通ったうえで
+ * 一覧の比率が空になる（入力した数値が消えたように見える）。エラーは**欠けている側**に出す。
+ * 正の数値であることも見る（CARequest に minimum の宣言が無く、サーバまで往復してしまうため）。
+ */
+function ratioErrors({ denominator, numerator }) {
+  const errors = { denominator: '', numerator: '' }
+  const fields = [
+    { key: 'denominator', label: '分母', value: denominator },
+    { key: 'numerator', label: '分子', value: numerator },
+  ]
+
+  const filled = fields.filter((field) => field.value !== '')
+  if (filled.length === 1) {
+    const missing = fields.find((field) => field.value === '')
+    errors[missing.key] = '比率は分母と分子の両方を入力してください。'
+  }
+
+  for (const field of filled) {
+    if (!(Number(field.value) > 0)) {
+      errors[field.key] = `${field.label}には正の数値を入力してください。`
+    }
+  }
+
+  return errors
+}
+
+/**
+ * 1 件を 1 行で示す文字列（成功メッセージに使う）。
+ * CA には自然キーが無いので、一覧で行を見分けるのに実際に読む 3 点を並べる。
+ */
+function caLabel(ca) {
+  const parts = [ca.stockCode || '—', caTypeLabel(ca)]
+  /*
+   * 効力発生日を持たない CA（分割・併合など）は日付を出さない。
+   * 権利付最終日へ暗黙に落とすと、ラベルの無い日付欄に別の意味の日付が入って誤読させる。
+   */
+  if (ca.effectiveDate) parts.push(ca.effectiveDate)
+
+  return parts.join(' / ')
+}
 </script>
 
 <template>
@@ -79,7 +218,12 @@ function rowClass(row) {
       >
         再読み込み
       </BaseButton>
+      <BaseButton data-testid="ca-add" @click="openAdd">新規追加</BaseButton>
     </Teleport>
+
+    <BaseAlert v-if="noticeMessage" variant="success" data-testid="ca-notice">
+      {{ noticeMessage }}
+    </BaseAlert>
 
     <!-- 画面の説明。4 状態や検索結果に関わらず常時出す -->
     <BaseAlert variant="info" data-testid="ca-description">
@@ -153,6 +297,105 @@ function rowClass(row) {
         <template #cell-note="{ value }">{{ value || '—' }}</template>
       </DataTable>
     </MasterListCard>
+
+    <MasterFormDialog
+      :open="isAddOpen"
+      title="CA 新規追加"
+      testid-prefix="ca"
+      :pending="creating"
+      :error="createError"
+      :validation-errors="validationErrors"
+      @close="closeAdd"
+      @submit="submitAdd"
+    >
+      <!-- 銘柄コードと CA種別 は必須。どちらも短いので横に並べる -->
+      <FormGrid :columns="2">
+        <!-- maxlength は実 API（CARequest の 銘柄コード）の 14 文字に合わせる -->
+        <FormField v-slot="{ field }" label="銘柄コード" required :error="addErrors.stockCode">
+          <BaseInput
+            v-bind="field"
+            v-model="addForm.stockCode"
+            placeholder="例: A0001"
+            maxlength="14"
+            data-testid="ca-add-stock-code"
+          />
+        </FormField>
+        <FormField v-slot="{ field }" label="CA種別" required :error="addErrors.caType">
+          <BaseSelect
+            v-bind="field"
+            v-model="addForm.caType"
+            :options="CA_TYPE_OPTIONS"
+            placeholder="-- 選択してください --"
+            data-testid="ca-add-type"
+          />
+        </FormField>
+      </FormGrid>
+
+      <!-- 日付 3 種はすべて任意。前後関係はサーバの事前検証に委ねる（画面では弾かない） -->
+      <FormGrid :columns="3">
+        <FormField v-slot="{ field }" label="権利付最終日">
+          <BaseInput
+            v-bind="field"
+            v-model="addForm.exRightsDate"
+            type="date"
+            data-testid="ca-add-ex-rights-date"
+          />
+        </FormField>
+        <FormField v-slot="{ field }" label="効力発生日">
+          <BaseInput
+            v-bind="field"
+            v-model="addForm.effectiveDate"
+            type="date"
+            data-testid="ca-add-effective-date"
+          />
+        </FormField>
+        <FormField v-slot="{ field }" label="支払日">
+          <BaseInput
+            v-bind="field"
+            v-model="addForm.paymentDate"
+            type="date"
+            data-testid="ca-add-payment-date"
+          />
+        </FormField>
+      </FormGrid>
+
+      <!-- 一覧に出る「比率」はサーバが 分母:分子 から組む表示項目。入力はこの 2 つ -->
+      <FormGrid :columns="2">
+        <FormField v-slot="{ field }" label="比率（分母）" :error="addErrors.denominator">
+          <BaseInput
+            v-bind="field"
+            v-model="addForm.denominator"
+            type="number"
+            min="0"
+            step="any"
+            placeholder="例: 1"
+            data-testid="ca-add-denominator"
+          />
+        </FormField>
+        <FormField v-slot="{ field }" label="比率（分子）" :error="addErrors.numerator">
+          <BaseInput
+            v-bind="field"
+            v-model="addForm.numerator"
+            type="number"
+            min="0"
+            step="any"
+            placeholder="例: 2"
+            data-testid="ca-add-numerator"
+          />
+        </FormField>
+      </FormGrid>
+
+      <!-- maxlength は実 API（CARequest の 備考）の 200 文字に合わせる -->
+      <FormField v-slot="{ field }" label="備考">
+        <BaseInput
+          v-bind="field"
+          v-model="addForm.note"
+          placeholder="例: Q1現金配当"
+          maxlength="200"
+          data-testid="ca-add-note"
+        />
+      </FormField>
+    </MasterFormDialog>
   </section>
 </template>
 

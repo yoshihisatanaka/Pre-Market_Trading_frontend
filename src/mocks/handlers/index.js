@@ -3,6 +3,7 @@ import { orderListResponse } from '../fixtures/orders'
 import { canceledMarketHolidays, marketHolidays } from '../fixtures/marketHolidays'
 import { blackoutDates, canceledBlackoutDates } from '../fixtures/blackoutDates'
 import { canceledCorporateActions, corporateActions } from '../fixtures/ca'
+import { canceledStocks, stocks } from '../fixtures/stocks'
 import { hardLimitSetting } from '../fixtures/hardLimits'
 
 /*
@@ -58,6 +59,18 @@ const BLACKOUT_DATES_PER_PAGE = 50
 const caRows = [...corporateActions, ...canceledCorporateActions]
 
 /**
+ * 銘柄マスタの行。いまは読むだけ（登録・更新・削除はまだ無い）なので、
+ * 書き換え可能な状態にはせずフィクスチャをそのまま使う。
+ */
+const stockRows = [...stocks, ...canceledStocks]
+
+/**
+ * 銘柄マスタの一覧が 1 ページで返す件数。
+ * 実 API は `limit` クエリを持たない固定値（受注不可日と同じ）なので、モックも定数で持つ。
+ */
+const STOCKS_PER_PAGE = 50
+
+/**
  * CA の並び順。実 API（ca_repository.list）の
  * `ORDER BY COALESCE(効力発生日, 権利付最終日, 99999999) DESC, ID DESC` と同じ。
  * 日付は YYYYMMDD の integer なので、数値の大小がそのまま日付の大小になる。
@@ -108,6 +121,50 @@ export const handlers = [
       limit,
       offset,
       ca_list: filtered.slice(offset, offset + limit),
+    })
+  }),
+
+  /*
+   * 銘柄マスタの一覧。取消済み（取消区分 1）は既定で返さない。
+   *
+   * 実 API のクエリ名は日本語で、`limit` を持たない（1 ページ 50 件固定。応答の limit は常に 50）。
+   * 銘柄コードの絞り込みは実 API の `LIKE %s` に合わせた**部分一致**で、
+   * 画面の検索欄 1 つで銘柄コードと Ticker のどちらにも当たるようにしてある。
+   * **銘柄名では絞らない**（実 API は `銘柄名` / `銘柄名_英字` を別のパラメータに分けている）。
+   * 区分 3 つは完全一致。
+   *
+   * CSV 入出力と更新履歴（/stocks/export-csv ほか）は画面が使わないのでモックしない。
+   */
+  http.get('*/api/stocks', ({ request }) => {
+    const params = new URL(request.url).searchParams
+    // DB 照合は大文字小文字を区別しないので、モックも大文字に寄せてから比べる
+    const stockCode = (params.get('銘柄コード') ?? '').trim().toUpperCase()
+    const regulation = params.get('規制情報') ?? ''
+    const orderRoute = params.get('注文ルート') ?? ''
+    const vwapTarget = params.get('VWAP対象区分') ?? ''
+    const includeDeleted = params.get('include_deleted') === 'true'
+    const offset = toNonNegativeInt(params.get('offset'), 0)
+
+    const filtered = stockRows
+      .filter(
+        (stock) =>
+          (includeDeleted || stock.取消区分 === 0) &&
+          (!stockCode ||
+            stock.銘柄コード.toUpperCase().includes(stockCode) ||
+            stock.Ticker.toUpperCase().includes(stockCode)) &&
+          (!regulation || stock.規制情報 === regulation) &&
+          (!orderRoute || stock.注文ルート === orderRoute) &&
+          (!vwapTarget || stock.VWAP対象区分 === vwapTarget),
+      )
+      // 実 API の ORDER BY は仕様に書かれていないので、主キーの昇順を仮に置く
+      .sort((a, b) => a.銘柄コード.localeCompare(b.銘柄コード))
+
+    return HttpResponse.json({
+      // total は絞り込み後・ページ切り出し前の件数
+      total: filtered.length,
+      limit: STOCKS_PER_PAGE,
+      offset,
+      stocks: filtered.slice(offset, offset + STOCKS_PER_PAGE),
     })
   }),
 

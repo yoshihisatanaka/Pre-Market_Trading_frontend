@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { fetchCorporateActions } from './ca'
+import { createCorporateAction, fetchCorporateActions, validateCorporateAction } from './ca'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -31,6 +31,25 @@ function record(body, status = 200) {
     http.get('*/api/ca', ({ request }) => {
       const url = new URL(request.url)
       lastRequest = { url, params: url.searchParams }
+      return HttpResponse.json(body, { status })
+    }),
+  )
+}
+
+/**
+ * POST の本文まで記録して、指定の本文を返すハンドラを立てる。
+ * 一覧の `record` と分けてあるのは、GET には読める本文が無いため
+ * （読もうとすると空文字で例外になる）。
+ *
+ * @param {string} path `*` 始まりのパス
+ * @param {unknown} body 返す本文
+ * @param {number} [status]
+ */
+function recordPost(path, body, status = 200) {
+  server.use(
+    http.post(path, async ({ request }) => {
+      const url = new URL(request.url)
+      lastRequest = { url, params: url.searchParams, body: await request.json() }
       return HttpResponse.json(body, { status })
     }),
   )
@@ -125,9 +144,14 @@ describe('api/ca', () => {
         exRightsDate: '2026-04-28',
         effectiveDate: '2026-04-30',
         paymentDate: '2026-05-15',
+        // 分母・分子は編集フォームへ戻すための生の数値（比率は表示用の文字列）
+        denominator: 1,
+        numerator: 2,
         ratio: '1:2',
         note: '1:2 株式分割',
         userModified: false,
+        // 更新日時 が null の行。undefined ではなく空文字に寄せる
+        updatedAt: '',
       },
     ])
   })
@@ -174,5 +198,134 @@ describe('api/ca', () => {
     record({ detail: 'サーバーでエラーが発生しました。' }, 500)
 
     await expect(fetchCorporateActions()).rejects.toBeTruthy()
+  })
+
+  it('[CAA-11] 登録は日本語キー・integer の日付で送り、応答の ca を変換して返す', async () => {
+    recordPost('*/api/ca', { success: true, ca: caItem, message: 'CAを登録しました' }, 201)
+
+    const created = await createCorporateAction({
+      stockCode: 'A0001',
+      caType: '120',
+      exRightsDate: '2026-04-28',
+      effectiveDate: '2026-04-30',
+      paymentDate: '',
+      denominator: 1,
+      numerator: 2,
+      note: 'メモ',
+    })
+
+    expect(lastRequest.url.pathname).toBe('/api/ca')
+    expect(lastRequest.body).toEqual({
+      銘柄コード: 'A0001',
+      CA種別: '120',
+      // 日付は integer の YYYYMMDD。空文字の支払日は「未設定」なので null
+      権利付最終日: 20260428,
+      効力発生日: 20260430,
+      支払日: null,
+      分母: 1,
+      分子: 2,
+      備考: 'メモ',
+    })
+    // Ticker は送らない（実 API が銘柄マスタから補完する）
+    expect(lastRequest.body).not.toHaveProperty('Ticker')
+    // 応答は CAItem なので、一覧と同じアプリ内モデルに変換されて返る
+    expect(created).toMatchObject({ id: String(caItem.ID), stockCode: caItem.銘柄コード, ratio: '1:2' })
+  })
+
+  it('[CAA-12] 未設定の項目はキーを省かず null で送る', async () => {
+    recordPost('*/api/ca', { success: true, ca: caItem, message: 'ok' }, 201)
+
+    await createCorporateAction({ stockCode: 'A0001', caType: '120', paymentDate: '' })
+
+    /*
+     * CARequest はレコード全体を差し替える形なので、キーを落とすと
+     * 「変えない」と「空にする」が区別できない（クエリパラメータとは扱いが逆）
+     */
+    expect(lastRequest.body).toEqual({
+      銘柄コード: 'A0001',
+      CA種別: '120',
+      権利付最終日: null,
+      効力発生日: null,
+      支払日: null,
+      分母: null,
+      分子: null,
+      備考: null,
+    })
+    for (const key of ['権利付最終日', '効力発生日', '支払日', '分母', '分子', '備考']) {
+      expect(Object.hasOwn(lastRequest.body, key)).toBe(true)
+    }
+  })
+
+  it('[CAA-13] 新規の事前検証はクエリを付けず CARequest の本文だけを送る', async () => {
+    recordPost('*/api/ca/validate', { valid: true, errors: [], warnings: [], details: null })
+
+    await validateCorporateAction({ stockCode: 'A0001', caType: '120' })
+
+    expect(lastRequest.url.pathname).toBe('/api/ca/validate')
+    // 既定が新規検証なので、何も付けない
+    expect(lastRequest.url.search).toBe('')
+    expect(lastRequest.body).toMatchObject({ 銘柄コード: 'A0001', CA種別: '120' })
+  })
+
+  it('[CAA-14] 編集からの事前検証は ca_id と is_update=true をクエリに載せる', async () => {
+    recordPost('*/api/ca/validate', { valid: true, errors: [], warnings: [], details: null })
+
+    await validateCorporateAction({ id: '7', stockCode: 'A0001', caType: '120' })
+
+    // 実 API は検証対象を本文ではなくクエリの ca_id（integer 宣言）で受ける
+    expect(lastRequest.params.get('ca_id')).toBe('7')
+    expect(lastRequest.params.get('is_update')).toBe('true')
+    // id は本文には出さない（CARequest に ID という項目は無い）
+    expect(lastRequest.body).not.toHaveProperty('ID')
+    expect(lastRequest.body).not.toHaveProperty('id')
+  })
+
+  it('[CAA-15] 事前検証の不合格は例外にせず valid / errors を返す', async () => {
+    const errors = ['銘柄コード(ZZZZ)は銘柄マスタに存在しません']
+    recordPost('*/api/ca/validate', { valid: false, errors, warnings: [], details: null })
+
+    const result = await validateCorporateAction({ stockCode: 'ZZZZ', caType: '120' })
+
+    // 不合格は通信・サーバ障害と区別する（呼び出し側が validationErrors に入れる）
+    expect(result).toEqual({ valid: false, errors })
+  })
+
+  it('[CAA-16] 応答の warnings は受け取らない', async () => {
+    recordPost('*/api/ca/validate', {
+      valid: true,
+      errors: [],
+      warnings: ['確認してください'],
+      details: null,
+    })
+
+    const result = await validateCorporateAction({ stockCode: 'A0001', caType: '120' })
+
+    // CA では警告を扱わない（返すと「追加を押しても何も起きない」経路に入る）
+    expect(result).toEqual({ valid: true, errors: [] })
+    expect(result).not.toHaveProperty('warnings')
+  })
+
+  it('[CAA-17] 文字列で渡された分母・分子は number にして送る', async () => {
+    recordPost('*/api/ca', { success: true, ca: caItem, message: 'ok' }, 201)
+
+    // 画面の type="number" は値を文字列で持つので、この層で数値に直す
+    await createCorporateAction({
+      stockCode: 'A0001',
+      caType: '120',
+      denominator: '1',
+      numerator: '2.5',
+    })
+
+    expect(lastRequest.body.分母).toBe(1)
+    expect(lastRequest.body.分子).toBe(2.5)
+  })
+
+  it('[CAA-18] 登録が 400 のときはサーバの detail を持つ例外になる', async () => {
+    const detail = '銘柄コード(ZZZZ)は銘柄マスタに存在しません'
+    recordPost('*/api/ca', { detail }, 400)
+
+    await expect(
+      createCorporateAction({ stockCode: 'ZZZZ', caType: '120' }),
+    ).rejects.toMatchObject({ status: 400, message: detail })
   })
 })

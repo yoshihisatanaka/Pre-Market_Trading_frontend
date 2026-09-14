@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { corporateActions } from '@/mocks/fixtures/ca'
+import { caStocks, corporateActions } from '@/mocks/fixtures/ca'
 import { CA_PAGE_SIZE, useCaStore } from './ca'
 
 /*
@@ -32,12 +32,43 @@ const caTypeIds = sorted.filter((ca) => ca.CA種別 === CA_TYPE).map((ca) => Str
 // フィクスチャのどの銘柄コード・Ticker にも当たらない文字列
 const NO_MATCH = 'ZZZZ'
 
+/*
+ * 登録に使う値。銘柄コードはモックの銘柄マスタ（caStocks）に実在するものでなければ
+ * 事前検証で弾かれるので、フィクスチャから採る。CA種別も既存の行と同じコードでよい
+ * （CA には自然キーが無く、同じ銘柄・同じ種別の行が複数あっても正当）。
+ */
+const NEW_STOCK_CODE = caStocks[0].stockCode
+const NEW_CA_TYPE = CA_TYPE
+
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
+
+/** 事前検証が銘柄マスタに無い銘柄コードへ返す理由（モックが実 API と同じ文言で返す） */
+const unknownStockMessage = (stockCode) => `銘柄コード(${stockCode})は銘柄マスタに存在しません`
 
 /** 一覧を 500 にする差し替え */
 function failList() {
   server.use(
     http.get('*/api/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+  )
+}
+
+/** 登録（事前検証は既定のまま）を 500 にする差し替え */
+function failCreate() {
+  server.use(
+    http.post('*/api/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+  )
+}
+
+/**
+ * 事前検証が警告つきの合格を返す差し替え。
+ * 実 API の CAValidationResponse は warnings を持つが、CA では使わない約束なので
+ * 「返ってきても登録を止めない」ことを確かめるために使う。
+ */
+function warnOnValidate(message) {
+  server.use(
+    http.post('*/api/ca/validate', () =>
+      HttpResponse.json({ valid: true, errors: [], warnings: [message], details: null }),
+    ),
   )
 }
 
@@ -151,13 +182,19 @@ describe('stores/ca', () => {
     expect(store.items.map((item) => item.id)).toEqual(tickerIds)
   })
 
-  it('[CAS-09] 読むだけの一覧なので登録・更新・削除を公開しない', () => {
+  it('[CAS-09] 登録は公開するが、まだ無い更新・削除は公開しない', () => {
     const store = useCaStore()
 
-    expect(store.create).toBeUndefined()
+    // 持っている操作
+    expect(typeof store.create).toBe('function')
+    expect(typeof store.clearCreateError).toBe('function')
+    expect(store.creating).toBe(false)
+    expect(store.validationErrors).toEqual([])
+
+    // まだ無い操作は、できるように見せない（呼べば「関数が無い」で落ちる）
     expect(store.update).toBeUndefined()
     expect(store.remove).toBeUndefined()
-    expect(store.creating).toBeUndefined()
+    expect(store.updating).toBeUndefined()
     expect(store.deleting).toBeUndefined()
   })
 
@@ -171,5 +208,81 @@ describe('stores/ca', () => {
     await Promise.all([stale, latest])
 
     expect(store.items.map((item) => item.id)).toEqual(expectedIds.slice(0, PAGE_SIZE))
+  })
+
+  it('[CAS-11] 登録に成功すると 1 件返り、一覧を読み直して件数が増える', async () => {
+    const store = useCaStore()
+    await store.load()
+
+    const created = await store.create({ stockCode: NEW_STOCK_CODE, caType: NEW_CA_TYPE })
+
+    expect(created.stockCode).toBe(NEW_STOCK_CODE)
+    expect(created.caType).toBe(NEW_CA_TYPE)
+    expect(store.total).toBe(TOTAL + 1)
+    expect(store.createError).toBeNull()
+    expect(store.validationErrors).toEqual([])
+  })
+
+  it('[CAS-12] 事前検証で弾かれたときは validationErrors に入り、登録しない', async () => {
+    const store = useCaStore()
+    await store.load()
+
+    const created = await store.create({ stockCode: NO_MATCH, caType: NEW_CA_TYPE })
+
+    expect(created).toBeNull()
+    expect(store.validationErrors).toEqual([unknownStockMessage(NO_MATCH)])
+    // 通信は成功しているので、サーバ障害の枠には入れない
+    expect(store.createError).toBeNull()
+    expect(store.total).toBe(TOTAL)
+  })
+
+  it('[CAS-13] 登録が失敗したときは createError に入る', async () => {
+    failCreate()
+    const store = useCaStore()
+    await store.load()
+
+    const created = await store.create({ stockCode: NEW_STOCK_CODE, caType: NEW_CA_TYPE })
+
+    expect(created).toBeNull()
+    expect(store.createError?.message).toBe(ERROR_MESSAGE)
+    // 事前検証は通っているので、こちらは空のまま
+    expect(store.validationErrors).toEqual([])
+    expect(store.total).toBe(TOTAL)
+  })
+
+  it('[CAS-14] clearCreateError は前回の失敗をどちらの枠からも消す', async () => {
+    failCreate()
+    const store = useCaStore()
+    await store.create({ stockCode: NEW_STOCK_CODE, caType: NEW_CA_TYPE })
+    await store.create({ stockCode: NO_MATCH, caType: NEW_CA_TYPE })
+
+    store.clearCreateError()
+
+    expect(store.createError).toBeNull()
+    expect(store.validationErrors).toEqual([])
+  })
+
+  it('[CAS-15] 登録後の読み直しで絞り込み条件が落ちない', async () => {
+    const store = useCaStore()
+    await store.load({ caType: CA_TYPE })
+
+    await store.create({ stockCode: NEW_STOCK_CODE, caType: CA_TYPE })
+
+    expect(store.caType).toBe(CA_TYPE)
+    expect(store.total).toBe(caTypeIds.length + 1)
+    expect(store.items.every((item) => item.caType === CA_TYPE)).toBe(true)
+  })
+
+  it('[CAS-16] 事前検証が警告を返しても登録は止まらない', async () => {
+    warnOnValidate('この CA は既存の行と同じ日付です')
+    const store = useCaStore()
+    await store.load()
+
+    const created = await store.create({ stockCode: NEW_STOCK_CODE, caType: NEW_CA_TYPE })
+
+    expect(created).not.toBeNull()
+    expect(store.total).toBe(TOTAL + 1)
+    // api 層が warnings を受け取らないので、確認待ちの経路には入らない
+    expect(store.validationWarnings).toEqual([])
   })
 })

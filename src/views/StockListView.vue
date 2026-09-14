@@ -10,7 +10,7 @@ import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { useStocksStore } from '@/stores/stocks'
-import { formatQuantity, formatUsd } from '@/utils/format'
+import { formatQuantity, formatUsdUnit } from '@/utils/format'
 import {
   ORDER_ROUTE_OPTIONS,
   REGULATION_OPTIONS,
@@ -197,8 +197,8 @@ function rowClass(row) {
           <span class="stock-list__name">{{ value || '—' }}</span>
         </template>
 
-        <!-- 相場の 3 列。未取得（null）は formatUsd / formatQuantity が '—' にする -->
-        <template #cell-previousClose="{ value }">{{ formatUsd(value) }}</template>
+        <!-- 相場の 3 列。未取得（null）は formatUsdUnit / formatQuantity が '—' にする -->
+        <template #cell-previousClose="{ value }">{{ formatUsdUnit(value) }}</template>
         <template #cell-previousVolume="{ value }">{{ formatQuantity(value) }}</template>
         <template #cell-averageVolume="{ value }">{{ formatQuantity(value) }}</template>
 

@@ -6,6 +6,12 @@ const usd = new Intl.NumberFormat('en-US', {
 
 const decimal = new Intl.NumberFormat('ja-JP')
 
+// 通貨記号ではなく「ドル」を後ろに置く表記用。金額なので小数第 2 位まで固定する
+const usdDecimal = new Intl.NumberFormat('ja-JP', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
 const dateTime = new Intl.DateTimeFormat('ja-JP', {
   year: 'numeric',
   month: '2-digit',
@@ -18,6 +24,16 @@ const dateTime = new Intl.DateTimeFormat('ja-JP', {
 export function formatUsd(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
   return usd.format(value)
+}
+
+/**
+ * 米ドル建ての価格を「227.16 ドル」の形に整形する。
+ *
+ * 通貨記号で出す formatUsd との違いは見た目だけで、どちらを使うかは画面の指定で決まる。
+ */
+export function formatUsdUnit(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  return `${usdDecimal.format(value)} ドル`
 }
 
 /** 株数などの整数を表示用に整形する */

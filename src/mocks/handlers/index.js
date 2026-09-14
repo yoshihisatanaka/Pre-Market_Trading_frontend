@@ -172,6 +172,61 @@ export const handlers = [
     )
   }),
 
+  /*
+   * CA の更新（全項目を変更できる）。
+   *
+   * 検査の順序は「本文の形(422) → 対象が居るか(404) → 値の妥当性(400) → 盤面が古くないか(409)」。
+   * 受注不可日の PUT にある「競合を重複より先に見る」という理由付けは、CA には重複検査が
+   * 無いので当てはまらない（写さないこと）。
+   */
+  http.put('*/api/ca/:caId', async ({ params, request }) => {
+    const body = await request.json().catch(() => null)
+    const violation = caRequestViolation(body)
+    if (violation) return violation
+
+    const targetId = Number(params.caId)
+    const current = caRows.find((ca) => ca.ID === targetId && ca.取消区分 === 0)
+    if (!current) {
+      return detailError(404, '指定されたCAデータが存在しません')
+    }
+
+    const ca = toCaInput(body)
+    const errors = caServiceErrors(ca)
+    if (errors.length > 0) return detailError(400, errors[0])
+
+    // 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば弾く
+    if (!isSameTimestamp(ca.updatedAt, current.更新日時)) {
+      return detailError(
+        409,
+        '他のユーザーによってCAデータが更新されています。最新データを再取得してください。',
+      )
+    }
+
+    const stock = findCaStock(ca.stockCode)
+    const updated = {
+      ...current,
+      銘柄コード: stock?.stockCode ?? ca.stockCode,
+      // 銘柄コードを変えたら Ticker も引き直す（実 API の自動補完と同じ）
+      Ticker: stock?.ticker ?? null,
+      CA種別: ca.caType,
+      CA種別名: CA_TYPE_NAMES[ca.caType] ?? null,
+      権利付最終日: ca.exRightsDate,
+      効力発生日: ca.effectiveDate,
+      支払日: ca.paymentDate,
+      分母: ca.denominator,
+      分子: ca.numerator,
+      比率: formatRatio(ca.denominator, ca.numerator),
+      備考: ca.note,
+      ユーザー操作フラグ: 1,
+      // 合札はサーバが新しくする（リクエストで来た値は照合に使うだけ）
+      更新日時: nowIsoTimestamp(),
+      更新者: '006',
+    }
+    caRows = caRows.map((row) => (row.ID === targetId ? updated : row))
+
+    return HttpResponse.json({ success: true, ca: updated, message: 'CAを更新しました' })
+  }),
+
   // 海外休場日マスタの一覧。取消済み（取消区分 1）は既定で返さない
   http.get('*/api/holidays', ({ request }) => {
     const params = new URL(request.url).searchParams

@@ -10,7 +10,7 @@ import { apiClient } from './client'
  *   - 一覧の配列名が `ca_list`、1 件の応答のキーが `ca`
  *   - 削除は論理削除（取消区分=1）。一覧は既定で取消済みを返さない
  *
- * いまは一覧の取得と登録・更新（事前検証つき）を持つ。削除、CSV 入出力、更新履歴は別途。
+ * 一覧の取得と登録・更新（事前検証つき）・削除を持つ。CSV 入出力と更新履歴は別途。
  * 更新系は `X-User-Code` ヘッダが必須。付与は client.js の interceptor が全 API 共通で行う。
  */
 
@@ -169,6 +169,22 @@ export async function updateCorporateAction({ id, ...ca }) {
   const { data } = await apiClient.put(`/ca/${encodeURIComponent(id)}`, toCaRequest(ca))
 
   return toCorporateAction(data.ca)
+}
+
+/**
+ * CA を 1 件削除する（実 API は論理削除。取消区分=1・ユーザー操作フラグ=1 になる）。
+ *
+ * 応答は削除後の 1 件（CAResponse）だが、画面は削除前の行を使ってメッセージを出すので
+ * 使い道が無い。呼び出し側が useAsync で成否を判定できるよう、削除した id を返す。
+ *
+ * 楽観的ロックは無い（実 API の DELETE は本文を取らず、更新日時 を照合しない）。
+ *
+ * @param {string} id 削除対象の CA ID
+ * @returns {Promise<string>} 削除した id
+ */
+export async function deleteCorporateAction(id) {
+  await apiClient.delete(`/ca/${encodeURIComponent(id)}`)
+  return id
 }
 
 /**

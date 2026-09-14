@@ -8,6 +8,7 @@ import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import CorporateActionFormFields from '@/components/ca/CorporateActionFormFields.vue'
+import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
 import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
@@ -31,6 +32,8 @@ const {
   updating,
   updateError,
   updateValidationErrors,
+  deleting,
+  deleteError,
 } = storeToRefs(store)
 
 /*
@@ -40,6 +43,8 @@ const {
  *   - モックの「権利確定日」も実 API に無い。日付は 権利付最終日 / 効力発生日 / 支払日 の 3 つ
  *   - 操作列の「編集」は画面モックには無いが、行から直せないと備考の誤記を直すだけでも
  *     「新規追加 → 削除」の 2 操作が必要になるため足している。新規追加はヘッダのボタンから開く
+ *   - 「削除」は編集の右端に置く。破壊的な操作を最後にする既存の並び
+ *     （モーダルのフッタも キャンセル → 危険色）に合わせる
  */
 const columns = [
   { key: 'stockCode', label: '銘柄' },
@@ -49,7 +54,7 @@ const columns = [
   { key: 'paymentDate', label: '支払日' },
   { key: 'ratio', label: '比率' },
   { key: 'note', label: '備考' },
-  // 行ごとの操作（編集）。画面モックに合わせて見出しは空にする
+  // 行ごとの操作（編集・削除）。画面モックに合わせて見出しは空にする
   { key: 'actions', label: '' },
 ]
 
@@ -246,9 +251,42 @@ async function submitEdit() {
   stepBackIfPageEmpty()
 }
 
+/*
+ * 削除。確認モーダルは「開いているか」と「何を消すか」を deleteTarget 1 つで持つ（編集と同じ形）。
+ * 実 API は論理削除で、一覧は既定で取消済みを返さないので、読み直すと行が消える。
+ * 事前検証は無い（DELETE は本文を取らない）ので、サーバの拒否は deleteError をモーダル内に出す。
+ */
+const deleteTarget = ref(null)
+
+function openDelete(ca) {
+  store.clearDeleteError()
+  noticeMessage.value = ''
+  deleteTarget.value = ca
+}
+
+function closeDelete() {
+  // 削除中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (deleting.value) return
+  deleteTarget.value = null
+}
+
+async function submitDelete() {
+  const target = deleteTarget.value
+  if (!target) return
+
+  const deleted = await store.remove(target.id)
+  // 失敗時はモーダルを開いたままにして、理由（deleteError）を読ませる
+  if (!deleted) return
+
+  deleteTarget.value = null
+  noticeMessage.value = `${caLabel(target)} を削除しました。`
+
+  stepBackIfPageEmpty()
+}
+
 /**
  * 読み直した結果が 0 件になったら 1 ページ戻す。
- * 最終ページの最後の 1 件が今の offset から居なくなる操作（絞り込み中の変更）で使う。
+ * 最終ページの最後の 1 件が今の offset から居なくなる操作（削除、絞り込み中の変更）で使う。
  */
 function stepBackIfPageEmpty() {
   if (items.value.length === 0 && offset.value > 0) {
@@ -391,7 +429,7 @@ function caLabel(ca) {
 
         <template #cell-note="{ value }">{{ value || '—' }}</template>
 
-        <!-- 行ごとの操作。削除が入るまでは「編集」だけが並ぶ -->
+        <!-- 編集を左、削除を右端に置く（破壊的な操作を最後にする既存の並び） -->
         <template #cell-actions="{ row }">
           <div class="ca-list__row-actions">
             <BaseButton
@@ -401,6 +439,14 @@ function caLabel(ca) {
               @click="openEdit(row)"
             >
               編集
+            </BaseButton>
+            <BaseButton
+              variant="danger"
+              :data-testid="`ca-delete-${row.id}`"
+              :disabled="deleting"
+              @click="openDelete(row)"
+            >
+              削除
             </BaseButton>
           </div>
         </template>
@@ -442,6 +488,16 @@ function caLabel(ca) {
         :errors="editErrors"
       />
     </MasterFormDialog>
+
+    <ConfirmDeleteDialog
+      :open="Boolean(deleteTarget)"
+      testid-prefix="ca"
+      :label="deleteTarget ? caLabel(deleteTarget) : ''"
+      :pending="deleting"
+      :error="deleteError"
+      @close="closeDelete"
+      @confirm="submitDelete"
+    />
   </section>
 </template>
 

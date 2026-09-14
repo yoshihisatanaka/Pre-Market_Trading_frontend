@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 
 import App from './App.vue'
 import router from './router'
+import { useCodesStore } from './stores/codes'
 import './assets/styles/main.css'
 
 async function enableMocking() {
@@ -18,5 +19,14 @@ async function enableMocking() {
 }
 
 enableMocking().then(() => {
-  createApp(App).use(createPinia()).use(router).mount('#app')
+  const pinia = createPinia()
+  createApp(App).use(pinia).use(router).mount('#app')
+
+  /*
+   * コードマスタは全画面のプルダウンで使うので、起動時に一度だけ読み込む。
+   * マウント後に呼ぶのは初回描画を API の応答待ちにしないため（選択肢が埋まるのは
+   * 応答が返ってから。それまで select は空のまま描かれる）。
+   * useAsync が例外を飲んでストアの error に入れるので、ここで catch は要らない。
+   */
+  useCodesStore(pinia).load()
 })

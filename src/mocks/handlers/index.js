@@ -5,6 +5,8 @@ import { blackoutDates, canceledBlackoutDates } from '../fixtures/blackoutDates'
 import { canceledCorporateActions, corporateActions } from '../fixtures/ca'
 import { canceledStocks, stocks } from '../fixtures/stocks'
 import { hardLimitSetting } from '../fixtures/hardLimits'
+import { codeMasters } from '../fixtures/codes'
+import { canceledCustomers, customers } from '../fixtures/customers'
 
 /*
  * モックハンドラの集約。
@@ -71,6 +73,19 @@ const stockRows = [...stocks, ...canceledStocks]
 const STOCKS_PER_PAGE = 50
 
 /**
+ * 顧客マスタの行。CA と同じく読むだけなので、書き換え可能な状態にはしない
+ * （そのため resetMockState() にも登録しない）。
+ * 削除済みも持つのは、一覧が取消区分で外していることを確かめられるようにするため。
+ */
+const customerRows = [...customers, ...canceledCustomers]
+
+/**
+ * 顧客マスタの一覧が 1 ページで返す件数。
+ * 実 API 側はクエリで変えられない固定値なので、モックも定数で持つ。
+ */
+const CUSTOMERS_PER_PAGE = 50
+
+/**
  * CA の並び順。実 API（ca_repository.list）の
  * `ORDER BY COALESCE(効力発生日, 権利付最終日, 99999999) DESC, ID DESC` と同じ。
  * 日付は YYYYMMDD の integer なので、数値の大小がそのまま日付の大小になる。
@@ -88,6 +103,59 @@ export function resetMockState() {
 
 export const handlers = [
   http.get('*/api/orders', () => HttpResponse.json(orderListResponse)),
+
+  /*
+   * 全コードマスタ一括取得。各画面のプルダウンの選択肢はここから来る。
+   * 実 API は絞り込みのクエリを持たず、常に全部返す。
+   */
+  http.get('*/api/codes', () => HttpResponse.json(codeMasters)),
+
+  /*
+   * 顧客マスタの一覧。削除済み（取消区分 1）は既定で返さない。
+   * 実 API は 1 ページ 50 件で固定されていて limit というクエリを持たないので、
+   * ここも limit を読まない。
+   *
+   * クエリ名は実 API に合わせて日本語。顧客名だけ 顧客名 / 顧客名カナ への部分一致で、
+   * ほかは完全一致（実 API の m_口座情報 の検索と同じ）。
+   *
+   * 取引停止区分_全取引 / 口座区分 / 法人区分 は openapi に無いクエリで、画面モックにある
+   * 検索条件をモックだけで成立させるためのもの。実 API に切り替えるときは仕様追加を依頼する。
+   */
+  http.get('*/api/customers', ({ request }) => {
+    const params = new URL(request.url).searchParams
+    const branchCode = params.get('部店コード') ?? ''
+    const handlerCode = params.get('扱者コード') ?? ''
+    const accountNo = toNonNegativeInt(params.get('口座番号'), 0)
+    const customerName = (params.get('顧客名') ?? '').trim()
+    const restriction = params.get('取引停止区分_全取引') ?? ''
+    const accountType = params.get('口座区分') ?? ''
+    const corporateType = params.get('法人区分') ?? ''
+    const includeDeleted = params.get('include_deleted') === 'true'
+    const offset = toNonNegativeInt(params.get('offset'), 0)
+
+    const filtered = customerRows
+      .filter(
+        (customer) =>
+          (includeDeleted || customer.取消区分 === 0) &&
+          (!branchCode || customer.部店コード === branchCode) &&
+          (!handlerCode || customer.扱者コード === handlerCode) &&
+          (!accountNo || customer.口座番号 === accountNo) &&
+          (!customerName ||
+            customer.顧客名.includes(customerName) ||
+            customer.顧客名カナ.includes(customerName)) &&
+          // 取引停止区分だけ integer なので、文字列のクエリと比べる前に型をそろえる
+          (!restriction || String(customer.取引停止区分_全取引) === restriction) &&
+          (!accountType || customer.口座区分 === accountType) &&
+          (!corporateType || customer.法人区分 === corporateType),
+      )
+      .sort((a, b) => a.口座番号 - b.口座番号)
+
+    return HttpResponse.json({
+      // total は絞り込み後・ページ切り出し前の件数
+      total: filtered.length,
+      customers: filtered.slice(offset, offset + CUSTOMERS_PER_PAGE),
+    })
+  }),
 
   /*
    * CAマスタ（コーポレートアクション）の一覧。取消済み（取消区分 1）は既定で返さない。
@@ -373,7 +441,9 @@ export const handlers = [
     })
     // 取消済みの行があれば置き換える（＝再有効化。行は増えない）
     blackoutDateRows = existing
-      ? blackoutDateRows.map((blackout) => (blackout.受注不可日 === blackoutDate ? created : blackout))
+      ? blackoutDateRows.map((blackout) =>
+          blackout.受注不可日 === blackoutDate ? created : blackout,
+        )
       : [...blackoutDateRows, created]
 
     return HttpResponse.json(

@@ -20,7 +20,10 @@ const dateTime = new Intl.DateTimeFormat('ja-JP', {
   minute: '2-digit',
 })
 
-/** 米ドル建ての価格を表示用に整形する */
+/**
+ * 米ドル建ての価格を表示用に整形する（`$1,234.56`）。
+ * 通貨記号を前置する注文系の画面向け。単位を後置する画面は formatUsdUnit を使う。
+ */
 export function formatUsd(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
   return usd.format(value)
@@ -34,6 +37,16 @@ export function formatUsd(value) {
 export function formatUsdUnit(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
   return `${usdDecimal.format(value)} ドル`
+}
+
+/**
+ * 円建ての金額を「3,500,000 円」の形に整形する。
+ *
+ * 単位を後置する側の円版（formatUsdUnit と対になる）。マスタ系の一覧・編集で使う。
+ */
+export function formatJpyUnit(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  return `${decimal.format(value)} 円`
 }
 
 /** 株数などの整数を表示用に整形する */

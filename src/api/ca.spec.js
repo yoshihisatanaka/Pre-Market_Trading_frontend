@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import {
   createCorporateAction,
+  deleteCorporateAction,
   fetchCorporateActions,
   updateCorporateAction,
   validateCorporateAction,
@@ -418,5 +419,32 @@ describe('api/ca', () => {
     await expect(
       updateCorporateAction({ id: '7', stockCode: 'A0030', caType: '120', updatedAt: 'old' }),
     ).rejects.toMatchObject({ status: 409, message: detail })
+  })
+
+  it('[CAA-24] 削除は DELETE /ca/{id} を叩き、削除した id を返す', async () => {
+    server.use(
+      http.delete('*/api/ca/:caId', async ({ request }) => {
+        const url = new URL(request.url)
+        lastRequest = { url, params: url.searchParams, body: await request.text() }
+        return HttpResponse.json({ success: true, ca: caItem, message: 'ok' })
+      }),
+    )
+
+    const deleted = await deleteCorporateAction('7')
+
+    expect(lastRequest.url.pathname).toBe('/api/ca/7')
+    // DELETE は本文を取らない（実 API 側も CARequest を受けない）
+    expect(lastRequest.body).toBe('')
+    // 応答の CAResponse は使わず、呼び出し側が成否を判定できる値を返す
+    expect(deleted).toBe('7')
+  })
+
+  it('[CAA-25] 削除が 404 のときはサーバの detail を持つ例外になる', async () => {
+    const detail = '指定されたCAが存在しないか、既に削除されています'
+    server.use(
+      http.delete('*/api/ca/:caId', () => HttpResponse.json({ detail }, { status: 404 })),
+    )
+
+    await expect(deleteCorporateAction('999')).rejects.toMatchObject({ status: 404, message: detail })
   })
 })

@@ -41,6 +41,8 @@ const allRows = sorted.map(toRow)
 const TOTAL = allRows.length
 const secondPage = allRows.slice(PAGE_SIZE)
 const firstRow = allRows[0]
+// 2 ページ目に残る行（CA-27 で 1 件ずつ消す）。削除ボタンの testid に使う ID ごと必要なので生の形
+const secondPageCas = sorted.slice(PAGE_SIZE)
 
 // 絞り込みに使う値もフィクスチャから導く（'AAPL' や '110' を直接書かない）
 const TICKER = firstRow.ticker
@@ -89,6 +91,14 @@ const EDIT_TARGET = {
 }
 const EDITED_NOTE = `${EDIT_TARGET.note}（訂正）`
 
+/*
+ * 削除の対象も一覧の 1 行目（EDIT_TARGET と同じ行）。確認ダイアログに出る対象ラベルは
+ * 成功メッセージと同じ 銘柄コード / CA種別名 / 効力発生日 の 1 行（この行は効力発生日を持つ）。
+ */
+const DELETE_LABEL = [EDIT_TARGET.stockCode, EDIT_TARGET.caTypeName, EDIT_TARGET.effectiveDate].join(
+  ' / ',
+)
+
 // 楽観的ロックの競合（PUT が 409）。実 API と同じ文言を body に載せる
 const CONFLICT_MESSAGE =
   '他のユーザーによってCAデータが更新されています。最新データを再取得してください。'
@@ -106,6 +116,22 @@ function addDialogOf(page) {
 /** 編集モーダル。追加と同じくタイトルが aria-label になる */
 function editDialogOf(page) {
   return page.getByRole('dialog', { name: 'CA 編集' })
+}
+
+/** 削除確認ダイアログ。追加・編集のモーダルと取り違えないよう aria-label（タイトル）で絞る */
+function deleteDialogOf(page) {
+  return page.getByRole('dialog', { name: '削除確認' })
+}
+
+/** 行の削除ボタン。testid は行の CA の ID を含む */
+function deleteButtonOf(page, id) {
+  return page.getByTestId(`ca-delete-${id}`)
+}
+
+/** 一覧の 1 行目（EDIT_TARGET の行）の「削除」を押す */
+async function openDeleteOfFirstRow(page) {
+  await deleteButtonOf(page, EDIT_TARGET.id).click()
+  await expect(deleteDialogOf(page)).toBeVisible()
 }
 
 /** 一覧の 1 行目（EDIT_TARGET の行）の「編集」を押す */
@@ -256,7 +282,7 @@ test.describe('CAマスタ一覧', () => {
     expect(markedColor).not.toBe(plainColor)
   })
 
-  test('[CA-09] 列順が仕様どおりでステータス列が無く行に編集がある', async ({ page }) => {
+  test('[CA-09] 列順が仕様どおりでステータス列が無く行に編集と削除がある', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
@@ -272,11 +298,10 @@ test.describe('CAマスタ一覧', () => {
       '',
     ])
 
-    // 追加はヘッダの「新規追加」から行う。行の操作は「編集」だけ（削除はまだ無い）
+    // 追加はヘッダの「新規追加」から行う。行の操作は「編集」「削除」の 2 つがこの順に並ぶ
     await expect(page.getByTestId('ca-add')).toBeVisible()
     const rowButtons = rowsOf(page).first().getByRole('button')
-    await expect(rowButtons).toHaveCount(1)
-    await expect(rowButtons).toHaveText('編集')
+    await expect(rowButtons).toHaveText(['編集', '削除'])
   })
 
   test('[CA-10] ブラウザバックで前のページに戻る', async ({ page }) => {
@@ -598,5 +623,108 @@ test.describe('CAマスタ 編集', () => {
     await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(rowsOf(page).first()).toContainText(EDIT_TARGET.note)
+  })
+})
+
+/*
+ * 削除（CA-23〜27）。実 API と同じく論理削除で、一覧は既定で取消済みを返さないので
+ * 読み直すと行が消える。既定ハンドラは DELETE を可変配列に反映するため、件数が減るところまで見る。
+ *
+ * 事前検証は無い（DELETE は本文を取らない）ので、エラーの出し先は ca-delete-error の 1 系統だけ。
+ *
+ * CA には自然キーが無く日付 1 つでは行を特定できないので、確認ダイアログの対象ラベルは
+ * 銘柄コード / CA種別名 / 効力発生日 の 3 点を並べた 1 行になる（CA-23）。
+ */
+test.describe('CAマスタ 削除', () => {
+  test('[CA-23] 行の「削除」を押すと対象を示した確認ダイアログが開く', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openDeleteOfFirstRow(page)
+
+    const dialog = deleteDialogOf(page)
+    await expect(dialog).toContainText(DELETE_LABEL)
+    await expect(dialog).toContainText('を削除しますか？')
+    await expect(dialog).toContainText('この操作は元に戻せません。')
+  })
+
+  test('[CA-24] 「削除する」を押すと件数が 1 減りその行が消える', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openDeleteOfFirstRow(page)
+    await page.getByTestId('ca-delete-submit').click()
+
+    await expect(deleteDialogOf(page)).toBeHidden()
+
+    const notice = page.getByTestId('ca-notice')
+    await expect(notice).toBeVisible()
+    await expect(notice).toHaveText(`${DELETE_LABEL} を削除しました。`)
+
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL - 1} 件`)
+    // 消えたのは押した行そのもの（行の testid が ID を持つので同じ行が残っていないと言える）
+    await expect(deleteButtonOf(page, EDIT_TARGET.id)).toHaveCount(0)
+    // 1 ページ目は 2 ページ目から 1 行繰り上がって埋まる
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+  })
+
+  test('[CA-25] 「キャンセル」を押すと何も消えずに閉じる', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openDeleteOfFirstRow(page)
+    await page.getByTestId('ca-delete-cancel').click()
+
+    await expect(deleteDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('ca-notice')).toHaveCount(0)
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(deleteButtonOf(page, EDIT_TARGET.id)).toBeVisible()
+  })
+
+  test('[CA-26] 削除に失敗するとダイアログは開いたままエラーが出る', async ({ page }) => {
+    await mockApi(page, [
+      { method: 'delete', path: '*/api/ca/*', status: 500, body: { detail: ERROR_MESSAGE } },
+    ])
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openDeleteOfFirstRow(page)
+    await page.getByTestId('ca-delete-submit').click()
+
+    const error = page.getByTestId('ca-delete-error')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText(ERROR_MESSAGE)
+
+    // 理由を読ませるためダイアログは閉じない。一覧にも影響しない
+    await expect(deleteDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('ca-notice')).toHaveCount(0)
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
+    await expect(deleteButtonOf(page, EDIT_TARGET.id)).toBeVisible()
+  })
+
+  test('[CA-27] 最終ページを消し切ると 1 ページ前に戻る', async ({ page }) => {
+    // 既定モックの 2 ページ目。1 ページ目は満杯なので、消えるのはこの 6 件だけ
+    await page.goto(`${PATH}?offset=${PAGE_SIZE}`)
+    await expect(rowsOf(page)).toHaveCount(secondPageCas.length)
+
+    for (const [index, ca] of secondPageCas.entries()) {
+      await deleteButtonOf(page, ca.ID).click()
+      await expect(deleteDialogOf(page)).toBeVisible()
+      await page.getByTestId('ca-delete-submit').click()
+      await expect(deleteDialogOf(page)).toBeHidden()
+
+      const remaining = secondPageCas.length - index - 1
+      // 最後の 1 件を消すとこの offset が空になるので、行数ではなく URL の変化で見る
+      if (remaining > 0) {
+        await expect(rowsOf(page)).toHaveCount(remaining)
+        await expect(page).toHaveURL(new RegExp(`offset=${PAGE_SIZE}`))
+      }
+    }
+
+    // 戻る直前に空状態が一瞬描画されるため、最終状態だけを web-first assertion で待つ
+    await expect(page).toHaveURL(new RegExp(`${PATH}$`))
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL - secondPageCas.length} 件`)
   })
 })

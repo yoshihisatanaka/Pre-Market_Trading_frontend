@@ -18,6 +18,12 @@ const routes = [
   },
   {
     // path は navigation.js（サイドメニュー）の項目と一致させる
+    path: '/masters/customers',
+    name: 'customer-list',
+    component: () => import('@/views/CustomerListView.vue'),
+    meta: { title: '顧客マスタ' },
+  },
+  {
     path: '/masters/market-holidays',
     name: 'market-holiday-list',
     component: () => import('@/views/MarketHolidayListView.vue'),

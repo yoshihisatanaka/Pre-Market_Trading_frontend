@@ -1,7 +1,9 @@
 /**
  * サイドメニューの項目定義。
  * 並び・ラベル・パスは Manus モック（docs/mock/layout/masters-users.html）のサイドバーに準拠する。
- * 画面を実装したら router/index.js に同じ path のルートを足す（ここは変更しない）。
+ * ただし原本の取り込みが古く、公開モックのサイドバーにだけある項目がいくつかある
+ * （顧客マスタ / ハードリミットマスタ）。その場合は公開モックの並びに合わせて足す。
+ * 画面を実装したら router/index.js に同じ path のルートを足す。
  * 未実装の path は NotFoundView に落ちる。
  */
 export const navSections = [
@@ -26,6 +28,7 @@ export const navSections = [
   {
     label: 'マスタメンテ',
     items: [
+      { label: '顧客マスタ', to: '/masters/customers' },
       { label: 'ユーザマスタ', to: '/masters/users' },
       { label: '銘柄マスタ', to: '/masters/symbols' },
       { label: '為替マスタ', to: '/masters/fx' },

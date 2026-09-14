@@ -4,6 +4,7 @@ import { canceledMarketHolidays, marketHolidays } from '../fixtures/marketHolida
 import { blackoutDates, canceledBlackoutDates } from '../fixtures/blackoutDates'
 import { canceledCorporateActions, corporateActions } from '../fixtures/ca'
 import { hardLimitSetting } from '../fixtures/hardLimits'
+import { codeMasters } from '../fixtures/codes'
 
 /*
  * モックハンドラの集約。
@@ -75,6 +76,12 @@ export function resetMockState() {
 
 export const handlers = [
   http.get('*/api/orders', () => HttpResponse.json(orderListResponse)),
+
+  /*
+   * 全コードマスタ一括取得。各画面のプルダウンの選択肢はここから来る。
+   * 実 API は絞り込みのクエリを持たず、常に全部返す。
+   */
+  http.get('*/api/codes', () => HttpResponse.json(codeMasters)),
 
   /*
    * CAマスタ（コーポレートアクション）の一覧。取消済み（取消区分 1）は既定で返さない。
@@ -316,7 +323,9 @@ export const handlers = [
     })
     // 取消済みの行があれば置き換える（＝再有効化。行は増えない）
     blackoutDateRows = existing
-      ? blackoutDateRows.map((blackout) => (blackout.受注不可日 === blackoutDate ? created : blackout))
+      ? blackoutDateRows.map((blackout) =>
+          blackout.受注不可日 === blackoutDate ? created : blackout,
+        )
       : [...blackoutDateRows, created]
 
     return HttpResponse.json(

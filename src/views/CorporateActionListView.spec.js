@@ -190,6 +190,29 @@ const submitEdit = async (wrapper) => {
 const editValidationMessages = (wrapper) =>
   wrapper.findAll('[data-testid="ca-edit-validation-error"] li').map((item) => item.text())
 
+/* ここから削除確認ダイアログ用のヘルパ */
+
+const deleteSubmit = (wrapper) => wrapper.find('[data-testid="ca-delete-submit"]')
+const deleteCancel = (wrapper) => wrapper.find('[data-testid="ca-delete-cancel"]')
+
+/** 一覧の n 行目の「削除」を押す */
+const openDeleteModal = async (wrapper, index = 0) => {
+  await wrapper.find(`[data-testid="ca-delete-${firstPage[index].id}"]`).trigger('click')
+}
+
+const confirmDelete = async (wrapper) => {
+  await deleteSubmit(wrapper).trigger('click')
+  await settle()
+}
+
+/** 削除を 500 にする差し替え */
+const failDelete = () =>
+  server.use(
+    http.delete('*/api/ca/:caId', () =>
+      HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+    ),
+  )
+
 /** 更新を 409（楽観的ロックの競合）にする差し替え */
 const conflictOnUpdate = () =>
   server.use(
@@ -370,17 +393,16 @@ describe('CorporateActionListView', () => {
     }
   })
 
-  it('[CAV-16] ヘッダに追加、行に編集の導線があり、削除はまだ無い', async () => {
+  it('[CAV-16] ヘッダに追加、行に編集と削除の導線がある', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     expect(exists(wrapper, 'ca-reload')).toBe(true)
     expect(exists(wrapper, 'ca-add')).toBe(true)
 
-    // 行のボタンは「編集」1 つだけ（削除は別ブランチで足す）
+    // 破壊的な操作を最後にする（モーダルのフッタの キャンセル → 危険色 と同じ並び）
     const rowButtons = rows(wrapper)[0].findAll('button')
-    expect(rowButtons).toHaveLength(1)
-    expect(rowButtons[0].text()).toBe('編集')
+    expect(rowButtons.map((button) => button.text())).toEqual(['編集', '削除'])
   })
 
   it('[CAV-17] 追加が成功するとモーダルが閉じ、成功メッセージと増えた件数が出る', async () => {
@@ -745,6 +767,112 @@ describe('CorporateActionListView', () => {
     // 空のページに取り残さない。絞り込み条件は残したまま 1 ページ前へ戻す
     expect(router.currentRoute.value.query.offset).toBeUndefined()
     expect(router.currentRoute.value.query.ca_type).toBe(FILTER_TYPE)
+    expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
+  })
+
+  it('[CAV-34] 削除確認は消す対象と取り消せない旨を出す', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openDeleteModal(wrapper)
+
+    const dialog = wrapper.find('[role="dialog"]')
+    expect(dialog.text()).toContain(firstPage[0].stockCode)
+    expect(dialog.text()).toContain(firstPage[0].caTypeName)
+    expect(dialog.text()).toContain(firstPage[0].effectiveDate)
+    expect(dialog.text()).toContain('この操作は元に戻せません。')
+  })
+
+  it('[CAV-35] 削除が成功するとダイアログが閉じ、件数が 1 減る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+
+    await confirmDelete(wrapper)
+
+    expect(exists(wrapper, 'ca-delete-submit')).toBe(false)
+    const notice = wrapper.find('[data-testid="ca-notice"]').text()
+    expect(notice).toContain(firstPage[0].stockCode)
+    expect(notice).toContain(firstPage[0].caTypeName)
+    expect(countText(wrapper)).toContain(String(TOTAL - 1))
+    /*
+     * 論理削除だが、一覧は取消済みを返さないので消えたように見える。
+     * 備考や銘柄は他の行と重なりうる（フィクスチャは同じ CA を銘柄ごとに持つ）ので、
+     * 行そのものが消えたことは id で見る。
+     */
+    expect(exists(wrapper, `ca-edit-${firstPage[0].id}`)).toBe(false)
+  })
+
+  it('[CAV-36] 削除に失敗するとダイアログは開いたまま理由を出す', async () => {
+    failDelete()
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+
+    await confirmDelete(wrapper)
+
+    expect(exists(wrapper, 'ca-delete-submit')).toBe(true)
+    expect(wrapper.find('[data-testid="ca-delete-error"]').text()).toContain(ERROR_MESSAGE)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[CAV-37] 削除中は削除もキャンセルもできない', async () => {
+    server.use(
+      http.delete('*/api/ca/:caId', async () => {
+        await delay(20)
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+
+    const pending = deleteSubmit(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(deleteSubmit(wrapper).text()).toContain('削除中…')
+    expect(deleteSubmit(wrapper).attributes('disabled')).toBeDefined()
+    expect(deleteCancel(wrapper).attributes('disabled')).toBeDefined()
+
+    await pending
+    await settle()
+  })
+
+  it('[CAV-38] 最終ページの最後の 1 件を消すと 1 ページ戻る', async () => {
+    // 全件をちょうど「1 ページ + 1 件」にして、2 ページ目の唯一の行を消す
+    let rowsState = Array.from({ length: PAGE_SIZE + 1 }, (_, index) => ({
+      ...corporateActions[0],
+      ID: 600 + index,
+    }))
+    const LAST_ID = 600 + PAGE_SIZE
+
+    server.use(
+      http.get('*/api/ca', ({ request }) => {
+        const offset = Number(new URL(request.url).searchParams.get('offset') ?? 0)
+        return HttpResponse.json({
+          total: rowsState.length,
+          limit: PAGE_SIZE,
+          offset,
+          ca_list: rowsState.slice(offset, offset + PAGE_SIZE),
+        })
+      }),
+      http.delete('*/api/ca/:caId', ({ params }) => {
+        const id = Number(params.caId)
+        const target = rowsState.find((ca) => ca.ID === id)
+        rowsState = rowsState.filter((ca) => ca.ID !== id)
+        return HttpResponse.json({ success: true, ca: target, message: 'ok' })
+      }),
+    )
+
+    const { wrapper, router } = await mountView({ offset: String(PAGE_SIZE) })
+    await settle()
+    expect(rows(wrapper)).toHaveLength(1)
+
+    await wrapper.find(`[data-testid="ca-delete-${LAST_ID}"]`).trigger('click')
+    await confirmDelete(wrapper)
+    await settle()
+
+    expect(router.currentRoute.value.query.offset).toBeUndefined()
     expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
   })
 })

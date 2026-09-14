@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import {
   createCorporateAction,
+  deleteCorporateAction,
   fetchCorporateActions,
   updateCorporateAction,
   validateCorporateAction,
@@ -19,7 +20,7 @@ export const CA_PAGE_SIZE = 50
  * CAマスタ（コーポレートアクション）のストア。
  *
  * ページ位置・検索条件は URL クエリが正で、ここはその写しを持つだけ（画面側が load で渡す）。
- * 取得・競合防止・登録・更新の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
+ * 取得・競合防止・登録・更新・削除の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
  * 1 件の形は src/api/ca.js の JSDoc を参照。
  *
  * 登録も編集も「事前検証 → 登録 / 更新」の 2 段（実 API がその前提で分かれている）。
@@ -34,9 +35,8 @@ export const CA_PAGE_SIZE = 50
  * warnings を受け取らないため（理由はそちらの JSDoc。CA は主キーが surrogate な ID で、
  * 登録が必ず新しい行を作るので「取消済みの行を再有効化する」ような確認事項が起きない）。
  *
- * **削除はまだ無い**ので deleteItem を渡さない。
- * useCrudList はそれを渡さない限り削除の名前を公開しないので、
- * この段階では store.remove() は存在しない（別途入れる）。
+ * 削除は実 API 側が論理削除（取消区分=1）。一覧は既定で取消済みを返さないので、
+ * 読み直すと消えたように見える。事前検証は無い（DELETE は本文を取らない）。
  *
  * 並べ替えはサーバの責務で、ここでは触らない。
  */
@@ -48,5 +48,6 @@ export const useCaStore = defineStore('ca', () =>
     createItem: createCorporateAction,
     validateItem: validateCorporateAction,
     updateItem: updateCorporateAction,
+    deleteItem: deleteCorporateAction,
   }),
 )

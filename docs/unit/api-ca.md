@@ -57,3 +57,5 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 | CAA-21 | 既定モック | `updateCorporateAction({ updatedAt: '', … })` を呼ぶ | 本文に `更新日時` のキーが載らない（未指定を「照合しない」と解釈させる。登録直後の行は更新日時が無い） | 実装済 |
 | CAA-22 | 既定モック | 編集の payload（`id` と `updatedAt` を含む）をそのまま `validateCorporateAction()` に渡す | 事前検証の本文に `更新日時` が載らない（事前検証は楽観的ロックの照合をしない） | 実装済 |
 | CAA-23 | `PUT /api/ca/{id}` が 409 を返す | `updateCorporateAction()` を呼ぶ | 例外が投げられ、`status` が 409、`message` にサーバの `detail` が入る | 実装済 |
+| CAA-24 | 既定モック | `deleteCorporateAction('7')` を呼ぶ | `DELETE /api/ca/7` を叩き、本文を送らない。戻り値は削除した id（`'7'`） | 実装済 |
+| CAA-25 | `DELETE /api/ca/{id}` が 404 を返す | `deleteCorporateAction()` を呼ぶ | 例外が投げられ、`message` にサーバの `detail` が入る | 実装済 |

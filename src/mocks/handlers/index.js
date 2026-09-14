@@ -352,6 +352,31 @@ export const handlers = [
     return HttpResponse.json({ success: true, ca: updated, message: 'CAを更新しました' })
   }),
 
+  /*
+   * CA の論理削除。行は残したまま 取消区分 を 1 にする。
+   * 実 API は ユーザー操作フラグ も 1 に立てる（受注不可日のモックは削除時に触らないので、
+   * ここは意図的に違う。include_deleted=true で見たときに差が出る）。
+   */
+  http.delete('*/api/ca/:caId', ({ params }) => {
+    const targetId = Number(params.caId)
+    const target = caRows.find((ca) => ca.ID === targetId && ca.取消区分 === 0)
+
+    if (!target) {
+      return detailError(404, '指定されたCAが存在しないか、既に削除されています')
+    }
+
+    const deleted = {
+      ...target,
+      取消区分: 1,
+      ユーザー操作フラグ: 1,
+      取消日時: nowIsoTimestamp(),
+      取消者: '006',
+    }
+    caRows = caRows.map((ca) => (ca.ID === targetId ? deleted : ca))
+
+    return HttpResponse.json({ success: true, ca: deleted, message: 'CAを削除しました' })
+  }),
+
   // 海外休場日マスタの一覧。取消済み（取消区分 1）は既定で返さない
   http.get('*/api/holidays', ({ request }) => {
     const params = new URL(request.url).searchParams

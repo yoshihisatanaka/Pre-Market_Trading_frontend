@@ -59,6 +59,15 @@ function failCreate() {
   )
 }
 
+/** 削除を 500 にする差し替え */
+function failDelete() {
+  server.use(
+    http.delete('*/api/ca/:caId', () =>
+      HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+    ),
+  )
+}
+
 /** 更新（事前検証は既定のまま）を 409 にする差し替え */
 function conflictOnUpdate(detail) {
   server.use(
@@ -189,10 +198,9 @@ describe('stores/ca', () => {
     expect(store.items.map((item) => item.id)).toEqual(tickerIds)
   })
 
-  it('[CAS-09] 登録と更新は公開するが、まだ無い削除は公開しない', () => {
+  it('[CAS-09] 登録・更新・削除の 3 系統をすべて公開する', () => {
     const store = useCaStore()
 
-    // 持っている操作
     expect(typeof store.create).toBe('function')
     expect(typeof store.clearCreateError).toBe('function')
     expect(store.creating).toBe(false)
@@ -203,9 +211,10 @@ describe('stores/ca', () => {
     expect(store.updating).toBe(false)
     expect(store.updateValidationErrors).toEqual([])
 
-    // まだ無い操作は、できるように見せない（呼べば「関数が無い」で落ちる）
-    expect(store.remove).toBeUndefined()
-    expect(store.deleting).toBeUndefined()
+    expect(typeof store.remove).toBe('function')
+    expect(typeof store.clearDeleteError).toBe('function')
+    expect(store.deleting).toBe(false)
+    expect(store.deleteError).toBeNull()
   })
 
   it('[CAS-10] 古い応答が新しい結果を上書きしない', async () => {
@@ -374,5 +383,44 @@ describe('stores/ca', () => {
     expect(store.caType).toBe(CA_TYPE)
     expect(store.total).toBe(caTypeIds.length - 1)
     expect(store.items.every((item) => item.caType === CA_TYPE)).toBe(true)
+  })
+
+  it('[CAS-22] 削除に成功すると一覧からその行が消える', async () => {
+    const store = useCaStore()
+    await store.load()
+    const target = store.items[0]
+
+    const deleted = await store.remove(target.id)
+
+    expect(deleted).toBe(true)
+    expect(store.total).toBe(TOTAL - 1)
+    // 実 API は論理削除だが、一覧は取消済みを返さないので消えたように見える
+    expect(store.items.map((item) => item.id)).not.toContain(target.id)
+    expect(store.deleteError).toBeNull()
+  })
+
+  it('[CAS-23] 削除が失敗したときは deleteError に入り、一覧は変わらない', async () => {
+    failDelete()
+    const store = useCaStore()
+    await store.load()
+    const target = store.items[0]
+
+    const deleted = await store.remove(target.id)
+
+    expect(deleted).toBe(false)
+    expect(store.deleteError?.message).toBe(ERROR_MESSAGE)
+    expect(store.total).toBe(TOTAL)
+    expect(store.items.map((item) => item.id)).toContain(target.id)
+  })
+
+  it('[CAS-24] clearDeleteError は前回の失敗を消す', async () => {
+    failDelete()
+    const store = useCaStore()
+    await store.load()
+    await store.remove(store.items[0].id)
+
+    store.clearDeleteError()
+
+    expect(store.deleteError).toBeNull()
   })
 })

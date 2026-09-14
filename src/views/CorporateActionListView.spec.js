@@ -3,9 +3,9 @@ import { h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { corporateActions } from '@/mocks/fixtures/ca'
+import { caStocks, corporateActions } from '@/mocks/fixtures/ca'
 import { CA_PAGE_SIZE } from '@/stores/ca'
 import CorporateActionListView from './CorporateActionListView.vue'
 
@@ -57,6 +57,17 @@ const oddPage = allRows.slice(ODD_OFFSET, ODD_OFFSET + PAGE_SIZE)
 const TICKER = allRows[0].ticker
 const CA_TYPE = sorted[0].CA種別
 const bothFiltered = sorted.filter((ca) => ca.Ticker === TICKER && ca.CA種別 === CA_TYPE)
+
+/*
+ * 追加に使う値。銘柄コードはモックの銘柄マスタ（caStocks）に実在するものでなければ
+ * 事前検証で弾かれるので、フィクスチャから採る。
+ */
+const NEW_STOCK_CODE = caStocks[0].stockCode
+const NEW_CA_TYPE = CA_TYPE
+const NEW_CA_TYPE_NAME = sorted[0].CA種別名
+
+// 銘柄マスタに無い銘柄コード（事前検証が不合格を返す）
+const UNKNOWN_STOCK_CODE = 'ZZZZ'
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
@@ -113,6 +124,45 @@ const exists = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`).ex
 const headers = (wrapper) => wrapper.findAll('th').map((th) => th.text())
 const pageButton = (wrapper, page) =>
   wrapper.find(`[data-testid="pagination-page"][data-page="${page}"]`)
+
+/* ここから新規追加モーダル用のヘルパ */
+
+const addInput = (wrapper, name) => wrapper.find(`[data-testid="ca-add-${name}"]`)
+const addSubmit = (wrapper) => wrapper.find('[data-testid="ca-add-submit"]')
+const addCancel = (wrapper) => wrapper.find('[data-testid="ca-add-cancel"]')
+
+const openAddModal = async (wrapper) => {
+  await wrapper.find('[data-testid="ca-add"]').trigger('click')
+}
+
+/** 入力欄をまとめて埋める（キーは testid の `ca-add-` より後ろ） */
+const fillAdd = async (wrapper, values) => {
+  for (const [name, value] of Object.entries(values)) {
+    await addInput(wrapper, name).setValue(value)
+  }
+}
+
+const submitAdd = async (wrapper) => {
+  await addSubmit(wrapper).trigger('click')
+  await settle()
+}
+
+// 事前検証の理由は箇条書きで出るので、行ごとのテキストで取り出す
+const validationMessages = (wrapper) =>
+  wrapper.findAll('[data-testid="ca-add-validation-error"] li').map((item) => item.text())
+
+/** 入力欄の直下に出ている理由（FormField が aria-describedby で結び付けている） */
+const fieldError = (wrapper, input) => {
+  const ids = (input.attributes('aria-describedby') ?? '').split(' ').filter(Boolean)
+  const found = ids.map((id) => wrapper.find(`#${id}[role="alert"]`)).find((el) => el.exists())
+  return found ? found.text() : ''
+}
+
+/** 登録（事前検証は既定のまま）を 500 にする差し替え */
+const failCreate = () =>
+  server.use(
+    http.post('*/api/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+  )
 
 describe('CorporateActionListView', () => {
   it('[CAV-01] 応答を待つ間はローディングだけを出す', async () => {
@@ -284,13 +334,173 @@ describe('CorporateActionListView', () => {
     }
   })
 
-  it('[CAV-16] 読むだけの画面なので追加・編集・削除の導線を持たない', async () => {
+  it('[CAV-16] ヘッダに追加の導線があり、行には編集・削除のボタンが無い', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     expect(exists(wrapper, 'ca-reload')).toBe(true)
-    expect(exists(wrapper, 'ca-add')).toBe(false)
+    expect(exists(wrapper, 'ca-add')).toBe(true)
     // 行の中にボタンが無いこと（操作列そのものが無い）
     expect(rows(wrapper)[0].findAll('button')).toHaveLength(0)
+  })
+
+  it('[CAV-17] 追加が成功するとモーダルが閉じ、成功メッセージと増えた件数が出る', async () => {
+    const { wrapper, router } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, { 'stock-code': NEW_STOCK_CODE, type: NEW_CA_TYPE })
+    await submitAdd(wrapper)
+
+    expect(exists(wrapper, 'ca-add-form')).toBe(false)
+    const notice = wrapper.find('[data-testid="ca-notice"]').text()
+    expect(notice).toContain(NEW_STOCK_CODE)
+    expect(notice).toContain(NEW_CA_TYPE_NAME)
+    expect(countText(wrapper)).toContain(String(TOTAL + 1))
+    // 一覧の単方向フローには触らない
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('[CAV-18] 必須が未入力なら項目の直下に理由を出し、API へ送らない', async () => {
+    let validateCalls = 0
+    let createCalls = 0
+    server.use(
+      http.post('*/api/ca/validate', () => {
+        validateCalls += 1
+        return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
+      }),
+      http.post('*/api/ca', () => {
+        createCalls += 1
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await submitAdd(wrapper)
+
+    expect(exists(wrapper, 'ca-add-form')).toBe(true)
+    expect(fieldError(wrapper, addInput(wrapper, 'stock-code'))).toBe(
+      '銘柄コードを入力してください。',
+    )
+    expect(fieldError(wrapper, addInput(wrapper, 'type'))).toBe('CA種別を選択してください。')
+    // 無駄な往復をしない（事前検証も登録も呼ばない）
+    expect(validateCalls).toBe(0)
+    expect(createCalls).toBe(0)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[CAV-19] 比率は片方だけ・0 以下を弾き、理由を欠けている側に出す', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, { 'stock-code': NEW_STOCK_CODE, type: NEW_CA_TYPE })
+
+    // 分母だけを入れると、欠けている分子の側に理由が出る
+    await fillAdd(wrapper, { denominator: '1' })
+    await submitAdd(wrapper)
+
+    expect(exists(wrapper, 'ca-add-form')).toBe(true)
+    expect(fieldError(wrapper, addInput(wrapper, 'denominator'))).toBe('')
+    expect(fieldError(wrapper, addInput(wrapper, 'numerator'))).toBe(
+      '比率は分母と分子の両方を入力してください。',
+    )
+
+    // 0 を入れた項目には、正の数値を求める理由が出る
+    await fillAdd(wrapper, { numerator: '0' })
+    await submitAdd(wrapper)
+
+    expect(fieldError(wrapper, addInput(wrapper, 'numerator'))).toBe(
+      '分子には正の数値を入力してください。',
+    )
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[CAV-20] 事前検証の不合格はモーダル内に箇条書きで出し、登録しない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, { 'stock-code': UNKNOWN_STOCK_CODE, type: NEW_CA_TYPE })
+    await submitAdd(wrapper)
+
+    expect(exists(wrapper, 'ca-add-form')).toBe(true)
+    expect(validationMessages(wrapper)).toEqual([
+      `銘柄コード(${UNKNOWN_STOCK_CODE})は銘柄マスタに存在しません`,
+    ])
+    // 通信は成功しているので、サーバ障害の枠には出さない
+    expect(exists(wrapper, 'ca-add-error')).toBe(false)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[CAV-21] 通信・サーバ障害はモーダル内に 1 行で出す', async () => {
+    failCreate()
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, { 'stock-code': NEW_STOCK_CODE, type: NEW_CA_TYPE })
+    await submitAdd(wrapper)
+
+    expect(exists(wrapper, 'ca-add-form')).toBe(true)
+    expect(wrapper.find('[data-testid="ca-add-error"]').text()).toContain(ERROR_MESSAGE)
+    // 事前検証は通っているので、そちらの枠には出さない
+    expect(exists(wrapper, 'ca-add-validation-error')).toBe(false)
+  })
+
+  it('[CAV-22] 登録中は送信もキャンセルもできない', async () => {
+    server.use(
+      http.post('*/api/ca', async () => {
+        await delay(20)
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, { 'stock-code': NEW_STOCK_CODE, type: NEW_CA_TYPE })
+
+    // 応答を待たずに押した直後を見る
+    const pending = addSubmit(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(addSubmit(wrapper).text()).toContain('追加中…')
+    expect(addSubmit(wrapper).attributes('disabled')).toBeDefined()
+    expect(addCancel(wrapper).attributes('disabled')).toBeDefined()
+
+    await pending
+    await settle()
+  })
+
+  it('[CAV-23] モーダルを開き直すと前回の入力と失敗理由が残らない', async () => {
+    failCreate()
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, { 'stock-code': NEW_STOCK_CODE, type: NEW_CA_TYPE, note: 'メモ' })
+    await submitAdd(wrapper)
+    expect(exists(wrapper, 'ca-add-error')).toBe(true)
+
+    await addCancel(wrapper).trigger('click')
+    await openAddModal(wrapper)
+
+    expect(exists(wrapper, 'ca-add-error')).toBe(false)
+    expect(addInput(wrapper, 'stock-code').element.value).toBe('')
+    expect(addInput(wrapper, 'type').element.value).toBe('')
+    expect(addInput(wrapper, 'note').element.value).toBe('')
+  })
+
+  it('[CAV-24] 追加の成功メッセージは次にモーダルを開いたときに消える', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, { 'stock-code': NEW_STOCK_CODE, type: NEW_CA_TYPE })
+    await submitAdd(wrapper)
+    expect(exists(wrapper, 'ca-notice')).toBe(true)
+
+    await openAddModal(wrapper)
+
+    expect(exists(wrapper, 'ca-notice')).toBe(false)
   })
 })

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
-import { corporateActions } from '../src/mocks/fixtures/ca'
+import { caStocks, corporateActions } from '../src/mocks/fixtures/ca'
+import { CA_TYPE_OPTIONS } from '../src/utils/caTypes'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/ca.md（タイトル先頭の [CA-xx] が対応 ID）
@@ -53,9 +54,34 @@ const NO_MATCH = 'ZZZZ'
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
+/*
+ * 新規追加に使う値。銘柄コードは銘柄マスタ（caStocks）に実在するものでないと
+ * サーバの事前検証で弾かれるので、フィクスチャの先頭から採る。
+ */
+const NEW_STOCK = caStocks[0]
+const NEW_CA_TYPE = CA_TYPE_OPTIONS.find((option) => option.label === '株式分割')
+// 比率は 分母:分子 をサーバが組んだ表示項目（src/mocks/fixtures/ca.js の formatRatio）
+const NEW_DENOMINATOR = '1'
+const NEW_NUMERATOR = '2'
+const NEW_RATIO = `${NEW_DENOMINATOR}:${NEW_NUMERATOR}`
+
+// 銘柄マスタ（caStocks）のどのコードにも当たらない文字列
+const UNKNOWN_STOCK_CODE = 'ZZZZZ'
+
 /** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function rowsOf(page) {
   return page.getByTestId('ca-table').getByTestId('data-table-row')
+}
+
+/** 追加モーダル。role=dialog の aria-label はモーダルのタイトル（BaseModal） */
+function addDialogOf(page) {
+  return page.getByRole('dialog', { name: 'CA 新規追加' })
+}
+
+/** 必須の 2 項目だけ埋める（日付と比率は任意） */
+async function fillRequiredAddFields(page) {
+  await page.getByTestId('ca-add-stock-code').fill(NEW_STOCK.stockCode)
+  await page.getByTestId('ca-add-type').selectOption(NEW_CA_TYPE.value)
 }
 
 /** 行の背景色。CSS クラス名ではなく「見えかた」で確かめる（CA-08） */
@@ -208,8 +234,8 @@ test.describe('CAマスタ一覧', () => {
       '備考',
     ])
 
-    // 読むだけの画面。追加の導線も行ごとの操作も持たない
-    await expect(page.getByTestId('ca-add')).toHaveCount(0)
+    // 追加はヘッダの「新規追加」から行う。行には編集・削除のボタンが無い
+    await expect(page.getByTestId('ca-add')).toBeVisible()
     await expect(rowsOf(page).first().getByRole('button')).toHaveCount(0)
   })
 
@@ -224,6 +250,167 @@ test.describe('CAマスタ一覧', () => {
     await page.goBack()
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(rowsOf(page).first()).toContainText(firstRow.stockCode)
+  })
+})
+
+/*
+ * 新規追加（CA-11〜16）。既定ハンドラは登録した行を保持するので、件数が増えるところまで見る。
+ * モックの可変状態はページを開き直すと初期化されるため、テスト間で持ち越さない。
+ *
+ * 登録は「事前検証 → 登録」の 2 段で、エラーの出し先が 3 系統に分かれる。
+ *   必須未入力       … FormField の error（CA-13）
+ *   事前検証の不合格 … ca-add-validation-error の箇条書き（CA-14）
+ *   通信・サーバ障害 … ca-add-error（CA-15）
+ * 事前検証と登録は別パス（/ca/validate と /ca）なので、mockApi() で一方だけを差し替えられる。
+ *
+ * CA には一意性の規則が無いので、サーバが見るのは銘柄コードが銘柄マスタに実在するか（CA-14）。
+ */
+test.describe('CAマスタ 新規追加', () => {
+  test('[CA-11] 必要な項目を入れて追加すると件数が 1 増える', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('ca-add').click()
+    await fillRequiredAddFields(page)
+    await page.getByTestId('ca-add-denominator').fill(NEW_DENOMINATOR)
+    await page.getByTestId('ca-add-numerator').fill(NEW_NUMERATOR)
+    await page.getByTestId('ca-add-submit').click()
+
+    await expect(addDialogOf(page)).toBeHidden()
+
+    /*
+     * 追加した行が 1 ページ目に出るとは限らないので、何が増えたのかはメッセージで示す。
+     * 効力発生日を入れていないので、ラベルは銘柄コードと CA種別名の 2 点だけになる。
+     */
+    const notice = page.getByTestId('ca-notice')
+    await expect(notice).toBeVisible()
+    await expect(notice).toHaveText(
+      `${NEW_STOCK.stockCode} / ${NEW_CA_TYPE.label} を追加しました。`,
+    )
+
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL + 1} 件`)
+
+    // 登録は一覧の単方向フローに触らない（URL は変わらない）
+    await expect(page).toHaveURL(new RegExp(`${PATH}$`))
+  })
+
+  test('[CA-12] 日付の無い行は一覧の先頭に手動操作の色で出る', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('ca-add').click()
+    await fillRequiredAddFields(page)
+    await page.getByTestId('ca-add-denominator').fill(NEW_DENOMINATOR)
+    await page.getByTestId('ca-add-numerator').fill(NEW_NUMERATOR)
+    await page.getByTestId('ca-add-submit').click()
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL + 1} 件`)
+
+    /*
+     * サーバの並びは COALESCE(効力発生日, 権利付最終日, 99999999) の降順なので、
+     * 日付を持たない行は先頭に来る。
+     */
+    const rows = rowsOf(page)
+    const created = rows.first()
+    await expect(created).toContainText(NEW_STOCK.stockCode)
+    // Ticker は送っていない。サーバが銘柄マスタから補完する
+    await expect(created).toContainText(NEW_STOCK.ticker)
+    await expect(created).toContainText(NEW_CA_TYPE.label)
+    await expect(created).toContainText(NEW_RATIO)
+
+    /*
+     * 画面から登録した行はユーザー操作フラグ 1 になる（CA-08 と同じく色で確かめる）。
+     * 1 行増えたぶん、既存の行の位置は 1 つずつ下にずれる。
+     */
+    const markedIndex = allRows.findIndex((row) => row.userModified) + 1
+    const plainIndex = allRows.findIndex((row) => !row.userModified) + 1
+    expect(markedIndex).toBeLessThan(PAGE_SIZE)
+    expect(plainIndex).toBeLessThan(PAGE_SIZE)
+
+    const createdColor = await backgroundColorOf(created)
+    expect(createdColor).toBe(await backgroundColorOf(rows.nth(markedIndex)))
+    expect(createdColor).not.toBe(await backgroundColorOf(rows.nth(plainIndex)))
+  })
+
+  test('[CA-13] 未入力のまま「追加」を押すと項目ごとにエラーが出る', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('ca-add').click()
+    const dialog = addDialogOf(page)
+    await page.getByTestId('ca-add-submit').click()
+
+    await expect(dialog.getByText('銘柄コードを入力してください。')).toBeVisible()
+    await expect(dialog.getByText('CA種別を選択してください。')).toBeVisible()
+
+    // 3 系統のうち項目直下だけに出る。サーバへは行かないので他の 2 つは出ない
+    await expect(page.getByTestId('ca-add-validation-error')).toHaveCount(0)
+    await expect(page.getByTestId('ca-add-error')).toHaveCount(0)
+
+    // 入力を直せるようモーダルは閉じない。一覧にも影響しない
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
+  })
+
+  test('[CA-14] 銘柄マスタに無い銘柄コードは事前検証で弾かれる', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('ca-add').click()
+    await page.getByTestId('ca-add-stock-code').fill(UNKNOWN_STOCK_CODE)
+    await page.getByTestId('ca-add-type').selectOption(NEW_CA_TYPE.value)
+    await page.getByTestId('ca-add-submit').click()
+
+    const validationError = page.getByTestId('ca-add-validation-error')
+    await expect(validationError).toBeVisible()
+    await expect(validationError.getByRole('listitem')).toHaveText([
+      `銘柄コード(${UNKNOWN_STOCK_CODE})は銘柄マスタに存在しません`,
+    ])
+
+    // 事前検証の不合格は通信障害ではないので、専用の表示には出ない
+    await expect(page.getByTestId('ca-add-error')).toHaveCount(0)
+
+    await expect(addDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('ca-notice')).toHaveCount(0)
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
+  })
+
+  test('[CA-15] 登録に失敗するとモーダルは開いたままエラーが出る', async ({ page }) => {
+    // 事前検証（*/api/ca/validate）はパスが別なので既定ハンドラのまま通る
+    await mockApi(page, [
+      { method: 'post', path: '*/api/ca', status: 500, body: { detail: ERROR_MESSAGE } },
+    ])
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('ca-add').click()
+    await fillRequiredAddFields(page)
+    await page.getByTestId('ca-add-submit').click()
+
+    const error = page.getByTestId('ca-add-error')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText(ERROR_MESSAGE)
+
+    // 事前検証は通っているので箇条書きは出ない
+    await expect(page.getByTestId('ca-add-validation-error')).toHaveCount(0)
+
+    await expect(addDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('ca-notice')).toHaveCount(0)
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
+  })
+
+  test('[CA-16] 「キャンセル」を押すと何も増えずに閉じる', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('ca-add').click()
+    await fillRequiredAddFields(page)
+    await page.getByTestId('ca-add-cancel').click()
+
+    await expect(addDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('ca-notice')).toHaveCount(0)
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(rowsOf(page).first()).toContainText(firstRow.stockCode)
   })

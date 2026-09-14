@@ -14,7 +14,7 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 **送信されたリクエストそのもの**を `docs/api/openapi.json` の宣言と突き合わせる。
 受注不可日の同種の文書は [api-blackout-dates.md](api-blackout-dates.md)。
 
-取り違えやすい点を 5 つ固定する。
+取り違えやすい点を 6 つ固定する。
 
 - **`limit` を送る。** 受注不可日の `/blackout-dates` と違い、`GET /ca` は `limit`（既定 50・最大 200）を
   クエリで受け付ける。表示件数を変えたらそのまま送る
@@ -26,6 +26,11 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
   キーごと省くのではなく `null` を送る。`CARequest` はレコード全体を差し替える形なので、
   キーを落とすと「変えない」と「空にする」が区別できない（CAA-12）
 - **`warnings` は受け取らない。** 応答は持つが、CA では常に空とみなす（CAA-16）
+- **楽観的ロックの合札は整形せず素通しする。** `CAItem.更新日時` は ISO の date-time で返り、
+  `CARequest.更新日時` の説明は `'YYYY-MM-DD HH:MM:SS'` と書かれているが、
+  **受注不可日（`BlackoutDateItem` / `BlackoutDateRequest`）もまったく同じ非対称**で、
+  そちらは ISO を素通しして実 API の編集が通っている（`docs/e2e/blackout-dates-real-api.md` の BDR-06）。
+  合札は照合用の不透明なトークンなので、秒未満の桁を落とす整形はかえって不一致を作る（CAA-20 / 21）
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
@@ -47,3 +52,8 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 | CAA-16 | 事前検証が `warnings` を含む応答を返す | `validateCorporateAction()` を呼ぶ | 戻り値は `{ valid, errors }` だけで `warnings` を含まない（CA では警告を扱わない） | 実装済 |
 | CAA-17 | 既定モック | `createCorporateAction({ denominator: '1', numerator: '2.5' })` のように分母・分子を文字列で渡す | 本文では number になる（画面の `type="number"` が持つ文字列をこの層で数値に直す） | 実装済 |
 | CAA-18 | `POST /api/ca` が 400 を返す | `createCorporateAction()` を呼ぶ | 例外が投げられ、`message` にサーバの `detail` が入る | 実装済 |
+| CAA-19 | 既定モック | `updateCorporateAction({ id: '7', stockCode, caType, … })` を呼ぶ | `PUT /api/ca/7` を叩き、本文が `CARequest` の形（日本語キー・日付は integer）になる。応答の `ca` がアプリ内モデルに変換されて返る | 実装済 |
+| CAA-20 | 既定モック | `updateCorporateAction({ updatedAt: '2026-08-20T09:30:00', … })` を呼ぶ | 本文の `更新日時` が **`'2026-08-20T09:30:00'` のまま**載る（半角空白へ整形しない） | 実装済 |
+| CAA-21 | 既定モック | `updateCorporateAction({ updatedAt: '', … })` を呼ぶ | 本文に `更新日時` のキーが載らない（未指定を「照合しない」と解釈させる。登録直後の行は更新日時が無い） | 実装済 |
+| CAA-22 | 既定モック | 編集の payload（`id` と `updatedAt` を含む）をそのまま `validateCorporateAction()` に渡す | 事前検証の本文に `更新日時` が載らない（事前検証は楽観的ロックの照合をしない） | 実装済 |
+| CAA-23 | `PUT /api/ca/{id}` が 409 を返す | `updateCorporateAction()` を呼ぶ | 例外が投げられ、`status` が 409、`message` にサーバの `detail` が入る | 実装済 |

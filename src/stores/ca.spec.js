@@ -59,6 +59,13 @@ function failCreate() {
   )
 }
 
+/** 更新（事前検証は既定のまま）を 409 にする差し替え */
+function conflictOnUpdate(detail) {
+  server.use(
+    http.put('*/api/ca/:caId', () => HttpResponse.json({ detail }, { status: 409 })),
+  )
+}
+
 /**
  * 事前検証が警告つきの合格を返す差し替え。
  * 実 API の CAValidationResponse は warnings を持つが、CA では使わない約束なので
@@ -182,7 +189,7 @@ describe('stores/ca', () => {
     expect(store.items.map((item) => item.id)).toEqual(tickerIds)
   })
 
-  it('[CAS-09] 登録は公開するが、まだ無い更新・削除は公開しない', () => {
+  it('[CAS-09] 登録と更新は公開するが、まだ無い削除は公開しない', () => {
     const store = useCaStore()
 
     // 持っている操作
@@ -191,10 +198,13 @@ describe('stores/ca', () => {
     expect(store.creating).toBe(false)
     expect(store.validationErrors).toEqual([])
 
+    expect(typeof store.update).toBe('function')
+    expect(typeof store.clearUpdateError).toBe('function')
+    expect(store.updating).toBe(false)
+    expect(store.updateValidationErrors).toEqual([])
+
     // まだ無い操作は、できるように見せない（呼べば「関数が無い」で落ちる）
-    expect(store.update).toBeUndefined()
     expect(store.remove).toBeUndefined()
-    expect(store.updating).toBeUndefined()
     expect(store.deleting).toBeUndefined()
   })
 
@@ -284,5 +294,85 @@ describe('stores/ca', () => {
     expect(store.total).toBe(TOTAL + 1)
     // api 層が warnings を受け取らないので、確認待ちの経路には入らない
     expect(store.validationWarnings).toEqual([])
+  })
+
+  it('[CAS-17] 更新に成功すると一覧の該当行が入れ替わる', async () => {
+    const store = useCaStore()
+    await store.load()
+    const target = store.items[0]
+
+    const updated = await store.update({
+      ...target,
+      note: '編集した備考',
+      updatedAt: target.updatedAt,
+    })
+
+    expect(updated.note).toBe('編集した備考')
+    expect(store.items[0].note).toBe('編集した備考')
+    // 更新は行を増やさない
+    expect(store.total).toBe(TOTAL)
+    expect(store.updateError).toBeNull()
+    expect(store.updateValidationErrors).toEqual([])
+  })
+
+  it('[CAS-18] 事前検証で弾かれたときは updateValidationErrors に入り、更新しない', async () => {
+    const store = useCaStore()
+    await store.load()
+    const target = store.items[0]
+
+    const updated = await store.update({ ...target, stockCode: NO_MATCH })
+
+    expect(updated).toBeNull()
+    expect(store.updateValidationErrors).toEqual([unknownStockMessage(NO_MATCH)])
+    // 通信は成功しているので、サーバ障害の枠には入れない
+    expect(store.updateError).toBeNull()
+    expect(store.items[0].stockCode).toBe(target.stockCode)
+  })
+
+  it('[CAS-19] 楽観的ロックの競合は updateError に入る', async () => {
+    const detail = '他のユーザーによってCAデータが更新されています。'
+    conflictOnUpdate(detail)
+    const store = useCaStore()
+    await store.load()
+    const target = store.items[0]
+
+    const updated = await store.update({ ...target, note: '編集した備考' })
+
+    expect(updated).toBeNull()
+    // 事前検証の不合格ではなく通信・サーバ障害と同じ枠（画面は 409 を特別扱いしない）
+    expect(store.updateError?.message).toBe(detail)
+    expect(store.updateValidationErrors).toEqual([])
+    // 競合しても一覧は自動で読み直さない（モーダルが握る合札は古いままなので意味が無い）
+    expect(store.items[0].note).toBe(target.note)
+  })
+
+  it('[CAS-20] clearUpdateError は更新側だけを消し、登録側を消さない', async () => {
+    failCreate()
+    conflictOnUpdate('競合しました')
+    const store = useCaStore()
+    await store.load()
+    await store.create({ stockCode: NEW_STOCK_CODE, caType: NEW_CA_TYPE })
+    await store.update({ ...store.items[0], note: '編集した備考' })
+
+    store.clearUpdateError()
+
+    expect(store.updateError).toBeNull()
+    expect(store.updateValidationErrors).toEqual([])
+    // 片方を消しても、もう片方のモーダルの理由は残る（枠を共用していない）
+    expect(store.createError?.message).toBe(ERROR_MESSAGE)
+  })
+
+  it('[CAS-21] 更新後の読み直しで絞り込み条件が落ちない', async () => {
+    const store = useCaStore()
+    await store.load({ caType: CA_TYPE })
+    const target = store.items[0]
+    // 絞り込みの圏外へ移す CA種別（フィクスチャに在る別のコードから採る）
+    const otherType = sorted.find((ca) => ca.CA種別 !== CA_TYPE).CA種別
+
+    await store.update({ ...target, caType: otherType })
+
+    expect(store.caType).toBe(CA_TYPE)
+    expect(store.total).toBe(caTypeIds.length - 1)
+    expect(store.items.every((item) => item.caType === CA_TYPE)).toBe(true)
   })
 })

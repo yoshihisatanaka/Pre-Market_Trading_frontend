@@ -68,6 +68,31 @@ const NEW_RATIO = `${NEW_DENOMINATOR}:${NEW_NUMERATOR}`
 // 銘柄マスタ（caStocks）のどのコードにも当たらない文字列
 const UNKNOWN_STOCK_CODE = 'ZZZZZ'
 
+/*
+ * 編集に使う行は一覧の 1 行目（並びは上の sorted と同じ規則）。
+ * 行の「編集」ボタンの data-testid は ca-edit-<CA の ID> なので、ID もフィクスチャから採る。
+ * 入力欄が持つのは表示項目（比率）ではなく元の 分母 / 分子 で、日付は api 層が
+ * YYYYMMDD の integer から 'YYYY-MM-DD' に直した値。
+ */
+const firstCa = sorted[0]
+const EDIT_TARGET = {
+  id: firstCa.ID,
+  stockCode: firstCa.銘柄コード,
+  caType: firstCa.CA種別,
+  caTypeName: firstCa.CA種別名 ?? '',
+  exRightsDate: toIsoDate(firstCa.権利付最終日),
+  effectiveDate: toIsoDate(firstCa.効力発生日),
+  paymentDate: toIsoDate(firstCa.支払日),
+  denominator: String(firstCa.分母 ?? ''),
+  numerator: String(firstCa.分子 ?? ''),
+  note: firstCa.備考 ?? '',
+}
+const EDITED_NOTE = `${EDIT_TARGET.note}（訂正）`
+
+// 楽観的ロックの競合（PUT が 409）。実 API と同じ文言を body に載せる
+const CONFLICT_MESSAGE =
+  '他のユーザーによってCAデータが更新されています。最新データを再取得してください。'
+
 /** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function rowsOf(page) {
   return page.getByTestId('ca-table').getByTestId('data-table-row')
@@ -76,6 +101,17 @@ function rowsOf(page) {
 /** 追加モーダル。role=dialog の aria-label はモーダルのタイトル（BaseModal） */
 function addDialogOf(page) {
   return page.getByRole('dialog', { name: 'CA 新規追加' })
+}
+
+/** 編集モーダル。追加と同じくタイトルが aria-label になる */
+function editDialogOf(page) {
+  return page.getByRole('dialog', { name: 'CA 編集' })
+}
+
+/** 一覧の 1 行目（EDIT_TARGET の行）の「編集」を押す */
+async function openEditOfFirstRow(page) {
+  await page.getByTestId(`ca-edit-${EDIT_TARGET.id}`).click()
+  await expect(editDialogOf(page)).toBeVisible()
 }
 
 /** 必須の 2 項目だけ埋める（日付と比率は任意） */
@@ -220,10 +256,11 @@ test.describe('CAマスタ一覧', () => {
     expect(markedColor).not.toBe(plainColor)
   })
 
-  test('[CA-09] 列順が仕様どおりでステータス列と行の操作が無い', async ({ page }) => {
+  test('[CA-09] 列順が仕様どおりでステータス列が無く行に編集がある', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
+    // 右端は行ごとの操作列。画面モックに合わせて見出しを持たない（ステータス列は無い）
     await expect(page.getByTestId('ca-table').locator('th')).toHaveText([
       '銘柄',
       'CA種別',
@@ -232,11 +269,14 @@ test.describe('CAマスタ一覧', () => {
       '支払日',
       '比率',
       '備考',
+      '',
     ])
 
-    // 追加はヘッダの「新規追加」から行う。行には編集・削除のボタンが無い
+    // 追加はヘッダの「新規追加」から行う。行の操作は「編集」だけ（削除はまだ無い）
     await expect(page.getByTestId('ca-add')).toBeVisible()
-    await expect(rowsOf(page).first().getByRole('button')).toHaveCount(0)
+    const rowButtons = rowsOf(page).first().getByRole('button')
+    await expect(rowButtons).toHaveCount(1)
+    await expect(rowButtons).toHaveText('編集')
   })
 
   test('[CA-10] ブラウザバックで前のページに戻る', async ({ page }) => {
@@ -413,5 +453,150 @@ test.describe('CAマスタ 新規追加', () => {
     await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(rowsOf(page).first()).toContainText(firstRow.stockCode)
+  })
+})
+
+/*
+ * 編集（CA-17〜22）。既定ハンドラは更新した内容を保持するので、一覧の行が変わるところまで見る。
+ * 更新は行を増やさないので、件数が変わらないことも一緒に確かめる（CA-18）。
+ *
+ * エラーの出し先は新規追加と同じ 3 系統（data-testid は ca-edit-… に振り替わる）。
+ *   必須未入力       … FormField の error（CA-19）
+ *   事前検証の不合格 … ca-edit-validation-error の箇条書き（CA-20）
+ *   通信・サーバ障害 … ca-edit-error（CA-21。楽観的ロックの競合 409 も同じ枠）
+ */
+test.describe('CAマスタ 編集', () => {
+  test('[CA-17] 行の「編集」を押すとその行の値が入った状態で開く', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openEditOfFirstRow(page)
+
+    await expect(page.getByTestId('ca-edit-stock-code')).toHaveValue(EDIT_TARGET.stockCode)
+    await expect(page.getByTestId('ca-edit-type')).toHaveValue(EDIT_TARGET.caType)
+    await expect(page.getByTestId('ca-edit-ex-rights-date')).toHaveValue(EDIT_TARGET.exRightsDate)
+    await expect(page.getByTestId('ca-edit-effective-date')).toHaveValue(EDIT_TARGET.effectiveDate)
+    await expect(page.getByTestId('ca-edit-payment-date')).toHaveValue(EDIT_TARGET.paymentDate)
+    // 入力欄が持つのは一覧に出る表示項目（比率）ではなく、元の 分母 / 分子
+    await expect(page.getByTestId('ca-edit-denominator')).toHaveValue(EDIT_TARGET.denominator)
+    await expect(page.getByTestId('ca-edit-numerator')).toHaveValue(EDIT_TARGET.numerator)
+    await expect(page.getByTestId('ca-edit-note')).toHaveValue(EDIT_TARGET.note)
+  })
+
+  test('[CA-18] 備考を書き換えて更新すると一覧のその行が変わる', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openEditOfFirstRow(page)
+    await page.getByTestId('ca-edit-note').fill(EDITED_NOTE)
+    await page.getByTestId('ca-edit-submit').click()
+
+    await expect(editDialogOf(page)).toBeHidden()
+
+    /*
+     * 銘柄・CA種別・日付のどれも変えられるので、メッセージには受理された内容が出る
+     * （効力発生日を持つ行なので日付まで並ぶ）。
+     */
+    const notice = page.getByTestId('ca-notice')
+    await expect(notice).toBeVisible()
+    await expect(notice).toHaveText(
+      `${EDIT_TARGET.stockCode} / ${EDIT_TARGET.caTypeName} / ${EDIT_TARGET.effectiveDate} を更新しました。`,
+    )
+
+    // 効力発生日を変えていないので並びは動かない。その行の備考だけが新しくなる
+    await expect(rowsOf(page).first()).toContainText(EDITED_NOTE)
+
+    // 更新は行を増やさない
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+  })
+
+  test('[CA-19] 銘柄コードを空にして更新すると必須のエラーが出る', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openEditOfFirstRow(page)
+    await page.getByTestId('ca-edit-stock-code').fill('')
+    await page.getByTestId('ca-edit-submit').click()
+
+    const dialog = editDialogOf(page)
+    await expect(dialog.getByText('銘柄コードを入力してください。')).toBeVisible()
+
+    // 3 系統のうち項目直下だけに出る。サーバへは行かないので他の 2 つは出ない
+    await expect(page.getByTestId('ca-edit-validation-error')).toHaveCount(0)
+    await expect(page.getByTestId('ca-edit-error')).toHaveCount(0)
+
+    // 入力を直せるようモーダルは閉じない。一覧にも影響しない
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rowsOf(page).first()).toContainText(EDIT_TARGET.note)
+  })
+
+  test('[CA-20] 銘柄マスタに無い銘柄コードは事前検証で弾かれる', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openEditOfFirstRow(page)
+    await page.getByTestId('ca-edit-stock-code').fill(UNKNOWN_STOCK_CODE)
+    await page.getByTestId('ca-edit-submit').click()
+
+    const validationError = page.getByTestId('ca-edit-validation-error')
+    await expect(validationError).toBeVisible()
+    await expect(validationError.getByRole('listitem')).toHaveText([
+      `銘柄コード(${UNKNOWN_STOCK_CODE})は銘柄マスタに存在しません`,
+    ])
+
+    // 事前検証の不合格は通信障害ではないので、専用の表示には出ない
+    await expect(page.getByTestId('ca-edit-error')).toHaveCount(0)
+
+    await expect(editDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('ca-notice')).toHaveCount(0)
+    await expect(rowsOf(page).first()).toContainText(EDIT_TARGET.stockCode)
+  })
+
+  test('[CA-21] 更新が競合するとモーダルは開いたままエラーが出る', async ({ page }) => {
+    // 事前検証（*/api/ca/validate）はパスが別なので既定ハンドラのまま通る
+    await mockApi(page, [
+      { method: 'put', path: '*/api/ca/*', status: 409, body: { detail: CONFLICT_MESSAGE } },
+    ])
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openEditOfFirstRow(page)
+    await page.getByTestId('ca-edit-note').fill(EDITED_NOTE)
+    await page.getByTestId('ca-edit-submit').click()
+
+    // 409 は通信・サーバ障害と同じ枠に出す（画面は競合を特別扱いしない）
+    const error = page.getByTestId('ca-edit-error')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText(CONFLICT_MESSAGE)
+
+    // 事前検証は通っているので箇条書きは出ない
+    await expect(page.getByTestId('ca-edit-validation-error')).toHaveCount(0)
+
+    /*
+     * モーダルは開いたまま入力を保つ。一覧を自動で読み直すこともしない
+     * （読み直してもモーダルが握る合札は古いままで、再度 409 になるため）。
+     */
+    await expect(editDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('ca-edit-note')).toHaveValue(EDITED_NOTE)
+    await expect(page.getByTestId('ca-notice')).toHaveCount(0)
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rowsOf(page).first()).toContainText(EDIT_TARGET.note)
+  })
+
+  test('[CA-22] 「キャンセル」を押すと何も変わらずに閉じる', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openEditOfFirstRow(page)
+    await page.getByTestId('ca-edit-note').fill(EDITED_NOTE)
+    await page.getByTestId('ca-edit-cancel').click()
+
+    await expect(editDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('ca-notice')).toHaveCount(0)
+    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(rowsOf(page).first()).toContainText(EDIT_TARGET.note)
   })
 })

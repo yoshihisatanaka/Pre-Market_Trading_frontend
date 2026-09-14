@@ -7,12 +7,12 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
-import FormGrid from '@/components/ui/FormGrid.vue'
+import CorporateActionFormFields from '@/components/ca/CorporateActionFormFields.vue'
 import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
-import { useCaStore } from '@/stores/ca'
+import { CA_PAGE_SIZE, useCaStore } from '@/stores/ca'
 import { CA_TYPE_OPTIONS, formatCaType, isCaType } from '@/utils/caTypes'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
@@ -28,6 +28,9 @@ const {
   creating,
   createError,
   validationErrors,
+  updating,
+  updateError,
+  updateValidationErrors,
 } = storeToRefs(store)
 
 /*
@@ -35,7 +38,8 @@ const {
  * 実 API（docs/api/openapi.json の CAItem）が持つ項目だけを出す。
  *   - ステータスは実 API に無い（モックにはあるが、対応する列も値も無いので出さない）
  *   - モックの「権利確定日」も実 API に無い。日付は 権利付最終日 / 効力発生日 / 支払日 の 3 つ
- *   - 操作列（編集・削除）は別途。新規追加はヘッダのボタンから開くので、列は増えない
+ *   - 操作列の「編集」は画面モックには無いが、行から直せないと備考の誤記を直すだけでも
+ *     「新規追加 → 削除」の 2 操作が必要になるため足している。新規追加はヘッダのボタンから開く
  */
 const columns = [
   { key: 'stockCode', label: '銘柄' },
@@ -45,6 +49,8 @@ const columns = [
   { key: 'paymentDate', label: '支払日' },
   { key: 'ratio', label: '比率' },
   { key: 'note', label: '備考' },
+  // 行ごとの操作（編集）。画面モックに合わせて見出しは空にする
+  { key: 'actions', label: '' },
 ]
 
 /*
@@ -159,6 +165,95 @@ async function submitAdd() {
    * どの行が増えたのかをメッセージで示して、ユーザがその条件で検索できるようにする。
    */
   noticeMessage.value = `${caLabel(created)} を追加しました。`
+}
+
+/*
+ * 編集。モーダルは「開いているか」と「どの行か」を editTarget 1 つで持つ。
+ * 入力欄はその行の現在値で初期化し、editTarget が握っている updatedAt が
+ * 楽観的ロックの合札になる（他の利用者が先に更新していればサーバが 409 で弾く）。
+ *
+ * エラーの出し先は新規追加と同じ 3 系統。409 の競合も通信・サーバ障害と同じ枠に出すので、
+ * ここに競合専用のコードは無い（code を見て分岐すると、view が API のコード値を知る約束事が増える）。
+ * 競合時に一覧を自動で読み直すこともしない。一覧だけ読み直してもモーダルが握る合札は古いままで
+ * 再度 409 になり、モーダル側まで差し替えると他人の変更を見せずに上書きさせることになる。
+ */
+const editTarget = ref(null)
+const editForm = ref(emptyForm())
+const editErrors = ref(emptyErrors())
+
+/** 一覧の 1 行を編集フォームの形に開く（分母・分子は入力欄が文字列を持つので寄せる） */
+function toForm(ca) {
+  return {
+    stockCode: ca.stockCode,
+    caType: ca.caType,
+    exRightsDate: ca.exRightsDate,
+    effectiveDate: ca.effectiveDate,
+    paymentDate: ca.paymentDate,
+    // null（未設定）と 0 を混ぜないよう、空文字に寄せるのは null のときだけ
+    denominator: ca.denominator ?? '',
+    numerator: ca.numerator ?? '',
+    note: ca.note,
+  }
+}
+
+function openEdit(ca) {
+  editForm.value = toForm(ca)
+  editErrors.value = emptyErrors()
+  // 前回の失敗と成功をどちらも持ち込まない
+  store.clearUpdateError()
+  noticeMessage.value = ''
+  editTarget.value = ca
+}
+
+function closeEdit() {
+  // 更新中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (updating.value) return
+  editTarget.value = null
+}
+
+async function submitEdit() {
+  const target = editTarget.value
+  if (!target) return
+
+  const form = editForm.value
+  editErrors.value = {
+    stockCode: form.stockCode.trim() ? '' : '銘柄コードを入力してください。',
+    caType: form.caType ? '' : 'CA種別を選択してください。',
+    ...ratioErrors(form),
+  }
+  if (Object.values(editErrors.value).some(Boolean)) return
+
+  const updated = await store.update({
+    ...form,
+    id: target.id,
+    stockCode: form.stockCode.trim(),
+    note: form.note.trim(),
+    updatedAt: target.updatedAt,
+  })
+  // 失敗時はモーダルを開いたままにして、入力を直せるようにする（理由は updateError に出る）
+  if (!updated) return
+
+  editTarget.value = null
+  // 銘柄・CA種別・日付のどれも変えられるので、サーバが受理した内容をそのまま出す
+  noticeMessage.value = `${caLabel(updated)} を更新しました。`
+
+  /*
+   * 絞り込み中に条件の圏外へ変えると total が 1 減り、最終ページが空になり得る
+   * （銘柄コードや CA種別を変えたとき）。行が別ページへ移ったことそのものは追わない
+   * （サーバが新しいインデックスを返さないため）。成功メッセージが新しい内容を含むので、
+   * ユーザはその条件で検索できる。
+   */
+  stepBackIfPageEmpty()
+}
+
+/**
+ * 読み直した結果が 0 件になったら 1 ページ戻す。
+ * 最終ページの最後の 1 件が今の offset から居なくなる操作（絞り込み中の変更）で使う。
+ */
+function stepBackIfPageEmpty() {
+  if (items.value.length === 0 && offset.value > 0) {
+    goToOffset(offset.value - CA_PAGE_SIZE)
+  }
 }
 
 /**
@@ -295,6 +390,20 @@ function caLabel(ca) {
         </template>
 
         <template #cell-note="{ value }">{{ value || '—' }}</template>
+
+        <!-- 行ごとの操作。削除が入るまでは「編集」だけが並ぶ -->
+        <template #cell-actions="{ row }">
+          <div class="ca-list__row-actions">
+            <BaseButton
+              variant="secondary"
+              :data-testid="`ca-edit-${row.id}`"
+              :disabled="updating"
+              @click="openEdit(row)"
+            >
+              編集
+            </BaseButton>
+          </div>
+        </template>
       </DataTable>
     </MasterListCard>
 
@@ -308,93 +417,30 @@ function caLabel(ca) {
       @close="closeAdd"
       @submit="submitAdd"
     >
-      <!-- 銘柄コードと CA種別 は必須。どちらも短いので横に並べる -->
-      <FormGrid :columns="2">
-        <!-- maxlength は実 API（CARequest の 銘柄コード）の 14 文字に合わせる -->
-        <FormField v-slot="{ field }" label="銘柄コード" required :error="addErrors.stockCode">
-          <BaseInput
-            v-bind="field"
-            v-model="addForm.stockCode"
-            placeholder="例: A0001"
-            maxlength="14"
-            data-testid="ca-add-stock-code"
-          />
-        </FormField>
-        <FormField v-slot="{ field }" label="CA種別" required :error="addErrors.caType">
-          <BaseSelect
-            v-bind="field"
-            v-model="addForm.caType"
-            :options="CA_TYPE_OPTIONS"
-            placeholder="-- 選択してください --"
-            data-testid="ca-add-type"
-          />
-        </FormField>
-      </FormGrid>
+      <CorporateActionFormFields
+        v-model="addForm"
+        testid-prefix="ca-add"
+        :errors="addErrors"
+      />
+    </MasterFormDialog>
 
-      <!-- 日付 3 種はすべて任意。前後関係はサーバの事前検証に委ねる（画面では弾かない） -->
-      <FormGrid :columns="3">
-        <FormField v-slot="{ field }" label="権利付最終日">
-          <BaseInput
-            v-bind="field"
-            v-model="addForm.exRightsDate"
-            type="date"
-            data-testid="ca-add-ex-rights-date"
-          />
-        </FormField>
-        <FormField v-slot="{ field }" label="効力発生日">
-          <BaseInput
-            v-bind="field"
-            v-model="addForm.effectiveDate"
-            type="date"
-            data-testid="ca-add-effective-date"
-          />
-        </FormField>
-        <FormField v-slot="{ field }" label="支払日">
-          <BaseInput
-            v-bind="field"
-            v-model="addForm.paymentDate"
-            type="date"
-            data-testid="ca-add-payment-date"
-          />
-        </FormField>
-      </FormGrid>
-
-      <!-- 一覧に出る「比率」はサーバが 分母:分子 から組む表示項目。入力はこの 2 つ -->
-      <FormGrid :columns="2">
-        <FormField v-slot="{ field }" label="比率（分母）" :error="addErrors.denominator">
-          <BaseInput
-            v-bind="field"
-            v-model="addForm.denominator"
-            type="number"
-            min="0"
-            step="any"
-            placeholder="例: 1"
-            data-testid="ca-add-denominator"
-          />
-        </FormField>
-        <FormField v-slot="{ field }" label="比率（分子）" :error="addErrors.numerator">
-          <BaseInput
-            v-bind="field"
-            v-model="addForm.numerator"
-            type="number"
-            min="0"
-            step="any"
-            placeholder="例: 2"
-            data-testid="ca-add-numerator"
-          />
-        </FormField>
-      </FormGrid>
-
-      <!-- maxlength は実 API（CARequest の 備考）の 200 文字に合わせる -->
-      <FormField v-slot="{ field }" label="備考">
-        <BaseInput
-          v-bind="field"
-          v-model="addForm.note"
-          placeholder="例: Q1現金配当"
-          maxlength="200"
-          data-testid="ca-add-note"
-        />
-      </FormField>
+    <MasterFormDialog
+      :open="Boolean(editTarget)"
+      title="CA 編集"
+      testid-prefix="ca"
+      action="edit"
+      submit-label="更新"
+      :pending="updating"
+      :error="updateError"
+      :validation-errors="updateValidationErrors"
+      @close="closeEdit"
+      @submit="submitEdit"
+    >
+      <CorporateActionFormFields
+        v-model="editForm"
+        testid-prefix="ca-edit"
+        :errors="editErrors"
+      />
     </MasterFormDialog>
   </section>
 </template>
@@ -419,6 +465,12 @@ function caLabel(ca) {
 .ca-list__ticker {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
+}
+
+/* 行ごとの操作（編集）。横に並べ、間隔は他の並列ボタンと同じトークンで取る */
+.ca-list__row-actions {
+  display: flex;
+  gap: var(--space-2);
 }
 
 /* 日付と比率は桁を揃えて読ませる（受注不可日マスタの日付列と同じ扱い） */

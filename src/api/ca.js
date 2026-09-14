@@ -10,7 +10,7 @@ import { apiClient } from './client'
  *   - 一覧の配列名が `ca_list`、1 件の応答のキーが `ca`
  *   - 削除は論理削除（取消区分=1）。一覧は既定で取消済みを返さない
  *
- * いまは一覧の取得と登録（事前検証つき）を持つ。更新・削除、CSV 入出力、更新履歴は別途。
+ * いまは一覧の取得と登録・更新（事前検証つき）を持つ。削除、CSV 入出力、更新履歴は別途。
  * 更新系は `X-User-Code` ヘッダが必須。付与は client.js の interceptor が全 API 共通で行う。
  */
 
@@ -112,15 +112,16 @@ export async function fetchCorporateActions({
  * 編集からの呼び出しかどうか（= id を持つか）だけで決まる。
  * 受注不可日は主キーが日付そのものなので「日付を変えたか」を見る必要があった（blackoutDates.js 参照）。
  *
- * @param {CorporateActionInput & { id?: string }} params
- *   id は編集のときだけ渡す（実 API の ID を文字列にしたもの）
+ * @param {CorporateActionInput & { id?: string, updatedAt?: string }} params
+ *   id は編集のときだけ渡す（実 API の ID を文字列にしたもの）。
+ *   updatedAt は受け取るが送らない（編集の payload をそのまま渡せるようにするためだけ）
  * @returns {Promise<{ valid: boolean, errors: string[] }>}
  *   valid が false のときだけ errors に理由が入る
  */
-export async function validateCorporateAction({ id = '', ...ca }) {
+export async function validateCorporateAction({ id = '', updatedAt: _updatedAt = '', ...ca }) {
   const { data } = await apiClient.post(
     '/ca/validate',
-    // 更新日時 は送らない（事前検証は楽観的ロックの照合をしない）
+    // 更新日時 は本文から落とす（事前検証は楽観的ロックの照合をしない）
     toCaRequest(ca),
     // 既定が新規検証なので、変更検証のときだけクエリを付ける（ca_id は integer 宣言）
     id ? { params: { ca_id: Number(id), is_update: true } } : undefined,
@@ -146,6 +147,26 @@ export async function validateCorporateAction({ id = '', ...ca }) {
  */
 export async function createCorporateAction(ca) {
   const { data } = await apiClient.post('/ca', toCaRequest(ca))
+
+  return toCorporateAction(data.ca)
+}
+
+/**
+ * CA を 1 件更新する（全項目を変更できる）。
+ *
+ * `CARequest` はレコード全体を差し替える形なので、変えない項目も含めて送る。
+ * 呼び出し側は編集フォームの現在値をそのまま渡せばよい。
+ *
+ * updatedAt は一覧取得時の更新日時をそのまま送り返す楽観的ロックの合札で、
+ * サーバ側の現在値と違えば 409 で弾かれる（他の利用者が先に更新していた場合）。
+ * 書式は変換しない（理由は toCaRequest のコメント）。
+ *
+ * @param {CorporateActionInput & { id: string, updatedAt?: string }} params
+ *   id は更新対象の CA ID（実 API では integer なのでパスへ入れる前に数値に寄せる）
+ * @returns {Promise<CorporateAction>} 更新後の 1 件
+ */
+export async function updateCorporateAction({ id, ...ca }) {
+  const { data } = await apiClient.put(`/ca/${encodeURIComponent(id)}`, toCaRequest(ca))
 
   return toCorporateAction(data.ca)
 }

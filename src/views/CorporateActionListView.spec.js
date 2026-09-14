@@ -70,6 +70,7 @@ const NEW_CA_TYPE_NAME = sorted[0].CA種別名
 const UNKNOWN_STOCK_CODE = 'ZZZZ'
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
+const CONFLICT_MESSAGE = '他のユーザーによってCAデータが更新されています。'
 
 /** CAListResponse の形で返す */
 const listBody = (items, total = items.length) => ({
@@ -164,6 +165,39 @@ const failCreate = () =>
     http.post('*/api/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
   )
 
+/* ここから編集モーダル用のヘルパ。testid の -edit- で追加側と取り違えないようにする */
+
+const editInput = (wrapper, name) => wrapper.find(`[data-testid="ca-edit-${name}"]`)
+const editSubmit = (wrapper) => wrapper.find('[data-testid="ca-edit-submit"]')
+const editCancel = (wrapper) => wrapper.find('[data-testid="ca-edit-cancel"]')
+
+/** 一覧の n 行目の「編集」を押す */
+const openEditModal = async (wrapper, index = 0) => {
+  await wrapper.find(`[data-testid="ca-edit-${firstPage[index].id}"]`).trigger('click')
+}
+
+const fillEdit = async (wrapper, values) => {
+  for (const [name, value] of Object.entries(values)) {
+    await editInput(wrapper, name).setValue(value)
+  }
+}
+
+const submitEdit = async (wrapper) => {
+  await editSubmit(wrapper).trigger('click')
+  await settle()
+}
+
+const editValidationMessages = (wrapper) =>
+  wrapper.findAll('[data-testid="ca-edit-validation-error"] li').map((item) => item.text())
+
+/** 更新を 409（楽観的ロックの競合）にする差し替え */
+const conflictOnUpdate = () =>
+  server.use(
+    http.put('*/api/ca/:caId', () =>
+      HttpResponse.json({ detail: CONFLICT_MESSAGE }, { status: 409 }),
+    ),
+  )
+
 describe('CorporateActionListView', () => {
   it('[CAV-01] 応答を待つ間はローディングだけを出す', async () => {
     const { wrapper } = await mountView()
@@ -201,6 +235,8 @@ describe('CorporateActionListView', () => {
       '支払日',
       '比率',
       '備考',
+      // 行ごとの操作。画面モックに合わせて見出しは空にする
+      '',
     ])
   })
 
@@ -334,14 +370,17 @@ describe('CorporateActionListView', () => {
     }
   })
 
-  it('[CAV-16] ヘッダに追加の導線があり、行には編集・削除のボタンが無い', async () => {
+  it('[CAV-16] ヘッダに追加、行に編集の導線があり、削除はまだ無い', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     expect(exists(wrapper, 'ca-reload')).toBe(true)
     expect(exists(wrapper, 'ca-add')).toBe(true)
-    // 行の中にボタンが無いこと（操作列そのものが無い）
-    expect(rows(wrapper)[0].findAll('button')).toHaveLength(0)
+
+    // 行のボタンは「編集」1 つだけ（削除は別ブランチで足す）
+    const rowButtons = rows(wrapper)[0].findAll('button')
+    expect(rowButtons).toHaveLength(1)
+    expect(rowButtons[0].text()).toBe('編集')
   })
 
   it('[CAV-17] 追加が成功するとモーダルが閉じ、成功メッセージと増えた件数が出る', async () => {
@@ -502,5 +541,210 @@ describe('CorporateActionListView', () => {
     await openAddModal(wrapper)
 
     expect(exists(wrapper, 'ca-notice')).toBe(false)
+  })
+
+  it('[CAV-25] 編集モーダルはその行の現在値で開く', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openEditModal(wrapper)
+
+    expect(exists(wrapper, 'ca-edit-form')).toBe(true)
+    expect(editInput(wrapper, 'stock-code').element.value).toBe(firstPage[0].stockCode)
+    expect(editInput(wrapper, 'type').element.value).toBe(sorted[0].CA種別)
+    expect(editInput(wrapper, 'ex-rights-date').element.value).toBe(firstPage[0].exRightsDate)
+    expect(editInput(wrapper, 'denominator').element.value).toBe(String(sorted[0].分母))
+    expect(editInput(wrapper, 'numerator').element.value).toBe(String(sorted[0].分子))
+    expect(editInput(wrapper, 'note').element.value).toBe(firstPage[0].note)
+  })
+
+  it('[CAV-32] 分母・分子が未設定の行では空欄になり 0 にならない', async () => {
+    // フィクスチャは全行が比率を持つので、未設定の行はここで作る
+    const withoutRatio = { ...corporateActions[0], ID: 900, 分母: null, 分子: null, 比率: null }
+    server.use(http.get('*/api/ca', () => HttpResponse.json(listBody([withoutRatio]))))
+    const { wrapper } = await mountView()
+    await settle()
+
+    await wrapper.find('[data-testid="ca-edit-900"]').trigger('click')
+
+    // null（未設定）を 0 に読み替えると、更新のたびに比率が勝手に付く
+    expect(editInput(wrapper, 'denominator').element.value).toBe('')
+    expect(editInput(wrapper, 'numerator').element.value).toBe('')
+  })
+
+  it('[CAV-26] 更新が成功するとモーダルが閉じ、一覧の該当行が入れ替わる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+
+    await fillEdit(wrapper, { note: '編集した備考' })
+    await submitEdit(wrapper)
+
+    expect(exists(wrapper, 'ca-edit-form')).toBe(false)
+    const notice = wrapper.find('[data-testid="ca-notice"]').text()
+    expect(notice).toContain(firstPage[0].stockCode)
+    expect(notice).toContain(firstPage[0].caTypeName)
+    expect(rows(wrapper)[0].text()).toContain('編集した備考')
+    // 更新は行を増やさない
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[CAV-27] 必須を空にすると項目の直下に理由を出し、API へ送らない', async () => {
+    let updateCalls = 0
+    server.use(
+      http.put('*/api/ca/:caId', () => {
+        updateCalls += 1
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+
+    await fillEdit(wrapper, { 'stock-code': '' })
+    await submitEdit(wrapper)
+
+    expect(exists(wrapper, 'ca-edit-form')).toBe(true)
+    expect(fieldError(wrapper, editInput(wrapper, 'stock-code'))).toBe(
+      '銘柄コードを入力してください。',
+    )
+    expect(updateCalls).toBe(0)
+  })
+
+  it('[CAV-28] 事前検証の不合格は編集モーダル内に箇条書きで出す', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+
+    await fillEdit(wrapper, { 'stock-code': UNKNOWN_STOCK_CODE })
+    await submitEdit(wrapper)
+
+    expect(exists(wrapper, 'ca-edit-form')).toBe(true)
+    expect(editValidationMessages(wrapper)).toEqual([
+      `銘柄コード(${UNKNOWN_STOCK_CODE})は銘柄マスタに存在しません`,
+    ])
+    expect(exists(wrapper, 'ca-edit-error')).toBe(false)
+  })
+
+  it('[CAV-29] 楽観的ロックの競合は通信・サーバ障害と同じ枠に出す', async () => {
+    conflictOnUpdate()
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+
+    await fillEdit(wrapper, { note: '編集した備考' })
+    await submitEdit(wrapper)
+
+    expect(exists(wrapper, 'ca-edit-form')).toBe(true)
+    expect(wrapper.find('[data-testid="ca-edit-error"]').text()).toContain(CONFLICT_MESSAGE)
+    // 409 を事前検証の不合格として扱わない（画面は 409 を特別扱いしない）
+    expect(exists(wrapper, 'ca-edit-validation-error')).toBe(false)
+    // 一覧を自動で読み直さない（モーダルが握る合札は古いままなので意味が無い）
+    expect(rows(wrapper)[0].text()).toContain(firstPage[0].note)
+  })
+
+  it('[CAV-30] 更新中は送信もキャンセルもできない', async () => {
+    server.use(
+      http.put('*/api/ca/:caId', async () => {
+        await delay(20)
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+
+    const pending = editSubmit(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(editSubmit(wrapper).text()).toContain('更新中…')
+    expect(editSubmit(wrapper).attributes('disabled')).toBeDefined()
+    expect(editCancel(wrapper).attributes('disabled')).toBeDefined()
+
+    await pending
+    await settle()
+  })
+
+  it('[CAV-31] 追加の失敗理由が編集モーダルに漏れない', async () => {
+    failCreate()
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, { 'stock-code': NEW_STOCK_CODE, type: NEW_CA_TYPE })
+    await submitAdd(wrapper)
+    expect(exists(wrapper, 'ca-add-error')).toBe(true)
+
+    await addCancel(wrapper).trigger('click')
+    await openEditModal(wrapper)
+
+    // 登録側と更新側で枠が分かれている（共用すると片方の消し忘れが漏れる）
+    expect(exists(wrapper, 'ca-edit-error')).toBe(false)
+    expect(exists(wrapper, 'ca-edit-validation-error')).toBe(false)
+  })
+
+  it('[CAV-33] 絞り込み中に最終ページの最後の 1 件を圏外へ変えると 1 ページ戻る', async () => {
+    /*
+     * 絞り込み結果がちょうど「1 ページ + 1 件」になる状況はフィクスチャに無いので、
+     * ここで組む（絞り込みごとの件数は 8〜24 件で、表示件数の 50 を超えるのは全件だけ）。
+     * 同じ理由で E2E には置けない（mockApi は固定の body を返すだけで、
+     * 更新の前後で件数を変えられない）。
+     */
+    const FILTER_TYPE = '110'
+    const OTHER_TYPE = '120'
+    const LAST_ID = 500 + PAGE_SIZE
+    let rowsState = Array.from({ length: PAGE_SIZE + 1 }, (_, index) => ({
+      ...corporateActions[0],
+      ID: 500 + index,
+      CA種別: FILTER_TYPE,
+      CA種別名: '現金配当',
+    }))
+
+    server.use(
+      /*
+       * 事前検証も差し替える。ここで組んだ行は既定ハンドラの持ち物ではないので、
+       * 既定のままだと変更検証が「指定されたCAは存在しません」で弾いてしまう。
+       */
+      http.post('*/api/ca/validate', () =>
+        HttpResponse.json({ valid: true, errors: [], warnings: [], details: null }),
+      ),
+      http.get('*/api/ca', ({ request }) => {
+        const params = new URL(request.url).searchParams
+        const caType = params.get('ca_type') ?? ''
+        const offset = Number(params.get('offset') ?? 0)
+        const filtered = rowsState.filter((ca) => !caType || ca.CA種別 === caType)
+        return HttpResponse.json({
+          total: filtered.length,
+          limit: PAGE_SIZE,
+          offset,
+          ca_list: filtered.slice(offset, offset + PAGE_SIZE),
+        })
+      }),
+      http.put('*/api/ca/:caId', async ({ params, request }) => {
+        const body = await request.json()
+        const id = Number(params.caId)
+        const updated = { ...rowsState.find((ca) => ca.ID === id), CA種別: body.CA種別 }
+        rowsState = rowsState.map((ca) => (ca.ID === id ? updated : ca))
+        return HttpResponse.json({ success: true, ca: updated, message: 'ok' })
+      }),
+    )
+
+    const { wrapper, router } = await mountView({
+      ca_type: FILTER_TYPE,
+      offset: String(PAGE_SIZE),
+    })
+    await settle()
+    expect(rows(wrapper)).toHaveLength(1)
+
+    await wrapper.find(`[data-testid="ca-edit-${LAST_ID}"]`).trigger('click')
+    await fillEdit(wrapper, { type: OTHER_TYPE })
+    await submitEdit(wrapper)
+    // 事前検証 → 更新 → 読み直し → ページ戻し → 再取得 と続くので、settle を重ねて待つ
+    await settle()
+    await settle()
+
+    // 空のページに取り残さない。絞り込み条件は残したまま 1 ページ前へ戻す
+    expect(router.currentRoute.value.query.offset).toBeUndefined()
+    expect(router.currentRoute.value.query.ca_type).toBe(FILTER_TYPE)
+    expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
   })
 })

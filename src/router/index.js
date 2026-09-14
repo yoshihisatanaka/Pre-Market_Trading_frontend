@@ -30,6 +30,13 @@ const routes = [
     meta: { title: '受注不可日マスタ' },
   },
   {
+    // 実 API は /stocks だが、path は navigation.js（サイドメニュー）の項目に合わせる
+    path: '/masters/symbols',
+    name: 'stock-list',
+    component: () => import('@/views/StockListView.vue'),
+    meta: { title: '銘柄マスタ' },
+  },
+  {
     path: '/masters/ca',
     name: 'corporate-action-list',
     component: () => import('@/views/CorporateActionListView.vue'),

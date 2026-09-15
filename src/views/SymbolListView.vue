@@ -9,7 +9,7 @@ import FormField from '@/components/ui/FormField.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
-import { useStocksStore } from '@/stores/stocks'
+import { useSymbolsStore } from '@/stores/symbols'
 import { formatQuantity, formatUsdUnit } from '@/utils/format'
 import {
   ORDER_ROUTE_OPTIONS,
@@ -21,15 +21,15 @@ import {
   isOrderRoute,
   isRegulation,
   isVwapTarget,
-} from '@/utils/stockTypes'
+} from '@/utils/symbolTypes'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する
-const store = useStocksStore()
+const store = useSymbolsStore()
 const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(store)
 
 /*
  * 列は画面モック（https://uspreorder-vmbhej3k.manus.space/masters/symbols）に合わせつつ、
- * 実 API（docs/api/openapi.json の StockItem）が持つ項目だけを出す。
+ * 実 API（docs/api/openapi.json の SymbolItem）が持つ項目だけを出す。
  *   - モックには無い「前日出来高」を足し、相場の 3 列を
  *     前日終値 / 前日出来高 / 5日平均出来高 の順でまとめている
  *   - ユーザー操作フラグは列にせず、行の色で表す（下の rowClass）
@@ -37,7 +37,7 @@ const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(sto
  *   - 操作列（編集・削除）は別途。この画面はいま読むだけ
  */
 const columns = [
-  { key: 'stockCode', label: '銘柄コード' },
+  { key: 'symbolCode', label: '銘柄コード' },
   { key: 'ticker', label: 'ティッカーコード' },
   { key: 'nameEn', label: '銘柄名（英語）' },
   { key: 'name', label: '銘柄名（日本語）' },
@@ -52,15 +52,15 @@ const columns = [
 
 /*
  * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
- * URL 上のクエリ名（stock_code / regulation / …）はこの filters 定義にだけ現れる。
+ * URL 上のクエリ名（symbol_code / regulation / …）はこの filters 定義にだけ現れる。
  *
  * 検索欄は画面モックどおり 4 つだが、実 API は銘柄コード・Ticker・銘柄名を別々の
- * パラメータに分けていて 1 語でまとめて探せない。この欄は `銘柄コード` に乗るので、
+ * パラメータに分けていて 1 語でまとめて探せない。この欄は `symbol` に乗るので、
  * 効くのは銘柄コードと Ticker だけ（ラベルもそう書いてある）。
  */
 const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
   filters: [
-    { key: 'stockCode', query: 'stock_code' },
+    { key: 'symbolCode', query: 'symbol_code' },
     // 未知のコード（?regulation=9 など）は条件なしとして捨てる
     { key: 'regulation', query: 'regulation', parse: (value) => (isRegulation(value) ? value : '') },
     {
@@ -103,12 +103,12 @@ function rowClass(row) {
 </script>
 
 <template>
-  <section class="stock-list">
+  <section class="symbol-list">
     <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
     <Teleport defer to="#topbar-actions">
       <BaseButton
         variant="secondary"
-        data-testid="stocks-reload"
+        data-testid="symbols-reload"
         :disabled="loading"
         @click="store.reload()"
       >
@@ -117,13 +117,13 @@ function rowClass(row) {
     </Teleport>
 
     <!-- 画面の説明。4 状態や検索結果に関わらず常時出す -->
-    <BaseAlert variant="info" data-testid="stocks-description">
+    <BaseAlert variant="info" data-testid="symbols-description">
       取扱銘柄と、取引可否・預託先・VWAP対象の区分を管理します。<strong>色の付いた行</strong>は画面や
       API から手動で操作された行で、自動取込のままの行と区別しています。
     </BaseAlert>
 
     <MasterSearchCard
-      testid-prefix="stocks"
+      testid-prefix="symbols"
       :disabled="loading"
       @submit="submitSearch"
       @clear="clearSearch"
@@ -131,9 +131,9 @@ function rowClass(row) {
       <FormField v-slot="{ field }" label="銘柄コード・ティッカーコード">
         <BaseInput
           v-bind="field"
-          v-model="inputs.stockCode"
+          v-model="inputs.symbolCode"
           placeholder="例: S001 / AAPL"
-          data-testid="stocks-stock-code"
+          data-testid="symbols-symbol-code"
         />
       </FormField>
       <FormField v-slot="{ field }" label="取引可否">
@@ -142,7 +142,7 @@ function rowClass(row) {
           v-model="inputs.regulation"
           :options="REGULATION_OPTIONS"
           placeholder="-- すべて --"
-          data-testid="stocks-regulation"
+          data-testid="symbols-regulation"
         />
       </FormField>
       <FormField v-slot="{ field }" label="預託先区分">
@@ -151,7 +151,7 @@ function rowClass(row) {
           v-model="inputs.orderRoute"
           :options="ORDER_ROUTE_OPTIONS"
           placeholder="-- すべて --"
-          data-testid="stocks-order-route"
+          data-testid="symbols-order-route"
         />
       </FormField>
       <FormField v-slot="{ field }" label="VWAP対象区分">
@@ -160,13 +160,13 @@ function rowClass(row) {
           v-model="inputs.vwapTarget"
           :options="VWAP_TARGET_OPTIONS"
           placeholder="-- すべて --"
-          data-testid="stocks-vwap-target"
+          data-testid="symbols-vwap-target"
         />
       </FormField>
     </MasterSearchCard>
 
     <MasterListCard
-      testid-prefix="stocks"
+      testid-prefix="symbols"
       title="銘柄一覧"
       empty-message="該当する銘柄はありません。"
       :total="total"
@@ -180,21 +180,21 @@ function rowClass(row) {
     >
       <DataTable
         flat
-        row-key="stockCode"
-        data-testid="stocks-table"
+        row-key="symbolCode"
+        data-testid="symbols-table"
         :columns="columns"
         :rows="items"
         :row-class="rowClass"
       >
-        <template #cell-stockCode="{ value }">
-          <span class="stock-list__code">{{ value || '—' }}</span>
+        <template #cell-symbolCode="{ value }">
+          <span class="symbol-list__code">{{ value || '—' }}</span>
         </template>
         <template #cell-ticker="{ value }">
-          <span class="stock-list__ticker">{{ value || '—' }}</span>
+          <span class="symbol-list__ticker">{{ value || '—' }}</span>
         </template>
         <template #cell-nameEn="{ value }">{{ value || '—' }}</template>
         <template #cell-name="{ value }">
-          <span class="stock-list__name">{{ value || '—' }}</span>
+          <span class="symbol-list__name">{{ value || '—' }}</span>
         </template>
 
         <!-- 相場の 3 列。未取得（null）は formatUsdUnit / formatQuantity が '—' にする -->
@@ -204,24 +204,24 @@ function rowClass(row) {
 
         <!-- 取引可否は可否が一目で分かるように色を変える（画面モックと同じ扱い） -->
         <template #cell-regulation="{ row }">
-          <span :class="['stock-list__flag', row.regulation === '0' ? 'is-open' : 'is-closed']">
+          <span :class="['symbol-list__flag', row.regulation === '0' ? 'is-open' : 'is-closed']">
             {{ regulationLabel(row) }}
           </span>
         </template>
 
         <template #cell-orderRoute="{ row }">
-          <span class="stock-list__route">{{ orderRouteLabel(row) }}</span>
+          <span class="symbol-list__route">{{ orderRouteLabel(row) }}</span>
         </template>
 
         <!-- 対象外は主張させない（対象の行だけを目で拾えるようにする） -->
         <template #cell-vwapTarget="{ row }">
-          <span :class="['stock-list__flag', row.vwapTarget === '1' ? 'is-open' : 'is-muted']">
+          <span :class="['symbol-list__flag', row.vwapTarget === '1' ? 'is-open' : 'is-muted']">
             {{ vwapTargetLabel(row) }}
           </span>
         </template>
 
         <template #cell-note="{ value }">
-          <span class="stock-list__note">{{ value || '—' }}</span>
+          <span class="symbol-list__note">{{ value || '—' }}</span>
         </template>
       </DataTable>
     </MasterListCard>
@@ -229,49 +229,49 @@ function rowClass(row) {
 </template>
 
 <style scoped>
-.stock-list {
+.symbol-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
 }
 
 /* 銘柄コードと Ticker はコード値。桁を揃えて読ませる */
-.stock-list__code {
+.symbol-list__code {
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.stock-list__ticker {
+.symbol-list__ticker {
   font-weight: 600;
 }
 
-.stock-list__name {
+.symbol-list__name {
   font-size: var(--font-size-sm);
 }
 
-.stock-list__route {
+.symbol-list__route {
   white-space: nowrap;
 }
 
-.stock-list__note {
+.symbol-list__note {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 }
 
-.stock-list__flag {
+.symbol-list__flag {
   font-weight: 600;
   white-space: nowrap;
 }
 
-.stock-list__flag.is-open {
+.symbol-list__flag.is-open {
   color: var(--color-success);
 }
 
-.stock-list__flag.is-closed {
+.symbol-list__flag.is-closed {
   color: var(--color-danger-text);
 }
 
-.stock-list__flag.is-muted {
+.symbol-list__flag.is-muted {
   color: var(--color-text-muted);
   font-weight: 400;
 }
@@ -281,12 +281,12 @@ function rowClass(row) {
  * 行は DataTable が描くので、scoped のままでは届かない（:deep が要る）。
  * 色は警告色の淡色面を借りる。「異常」ではなく「自動取込のままではない」ことの印。
  */
-.stock-list :deep(tr.is-user-modified) {
+.symbol-list :deep(tr.is-user-modified) {
   background-color: var(--color-warning-bg);
 }
 
 /* ホバー中も印を残す。DataTable の中立なホバー色に塗り潰させず、同系色で一段濃くする */
-.stock-list :deep(tr.is-user-modified:hover td) {
+.symbol-list :deep(tr.is-user-modified:hover td) {
   background-color: var(--color-warning-border);
 }
 </style>

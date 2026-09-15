@@ -561,4 +561,9 @@ function caLabel(ca) {
 .ca-list :deep(tr.is-user-modified) {
   background-color: var(--color-warning-bg);
 }
+
+/* ホバー中も印を残す。DataTable の中立なホバー色に塗り潰させず、同系色で一段濃くする */
+.ca-list :deep(tr.is-user-modified:hover td) {
+  background-color: var(--color-warning-border);
+}
 </style>

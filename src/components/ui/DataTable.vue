@@ -100,4 +100,15 @@ th.is-numeric {
 tbody tr:last-child td {
   border-bottom: none;
 }
+
+/*
+ * 行ホバー。モック（docs/mock/ の `tr:hover td`）に合わせ、背景だけを一段沈ませる。
+ * transition もカーソル変更も付けない（行はクリックできない）。
+ * tr ではなく td に塗るのもモックと同じ。ただしこれは行ごとの色
+ * （呼び出し側が :deep で当てる tr.is-user-modified など）をホバー中だけ隠すので、
+ * 行に色を付けている画面は、そのホバー色も対で指定すること。
+ */
+tbody tr:hover td {
+  background-color: var(--color-surface-muted);
+}
 </style>

@@ -239,7 +239,7 @@ test.describe('顧客マスタ一覧', () => {
   })
 
   test('[CU-09] API がエラーを返したときエラー表示と再試行ボタンが出る', async ({ page }) => {
-    await mockApi(page, [{ path: '*/api/customers', status: 500, body: { detail: ERROR_MESSAGE } }])
+    await mockApi(page, [{ path: '*/api/masters/customers', status: 500, body: { detail: ERROR_MESSAGE } }])
     await page.goto(PATH)
 
     const error = page.getByTestId('customers-error')

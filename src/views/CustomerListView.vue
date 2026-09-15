@@ -59,7 +59,9 @@ const columns = [
 /*
  * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
  * URL 上のクエリ名（branch_code / account_type など）はこの filters 定義にだけ現れる。
- * バックエンドが受け取る日本語のクエリ名は src/api/customers.js の中に閉じている。
+ * バックエンドが受け取る英語のクエリ名（branch_code / account_no / customer_name）は
+ * src/api/customers.js の中に閉じている。扱者コードは /masters/customers に対応する
+ * クエリが無く、取引規制・口座区分・個人法人と同じくモックだけが解釈する。
  */
 const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
   filters: [

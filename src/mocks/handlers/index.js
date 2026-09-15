@@ -87,10 +87,11 @@ const STOCKS_PER_PAGE = 50
 const customerRows = [...customers, ...canceledCustomers]
 
 /**
- * 顧客マスタの一覧が 1 ページで返す件数。
- * 実 API 側はクエリで変えられない固定値なので、モックも定数で持つ。
+ * 顧客マスタの一覧が 1 ページで返す件数の既定値。
+ * `/masters/customers` は limit（1〜200・既定 50）を受け取るので、
+ * これはクエリが無いときに使う値。
  */
-const CUSTOMERS_PER_PAGE = 50
+const CUSTOMERS_DEFAULT_LIMIT = 50
 
 /**
  * CA の並び順。実 API（ca_repository.list）の
@@ -150,25 +151,25 @@ export const handlers = [
 
   /*
    * 顧客マスタの一覧。削除済み（取消区分 1）は既定で返さない。
-   * 実 API は 1 ページ 50 件で固定されていて limit というクエリを持たないので、
-   * ここも limit を読まない。
+   * クエリ名は実 API に合わせて英語の snake_case。顧客名だけ 顧客名 / 顧客名カナ への
+   * 部分一致で、ほかは完全一致（実 API の m_口座情報 の検索と同じ）。
    *
-   * クエリ名は実 API に合わせて日本語。顧客名だけ 顧客名 / 顧客名カナ への部分一致で、
-   * ほかは完全一致（実 API の m_口座情報 の検索と同じ）。
-   *
-   * 取引停止区分_全取引 / 口座区分 / 法人区分 は openapi に無いクエリで、画面モックにある
-   * 検索条件をモックだけで成立させるためのもの。実 API に切り替えるときは仕様追加を依頼する。
+   * handler_code / restriction / account_type / corporate_type は
+   * `/masters/customers` に無いクエリで、画面モックにある検索条件をモックだけで
+   * 成立させるためのもの（handler_code は旧 `/customers` にはある）。
+   * 実 API に切り替えるときは仕様追加を依頼する。
    */
-  http.get('*/api/customers', ({ request }) => {
+  http.get('*/api/masters/customers', ({ request }) => {
     const params = new URL(request.url).searchParams
-    const branchCode = params.get('部店コード') ?? ''
-    const handlerCode = params.get('扱者コード') ?? ''
-    const accountNo = toNonNegativeInt(params.get('口座番号'), 0)
-    const customerName = (params.get('顧客名') ?? '').trim()
-    const restriction = params.get('取引停止区分_全取引') ?? ''
-    const accountType = params.get('口座区分') ?? ''
-    const corporateType = params.get('法人区分') ?? ''
+    const branchCode = params.get('branch_code') ?? ''
+    const handlerCode = params.get('handler_code') ?? ''
+    const accountNo = toNonNegativeInt(params.get('account_no'), 0)
+    const customerName = (params.get('customer_name') ?? '').trim()
+    const restriction = params.get('restriction') ?? ''
+    const accountType = params.get('account_type') ?? ''
+    const corporateType = params.get('corporate_type') ?? ''
     const includeDeleted = params.get('include_deleted') === 'true'
+    const limit = toNonNegativeInt(params.get('limit'), CUSTOMERS_DEFAULT_LIMIT)
     const offset = toNonNegativeInt(params.get('offset'), 0)
 
     const filtered = customerRows
@@ -191,7 +192,10 @@ export const handlers = [
     return HttpResponse.json({
       // total は絞り込み後・ページ切り出し前の件数
       total: filtered.length,
-      customers: filtered.slice(offset, offset + CUSTOMERS_PER_PAGE),
+      // CustomerListResponse は limit / offset も返す
+      limit,
+      offset,
+      customers: filtered.slice(offset, offset + limit),
     })
   }),
 

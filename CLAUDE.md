@@ -324,14 +324,19 @@ headless なので**ブラウザ画面をリアルタイムには覗けない**�
 - **このリポジトリはフロントエンド専用。** バックエンドは別リポジトリ・別サーバ。`/api` は Vite dev サーバが
   `.env` の `VITE_PROXY_TARGET`（既定 `http://host.docker.internal:8000`）へプロキシする。
   取り決めは README の「バックエンドとの連携」
-- API 仕様は `docs/api/openapi.json` に取り込み済み（55 パス / 76 オペレーション / 95 スキーマ）。
+- API 仕様は `docs/api/openapi.json` に取り込み済み（79 パス / 102 オペレーション / 129 スキーマ）。
   原本は FastAPI が生成する **OpenAPI 3.1 の JSON** なので **YAML へ変換しない**（二度手間）。
   `/api-spec-sync` を実行すると、隣のバックエンドリポジトリ（`../Pre-Market_Trading`。**相対パスで参照する**。
   絶対パスは guard フックが弾く）の稼働中 `api` コンテナから取得し直し、lint・HTML 生成・仕様ギャップの点検まで通す。
   事前に `(cd ../Pre-Market_Trading && docker compose up -d api)` が必要。
   **仕様の正はバックエンド側リポジトリで、`docs/api/openapi.json` はその取り込みコピー（フロント実装上の正）**
-- ただし主要レスポンスに `response_model` が無く中身が未定義、`enum` 0 件、エラー応答が 422 のみ、といった
-  **ギャップが残っている**（→ `.claude/skills/api-spec-sync/checklist.md`）。埋まるまでは `src/mocks/` の仮フィクスチャで進める
+- **マスタ系のパスは 2026-09-15 の取り込みで `/masters/` 配下へ移った**（`/ca` → `/masters/ca` ほか）。
+  あわせて `/masters/symbols` と `/customers` の**クエリ名が日本語から英語の snake_case になっている**。
+  パスだけ直してクエリ名を残すと絞り込みが黙って効かなくなる（FastAPI は知らないクエリを無視する）
+- `enum` は 21 種定義済みで、値の写しは `src/utils/apiEnums.js`（`openapi.json` と突き合わせるテスト付き）。
+  ただし `/batch/*`・`/mizuho/*`・`GET /orders/{order_id}`・`/codes`・`/branches` は
+  **レスポンスの中身が未定義のまま**（→ `.claude/skills/api-spec-sync/checklist.md`）。
+  埋まるまでは `src/mocks/` の仮フィクスチャで進める
 - Manus の画面モックは受領済（素の CSS。Tailwind ではないので導入しない）。
   共通レイアウト部分だけ取り込み済み（原本 `docs/mock/layout/masters-users.html`、`tokens.css` は
   モックの配色・文字サイズに更新済み）。個別画面はまだ未着手

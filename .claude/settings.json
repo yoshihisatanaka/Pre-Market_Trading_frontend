@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
+      "Read(//**)",
       "Read(./**)",
+      "Glob(//**)",
+      "Grep(//**)",
       "Write(./**)",
       "Edit(./**)",
       "Bash(mkdir:*)",
@@ -186,6 +189,9 @@
       "Bash(docker compose down --volumes*)",
       "PowerShell(docker compose down -v*)",
       "PowerShell(docker compose down --volumes*)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\0036\\worktrees"
     ]
   },
   "hooks": {

@@ -155,21 +155,30 @@ async function submitAdd() {
   }
   if (Object.values(addErrors.value).some(Boolean)) return
 
-  const created = await store.create({
-    ...form,
-    stockCode: form.stockCode.trim(),
-    note: form.note.trim(),
-  })
-  // 失敗時はモーダルを開いたままにして、入力を直せるようにする（理由は createError に出る）
-  if (!created) return
-
-  isAddOpen.value = false
-  /*
-   * 一覧は効力発生日の降順なので、追加した行が 1 ページ目に出るとは限らない
-   * （日付を空にした行はサーバ側で先頭に来る）。行を追いかけることはせず、
-   * どの行が増えたのかをメッセージで示して、ユーザがその条件で検索できるようにする。
-   */
-  noticeMessage.value = `${caLabel(created)} を追加しました。`
+  await store.create(
+    {
+      ...form,
+      stockCode: form.stockCode.trim(),
+      note: form.note.trim(),
+    },
+    {
+      /*
+       * 閉じるのは登録が受理された時点。store.create の戻り値を待つと、
+       * そこに含まれる一覧の読み直しのあいだモーダルが開いたまま残る。
+       * 失敗時は呼ばれないので、モーダルは開いたままになり入力を直せる
+       * （理由は createError に出る）。
+       */
+      onSuccess: (created) => {
+        isAddOpen.value = false
+        /*
+         * 一覧は効力発生日の降順なので、追加した行が 1 ページ目に出るとは限らない
+         * （日付を空にした行はサーバ側で先頭に来る）。行を追いかけることはせず、
+         * どの行が増えたのかをメッセージで示して、ユーザがその条件で検索できるようにする。
+         */
+        noticeMessage.value = `${caLabel(created)} を追加しました。`
+      },
+    },
+  )
 }
 
 /*
@@ -228,19 +237,25 @@ async function submitEdit() {
   }
   if (Object.values(editErrors.value).some(Boolean)) return
 
-  const updated = await store.update({
-    ...form,
-    id: target.id,
-    stockCode: form.stockCode.trim(),
-    note: form.note.trim(),
-    updatedAt: target.updatedAt,
-  })
-  // 失敗時はモーダルを開いたままにして、入力を直せるようにする（理由は updateError に出る）
+  const updated = await store.update(
+    {
+      ...form,
+      id: target.id,
+      stockCode: form.stockCode.trim(),
+      note: form.note.trim(),
+      updatedAt: target.updatedAt,
+    },
+    {
+      // 追加と同じく、一覧の読み直しを待たずに閉じる。失敗時は呼ばれないので
+      // モーダルは開いたままになり入力を直せる（理由は updateError に出る）
+      onSuccess: (item) => {
+        editTarget.value = null
+        // 銘柄・CA種別・日付のどれも変えられるので、サーバが受理した内容をそのまま出す
+        noticeMessage.value = `${caLabel(item)} を更新しました。`
+      },
+    },
+  )
   if (!updated) return
-
-  editTarget.value = null
-  // 銘柄・CA種別・日付のどれも変えられるので、サーバが受理した内容をそのまま出す
-  noticeMessage.value = `${caLabel(updated)} を更新しました。`
 
   /*
    * 絞り込み中に条件の圏外へ変えると total が 1 減り、最終ページが空になり得る
@@ -274,12 +289,15 @@ async function submitDelete() {
   const target = deleteTarget.value
   if (!target) return
 
-  const deleted = await store.remove(target.id)
-  // 失敗時はモーダルを開いたままにして、理由（deleteError）を読ませる
+  const deleted = await store.remove(target.id, {
+    // 追加・編集と同じく、一覧の読み直しを待たずに閉じる。失敗時は呼ばれないので
+    // モーダルは開いたままになり、理由（deleteError）を読ませられる
+    onSuccess: () => {
+      deleteTarget.value = null
+      noticeMessage.value = `${caLabel(target)} を削除しました。`
+    },
+  })
   if (!deleted) return
-
-  deleteTarget.value = null
-  noticeMessage.value = `${caLabel(target)} を削除しました。`
 
   stepBackIfPageEmpty()
 }
@@ -542,5 +560,10 @@ function caLabel(ca) {
  */
 .ca-list :deep(tr.is-user-modified) {
   background-color: var(--color-warning-bg);
+}
+
+/* ホバー中も印を残す。DataTable の中立なホバー色に塗り潰させず、同系色で一段濃くする */
+.ca-list :deep(tr.is-user-modified:hover td) {
+  background-color: var(--color-warning-border);
 }
 </style>

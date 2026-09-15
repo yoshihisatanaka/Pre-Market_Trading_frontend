@@ -1,7 +1,7 @@
 /*
  * モックのレスポンス実体（銘柄マスタ）。
  * ここに書くのは「バックエンドが返す生の形」であり、アプリ内モデルではない。
- * docs/api/openapi.json の StockItem に合わせてある
+ * docs/api/openapi.json の SymbolItem に合わせてある
  * （プロパティ名は日本語、Pre区分・取消区分・ユーザー操作フラグは 0/1 の integer）。
  * ブラウザ(MSW worker)・単体テスト・E2E で共用する。
  *
@@ -18,7 +18,7 @@
  *     1 ページ目の S021 と 2 ページ目の S055）
  */
 
-/** コード → 表示名。src/utils/stockTypes.js と同じ対応表（規制情報は仮置きの値） */
+/** コード → 表示名。src/utils/symbolTypes.js と同じ対応表（規制情報は仮置きの値） */
 const REGULATION_NAMES = { 0: '取引可', 1: '取引不可' }
 const ORDER_ROUTE_NAMES = { 0: 'みずほ証券', 1: 'IB証券' }
 const VWAP_TARGET_NAMES = { 0: '対象外', 1: '対象' }
@@ -210,11 +210,11 @@ const VOLUME_FACTORS = [0.62, 0.88, 1.04, 1.35, 1.81]
 const WITHOUT_QUOTE = new Set(['S021', 'S055'])
 
 /** 'S001' の形。銘柄コードは実 API では varchar(14) だが、モックは画面モックの体裁に合わせる */
-function toStockCode(serial) {
+function toSymbolCode(serial) {
   return `S${String(serial).padStart(3, '0')}`
 }
 
-function toStockItem({
+function toSymbolItem({
   serial,
   ticker,
   nameEn,
@@ -231,11 +231,11 @@ function toStockItem({
   userModified = false,
   canceled = false,
 }) {
-  const stockCode = toStockCode(serial)
-  const hasQuote = !WITHOUT_QUOTE.has(stockCode)
+  const symbolCode = toSymbolCode(serial)
+  const hasQuote = !WITHOUT_QUOTE.has(symbolCode)
 
   return {
-    銘柄コード: stockCode,
+    銘柄コード: symbolCode,
     Ticker: ticker,
     銘柄名: name,
     銘柄名_英字: nameEn,
@@ -267,12 +267,12 @@ function toStockItem({
  * 有効な行（取消区分 0）。56 件。
  * 並べ替えは読み出し側（ハンドラ）が実 API と同じ規則で行うので、ここでは生成順のまま置く。
  */
-export const stocks = [
-  ...FEATURED.map((stock, index) => toStockItem({ serial: index + 1, ...stock })),
+export const symbols = [
+  ...FEATURED.map((symbol, index) => toSymbolItem({ serial: index + 1, ...symbol })),
   ...FILLER_NAMES.map(([ticker, nameEn, name], index) => {
     const averageVolume = ((index % 7) + 1) * 1_250_000
 
-    return toStockItem({
+    return toSymbolItem({
       serial: FEATURED.length + index + 1,
       ticker,
       nameEn,
@@ -296,9 +296,9 @@ export const stocks = [
  * 取消済み（論理削除）の行。既定の一覧には出ない。
  * `include_deleted=true` を送ったときだけ返るので、「取消区分で外している」ことを確かめられる。
  */
-export const canceledStocks = [
-  toStockItem({
-    serial: stocks.length + 1,
+export const canceledSymbols = [
+  toSymbolItem({
+    serial: symbols.length + 1,
     ticker: 'DLST',
     nameEn: 'Delisted Sample Corp.',
     name: '上場廃止サンプル',

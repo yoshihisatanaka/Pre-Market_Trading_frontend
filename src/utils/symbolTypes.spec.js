@@ -9,15 +9,15 @@ import {
   isOrderRoute,
   isRegulation,
   isVwapTarget,
-} from './stockTypes'
+} from './symbolTypes'
 
 /*
  * 区分コードの対応表。**コード値そのものは固定しない**。
  * 規制情報の 0/1 は openapi.json に enum が無いための仮置きで、バックエンドの対応表が
- * 確認できたら差し替わる（src/utils/stockTypes.js の冒頭コメント）。
+ * 確認できたら差し替わる（src/utils/symbolTypes.js の冒頭コメント）。
  * 期待値は選択肢定数から導き、守るのは「選択肢の形」と「未知の値の扱い」だけにする。
  *
- * シナリオ: docs/unit/utils-stock-types.md
+ * シナリオ: docs/unit/utils-symbol-types.md
  */
 
 /** [区分の名前, 選択肢, format 関数, is 関数] */
@@ -30,7 +30,7 @@ const KINDS = [
 /** どの区分の選択肢にも無い値（未知のコードとして使う） */
 const UNKNOWN = '999'
 
-describe('stockTypes', () => {
+describe('symbolTypes', () => {
   it('[STT-01] 3 つの区分が { value, label } の選択肢を重複なく持つ', () => {
     for (const [name, options, ,] of KINDS) {
       expect(options.length, name).toBeGreaterThan(0)

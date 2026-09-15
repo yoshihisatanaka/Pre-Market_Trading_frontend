@@ -205,6 +205,26 @@ const confirmDelete = async (wrapper) => {
   await settle()
 }
 
+/**
+ * 一覧の取得を握るハンドラ。解放するまで応答しない。
+ * 「登録・更新・削除のあとの読み直しを待たずにモーダルが閉じる」ことを確かめるために使う。
+ *
+ * @returns {() => void} 呼ぶと応答が返る
+ */
+function gateListResponse() {
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  server.use(
+    http.get('*/api/ca', async () => {
+      await gate
+      return HttpResponse.json(listBody([], 0))
+    }),
+  )
+  return release
+}
+
 /** 削除を 500 にする差し替え */
 const failDelete = () =>
   server.use(
@@ -874,5 +894,63 @@ describe('CorporateActionListView', () => {
 
     expect(router.currentRoute.value.query.offset).toBeUndefined()
     expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
+  })
+
+  it('[CAV-39] 登録が受理されたら一覧の読み直しを待たずに追加モーダルが閉じる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, { 'stock-code': NEW_STOCK_CODE, type: NEW_CA_TYPE })
+
+    // 登録の後に走る読み直しを握る
+    const releaseList = gateListResponse()
+    await addSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+
+    // 読み直しはまだ終わっていないが、登録は受理されているのでモーダルを残さない
+    expect(exists(wrapper, 'ca-loading')).toBe(true)
+    expect(exists(wrapper, 'ca-add-form')).toBe(false)
+    expect(wrapper.find('[data-testid="ca-notice"]').text()).toContain(NEW_STOCK_CODE)
+
+    releaseList()
+    await settle()
+  })
+
+  it('[CAV-40] 更新が受理されたら一覧の読み直しを待たずに編集モーダルが閉じる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+    await fillEdit(wrapper, { note: '編集した備考' })
+
+    const releaseList = gateListResponse()
+    await editSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'ca-loading')).toBe(true)
+    expect(exists(wrapper, 'ca-edit-form')).toBe(false)
+    expect(wrapper.find('[data-testid="ca-notice"]').text()).toContain(firstPage[0].stockCode)
+
+    releaseList()
+    await settle()
+  })
+
+  it('[CAV-41] 削除が受理されたら一覧の読み直しを待たずに確認ダイアログが閉じる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+
+    const releaseList = gateListResponse()
+    await deleteSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'ca-loading')).toBe(true)
+    expect(exists(wrapper, 'ca-delete-submit')).toBe(false)
+    expect(wrapper.find('[data-testid="ca-notice"]').text()).toContain(firstPage[0].stockCode)
+
+    releaseList()
+    await settle()
   })
 })

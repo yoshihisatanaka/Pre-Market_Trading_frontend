@@ -3,7 +3,7 @@ import { formatDateTime, formatQuantity, formatUsd, formatUsdUnit } from './form
 
 /*
  * 表示用の整形。守るのは「空値は '—' でそろえる」ことと「0 を空値として扱わない」ことの 2 点。
- * 相場の 0 と未取得（null）の区別は api 層（src/api/stocks.js）が保っているので、
+ * 相場の 0 と未取得（null）の区別は api 層（src/api/symbols.js）が保っているので、
  * ここで潰すと一覧でその区別が消える。
  *
  * シナリオ: docs/unit/utils-format.md

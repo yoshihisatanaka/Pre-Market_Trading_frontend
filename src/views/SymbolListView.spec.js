@@ -5,50 +5,50 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { stocks } from '@/mocks/fixtures/stocks'
-import { STOCKS_PAGE_SIZE } from '@/stores/stocks'
+import { symbols } from '@/mocks/fixtures/symbols'
+import { SYMBOLS_PAGE_SIZE } from '@/stores/symbols'
 import { formatQuantity, formatUsdUnit } from '@/utils/format'
-import { ORDER_ROUTE_OPTIONS, REGULATION_OPTIONS, VWAP_TARGET_OPTIONS } from '@/utils/stockTypes'
-import StockListView from './StockListView.vue'
+import { ORDER_ROUTE_OPTIONS, REGULATION_OPTIONS, VWAP_TARGET_OPTIONS } from '@/utils/symbolTypes'
+import SymbolListView from './SymbolListView.vue'
 
 /*
  * 画面テスト。実際の Pinia ストア + vue-router + MSW(node) を通し、
  * 4状態の出し分けと「URL クエリが正」の単方向フローを検証する。
  *
  * 取引可否セルは表示名だけを見る（色は仮置きのコード値に依存するため。
- * docs/unit/views-stock-list-view.md）。
+ * docs/unit/views-symbol-list-view.md）。
  *
- * シナリオ: docs/unit/views-stock-list-view.md
+ * シナリオ: docs/unit/views-symbol-list-view.md
  */
 const PATH = '/masters/symbols'
 
-const PAGE_SIZE = STOCKS_PAGE_SIZE
-const TOTAL = stocks.length
+const PAGE_SIZE = SYMBOLS_PAGE_SIZE
+const TOTAL = symbols.length
 
 /*
  * フィクスチャはバックエンドの生の形（日本語キー / フラグは 0/1 の integer）なので、
  * 期待値は api 層と同じ変換でアプリ内モデルの形に直してから使う。
  */
-const toRow = (stock) => ({
-  stockCode: stock.銘柄コード,
-  ticker: stock.Ticker ?? '',
-  name: stock.銘柄名 ?? '',
-  nameEn: stock.銘柄名_英字 ?? '',
-  regulation: stock.規制情報 ?? '',
-  regulationName: stock.規制情報名 ?? '',
-  orderRoute: stock.注文ルート ?? '',
-  orderRouteName: stock.注文ルート名 ?? '',
-  vwapTarget: stock.VWAP対象区分 ?? '',
-  vwapTargetName: stock.VWAP対象区分名 ?? '',
-  note: stock.備考 ?? '',
-  previousClose: stock.前日終値,
-  previousVolume: stock.前日出来高,
-  averageVolume: stock.平均出来高,
-  userModified: stock.ユーザー操作フラグ === 1,
+const toRow = (symbol) => ({
+  symbolCode: symbol.銘柄コード,
+  ticker: symbol.Ticker ?? '',
+  name: symbol.銘柄名 ?? '',
+  nameEn: symbol.銘柄名_英字 ?? '',
+  regulation: symbol.規制情報 ?? '',
+  regulationName: symbol.規制情報名 ?? '',
+  orderRoute: symbol.注文ルート ?? '',
+  orderRouteName: symbol.注文ルート名 ?? '',
+  vwapTarget: symbol.VWAP対象区分 ?? '',
+  vwapTargetName: symbol.VWAP対象区分名 ?? '',
+  note: symbol.備考 ?? '',
+  previousClose: symbol.前日終値,
+  previousVolume: symbol.前日出来高,
+  averageVolume: symbol.平均出来高,
+  userModified: symbol.ユーザー操作フラグ === 1,
 })
 
 /** 実 API と同じ並び（銘柄コードの昇順） */
-const sorted = [...stocks].sort((a, b) => a.銘柄コード.localeCompare(b.銘柄コード))
+const sorted = [...symbols].sort((a, b) => a.銘柄コード.localeCompare(b.銘柄コード))
 const allRows = sorted.map(toRow)
 const firstPage = allRows.slice(0, PAGE_SIZE)
 const secondPage = allRows.slice(PAGE_SIZE)
@@ -75,7 +75,7 @@ const UNKNOWN_CODE = '9'
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
-/** StockListResponse の形で返す */
+/** SymbolListResponse の形で返す */
 const listBody = (items, total = items.length) => ({
   total,
   limit: PAGE_SIZE,
@@ -85,12 +85,12 @@ const listBody = (items, total = items.length) => ({
 
 const errorHandler = (options) =>
   http.get(
-    '*/api/stocks',
+    '*/api/masters/symbols',
     () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     options,
   )
 const emptyHandler = (options) =>
-  http.get('*/api/stocks', () => HttpResponse.json(listBody([])), options)
+  http.get('*/api/masters/symbols', () => HttpResponse.json(listBody([])), options)
 
 const Page = { render: () => h('div') }
 
@@ -107,7 +107,7 @@ async function mountView(query = {}) {
   // mount 前に遷移を済ませておけば router.isReady() を待たなくてよい
   await router.push({ path: PATH, query })
 
-  const wrapper = mount(StockListView, {
+  const wrapper = mount(SymbolListView, {
     global: {
       plugins: [createPinia(), router],
       // teleport を stub して、ヘッダへ差し込むボタンを wrapper 内に描画させる
@@ -127,25 +127,25 @@ async function settle() {
 }
 
 const rows = (wrapper) => wrapper.findAll('[data-testid="data-table-row"]')
-const countText = (wrapper) => wrapper.find('[data-testid="stocks-count"]').text()
+const countText = (wrapper) => wrapper.find('[data-testid="symbols-count"]').text()
 const exists = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`).exists()
 const headers = (wrapper) => wrapper.findAll('th').map((th) => th.text())
 const cells = (row) => row.findAll('td').map((td) => td.text())
-const rowOf = (wrapper, stockCode) =>
-  rows(wrapper).find((candidate) => candidate.text().includes(stockCode))
+const rowOf = (wrapper, symbolCode) =>
+  rows(wrapper).find((candidate) => candidate.text().includes(symbolCode))
 const pageButton = (wrapper, page) =>
   wrapper.find(`[data-testid="pagination-page"][data-page="${page}"]`)
 
 /** 選択肢定数から表示名を引く（仮置きのラベル文字列をテストに直接書かない） */
 const labelOf = (options, value) => options.find((option) => option.value === value).label
 
-describe('StockListView', () => {
+describe('SymbolListView', () => {
   it('[STV-01] 応答を待つ間はローディングだけを出す', async () => {
     const { wrapper } = await mountView()
 
-    expect(exists(wrapper, 'stocks-loading')).toBe(true)
-    expect(exists(wrapper, 'stocks-table')).toBe(false)
-    expect(exists(wrapper, 'stocks-empty')).toBe(false)
+    expect(exists(wrapper, 'symbols-loading')).toBe(true)
+    expect(exists(wrapper, 'symbols-table')).toBe(false)
+    expect(exists(wrapper, 'symbols-empty')).toBe(false)
   })
 
   it('[STV-02] 1 ページ目の件数と行がフィクスチャと一致する', async () => {
@@ -156,7 +156,7 @@ describe('StockListView', () => {
     expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
 
     const first = rows(wrapper)[0].text()
-    expect(first).toContain(firstPage[0].stockCode)
+    expect(first).toContain(firstPage[0].symbolCode)
     expect(first).toContain(firstPage[0].ticker)
     expect(first).toContain(firstPage[0].nameEn)
     expect(first).toContain(firstPage[0].name)
@@ -202,7 +202,7 @@ describe('StockListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(cells(rowOf(wrapper, target.stockCode)).slice(4, 7)).toEqual(['—', '—', '—'])
+    expect(cells(rowOf(wrapper, target.symbolCode)).slice(4, 7)).toEqual(['—', '—', '—'])
   })
 
   it('[STV-06] 前日終値は「ドル」付き、出来高は 3 桁区切りで出す', async () => {
@@ -211,7 +211,7 @@ describe('StockListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    const quote = cells(rowOf(wrapper, target.stockCode)).slice(4, 7)
+    const quote = cells(rowOf(wrapper, target.symbolCode)).slice(4, 7)
     expect(quote).toEqual([
       formatUsdUnit(target.previousClose),
       formatQuantity(target.previousVolume),
@@ -224,7 +224,7 @@ describe('StockListView', () => {
 
   it('[STV-07] 区分名が欠けた応答でもコードから名前を補う', async () => {
     const raw = { ...sorted[0], 規制情報名: null, 注文ルート名: null, VWAP対象区分名: null }
-    server.use(http.get('*/api/stocks', () => HttpResponse.json(listBody([raw]))))
+    server.use(http.get('*/api/masters/symbols', () => HttpResponse.json(listBody([raw]))))
 
     const { wrapper } = await mountView()
     await settle()
@@ -241,8 +241,8 @@ describe('StockListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(wrapper.find('[data-testid="stocks-empty"]').text()).toBe('該当する銘柄はありません。')
-    expect(exists(wrapper, 'stocks-table')).toBe(false)
+    expect(wrapper.find('[data-testid="symbols-empty"]').text()).toBe('該当する銘柄はありません。')
+    expect(exists(wrapper, 'symbols-table')).toBe(false)
   })
 
   it('[STV-09] 取得に失敗したときは理由と再試行を出す', async () => {
@@ -250,9 +250,9 @@ describe('StockListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(wrapper.find('[data-testid="stocks-error"]').text()).toContain(ERROR_MESSAGE)
-    expect(exists(wrapper, 'stocks-table')).toBe(false)
-    expect(exists(wrapper, 'stocks-empty')).toBe(false)
+    expect(wrapper.find('[data-testid="symbols-error"]').text()).toContain(ERROR_MESSAGE)
+    expect(exists(wrapper, 'symbols-table')).toBe(false)
+    expect(exists(wrapper, 'symbols-empty')).toBe(false)
   })
 
   it('[STV-10] 再試行で読み直すと表が出る', async () => {
@@ -261,10 +261,10 @@ describe('StockListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    await wrapper.find('[data-testid="stocks-error"]').find('button').trigger('click')
+    await wrapper.find('[data-testid="symbols-error"]').find('button').trigger('click')
     await settle()
 
-    expect(exists(wrapper, 'stocks-error')).toBe(false)
+    expect(exists(wrapper, 'symbols-error')).toBe(false)
     expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
   })
 
@@ -273,7 +273,7 @@ describe('StockListView', () => {
     await settle()
 
     expect(rows(wrapper)).toHaveLength(oddPage.length)
-    expect(rows(wrapper)[0].text()).toContain(oddPage[0].stockCode)
+    expect(rows(wrapper)[0].text()).toContain(oddPage[0].symbolCode)
   })
 
   it('[STV-12] ページ番号を click すると URL に offset が乗り表が入れ替わる', async () => {
@@ -291,15 +291,15 @@ describe('StockListView', () => {
     const { wrapper, router } = await mountView()
     await settle()
 
-    await wrapper.find('[data-testid="stocks-stock-code"]').setValue(TICKER)
-    await wrapper.find('[data-testid="stocks-regulation"]').setValue(REGULATION)
-    await wrapper.find('[data-testid="stocks-order-route"]').setValue(ORDER_ROUTE)
-    await wrapper.find('[data-testid="stocks-vwap-target"]').setValue(VWAP_TARGET)
-    await wrapper.find('[data-testid="stocks-search"]').trigger('submit')
+    await wrapper.find('[data-testid="symbols-symbol-code"]').setValue(TICKER)
+    await wrapper.find('[data-testid="symbols-regulation"]').setValue(REGULATION)
+    await wrapper.find('[data-testid="symbols-order-route"]').setValue(ORDER_ROUTE)
+    await wrapper.find('[data-testid="symbols-vwap-target"]').setValue(VWAP_TARGET)
+    await wrapper.find('[data-testid="symbols-search"]').trigger('submit')
     await settle()
 
     expect(router.currentRoute.value.query).toEqual({
-      stock_code: TICKER,
+      symbol_code: TICKER,
       regulation: REGULATION,
       order_route: ORDER_ROUTE,
       vwap_target: VWAP_TARGET,
@@ -308,11 +308,11 @@ describe('StockListView', () => {
   })
 
   it('[STV-14] クリアで URL クエリが空になり全件に戻る', async () => {
-    const { wrapper, router } = await mountView({ stock_code: TICKER })
+    const { wrapper, router } = await mountView({ symbol_code: TICKER })
     await settle()
     expect(rows(wrapper).length).toBeLessThan(PAGE_SIZE)
 
-    await wrapper.find('[data-testid="stocks-search-clear"]').trigger('click')
+    await wrapper.find('[data-testid="symbols-search-clear"]').trigger('click')
     await settle()
 
     expect(router.currentRoute.value.query).toEqual({})
@@ -324,7 +324,7 @@ describe('StockListView', () => {
     await settle()
 
     expect(countText(wrapper)).toContain(String(TOTAL))
-    expect(wrapper.find('[data-testid="stocks-regulation"]').element.value).toBe('')
+    expect(wrapper.find('[data-testid="symbols-regulation"]').element.value).toBe('')
   })
 
   it('[STV-16] 説明バナーと検索カードは 4 状態のいずれでも表示される', async () => {
@@ -333,8 +333,8 @@ describe('StockListView', () => {
       const { wrapper } = await mountView()
       await settle()
 
-      expect(exists(wrapper, 'stocks-description')).toBe(true)
-      expect(exists(wrapper, 'stocks-search')).toBe(true)
+      expect(exists(wrapper, 'symbols-description')).toBe(true)
+      expect(exists(wrapper, 'symbols-search')).toBe(true)
     }
   })
 
@@ -342,8 +342,8 @@ describe('StockListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(exists(wrapper, 'stocks-reload')).toBe(true)
-    expect(exists(wrapper, 'stocks-add')).toBe(false)
+    expect(exists(wrapper, 'symbols-reload')).toBe(true)
+    expect(exists(wrapper, 'symbols-add')).toBe(false)
     // 行の中にボタンが無いこと（操作列そのものが無い）
     expect(rows(wrapper)[0].findAll('button')).toHaveLength(0)
   })

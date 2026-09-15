@@ -3,7 +3,7 @@ import { h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { symbols } from '@/mocks/fixtures/symbols'
 import { SYMBOLS_PAGE_SIZE } from '@/stores/symbols'
@@ -138,6 +138,51 @@ const pageButton = (wrapper, page) =>
 
 /** 選択肢定数から表示名を引く（仮置きのラベル文字列をテストに直接書かない） */
 const labelOf = (options, value) => options.find((option) => option.value === value).label
+
+/* ここから新規追加モーダル用のヘルパ */
+
+// フィクスチャに無い銘柄コードと、既にある銘柄コード（事前検証に重複で弾かれる）
+const NEW_SYMBOL = { 'symbol-code': 'S900', ticker: 'ZZZZ', name: 'テスト銘柄' }
+const EXISTING_CODE = allRows[0].symbolCode
+
+const addInput = (wrapper, name) => wrapper.find(`[data-testid="symbols-add-${name}"]`)
+const addSubmit = (wrapper) => wrapper.find('[data-testid="symbols-add-submit"]')
+const addCancel = (wrapper) => wrapper.find('[data-testid="symbols-add-cancel"]')
+
+const openAddModal = async (wrapper) => {
+  await wrapper.find('[data-testid="symbols-add"]').trigger('click')
+}
+
+/** 入力欄をまとめて埋める（キーは testid の `symbols-add-` より後ろ） */
+const fillAdd = async (wrapper, values) => {
+  for (const [name, value] of Object.entries(values)) {
+    await addInput(wrapper, name).setValue(value)
+  }
+}
+
+const submitAdd = async (wrapper) => {
+  await addSubmit(wrapper).trigger('click')
+  await settle()
+}
+
+// 事前検証の理由は箇条書きで出るので、行ごとのテキストで取り出す
+const validationMessages = (wrapper) =>
+  wrapper.findAll('[data-testid="symbols-add-validation-error"] li').map((item) => item.text())
+
+/** 入力欄の直下に出ている理由（FormField が aria-describedby で結び付けている） */
+const fieldError = (wrapper, input) => {
+  const ids = (input.attributes('aria-describedby') ?? '').split(' ').filter(Boolean)
+  const found = ids.map((id) => wrapper.find(`#${id}[role="alert"]`)).find((el) => el.exists())
+  return found ? found.text() : ''
+}
+
+/** 登録（事前検証は既定のまま）を 500 にする差し替え */
+const failCreate = () =>
+  server.use(
+    http.post('*/api/masters/symbols', () =>
+      HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+    ),
+  )
 
 describe('SymbolListView', () => {
   it('[STV-01] 応答を待つ間はローディングだけを出す', async () => {
@@ -338,13 +383,184 @@ describe('SymbolListView', () => {
     }
   })
 
-  it('[STV-17] 読むだけの画面なので追加・編集・削除の導線を持たない', async () => {
+  it('[STV-17] ヘッダに追加の導線があり、行には操作が無い', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     expect(exists(wrapper, 'symbols-reload')).toBe(true)
-    expect(exists(wrapper, 'symbols-add')).toBe(false)
-    // 行の中にボタンが無いこと（操作列そのものが無い）
+    expect(exists(wrapper, 'symbols-add')).toBe(true)
+    // 編集・削除はまだ無い（行の中にボタンが無く、操作列そのものが無い）
     expect(rows(wrapper)[0].findAll('button')).toHaveLength(0)
+  })
+
+  it('[STV-18] 新規追加を押すと 10 項目の空のフォームが開く', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openAddModal(wrapper)
+
+    expect(exists(wrapper, 'symbols-add-form')).toBe(true)
+    for (const name of [
+      'symbol-code',
+      'ticker',
+      'name',
+      'name-en',
+      'previous-close',
+      'average-volume',
+      'note',
+    ]) {
+      expect(addInput(wrapper, name).element.value).toBe('')
+    }
+    // 区分 3 つを含めて、入力欄はちょうど 10 個（市場名・前日出来高・Pre区分 は持たない）
+    const fields = wrapper.findAll('[data-testid^="symbols-add-"]')
+    const inputs = fields.filter((field) =>
+      ['input', 'select'].includes(field.element.tagName.toLowerCase()),
+    )
+    expect(inputs).toHaveLength(10)
+  })
+
+  it('[STV-19] 必須が未入力なら項目の直下に理由を出し、API へ送らない', async () => {
+    let validateCalls = 0
+    let createCalls = 0
+    server.use(
+      http.post('*/api/masters/symbols/validate', () => {
+        validateCalls += 1
+        return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
+      }),
+      http.post('*/api/masters/symbols', () => {
+        createCalls += 1
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await submitAdd(wrapper)
+
+    expect(exists(wrapper, 'symbols-add-form')).toBe(true)
+    expect(fieldError(wrapper, addInput(wrapper, 'symbol-code'))).toBe(
+      '銘柄コードを入力してください。',
+    )
+    expect(fieldError(wrapper, addInput(wrapper, 'ticker'))).toBe(
+      'ティッカーコードを入力してください。',
+    )
+    expect(fieldError(wrapper, addInput(wrapper, 'name'))).toBe(
+      '銘柄名（日本語）を入力してください。',
+    )
+    // 無駄な往復をしない（事前検証も登録も呼ばない）
+    expect(validateCalls).toBe(0)
+    expect(createCalls).toBe(0)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[STV-20] 追加が成功するとモーダルが閉じ、成功メッセージと増えた件数が出る', async () => {
+    const { wrapper, router } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, NEW_SYMBOL)
+    await submitAdd(wrapper)
+
+    expect(exists(wrapper, 'symbols-add-form')).toBe(false)
+    /*
+     * 一覧は銘柄コードの昇順なので、追加した行が 1 ページ目に出るとは限らない。
+     * 行を追わず、メッセージに銘柄コードが入っていること（＝検索できること）を見る。
+     */
+    const notice = wrapper.find('[data-testid="symbols-notice"]').text()
+    expect(notice).toContain(NEW_SYMBOL['symbol-code'])
+    expect(notice).toContain(NEW_SYMBOL.ticker)
+    expect(countText(wrapper)).toContain(String(TOTAL + 1))
+    // 一覧の単方向フローには触らない
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('[STV-21] 事前検証の不合格はモーダル内に箇条書きで出し、登録しない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, { ...NEW_SYMBOL, 'symbol-code': EXISTING_CODE })
+    await submitAdd(wrapper)
+
+    expect(exists(wrapper, 'symbols-add-form')).toBe(true)
+    expect(validationMessages(wrapper)).toEqual([
+      `銘柄コード(${EXISTING_CODE})は既に登録されています`,
+    ])
+    // 通信は成功しているので、サーバ障害の枠には出さない
+    expect(exists(wrapper, 'symbols-add-error')).toBe(false)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[STV-22] 通信・サーバ障害はモーダル内に 1 行で出す', async () => {
+    failCreate()
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await fillAdd(wrapper, NEW_SYMBOL)
+    await submitAdd(wrapper)
+
+    expect(exists(wrapper, 'symbols-add-form')).toBe(true)
+    expect(wrapper.find('[data-testid="symbols-add-error"]').text()).toContain(ERROR_MESSAGE)
+    // 事前検証は通っているので、そちらの枠には出さない
+    expect(exists(wrapper, 'symbols-add-validation-error')).toBe(false)
+  })
+
+  it('[STV-23] 登録中は送信もキャンセルもできない', async () => {
+    server.use(
+      http.post('*/api/masters/symbols', async () => {
+        await delay(20)
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, NEW_SYMBOL)
+
+    // 応答を待たずに押した直後を見る
+    const pending = addSubmit(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(addSubmit(wrapper).text()).toContain('追加中')
+    expect(addSubmit(wrapper).attributes('disabled')).toBeDefined()
+    // 結果の行き先が無くなるので、閉じさせない
+    expect(addCancel(wrapper).attributes('disabled')).toBeDefined()
+
+    await pending
+    await settle()
+    expect(exists(wrapper, 'symbols-add-form')).toBe(true)
+  })
+
+  it('[STV-24] モーダルを開き直すと前回の入力と失敗理由が残らない', async () => {
+    failCreate()
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, { ...NEW_SYMBOL, note: 'メモ' })
+    await submitAdd(wrapper)
+    expect(exists(wrapper, 'symbols-add-error')).toBe(true)
+
+    await addCancel(wrapper).trigger('click')
+    await openAddModal(wrapper)
+
+    expect(exists(wrapper, 'symbols-add-error')).toBe(false)
+    expect(addInput(wrapper, 'symbol-code').element.value).toBe('')
+    expect(addInput(wrapper, 'ticker').element.value).toBe('')
+    expect(addInput(wrapper, 'note').element.value).toBe('')
+  })
+
+  it('[STV-25] 区分 3 つは未選択を作らず実 API の既定から始まる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openAddModal(wrapper)
+
+    // 注文ルートは null を送れないので、未選択の選択肢そのものを置かない
+    for (const name of ['regulation', 'order-route', 'vwap-target']) {
+      expect(addInput(wrapper, name).element.value).toBe('0')
+      expect(addInput(wrapper, name).findAll('option[value=""]')).toHaveLength(0)
+    }
   })
 })

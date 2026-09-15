@@ -61,10 +61,11 @@ const Page = { render: () => h('div') }
 /**
  * 画面をマウントする。
  *
- * @param {{ query?: object, withCodes?: boolean }} [options]
- *   withCodes を立てるとコードマスタを先に読み込む（プルダウンに選択肢が入る）
+ * @param {{ query?: object, withCodes?: boolean, pendingCodes?: boolean }} [options]
+ *   withCodes を立てるとコードマスタを先に読み込む（プルダウンに選択肢が入る）。
+ *   pendingCodes は読み込みを始めるだけで待たない（取得中の見た目を見るため）
  */
-async function mountView({ query = {}, withCodes = false } = {}) {
+async function mountView({ query = {}, withCodes = false, pendingCodes = false } = {}) {
   // 実 router/index.js は createWebHistory 固定で差し替えられないため、テスト用に最小定義する。
   // この画面が見るのは route.query だけ（見出しは AppHeader が meta.title から出す）
   const router = createRouter({
@@ -78,9 +79,11 @@ async function mountView({ query = {}, withCodes = false } = {}) {
   await router.push({ path: PATH, query })
 
   const pinia = createPinia()
-  if (withCodes) {
+  if (withCodes || pendingCodes) {
     setActivePinia(pinia)
-    await useCodesStore().load()
+    const loaded = useCodesStore().load()
+    // pendingCodes のときは待たない。main.js が起動時に読み始めた直後の状態を作る
+    if (withCodes) await loaded
   }
 
   const wrapper = mount(CustomerListView, {
@@ -127,6 +130,8 @@ describe('CustomerListView', () => {
     expect(exists(wrapper, 'customers-loading')).toBe(true)
     expect(exists(wrapper, 'customers-table')).toBe(false)
     expect(exists(wrapper, 'customers-empty')).toBe(false)
+    // 確定前の件数を出すと、前回の値が新しい結果に見える
+    expect(exists(wrapper, 'customers-count')).toBe(false)
   })
 
   it('[CLV-02] 1 ページ目の件数と行がフィクスチャと一致する', async () => {
@@ -442,5 +447,25 @@ describe('CustomerListView', () => {
     expect(exists(wrapper, 'customers-add')).toBe(false)
     // 行の中にボタンが無いこと（操作列そのものが無い）
     expect(rows(wrapper)[0].findAll('button')).toHaveLength(0)
+  })
+
+  it('[CLV-22] コードマスタの取得中は検索カードが回転マークを出して入力を受け付けない', async () => {
+    const { wrapper } = await mountView({ pendingCodes: true })
+
+    expect(exists(wrapper, 'customers-options-loading')).toBe(true)
+    // 入力欄は fieldset ごと無効にする（select の disabled 属性は個々には付かない）
+    expect(wrapper.find('[data-testid="customers-search"] fieldset').attributes('disabled')).toBe(
+      '',
+    )
+    expect(wrapper.find('[data-testid="customers-search-submit"]').element.disabled).toBe(true)
+
+    await settle()
+
+    // 取得が終われば回転マークは消え、条件を入れられるようになる
+    expect(exists(wrapper, 'customers-options-loading')).toBe(false)
+    expect(
+      wrapper.find('[data-testid="customers-search"] fieldset').attributes('disabled'),
+    ).toBeUndefined()
+    expect(wrapper.find('[data-testid="customers-search-submit"]').element.disabled).toBe(false)
   })
 })

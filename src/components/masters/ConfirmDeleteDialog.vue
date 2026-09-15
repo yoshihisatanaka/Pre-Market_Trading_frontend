@@ -68,6 +68,7 @@ const emit = defineEmits(['close', 'confirm'])
         variant="danger"
         :data-testid="`${testidPrefix}-delete-submit`"
         :disabled="pending"
+        :loading="pending"
         @click="emit('confirm')"
       >
         {{ pending ? '削除中…' : '削除する' }}

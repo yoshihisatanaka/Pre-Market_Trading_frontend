@@ -7,9 +7,112 @@
     <link rel="icon" type="image/png" href="/favicon-192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>US Stock Order</title>
+    <style>
+      /*
+        JS バンドルを読み込んでいる間のスプラッシュ。
+
+        この時点では tokens.css も reset.css も届いていない（スタイルは main.js 経由でしか
+        来ない）ので、ここだけは直値で書く。値はすべて tokens.css の写し。
+          #182230 = --color-sidebar-bg      #2c3848 = --color-sidebar-border
+          #ffffff = --color-sidebar-text-active   #aeb9c7 = --color-sidebar-section
+        フォントも reset.css が来ていないので、--font-family-base と同じ指定を自前で持つ。
+
+        配色・寸法・文言は src/components/layout/AppLoadingOverlay.vue とそろえてある。
+        マウントの前後で見た目が変わると継ぎ目が見えるので、片方を変えたらもう片方も直すこと。
+      */
+      .boot-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 32px;
+        background-color: #182230;
+        font-family: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic UI', Meiryo, sans-serif;
+        /*
+          最初に目に入る画面なので、暗転してから中身が現れる形にする。
+          Vue 側のオーバーレイは同じ見た目を引き継ぐだけなので、そちらでは重ねてかけない
+          （もう一度フェードすると継ぎ目で明滅する）。
+        */
+        animation: boot-splash-fade 0.2s ease both;
+      }
+
+      .boot-splash__wordmark {
+        margin: 0;
+        color: #ffffff;
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-indent: 0.18em;
+      }
+
+      .boot-splash__status {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+
+      /* BaseSpinner の .base-spinner--lg と同じ（48px / border 4px / 0.8s） */
+      .boot-splash__spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid #2c3848;
+        border-top-color: #ffffff;
+        border-radius: 50%;
+        animation: boot-splash-rotate 0.8s linear infinite;
+      }
+
+      .boot-splash__caption {
+        margin: 0;
+        color: #aeb9c7;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+      }
+
+      @keyframes boot-splash-rotate {
+        to {
+          transform: rotate(1turn);
+        }
+      }
+
+      @keyframes boot-splash-fade {
+        from {
+          opacity: 0;
+        }
+      }
+
+      /* 止めずに遅くする（静止させると停止した UI と見分けが付かない） */
+      @media (prefers-reduced-motion: reduce) {
+        .boot-splash__spinner {
+          animation-duration: 2.4s;
+        }
+
+        .boot-splash {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!--
+        Vue の mount は #app の中身を捨てるので、マウントした瞬間にこれが消え、
+        そのまま AppLoadingOverlay へ引き継がれる（必ず #app の中に置くこと。
+        body 直下に置くと Vue が触らず、消し忘れて残る）。
+
+        aria-hidden にしてあるのは、直後に出る AppLoadingOverlay が
+        「読み込んでいます」を role="status" で読み上げるため。両方が喋ると二重に読まれる。
+      -->
+      <div class="boot-splash" aria-hidden="true">
+        <p class="boot-splash__wordmark">米株発注システム</p>
+        <div class="boot-splash__status">
+          <span class="boot-splash__spinner"></span>
+          <p class="boot-splash__caption">読み込んでいます</p>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

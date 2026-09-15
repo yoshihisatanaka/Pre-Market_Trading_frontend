@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { useOrdersStore } from '@/stores/orders'
 import { formatDateTime, formatQuantity, formatUsd } from '@/utils/format'
@@ -47,7 +48,9 @@ onMounted(() => store.load())
     </Teleport>
 
     <!-- 以降の画面もこの4状態の出し分けを踏襲する -->
-    <p v-if="loading" data-testid="orders-loading" class="order-list__status">読み込み中…</p>
+    <p v-if="loading" data-testid="orders-loading" class="order-list__status is-loading">
+      <BaseSpinner />
+    </p>
 
     <div v-else-if="error" data-testid="orders-error" class="order-list__status is-error">
       <p>{{ error.message }}</p>
@@ -77,6 +80,12 @@ onMounted(() => store.load())
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+}
+
+/* スピナーだけを置くので中央に寄せる（文言が無いぶん左端に小さく出ると迷子になる） */
+.order-list__status.is-loading {
+  display: flex;
+  justify-content: center;
 }
 
 .order-list__status.is-error {

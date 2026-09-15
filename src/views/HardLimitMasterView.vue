@@ -5,6 +5,7 @@ import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
 import { useHardLimitsStore } from '@/stores/hardLimits'
@@ -105,7 +106,9 @@ store.load()
     </BaseAlert>
 
     <!-- ローディング / エラー / 空 / データあり の 4 状態 -->
-    <p v-if="loading" data-testid="hard-limits-loading" class="hard-limit__status">読み込み中…</p>
+    <p v-if="loading" data-testid="hard-limits-loading" class="hard-limit__status is-loading">
+      <BaseSpinner />
+    </p>
 
     <div v-else-if="error" data-testid="hard-limits-error" class="hard-limit__status is-error">
       <p>{{ error.message }}</p>
@@ -201,7 +204,12 @@ store.load()
           </FormGrid>
 
           <div class="hard-limit__actions">
-            <BaseButton type="submit" data-testid="hard-limits-save" :disabled="saving">
+            <BaseButton
+              type="submit"
+              data-testid="hard-limits-save"
+              :disabled="saving"
+              :loading="saving"
+            >
               {{ saving ? '保存中…' : '保存' }}
             </BaseButton>
           </div>
@@ -301,6 +309,12 @@ store.load()
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+}
+
+/* スピナーだけを置くので中央に寄せる（文言が無いぶん左端に小さく出ると迷子になる） */
+.hard-limit__status.is-loading {
+  display: flex;
+  justify-content: center;
 }
 
 .hard-limit__status.is-error {

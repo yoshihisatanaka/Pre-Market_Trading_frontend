@@ -177,6 +177,26 @@ const deleteNotFoundHandler = () =>
     HttpResponse.json({ detail: NOT_FOUND_MESSAGE }, { status: 404 }),
   )
 
+/**
+ * 一覧の取得を握るハンドラ。解放するまで応答しない。
+ * 「登録・更新のあとの読み直しを待たずにモーダルが閉じる」ことを確かめるために使う。
+ *
+ * @returns {() => void} 呼ぶと応答が返る
+ */
+function gateListResponse() {
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  server.use(
+    http.get('*/api/blackout-dates', async () => {
+      await gate
+      return HttpResponse.json(listBody([], 0))
+    }),
+  )
+  return release
+}
+
 const deleteButton = (wrapper, id) => wrapper.find(`[data-testid="blackout-dates-delete-${id}"]`)
 const editButton = (wrapper, id) => wrapper.find(`[data-testid="blackout-dates-edit-${id}"]`)
 // 削除確認モーダルは表の行と同じ日付を出すので、dialog に絞ってから本文を読む
@@ -897,5 +917,64 @@ describe('BlackoutDateListView', () => {
     })
     expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
     expect(countText(wrapper)).toBe(`${PAGE_SIZE} 件`)
+  })
+
+  it('[BDL-37] 登録が受理されたら一覧の読み直しを待たずに追加モーダルが閉じる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, NEW_DATE, NEW_REASON)
+
+    // 登録の後に走る読み直しを握る
+    const releaseList = gateListResponse()
+    await addSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+
+    // 読み直しはまだ終わっていないが、登録は受理されているのでモーダルを残さない
+    expect(exists(wrapper, 'blackout-dates-loading')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-add-form')).toBe(false)
+    expect(wrapper.find('[data-testid="blackout-dates-notice"]').text()).toContain(NEW_DATE)
+
+    releaseList()
+    await settle()
+  })
+
+  it('[BDL-38] 更新が受理されたら一覧の読み直しを待たずに編集モーダルが閉じる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper, EDIT_TARGET.id)
+    await editReasonInput(wrapper).setValue(EDITED_REASON)
+
+    const releaseList = gateListResponse()
+    await editSubmit(wrapper).trigger('click')
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'blackout-dates-loading')).toBe(true)
+    expect(editDialog(wrapper).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="blackout-dates-notice"]').text()).toContain(EDIT_TARGET.date)
+
+    releaseList()
+    await settle()
+  })
+
+  it('[BDL-39] 削除が受理されたら一覧の読み直しを待たずに確認モーダルが閉じる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openDelete(wrapper, DELETE_TARGET.id)
+
+    const releaseList = gateListResponse()
+    await confirmDelete(wrapper)
+    await settle()
+
+    expect(exists(wrapper, 'blackout-dates-loading')).toBe(true)
+    expect(deleteDialog(wrapper).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="blackout-dates-notice"]').text()).toContain(
+      DELETE_TARGET.date,
+    )
+
+    releaseList()
+    await settle()
   })
 })

@@ -170,6 +170,26 @@ const emptyHandler = (options) =>
     () => HttpResponse.json({ total: 0, limit: PAGE_SIZE, offset: 0, holidays: [] }),
     options,
   )
+/**
+ * 一覧の取得を握るハンドラ。解放するまで応答しない。
+ * 「登録のあとの読み直しを待たずにモーダルが閉じる」ことを確かめるために使う。
+ *
+ * @returns {() => void} 呼ぶと応答が返る
+ */
+function gateListResponse() {
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  server.use(
+    http.get('*/api/holidays', async () => {
+      await gate
+      return HttpResponse.json({ total: 0, limit: PAGE_SIZE, offset: 0, holidays: [] })
+    }),
+  )
+  return release
+}
+
 const deleteNotFoundHandler = () =>
   http.delete('*/api/holidays/:holidayDate', () =>
     HttpResponse.json({ detail: NOT_FOUND_MESSAGE }, { status: 404 }),
@@ -616,5 +636,45 @@ describe('MarketHolidayListView', () => {
     expect(wrapper.find('[data-testid="market-holidays-notice"]').text()).toContain(CANCELED_DATE)
     // 取消済みの行が有効に戻るので、一覧の件数は 1 件増える
     expect(countText(wrapper)).toBe(`${TOTAL + 1} 件`)
+  })
+
+  it('[MHL-31] 登録が受理されたら一覧の読み直しを待たずに追加モーダルが閉じる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, NEW_DATE, NEW_REASON)
+
+    // 登録の後に走る読み直しを握る
+    const releaseList = gateListResponse()
+    await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
+    await settle()
+    await settle()
+
+    // 読み直しはまだ終わっていないが、登録は受理されているのでモーダルを残さない
+    expect(exists(wrapper, 'market-holidays-loading')).toBe(true)
+    expect(exists(wrapper, 'market-holidays-add-form')).toBe(false)
+    expect(wrapper.find('[data-testid="market-holidays-notice"]').text()).toContain(NEW_DATE)
+
+    releaseList()
+    await settle()
+  })
+
+  it('[MHL-32] 削除が受理されたら一覧の読み直しを待たずに確認モーダルが閉じる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openDelete(wrapper, DELETE_TARGET_ID)
+
+    const releaseList = gateListResponse()
+    await confirmDelete(wrapper)
+    await settle()
+
+    expect(exists(wrapper, 'market-holidays-loading')).toBe(true)
+    expect(deleteDialog(wrapper).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="market-holidays-notice"]').text()).toContain(
+      DELETE_TARGET_DATE,
+    )
+
+    releaseList()
+    await settle()
   })
 })

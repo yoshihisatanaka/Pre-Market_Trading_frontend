@@ -2,7 +2,12 @@
 /**
  * 汎用ボタン。ラベルは slot で受ける。
  * click は宣言せず、フォールスルー属性として <button> にそのまま届ける。
+ *
+ * loading は「送信中」の見た目（回転マークと aria-busy）だけを担う。押せなくするのは
+ * 呼び出し側の disabled の仕事で、ここでは連動させない（同じことを 2 箇所で管理しない）。
  */
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
+
 defineProps({
   variant: {
     type: String,
@@ -22,6 +27,11 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  /** 送信中。回転マークを出すだけで、押せなくはしない（上記） */
+  loading: {
+    type: Boolean,
+    default: false,
+  },
   block: {
     type: Boolean,
     default: false,
@@ -33,6 +43,7 @@ defineProps({
   <button
     :type="type"
     :disabled="disabled"
+    :aria-busy="loading || undefined"
     :class="[
       'base-button',
       `base-button--${variant}`,
@@ -40,6 +51,11 @@ defineProps({
       { 'is-block': block },
     ]"
   >
+    <!--
+      label="" は必須。ボタンのラベル（「追加中…」など）が既に状態を伝えているので
+      読み上げは二重にせず、textContent も汚さない（文言を完全一致で見ているテストがある）
+    -->
+    <BaseSpinner v-if="loading" size="sm" label="" />
     <slot />
   </button>
 </template>

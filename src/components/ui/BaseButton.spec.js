@@ -46,4 +46,23 @@ describe('BaseButton', () => {
 
     expect(wrapper.attributes('type')).toBe('submit')
   })
+
+  it('[BBT-07] loading で回転マークが出るが、押せなくはしない', () => {
+    const wrapper = mount(BaseButton, { props: { loading: true } })
+
+    expect(wrapper.find('.base-spinner').exists()).toBe(true)
+    expect(wrapper.attributes('aria-busy')).toBe('true')
+    // 押せなくするのは呼び出し側の disabled の役目。同じことを 2 箇所で管理しない
+    expect(wrapper.element.disabled).toBe(false)
+  })
+
+  it('[BBT-08] loading でもボタンの文字は変わらない', () => {
+    const wrapper = mount(BaseButton, {
+      props: { loading: true },
+      slots: { default: '追加中…' },
+    })
+
+    // 回転マークが読み上げテキストを足すと、文言を完全一致で見ているテストが壊れる
+    expect(wrapper.text()).toBe('追加中…')
+  })
 })

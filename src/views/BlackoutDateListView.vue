@@ -102,15 +102,21 @@ async function submitAdd() {
   }
   if (addErrors.value.date || addErrors.value.reason) return
 
-  const created = await store.create({
-    date: addDate.value,
-    reason: addReason.value.trim(),
-  })
-  // 失敗時はモーダルを開いたままにして、入力を直せるようにする（理由は createError に出る）
-  if (!created) return
-
-  isAddOpen.value = false
-  noticeMessage.value = `${created.date} を追加しました。`
+  await store.create(
+    { date: addDate.value, reason: addReason.value.trim() },
+    {
+      /*
+       * 閉じるのは登録が受理された時点。store.create の戻り値を待つと、
+       * そこに含まれる一覧の読み直しのあいだモーダルが開いたまま残る。
+       * 失敗時は呼ばれないので、モーダルは開いたままになり入力を直せる
+       * （理由は createError に出る）。
+       */
+      onSuccess: (created) => {
+        isAddOpen.value = false
+        noticeMessage.value = `${created.date} を追加しました。`
+      },
+    },
+  )
 }
 
 /*
@@ -154,18 +160,24 @@ async function submitEdit() {
   }
   if (editErrors.value.date || editErrors.value.reason) return
 
-  const updated = await store.update({
-    id: target.id,
-    date: editDate.value,
-    reason: editReason.value.trim(),
-    updatedAt: target.updatedAt,
-  })
-  // 失敗時はモーダルを開いたままにして、入力を直せるようにする（理由は updateError に出る）
+  const updated = await store.update(
+    {
+      id: target.id,
+      date: editDate.value,
+      reason: editReason.value.trim(),
+      updatedAt: target.updatedAt,
+    },
+    {
+      // 追加と同じく、一覧の読み直しを待たずに閉じる。失敗時は呼ばれないので
+      // モーダルは開いたままになり入力を直せる（理由は updateError に出る）
+      onSuccess: (item) => {
+        editTarget.value = null
+        // 日付を変更できるので、サーバが受理した日付をそのまま出す
+        noticeMessage.value = `${item.date} を更新しました。`
+      },
+    },
+  )
   if (!updated) return
-
-  editTarget.value = null
-  // 日付を変更できるので、サーバが受理した日付をそのまま出す
-  noticeMessage.value = `${updated.date} を更新しました。`
 
   /*
    * 絞り込み中に対象外の日付へ変えると total が 1 減り、最終ページが空になり得る。
@@ -198,12 +210,15 @@ async function submitDelete() {
   const target = deleteTarget.value
   if (!target) return
 
-  const deleted = await store.remove(target.id)
-  // 失敗時はモーダルを開いたままにして、理由（deleteError）を読ませる
+  const deleted = await store.remove(target.id, {
+    // 追加・編集と同じく、一覧の読み直しを待たずに閉じる。失敗時は呼ばれないので
+    // モーダルは開いたままになり、理由（deleteError）を読ませられる
+    onSuccess: () => {
+      deleteTarget.value = null
+      noticeMessage.value = `${target.date} を削除しました。`
+    },
+  })
   if (!deleted) return
-
-  deleteTarget.value = null
-  noticeMessage.value = `${target.date} を削除しました。`
 
   stepBackIfPageEmpty()
 }

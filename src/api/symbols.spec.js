@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { fetchStocks } from './stocks'
+import { fetchSymbols } from './symbols'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -10,7 +10,7 @@ import { fetchStocks } from './stocks'
  * ストア・画面のテストはモックが返す結果を見ているので、モックとサーバの理解がずれていても
  * 気づけない。この層でクエリ名・値の型・応答のキーを固定しておくと、ずれが 1 か所で見つかる。
  *
- * シナリオ: docs/unit/api-stocks.md
+ * シナリオ: docs/unit/api-symbols.md
  */
 
 /** 最後に届いたリクエストを覚えておくための入れ物 */
@@ -28,7 +28,7 @@ afterEach(() => {
  */
 function record(body, status = 200) {
   server.use(
-    http.get('*/api/stocks', ({ request }) => {
+    http.get('*/api/masters/symbols', ({ request }) => {
       const url = new URL(request.url)
       lastRequest = { url, params: url.searchParams }
       return HttpResponse.json(body, { status })
@@ -36,8 +36,8 @@ function record(body, status = 200) {
   )
 }
 
-/** StockItem 1 件（openapi.json の項目をひととおり埋めたもの） */
-const stockItem = {
+/** SymbolItem 1 件（openapi.json の項目をひととおり埋めたもの） */
+const symbolItem = {
   銘柄コード: 'S001',
   Ticker: 'AAPL',
   銘柄名: 'アップル',
@@ -69,74 +69,77 @@ const listBody = (stocks) => ({
   stocks,
 })
 
-describe('api/stocks', () => {
-  it('[STA-01] 引数なしの一覧取得は offset だけを送る', async () => {
+describe('api/symbols', () => {
+  it('[STA-01] 引数なしの一覧取得は limit と offset だけを送る', async () => {
     record(listBody([]))
 
-    await fetchStocks()
+    await fetchSymbols()
 
-    expect(lastRequest.url.pathname).toBe('/api/stocks')
+    expect(lastRequest.url.pathname).toBe('/api/masters/symbols')
+    expect(lastRequest.params.get('limit')).toBe('50')
     expect(lastRequest.params.get('offset')).toBe('0')
     // 条件なしのときは送らない（実 API 側の既定に任せる）
-    expect(lastRequest.params.has('銘柄コード')).toBe(false)
-    expect(lastRequest.params.has('規制情報')).toBe(false)
-    expect(lastRequest.params.has('注文ルート')).toBe(false)
-    expect(lastRequest.params.has('VWAP対象区分')).toBe(false)
+    expect(lastRequest.params.has('symbol')).toBe(false)
+    expect(lastRequest.params.has('restriction')).toBe(false)
+    expect(lastRequest.params.has('route')).toBe(false)
+    expect(lastRequest.params.has('vwap_target')).toBe(false)
     expect(lastRequest.params.has('include_deleted')).toBe(false)
   })
 
-  it('[STA-02] limit を渡しても送らない（実 API が持たないパラメータ）', async () => {
+  it('[STA-02] limit は渡した値をそのまま送る', async () => {
     record(listBody([]))
 
-    await fetchStocks({ limit: 20 })
+    await fetchSymbols({ limit: 20 })
 
-    expect(lastRequest.params.has('limit')).toBe(false)
+    expect(lastRequest.params.get('limit')).toBe('20')
   })
 
-  it('[STA-03] 絞り込み条件は日本語のクエリ名で送る', async () => {
+  it('[STA-03] 絞り込み条件は英語のクエリ名で送る', async () => {
     record(listBody([]))
 
-    await fetchStocks({
-      stockCode: 'AAPL',
+    await fetchSymbols({
+      symbolCode: 'AAPL',
       regulation: '0',
       orderRoute: '1',
       vwapTarget: '1',
     })
 
-    expect(lastRequest.params.get('銘柄コード')).toBe('AAPL')
-    expect(lastRequest.params.get('規制情報')).toBe('0')
-    expect(lastRequest.params.get('注文ルート')).toBe('1')
-    expect(lastRequest.params.get('VWAP対象区分')).toBe('1')
+    // 送るのはレスポンスの日本語キーではなく、仕様どおりの英語のクエリ名
+    expect(lastRequest.params.get('symbol')).toBe('AAPL')
+    expect(lastRequest.params.get('restriction')).toBe('0')
+    expect(lastRequest.params.get('route')).toBe('1')
+    expect(lastRequest.params.get('vwap_target')).toBe('1')
+    expect(lastRequest.params.has('銘柄コード')).toBe(false)
   })
 
   it('[STA-04] 空文字の条件はクエリに載せない', async () => {
     record(listBody([]))
 
-    await fetchStocks({ stockCode: '', regulation: '', orderRoute: '', vwapTarget: '' })
+    await fetchSymbols({ symbolCode: '', regulation: '', orderRoute: '', vwapTarget: '' })
 
-    expect(lastRequest.params.has('銘柄コード')).toBe(false)
-    expect(lastRequest.params.has('規制情報')).toBe(false)
-    expect(lastRequest.params.has('注文ルート')).toBe(false)
-    expect(lastRequest.params.has('VWAP対象区分')).toBe(false)
+    expect(lastRequest.params.has('symbol')).toBe(false)
+    expect(lastRequest.params.has('restriction')).toBe(false)
+    expect(lastRequest.params.has('route')).toBe(false)
+    expect(lastRequest.params.has('vwap_target')).toBe(false)
   })
 
   it('[STA-05] offset は渡した値をそのまま送る', async () => {
     record(listBody([]))
 
-    await fetchStocks({ offset: 50 })
+    await fetchSymbols({ offset: 50 })
 
     expect(lastRequest.params.get('offset')).toBe('50')
   })
 
-  it('[STA-06] StockItem をアプリ内モデルに変換する', async () => {
-    record(listBody([stockItem]))
+  it('[STA-06] SymbolItem をアプリ内モデルに変換する', async () => {
+    record(listBody([symbolItem]))
 
-    const { items, total } = await fetchStocks()
+    const { items, total } = await fetchSymbols()
 
     expect(total).toBe(1)
     expect(items).toEqual([
       {
-        stockCode: 'S001',
+        symbolCode: 'S001',
         ticker: 'AAPL',
         name: 'アップル',
         nameEn: 'Apple Inc.',
@@ -160,7 +163,7 @@ describe('api/stocks', () => {
     record(
       listBody([
         {
-          ...stockItem,
+          ...symbolItem,
           Ticker: null,
           銘柄名: null,
           銘柄名_英字: null,
@@ -173,7 +176,7 @@ describe('api/stocks', () => {
       ]),
     )
 
-    const { items } = await fetchStocks()
+    const { items } = await fetchSymbols()
 
     expect(items[0]).toMatchObject({
       ticker: '',
@@ -188,9 +191,9 @@ describe('api/stocks', () => {
   })
 
   it('[STA-08] 相場の 3 項目は null のまま通す', async () => {
-    record(listBody([{ ...stockItem, 前日終値: null, 前日出来高: null, 平均出来高: null }]))
+    record(listBody([{ ...symbolItem, 前日終値: null, 前日出来高: null, 平均出来高: null }]))
 
-    const { items } = await fetchStocks()
+    const { items } = await fetchSymbols()
 
     // 空文字や 0 に寄せると「未取得」の意味が消える
     expect(items[0]).toMatchObject({
@@ -201,9 +204,9 @@ describe('api/stocks', () => {
   })
 
   it('[STA-09] 相場の 0 は 0 のまま通す（未取得と混ぜない）', async () => {
-    record(listBody([{ ...stockItem, 前日終値: 0, 前日出来高: 0, 平均出来高: 0 }]))
+    record(listBody([{ ...symbolItem, 前日終値: 0, 前日出来高: 0, 平均出来高: 0 }]))
 
-    const { items } = await fetchStocks()
+    const { items } = await fetchSymbols()
 
     expect(items[0]).toMatchObject({ previousClose: 0, previousVolume: 0, averageVolume: 0 })
   })
@@ -211,12 +214,12 @@ describe('api/stocks', () => {
   it('[STA-10] ユーザー操作フラグは boolean になる', async () => {
     record(
       listBody([
-        { ...stockItem, 銘柄コード: 'S001', ユーザー操作フラグ: 1 },
-        { ...stockItem, 銘柄コード: 'S002', ユーザー操作フラグ: 0 },
+        { ...symbolItem, 銘柄コード: 'S001', ユーザー操作フラグ: 1 },
+        { ...symbolItem, 銘柄コード: 'S002', ユーザー操作フラグ: 0 },
       ]),
     )
 
-    const { items } = await fetchStocks()
+    const { items } = await fetchSymbols()
 
     expect(items.map((item) => item.userModified)).toEqual([true, false])
   })
@@ -224,7 +227,7 @@ describe('api/stocks', () => {
   it('[STA-11] stocks を持たない応答でも空の一覧として扱う', async () => {
     record({ total: 0, limit: 50, offset: 0 })
 
-    const { items, total } = await fetchStocks()
+    const { items, total } = await fetchSymbols()
 
     expect(items).toEqual([])
     expect(total).toBe(0)
@@ -233,6 +236,6 @@ describe('api/stocks', () => {
   it('[STA-12] サーバエラーは例外になる', async () => {
     record({ detail: 'サーバーでエラーが発生しました。' }, 500)
 
-    await expect(fetchStocks()).rejects.toBeTruthy()
+    await expect(fetchSymbols()).rejects.toBeTruthy()
   })
 })

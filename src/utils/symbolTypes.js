@@ -9,7 +9,7 @@
  *
  * 値は数値ではなく文字列で扱う。実 API の値がゼロ埋めされた文字列であることに合わせるため。
  *
- * **注意: `規制情報` のコード値は未確定。** docs/api/openapi.json の StockItem は
+ * **注意: `規制情報` のコード値は未確定。** docs/api/openapi.json の SymbolItem は
  * 「取引可否・規制情報コード」とだけ書いてあり enum が無い（注文ルートと VWAP対象区分は
  * description に 0 / 1 の意味が書かれている）。ここの 0:取引可 / 1:取引不可 は
  * 画面モックの「取引可 / 取引不可」に合わせた**仮置き**で、バックエンドの対応表
@@ -24,14 +24,14 @@ export const REGULATION_OPTIONS = [
   { value: '1', label: '取引不可' },
 ]
 
-/** 預託先区分（注文ルート）。StockItem.注文ルート の description（0:みずほ, 1:IB）に準拠 */
+/** 預託先区分（注文ルート）。SymbolItem.注文ルート の description（0:みずほ, 1:IB）に準拠 */
 export const ORDER_ROUTE_OPTIONS = [
   { value: '0', label: 'みずほ証券' },
   { value: '1', label: 'IB証券' },
 ]
 
 /**
- * VWAP対象区分。StockItem の description は 0:非対象 / 1:対象 だが、
+ * VWAP対象区分。SymbolItem の description は 0:非対象 / 1:対象 だが、
  * ラベルは画面モックの文言（対象外 / 対象）に寄せる。
  */
 export const VWAP_TARGET_OPTIONS = [

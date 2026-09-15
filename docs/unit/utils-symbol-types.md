@@ -1,15 +1,15 @@
-# utils/stockTypes（銘柄マスタの区分）
+# utils/symbolTypes（銘柄マスタの区分）
 
 - 略号: `STT`
-- 対象: `src/utils/stockTypes.js`
-- テスト: `src/utils/stockTypes.spec.js`
+- 対象: `src/utils/symbolTypes.js`
+- テスト: `src/utils/symbolTypes.spec.js`
 
 `規制情報`（取引可否）・`注文ルート`（預託先区分）・`VWAP対象区分` の 3 つについて、
 検索セレクトの選択肢と一覧セルの表示名を持つ対応表。CA種別（[utils-ca-types.md](utils-ca-types.md)）と同じ形。
 
-**コード値そのものは固定しない。** `docs/api/openapi.json` の `StockItem` に enum が無く、
+**コード値そのものは固定しない。** `docs/api/openapi.json` の `SymbolItem` に enum が無く、
 `規制情報` の 0:取引可 / 1:取引不可 は画面モックに合わせた**仮置き**だから
-（`src/utils/stockTypes.js` の冒頭コメント参照）。ここで守るのは値ではなく**振る舞い**で、
+（`src/utils/symbolTypes.js` の冒頭コメント参照）。ここで守るのは値ではなく**振る舞い**で、
 期待値は選択肢定数そのものから導く。バックエンドの対応表が確認できて定数が差し替わっても、
 「選択肢の形」「未知の値は `'—'` / `false`」は変わらない。
 

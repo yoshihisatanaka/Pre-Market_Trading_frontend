@@ -1,19 +1,19 @@
 import { apiClient } from './client'
 
 /*
- * 銘柄マスタ（実 API `/stocks`）。
+ * 銘柄マスタ（実 API `/masters/symbols`）。
  *
- * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次の 6 点。
- *   - プロパティ名が日本語（銘柄コード / Ticker / 銘柄名_英字 / 前日終値 …）
- *   - 検索クエリ名も日本語（`銘柄コード` / `規制情報` / `注文ルート` / `VWAP対象区分`）。
- *     axios が URL エンコードして送る
+ * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次の 5 点。
+ *   - レスポンスのプロパティ名が日本語（銘柄コード / Ticker / 銘柄名_英字 / 前日終値 …）
+ *   - **検索クエリ名だけは英語**（`symbol` / `ticker` / `restriction` / `route` / `vwap_target`）。
+ *     レスポンスの日本語キーと対応しないので、両者を混同しない
  *   - フラグが 0 / 1 の integer（取消区分・ユーザー操作フラグ）。アプリ内は boolean
- *   - 一覧の配列名が `stocks`
- *   - 一覧は 1 ページ 50 件固定で `limit` クエリを持たない（応答の limit は常に 50）
+ *   - 一覧の配列名が `stocks`（モデル名は SymbolListResponse なのにここだけ stock を名乗る。
+ *     ワイヤ上の名前なのでこの層の中で吸収し、外へは出さない）
  *   - 削除は論理削除（取消区分=1）。一覧は既定で取消済みを返さない
  *
- * 画面の検索欄（銘柄コード・ティッカーコード）は `銘柄コード` パラメータにだけ乗る。
- * 実 API は `銘柄コード` / `Ticker` / `銘柄名` / `銘柄名_英字` をそれぞれ別のパラメータに
+ * 画面の検索欄（銘柄コード・ティッカーコード）は `symbol` パラメータにだけ乗る。
+ * 実 API は `symbol` / `ticker` / `name_ja` / `name_en` をそれぞれ別のパラメータに
  * 分けていて、まとめて 1 語で探すパラメータが無いため、**この欄では銘柄名では絞れない**。
  *
  * いまは一覧の取得だけを持つ。登録・更新・削除、CSV 入出力、更新履歴は別途。
@@ -23,7 +23,7 @@ import { apiClient } from './client'
  * 1 件のアプリ内モデル（このファイルの JSDoc で使う）
  *
  * @typedef {{
- *   stockCode: string,
+ *   symbolCode: string,
  *   ticker: string,
  *   name: string,
  *   nameEn: string,
@@ -39,8 +39,8 @@ import { apiClient } from './client'
  *   previousVolume: number|null,
  *   averageVolume: number|null,
  *   userModified: boolean,
- * }} Stock
- *   stockCode が主キー（実 API も銘柄コードをキーにしている）。
+ * }} Symbol
+ *   symbolCode が主キー（実 API も銘柄コードをキーにしている）。
  *   数値 3 種は null のまま通す。0 と「未取得」を区別したいので空文字や 0 に寄せない
  *   （整形は utils/format.js の formatUsd / formatQuantity が null を '—' にする）。
  *   userModified は ユーザー操作フラグ=1（手動操作された行）。一覧で色を付ける印になる
@@ -53,50 +53,54 @@ import { apiClient } from './client'
  *
  * 取消済み（論理削除）の行は含めない。実 API の include_deleted は既定 false なので送らない。
  *
- * `limit` は受け取っても送らない。実 API の一覧は 1 ページ 50 件で固定されており
- * `limit` というクエリを持たない。ページャーの表示件数は
- * stores/stocks.js の STOCKS_PAGE_SIZE 側で 50 に合わせてある。
+ * 画面の検索欄 1 つは `symbol` にだけ乗せる。実 API は `ticker` を別パラメータに分けているが、
+ * 欄を 2 つに割るかはバックエンドの `symbol` が Ticker にも当たるか次第なので、
+ * 確認が付くまでは従来どおり 1 つの欄・1 つのパラメータで通す。
  *
  * @param {{
+ *   limit?: number,
  *   offset?: number,
- *   stockCode?: string,
+ *   symbolCode?: string,
  *   regulation?: string,
  *   orderRoute?: string,
  *   vwapTarget?: string,
  * }} [params]
- *   stockCode は銘柄コードまたは Ticker。regulation / orderRoute / vwapTarget は
- *   utils/stockTypes.js のコード値。空文字は「条件なし」としてリクエストに載せない
- * @returns {Promise<{ items: Stock[], total: number }>}
+ *   limit は 1..200（実 API の既定は 50）。symbolCode は銘柄コードまたは Ticker。
+ *   regulation / orderRoute / vwapTarget は utils/symbolTypes.js のコード値。
+ *   空文字は「条件なし」としてリクエストに載せない
+ * @returns {Promise<{ items: Symbol[], total: number }>}
  */
-export async function fetchStocks({
+export async function fetchSymbols({
+  limit = 50,
   offset = 0,
-  stockCode = '',
+  symbolCode = '',
   regulation = '',
   orderRoute = '',
   vwapTarget = '',
 } = {}) {
-  const { data } = await apiClient.get('/stocks', {
+  const { data } = await apiClient.get('/masters/symbols', {
     // クエリ名を知ってよいのはこの層だけ。値が undefined のパラメータは axios が送らない
     params: {
+      limit,
       offset,
-      銘柄コード: stockCode || undefined,
-      規制情報: regulation || undefined,
-      注文ルート: orderRoute || undefined,
-      VWAP対象区分: vwapTarget || undefined,
+      symbol: symbolCode || undefined,
+      restriction: regulation || undefined,
+      route: orderRoute || undefined,
+      vwap_target: vwapTarget || undefined,
     },
   })
 
   return {
-    items: (data.stocks ?? []).map(toStock),
+    items: (data.stocks ?? []).map(toSymbol),
     total: data.total ?? 0,
   }
 }
 
-/** StockItem → アプリ内モデル */
-function toStock(raw) {
+/** SymbolItem → アプリ内モデル */
+function toSymbol(raw) {
   return {
     // 主キーは銘柄コードそのもの（CA のような数値 ID は無い）
-    stockCode: raw?.銘柄コード ?? '',
+    symbolCode: raw?.銘柄コード ?? '',
     // nullable な項目は空文字に寄せて、画面が null を出さないようにする
     ticker: raw?.Ticker ?? '',
     name: raw?.銘柄名 ?? '',

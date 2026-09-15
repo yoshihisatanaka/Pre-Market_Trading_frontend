@@ -2,34 +2,34 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { stocks } from '@/mocks/fixtures/stocks'
-import { STOCKS_PAGE_SIZE, useStocksStore } from './stocks'
+import { symbols } from '@/mocks/fixtures/symbols'
+import { SYMBOLS_PAGE_SIZE, useSymbolsStore } from './symbols'
 
 /*
  * 既定の MSW ハンドラ（実 API と同じ絞り込み・並び順）に当てる。
  * 期待値はフィクスチャと表示件数から導き、56 / 50 / 'AAPL' のような値を直接書かない。
  *
- * シナリオ: docs/unit/stores-stocks.md
+ * シナリオ: docs/unit/stores-symbols.md
  */
 
-const PAGE_SIZE = STOCKS_PAGE_SIZE
-const TOTAL = stocks.length
+const PAGE_SIZE = SYMBOLS_PAGE_SIZE
+const TOTAL = symbols.length
 
 /** 実 API と同じ並び（銘柄コードの昇順）。フィクスチャは生成順のまま置かれている */
-const sorted = [...stocks].sort((a, b) => a.銘柄コード.localeCompare(b.銘柄コード))
-const codesOf = (rows) => rows.map((stock) => stock.銘柄コード)
+const sorted = [...symbols].sort((a, b) => a.銘柄コード.localeCompare(b.銘柄コード))
+const codesOf = (rows) => rows.map((symbol) => symbol.銘柄コード)
 const allCodes = codesOf(sorted)
 
 /** 実 API と同じ規則（銘柄コードか Ticker への部分一致・大文字小文字を区別しない） */
-const matchesCode = (stock, keyword) =>
-  stock.銘柄コード.toUpperCase().includes(keyword.toUpperCase()) ||
-  stock.Ticker.toUpperCase().includes(keyword.toUpperCase())
+const matchesCode = (symbol, keyword) =>
+  symbol.銘柄コード.toUpperCase().includes(keyword.toUpperCase()) ||
+  symbol.Ticker.toUpperCase().includes(keyword.toUpperCase())
 
 /** フィクスチャに現れる区分コードを、件数の昇順で並べる */
 function valuesByCount(key) {
   const counts = new Map()
-  for (const stock of sorted) {
-    counts.set(stock[key], (counts.get(stock[key]) ?? 0) + 1)
+  for (const symbol of sorted) {
+    counts.set(symbol[key], (counts.get(symbol[key]) ?? 0) + 1)
   }
   return [...counts.entries()].sort((a, b) => a[1] - b[1]).map(([value]) => value)
 }
@@ -55,7 +55,7 @@ function widestFilter() {
     const value = valuesByCount(fixtureKey).at(-1)
     return {
       filter: { [filterKey]: value },
-      codes: codesOf(sorted.filter((stock) => stock[fixtureKey] === value)),
+      codes: codesOf(sorted.filter((symbol) => symbol[fixtureKey] === value)),
     }
   })
 
@@ -64,10 +64,10 @@ function widestFilter() {
 
 // 絞り込みに使う値もフィクスチャから導く
 const TICKER = sorted[0].Ticker
-const tickerCodes = codesOf(sorted.filter((stock) => matchesCode(stock, TICKER)))
+const tickerCodes = codesOf(sorted.filter((symbol) => matchesCode(symbol, TICKER)))
 
 const REGULATION = rarestValue('規制情報')
-const regulationCodes = codesOf(sorted.filter((stock) => stock.規制情報 === REGULATION))
+const regulationCodes = codesOf(sorted.filter((symbol) => symbol.規制情報 === REGULATION))
 
 // reload は「2 ページ目に居るまま読み直す」ことを見たいので、2 ページ目ができる条件を使う
 const PAGED = widestFilter()
@@ -77,7 +77,7 @@ const ORDER_ROUTE = sorted[0].注文ルート
 const VWAP_TARGET = sorted[0].VWAP対象区分
 const bothCodes = codesOf(
   sorted.filter(
-    (stock) => stock.注文ルート === ORDER_ROUTE && stock.VWAP対象区分 === VWAP_TARGET,
+    (symbol) => symbol.注文ルート === ORDER_ROUTE && symbol.VWAP対象区分 === VWAP_TARGET,
   ),
 )
 
@@ -89,7 +89,7 @@ const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 /** 一覧を 500 にする差し替え */
 function failList() {
   server.use(
-    http.get('*/api/stocks', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+    http.get('*/api/masters/symbols', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
   )
 }
 
@@ -101,7 +101,7 @@ function failList() {
  */
 function slowList(waitFor) {
   server.use(
-    http.get('*/api/stocks', async ({ request }) => {
+    http.get('*/api/masters/symbols', async ({ request }) => {
       const offset = Number(new URL(request.url).searchParams.get('offset') ?? 0)
       await delay(waitFor(offset))
       return HttpResponse.json({
@@ -114,15 +114,15 @@ function slowList(waitFor) {
   )
 }
 
-const codes = (store) => store.items.map((item) => item.stockCode)
+const codes = (store) => store.items.map((item) => item.symbolCode)
 
-describe('stores/stocks', () => {
+describe('stores/symbols', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
   })
 
   it('[STS-01] 既定の読み込みで 1 ページ目が並び順どおりに入る', async () => {
-    const store = useStocksStore()
+    const store = useSymbolsStore()
 
     await store.load()
 
@@ -133,7 +133,7 @@ describe('stores/stocks', () => {
   })
 
   it('[STS-02] offset を渡すとその位置から読み込む', async () => {
-    const store = useStocksStore()
+    const store = useSymbolsStore()
 
     await store.load({ offset: PAGE_SIZE })
 
@@ -144,17 +144,17 @@ describe('stores/stocks', () => {
   })
 
   it('[STS-03] 銘柄コード・ティッカーコードで絞り込む', async () => {
-    const store = useStocksStore()
+    const store = useSymbolsStore()
 
-    await store.load({ stockCode: TICKER })
+    await store.load({ symbolCode: TICKER })
 
-    expect(store.stockCode).toBe(TICKER)
+    expect(store.symbolCode).toBe(TICKER)
     expect(store.total).toBe(tickerCodes.length)
     expect(codes(store)).toEqual(tickerCodes)
   })
 
   it('[STS-04] 取引可否（規制情報）で絞り込む', async () => {
-    const store = useStocksStore()
+    const store = useSymbolsStore()
 
     await store.load({ regulation: REGULATION })
 
@@ -164,7 +164,7 @@ describe('stores/stocks', () => {
   })
 
   it('[STS-05] 預託先区分と VWAP対象区分は AND で絞り込む', async () => {
-    const store = useStocksStore()
+    const store = useSymbolsStore()
 
     await store.load({ orderRoute: ORDER_ROUTE, vwapTarget: VWAP_TARGET })
 
@@ -178,9 +178,9 @@ describe('stores/stocks', () => {
   })
 
   it('[STS-06] 該当が無いときは空とみなす', async () => {
-    const store = useStocksStore()
+    const store = useSymbolsStore()
 
-    await store.load({ stockCode: NO_MATCH })
+    await store.load({ symbolCode: NO_MATCH })
 
     expect(store.items).toEqual([])
     expect(store.total).toBe(0)
@@ -189,7 +189,7 @@ describe('stores/stocks', () => {
 
   it('[STS-07] 取得に失敗したときは error に入り、空状態にはしない', async () => {
     failList()
-    const store = useStocksStore()
+    const store = useSymbolsStore()
 
     await store.load()
 
@@ -201,7 +201,7 @@ describe('stores/stocks', () => {
 
   it('[STS-08] 取得中は loading が立つ', async () => {
     slowList(() => 10)
-    const store = useStocksStore()
+    const store = useSymbolsStore()
 
     const pending = store.load()
     expect(store.loading).toBe(true)
@@ -211,7 +211,7 @@ describe('stores/stocks', () => {
   })
 
   it('[STS-09] reload は条件とページ位置を保ったまま読み直す', async () => {
-    const store = useStocksStore()
+    const store = useSymbolsStore()
     // 2 ページ目が残る条件でないと、このシナリオは意味を失う
     expect(PAGED.codes.length).toBeGreaterThan(PAGE_SIZE)
     await store.load({ offset: PAGE_SIZE, ...PAGED.filter })
@@ -226,7 +226,7 @@ describe('stores/stocks', () => {
   })
 
   it('[STS-10] 読むだけの一覧なので登録・更新・削除を公開しない', () => {
-    const store = useStocksStore()
+    const store = useSymbolsStore()
 
     expect(store.create).toBeUndefined()
     expect(store.update).toBeUndefined()
@@ -238,7 +238,7 @@ describe('stores/stocks', () => {
   it('[STS-11] 古い応答が新しい結果を上書きしない', async () => {
     // 先に投げる 2 ページ目を遅く、後から投げる 1 ページ目を速く返す
     slowList((offset) => (offset === 0 ? 10 : 60))
-    const store = useStocksStore()
+    const store = useSymbolsStore()
 
     const stale = store.load({ offset: PAGE_SIZE })
     const latest = store.load({ offset: 0 })

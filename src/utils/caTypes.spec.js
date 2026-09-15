@@ -1,32 +1,20 @@
 import { describe, expect, it } from 'vitest'
+import { CA_TYPE_VALUES } from './apiEnums'
 import { CA_TYPE_OPTIONS, formatCaType, isCaType } from './caTypes'
 
 // シナリオ: docs/unit/utils-ca-types.md
 
 /*
- * docs/api/openapi.json の CATypeEnum が持つコード。
- * openapi.json を読み込んで比べるのではなく写しを置くのは、**取り込み直しで enum が増えたときに
- * ここが落ちて気づける**ようにするため（自動で追従すると、名前の無いコードが黙って増える）。
- * 落ちたら src/utils/caTypes.js とこの配列の両方に、codes.json 由来の名前を付けて足す。
+ * 比較相手は src/utils/apiEnums.js（docs/api/openapi.json の CATypeEnum の写し）。
+ * ここに写しを手で置くと「自分で書いた 2 つを比べる」だけになり、
+ * openapi.json が変わっても落ちない。取り込み直しの検知は apiEnums.spec.js（AEN-01/02）が担い、
+ * **名前を付ける作業が要ることに気づく**のがこの CAT-01 の役目。
+ * 落ちたら src/utils/caTypes.js に codes.json 由来の名前を付けて足す。
  */
-const CA_TYPE_ENUM = [
-  '110',
-  '112',
-  '120',
-  '121',
-  '122',
-  '123',
-  '125',
-  '130',
-  '131',
-  '140',
-  '142',
-  '220',
-]
 
 describe('caTypes', () => {
   it('[CAT-01] 選択肢が CATypeEnum と同じコードを昇順で持ち、すべてに表示名がある', () => {
-    expect(CA_TYPE_OPTIONS.map((option) => option.value)).toEqual(CA_TYPE_ENUM)
+    expect(CA_TYPE_OPTIONS.map((option) => option.value)).toEqual([...CA_TYPE_VALUES])
 
     for (const option of CA_TYPE_OPTIONS) {
       expect(option.label).toBeTruthy()

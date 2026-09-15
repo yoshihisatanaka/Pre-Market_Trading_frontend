@@ -1,3 +1,4 @@
+import { ACCIDENT_ACCOUNT_TYPE } from '@/utils/apiEnums'
 import { apiClient } from './client'
 
 /*
@@ -123,15 +124,19 @@ function toCustomer(raw) {
     customerNameKana: raw?.顧客名カナ ?? '',
     // 年齢は実 API でも文字列（法人は空）。計算には使わないのでそのまま運ぶ
     age: raw?.年齢 ?? '',
-    // 0 / 1 の integer は、この層で boolean に直して外へ出す
+    /*
+     * 0 / 1 の integer は、この層で boolean に直して外へ出す。
+     * こちらは enum ではなく素の integer フラグなので、リテラルのまま比べる
+     * （下の 事故処理口座区分 だけが定数参照になっているのは、そこに enum があるから）。
+     */
     tradingSuspended: raw?.取引停止区分_全取引 === 1,
     // 表示名はサーバが付けて返す（コード → 名前の対応表をフロントに持たせない）
     restrictionName: raw?.取引停止区分_全取引名 ?? '',
     investmentPolicyName: raw?.投資方針名 ?? '',
     complianceRankName: raw?.コンプラランク名 ?? '',
     accountTypeName: raw?.口座区分名 ?? '',
-    // 事故処理口座区分は AccountItem では文字列の '0' / '1'（取引停止区分と型が違う）
-    accidentAccount: raw?.事故処理口座区分 === '1',
+    // 事故処理口座区分は文字列の '0' / '1'（取引停止区分と型が違う）。AccidentAccountTypeEnum
+    accidentAccount: raw?.事故処理口座区分 === ACCIDENT_ACCOUNT_TYPE.ACCIDENT,
     corporateTypeName: raw?.法人区分名 ?? '',
     /*
      * 金額は数値のまま外へ出す（整形は画面）。nullable なので空文字ではなく null に寄せる。

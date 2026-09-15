@@ -9,6 +9,9 @@ CA種別コードと表示名の対応表。検索セレクトの選択肢と一
 **表示名は `docs/api/openapi.json` に無い**（`CATypeEnum` は string の enum でコードだけ）。
 名前はバックエンドの対応表（`app/config/codes.json` の「CA種別」）から写したものなので、
 コードの集合が enum と一致していることをここで固定する（enum だけ増えても名前は出ない）。
+比較相手は `src/utils/apiEnums.js` の `CA_TYPE_VALUES`。仕様側の増減を検知するのは
+[utils-api-enums.md](utils-api-enums.md) の AEN-01/02 で、**名前を付ける作業が要ることに
+気づく**のが CAT-01 の役目。
 
 海外休場区分の同種の文書は [utils-market-holiday-types.md](utils-market-holiday-types.md)。
 

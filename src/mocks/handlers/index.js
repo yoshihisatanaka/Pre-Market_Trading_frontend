@@ -103,21 +103,21 @@ function caSortKey(ca) {
  * ローディング表示を目で確かめるための遅延（ブラウザでの開発時だけのつまみ）。
  *
  * モックは即座に応答するので、そのままでは 4 状態のうちローディングだけが一瞬すぎて見えない。
- * URL に `?mockDelay=3000` を付けると、以降そのタブの API 応答が 3 秒遅れる。
- * sessionStorage に覚えるので画面を遷移しても効き続ける（`?mockDelay=0` で解除）。
+ * URL に `?mockDelay=3000` を付けると、その URL の API 応答が 3 秒遅れる。
+ *
+ * 効くのは**クエリが付いている間だけ**で、記憶はしない。外せば即座に遅延なしに戻る。
+ * 画面遷移でクエリが落ちればそこで終わるので、遷移先でも遅らせたいならその URL にも付ける。
  *
  * 単体テストと E2E は付けないので常に 0 になり、実行時間には影響しない。
  */
 const MOCK_DELAY_KEY = 'mockDelay'
 
 function mockDelayMs() {
-  // 単体テストの jsdom にも window はあるが、クエリも sessionStorage も空なので 0 になる
+  // 単体テストの jsdom にも window はあるが、クエリが空なので 0 になる
   if (typeof window === 'undefined') return 0
 
-  const fromQuery = new URLSearchParams(window.location.search).get(MOCK_DELAY_KEY)
-  if (fromQuery !== null) window.sessionStorage.setItem(MOCK_DELAY_KEY, fromQuery)
-
-  return Number(window.sessionStorage.getItem(MOCK_DELAY_KEY)) || 0
+  // クエリ無しなら get() は null → Number(null) は 0。不正な値も || 0 で 0 に落ちる
+  return Number(new URLSearchParams(window.location.search).get(MOCK_DELAY_KEY)) || 0
 }
 
 /** モックの可変状態をフィクスチャの内容に戻す */

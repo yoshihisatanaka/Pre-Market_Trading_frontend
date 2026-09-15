@@ -142,11 +142,15 @@ export function useCrudList({
    *
    * @param {object} payload api 層の createItem / validateItem へそのまま渡る。
    *   警告を承知して押し直すときは `acknowledgedWarnings: true` を含める
+   * @param {{ onSuccess?: (created: object) => void }} [options]
+   *   onSuccess は**サーバが登録を受理した時点**で、一覧の読み直しを待たずに呼ぶ。
+   *   モーダルを閉じるような「登録できたのだから即座にやってよいこと」を渡す
+   *   （戻り値を待って閉じると、読み直しのあいだモーダルが開いたまま残る）
    * @returns {Promise<object|null>} 登録された 1 件。登録しなかったときは null
    *   （通信・サーバエラーは createError、事前検証で弾かれた理由は validationErrors、
    *   確認待ちの警告は validationWarnings に入る）
    */
-  async function create(payload) {
+  async function create(payload, { onSuccess } = {}) {
     validationErrors.value = []
     validationWarnings.value = []
 
@@ -164,6 +168,9 @@ export function useCrudList({
       validationWarnings.value = result.warnings
       return null
     }
+
+    // 読み直しより先に呼ぶ（登録はもう終わっているので、モーダルを残す理由が無い）
+    onSuccess?.(result.created)
 
     await reload()
     return result.created
@@ -210,12 +217,14 @@ export function useCrudList({
    *
    * @param {object} payload api 層の updateItem / validateItem へそのまま渡る
    *   （id と、楽観的ロックを持つ一覧では取得時の更新日時を含む）
+   * @param {{ onSuccess?: (updated: object) => void }} [options]
+   *   create と同じ。サーバが更新を受理した時点で、一覧の読み直しを待たずに呼ぶ
    * @returns {Promise<object|null>} 更新後の 1 件。失敗時は null
    *   （通信・サーバエラーは updateError、事前検証で弾かれた理由は updateValidationErrors に入る）
    *   削除の true / false と違い実体を返すのは、成功メッセージに使う日付が
    *   「サーバが受理した日付」であるべきなため（日付を変更できる）
    */
-  async function update(payload) {
+  async function update(payload, { onSuccess } = {}) {
     updateValidationErrors.value = []
 
     const result = await executeUpdate(payload)
@@ -226,6 +235,9 @@ export function useCrudList({
       updateValidationErrors.value = result.errors
       return null
     }
+
+    // 読み直しより先に呼ぶ（更新はもう終わっているので、モーダルを残す理由が無い）
+    onSuccess?.(result.updated)
 
     await reload()
     return result.updated
@@ -243,11 +255,17 @@ export function useCrudList({
    * 1 件削除し、成功したら今の条件のまま一覧を読み直す。
    *
    * @param {string} id 削除対象の id
+   * @param {{ onSuccess?: () => void }} [options]
+   *   create / update と同じ。サーバが削除を受理した時点で、一覧の読み直しを待たずに呼ぶ。
+   *   消した対象は呼び出し側が持っているので、引数は渡さない
    * @returns {Promise<boolean>} 削除できたら true（失敗の理由は deleteError に入る）
    */
-  async function remove(id) {
+  async function remove(id, { onSuccess } = {}) {
     const deleted = await executeDelete(id)
     if (!deleted) return false
+
+    // 読み直しより先に呼ぶ（削除はもう終わっているので、モーダルを残す理由が無い）
+    onSuccess?.()
 
     await reload()
     return true

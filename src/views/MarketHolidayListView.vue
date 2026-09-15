@@ -119,18 +119,26 @@ async function submitAdd() {
   }
   if (addErrors.value.date || addErrors.value.reason) return
 
-  const created = await store.create({
-    date: addDate.value,
-    reason: addReason.value.trim(),
-    holidayType: addHolidayType.value,
-    // 警告を出したうえでもう一度押されたので、承知したものとして登録に進む
-    acknowledgedWarnings: hasAddWarnings.value,
-  })
-  // 失敗時と確認待ちのときはモーダルを開いたままにして、理由を読ませる
-  if (!created) return
-
-  isAddOpen.value = false
-  noticeMessage.value = `${created.date} を追加しました。`
+  await store.create(
+    {
+      date: addDate.value,
+      reason: addReason.value.trim(),
+      holidayType: addHolidayType.value,
+      // 警告を出したうえでもう一度押されたので、承知したものとして登録に進む
+      acknowledgedWarnings: hasAddWarnings.value,
+    },
+    {
+      /*
+       * 閉じるのは登録が受理された時点。store.create の戻り値を待つと、
+       * そこに含まれる一覧の読み直しのあいだモーダルが開いたまま残る。
+       * 失敗時と確認待ちのときは呼ばれないので、モーダルは開いたままになり理由を読ませる。
+       */
+      onSuccess: (created) => {
+        isAddOpen.value = false
+        noticeMessage.value = `${created.date} を追加しました。`
+      },
+    },
+  )
 }
 
 /*
@@ -155,12 +163,15 @@ async function submitDelete() {
   const target = deleteTarget.value
   if (!target) return
 
-  const deleted = await store.remove(target.id)
-  // 失敗時はモーダルを開いたままにして、理由（deleteError）を読ませる
+  const deleted = await store.remove(target.id, {
+    // 追加と同じく、一覧の読み直しを待たずに閉じる。失敗時は呼ばれないので
+    // モーダルは開いたままになり、理由（deleteError）を読ませられる
+    onSuccess: () => {
+      deleteTarget.value = null
+      noticeMessage.value = `${target.date} を削除しました。`
+    },
+  })
   if (!deleted) return
-
-  deleteTarget.value = null
-  noticeMessage.value = `${target.date} を削除しました。`
 
   // 最終ページの最後の 1 件を消すと今の offset に行が無くなるので、1 ページ戻す
   if (items.value.length === 0 && offset.value > 0) {

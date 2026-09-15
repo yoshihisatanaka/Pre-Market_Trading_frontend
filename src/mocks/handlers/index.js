@@ -66,10 +66,15 @@ const BLACKOUT_DATES_PER_PAGE = 50
 let caRows = [...corporateActions, ...canceledCorporateActions]
 
 /**
- * 銘柄マスタの行。いまは読むだけ（登録・更新・削除はまだ無い）なので、
- * 書き換え可能な状態にはせずフィクスチャをそのまま使う。
+ * 銘柄マスタの行。登録したものが一覧に出るところまで再現したいので書き換え可能に持つ。
+ * 取消済みも持つのは、一覧が取消区分で外していることを確かめられるようにするため。
  */
-const symbolRows = [...symbols, ...canceledSymbols]
+let symbolRows = [...symbols, ...canceledSymbols]
+
+/** コード → 表示名。src/utils/symbolTypes.js と同じ対応表（規制情報は仮置きの値） */
+const REGULATION_NAMES = { 0: '取引可', 1: '取引不可' }
+const ORDER_ROUTE_NAMES = { 0: 'みずほ証券', 1: 'IB証券' }
+const VWAP_TARGET_NAMES = { 0: '対象外', 1: '対象' }
 
 /**
  * 顧客マスタの行。CA と同じく読むだけなので、書き換え可能な状態にはしない
@@ -119,6 +124,7 @@ export function resetMockState() {
   marketHolidayRows = [...marketHolidays, ...canceledMarketHolidays]
   blackoutDateRows = [...blackoutDates, ...canceledBlackoutDates]
   caRows = [...corporateActions, ...canceledCorporateActions]
+  symbolRows = [...symbols, ...canceledSymbols]
   hardLimitRow = { ...hardLimitSetting }
 }
 
@@ -269,6 +275,57 @@ export const handlers = [
       // 配列名だけワイヤ上は stocks（SymbolListResponse の項目名）
       stocks: filtered.slice(offset, offset + limit),
     })
+  }),
+
+  /*
+   * 銘柄の入力内容の事前検証（登録・更新はしない）。
+   *
+   * 銘柄マスタの主キーは銘柄コードそのものなので、実 API は**新規登録のときだけ重複を見る**。
+   * `is_update=true`（編集からの呼び出し）では自分自身が必ず在るため、重複の検査を外す
+   * （編集を足すときは、代わりに「その銘柄が在るか」の検査をここに入れる）。
+   *
+   * 必須と文字数は pydantic（SymbolRequest）が先に見るので、ここではなく 422 になる。
+   * この事前検証に残るのはコードマスタの照合と重複だけ。
+   */
+  http.post('*/api/masters/symbols/validate', async ({ request }) => {
+    const body = await request.json().catch(() => null)
+    const violation = symbolRequestViolation(body)
+    if (violation) return violation
+
+    const isUpdate = new URL(request.url).searchParams.get('is_update') === 'true'
+    const symbol = toSymbolInput(body)
+    const errors = symbolServiceErrors(symbol, { isUpdate })
+
+    return HttpResponse.json({
+      valid: errors.length === 0,
+      errors,
+      /*
+       * 銘柄マスタに「登録できるが確認したいこと」は無い。取消済みの銘柄コードは
+       * 重複として弾かれ、再有効化という経路を持たないため（海外休場日はそれがある）。
+       */
+      warnings: [],
+      details: errors.length === 0 ? toSymbolValidationDetails(symbol) : null,
+    })
+  }),
+
+  // 銘柄の新規登録。銘柄コードが主キーなので、既にあるコードは重複として弾かれる
+  http.post('*/api/masters/symbols', async ({ request }) => {
+    const body = await request.json().catch(() => null)
+    const violation = symbolRequestViolation(body)
+    if (violation) return violation
+
+    const symbol = toSymbolInput(body)
+    const errors = symbolServiceErrors(symbol, { isUpdate: false })
+    if (errors.length > 0) return detailError(400, errors[0])
+
+    const created = toMockSymbolItem(symbol)
+    symbolRows = [...symbolRows, created]
+
+    return HttpResponse.json(
+      // 1 件の入れ物もワイヤ上は stock（SymbolResponse の項目名）
+      { success: true, stock: created, message: '銘柄を登録しました' },
+      { status: 201 },
+    )
   }),
 
   /*
@@ -1215,6 +1272,217 @@ function toMockCaItem(ca) {
     更新者: null,
     取消日時: null,
     取消者: null,
+  }
+}
+
+/**
+ * `SymbolRequest` の宣言（pydantic）で弾かれるもの。
+ * 必須 3 項目と、文字数の上限を持つ項目・数値項目の型を見る。
+ *
+ * 画面は必須 3 項目を先に弾き、maxlength も入力欄に付けてあるので、
+ * 通常の操作でここに落ちることは無い（API 層の単体テストと直叩きのための関門）。
+ */
+function symbolRequestViolation(body) {
+  const required = [
+    { field: '銘柄コード', max: 14 },
+    { field: 'Ticker', max: 10 },
+    { field: '銘柄名', max: 200 },
+  ]
+  for (const { field, max } of required) {
+    const value = body?.[field]
+    if (typeof value !== 'string') {
+      return requestValidationError(['body', field], 'Field required', 'missing')
+    }
+    if (value.length < 1) {
+      return requestValidationError(
+        ['body', field],
+        'String should have at least 1 character',
+        'string_too_short',
+      )
+    }
+    if (value.length > max) {
+      return requestValidationError(
+        ['body', field],
+        `String should have at most ${max} characters`,
+        'string_too_long',
+      )
+    }
+  }
+
+  // 任意の文字列項目は null を許す。長さだけを見る
+  for (const [field, max] of [
+    ['銘柄名_英字', 200],
+    ['市場名', 20],
+    ['規制情報', 20],
+    ['備考', 200],
+  ]) {
+    const value = body?.[field]
+    if (typeof value === 'string' && value.length > max) {
+      return requestValidationError(
+        ['body', field],
+        `String should have at most ${max} characters`,
+        'string_too_long',
+      )
+    }
+  }
+
+  // 注文ルート は nullable でない（null を送ると型で弾かれる）
+  const orderRoute = body?.注文ルート
+  if (orderRoute !== undefined && typeof orderRoute !== 'string') {
+    return requestValidationError(
+      ['body', '注文ルート'],
+      'Input should be a valid string',
+      'string_type',
+    )
+  }
+
+  const previousClose = body?.前日終値
+  if (previousClose !== null && previousClose !== undefined) {
+    if (!Number.isFinite(previousClose)) {
+      return requestValidationError(
+        ['body', '前日終値'],
+        'Input should be a valid number',
+        'float_type',
+      )
+    }
+    if (previousClose < 0) {
+      return requestValidationError(
+        ['body', '前日終値'],
+        'Input should be greater than or equal to 0',
+        'greater_than_equal',
+      )
+    }
+  }
+
+  for (const field of ['前日出来高', '平均出来高']) {
+    const value = body?.[field]
+    if (value === null || value === undefined) continue
+    if (!Number.isInteger(value)) {
+      return requestValidationError(['body', field], 'Input should be a valid integer', 'int_type')
+    }
+    if (value < 0) {
+      return requestValidationError(
+        ['body', field],
+        'Input should be greater than or equal to 0',
+        'greater_than_equal',
+      )
+    }
+  }
+
+  return null
+}
+
+/**
+ * SymbolRequest（日本語キー）を、このモックが扱いやすい形に読み替える。
+ * symbolRequestViolation を通した本文にだけ使う（型はそこで保証されている）。
+ */
+function toSymbolInput(body) {
+  return {
+    symbolCode: body.銘柄コード,
+    ticker: body.Ticker,
+    name: body.銘柄名,
+    // nullable な項目は空文字に寄せず、送られてきた形のまま保存する
+    nameEn: typeof body.銘柄名_英字 === 'string' ? body.銘柄名_英字 : null,
+    marketName: typeof body.市場名 === 'string' ? body.市場名 : null,
+    regulation: typeof body.規制情報 === 'string' ? body.規制情報 : null,
+    // 既定を持つ 2 つは、送られてこなければ実 API と同じ '0' になる
+    orderRoute: typeof body.注文ルート === 'string' ? body.注文ルート : '0',
+    vwapTarget: typeof body.VWAP対象区分 === 'string' ? body.VWAP対象区分 : '0',
+    preFlag: Number.isInteger(body.Pre区分) ? body.Pre区分 : 0,
+    note: typeof body.備考 === 'string' ? body.備考 : null,
+    previousClose: body.前日終値 ?? null,
+    previousVolume: body.前日出来高 ?? null,
+    averageVolume: body.平均出来高 ?? null,
+    updatedAt: typeof body.更新日時 === 'string' ? body.更新日時 : null,
+  }
+}
+
+/**
+ * サービス層が見る妥当性（コードマスタの照合と銘柄コードの重複）。
+ * pydantic と違い**まとめて全件返す**（事前検証の応答は errors の配列なので、
+ * 直せるところを一度に見せられる）。
+ *
+ * @param {{ isUpdate: boolean }} options
+ *   isUpdate のときは重複を見ない（対象自身が必ず在るため）
+ * @returns {string[]} 問題が無ければ空配列
+ */
+function symbolServiceErrors({ symbolCode, orderRoute, vwapTarget }, { isUpdate }) {
+  const errors = []
+
+  if (!isUpdate && findSymbolRow(symbolCode)) {
+    // 取消済みの行も母数に入れる（主キーが銘柄コードそのものなので INSERT できない）
+    errors.push(`銘柄コード(${symbolCode})は既に登録されています`)
+  }
+
+  for (const [label, value, names] of [
+    ['注文ルート', orderRoute, ORDER_ROUTE_NAMES],
+    ['VWAP対象区分', vwapTarget, VWAP_TARGET_NAMES],
+  ]) {
+    if (value !== null && !Object.hasOwn(names, value)) {
+      errors.push(`${label}(${value})はコードマスタに存在しません`)
+    }
+  }
+
+  return errors
+}
+
+/** 銘柄コードで 1 行引く（DB 照合は大文字小文字を区別しないのでモックも寄せる） */
+function findSymbolRow(symbolCode) {
+  const needle = String(symbolCode ?? '').toUpperCase()
+
+  return symbolRows.find((row) => row.銘柄コード.toUpperCase() === needle) ?? null
+}
+
+/** SymbolItem を組み立てる（登録の応答用） */
+function toMockSymbolItem(symbol) {
+  return {
+    銘柄コード: symbol.symbolCode,
+    Ticker: symbol.ticker,
+    銘柄名: symbol.name,
+    銘柄名_英字: symbol.nameEn,
+    市場名: symbol.marketName,
+    規制情報: symbol.regulation,
+    // 区分名 3 つは DB の列ではなく、応答を組み立てるときにコードマスタから付ける表示項目
+    規制情報名: REGULATION_NAMES[symbol.regulation] ?? null,
+    注文ルート: symbol.orderRoute,
+    注文ルート名: ORDER_ROUTE_NAMES[symbol.orderRoute] ?? null,
+    VWAP対象区分: symbol.vwapTarget,
+    VWAP対象区分名: VWAP_TARGET_NAMES[symbol.vwapTarget] ?? null,
+    Pre区分: symbol.preFlag,
+    備考: symbol.note,
+    前日終値: symbol.previousClose,
+    前日出来高: symbol.previousVolume,
+    平均出来高: symbol.averageVolume,
+    取消区分: 0,
+    // 画面からの登録なので 1（システム連携ではない）
+    ユーザー操作フラグ: 1,
+    作成日時: nowIsoTimestamp(),
+    作成者: '006',
+    // CA と違い、実 API は登録時にも更新日時を入れる（次の更新で合札として送り返される）
+    更新日時: nowIsoTimestamp(),
+    更新者: '006',
+    取消日時: null,
+    取消者: null,
+  }
+}
+
+/**
+ * SymbolValidationResponse の details（事前検証が返す入力の解析結果）。
+ * openapi.json では `additionalProperties: true` で中身が未定義なので、
+ * 「解析した入力 + サーバが補完した名称」を返すという推測で置いている。
+ * **フロントはこの値を読まない**（読み始めるならバックエンドに形を確認すること）。
+ */
+function toSymbolValidationDetails(symbol) {
+  return {
+    銘柄コード: symbol.symbolCode,
+    Ticker: symbol.ticker,
+    銘柄名: symbol.name,
+    規制情報: symbol.regulation,
+    規制情報名: REGULATION_NAMES[symbol.regulation] ?? null,
+    注文ルート: symbol.orderRoute,
+    注文ルート名: ORDER_ROUTE_NAMES[symbol.orderRoute] ?? null,
+    VWAP対象区分: symbol.vwapTarget,
+    VWAP対象区分名: VWAP_TARGET_NAMES[symbol.vwapTarget] ?? null,
   }
 }
 

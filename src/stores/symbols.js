@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { fetchSymbols } from '@/api/symbols'
+import { createSymbol, fetchSymbols, validateSymbol } from '@/api/symbols'
 import { useCrudList } from '@/composables/useCrudList'
 
 /**
@@ -17,9 +17,12 @@ export const SYMBOLS_PAGE_SIZE = 50
  * 取得・競合防止の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
  * 1 件の形は src/api/symbols.js の JSDoc を参照。
  *
- * **いまは読むだけの一覧**なので createItem / updateItem / deleteItem を渡さない。
- * useCrudList はそれらを渡さない限り登録・更新・削除の名前を公開しないので、
- * この段階では store.create() などは存在しない（追加・編集・削除は別途入れる）。
+ * **いまは一覧と新規追加まで。** updateItem / deleteItem を渡していないので、
+ * useCrudList は更新・削除の名前を公開しない（store.update() などは存在しない）。
+ * 編集・削除は別途入れる。
+ *
+ * 登録は「サーバの事前検証（validateItem）→ 登録（createItem）」の 2 段。
+ * 不合格は validationErrors、通信・サーバ障害は createError と、入れ物が分かれる。
  *
  * 並べ替えはサーバの責務で、ここでは触らない。
  */
@@ -28,5 +31,7 @@ export const useSymbolsStore = defineStore('symbols', () =>
     pageSize: SYMBOLS_PAGE_SIZE,
     filterKeys: ['symbolCode', 'regulation', 'orderRoute', 'vwapTarget'],
     fetchPage: fetchSymbols,
+    createItem: createSymbol,
+    validateItem: validateSymbol,
   }),
 )

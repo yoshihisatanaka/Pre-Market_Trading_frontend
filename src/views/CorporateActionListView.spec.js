@@ -217,7 +217,7 @@ function gateListResponse() {
     release = resolve
   })
   server.use(
-    http.get('*/api/ca', async () => {
+    http.get('*/api/masters/ca', async () => {
       await gate
       return HttpResponse.json(listBody([], 0))
     }),

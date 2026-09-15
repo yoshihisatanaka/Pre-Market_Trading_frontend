@@ -4,7 +4,7 @@
 - 対象: `src/api/customers.js`
 - テスト: `src/api/customers.spec.js`
 
-ここだけが**バックエンドの形**（パス・日本語のクエリ名・日本語キー・0/1 のフラグ）を知ってよい層なので、
+ここだけが**バックエンドの形**（パス・クエリ名・日本語キー・0/1 のフラグ）を知ってよい層なので、
 この文書は「**実際に送り出す HTTP リクエストの形**」と「受け取った生データの変換」を守る。
 同種の文書は [api-ca.md](api-ca.md) / [api-blackout-dates.md](api-blackout-dates.md)。
 
@@ -13,29 +13,34 @@
 見ている。モックはこちらの実装と同じ理解で書かれているので、**モックとサーバの理解がずれていても
 気づけない**。そこでこの文書では、モックの応答ではなく**送信されたリクエストそのもの**を見る。
 
-取り違えやすい点を 4 つ固定する。
+2026-09-15 の OpenAPI 取り込みで、このマスタ一覧は `/customers` から**新設の
+`/masters/customers`** へ移った。あわせてクエリ名が日本語から英語になり、`limit` が使えるようになった。
 
-- **クエリ名が日本語**（`部店コード` / `扱者コード` / `口座番号` / `顧客名`）。
-  英語のクエリ名は `offset` だけ
-- **`limit` は送らない。** 実 API の一覧は 1 ページ 50 件で固定されていて `limit` を持たない。
-  引数としては受け取るが、リクエストには載せない（`GET /ca` との違い）
-- **`口座番号` は integer。** 数字だけの入力のときにだけ送る（文字列を送ると 422 で弾かれる）
+取り違えやすい点を 5 つ固定する。
+
+- **クエリ名は英語の snake_case**（`branch_code` / `account_no` / `customer_name`）。
+  取り込み前は日本語だった
+- **`limit` を送る**（1〜200・既定 50）。受注不可日の `/masters/blackout-dates` は今も `limit` を持たない
+- **`account_no` は integer。** 数字だけの入力のときにだけ送る（文字列を送ると 422 で弾かれる）
+- **`handler_code`（扱者コード）はサーバに無い。** `/masters/customers` のクエリに移されなかった
+  （旧 `/customers` には今もある）。`restriction` / `account_type` / `corporate_type` と同じく
+  送りはするがモックだけが解釈し、実 API では絞り込まれない
 - **フラグの型がキーごとに違う。** `取引停止区分_全取引` / `ユーザー操作フラグ` は integer の 0/1、
-  `事故処理口座区分` は**文字列の '0'/'1'**。どちらも boolean に直して外へ出す
+  `事故処理口座区分` は**文字列の '0'/'1'**（`AccidentAccountTypeEnum`）。どちらも boolean に直して外へ出す
 
 金額 3 種（`円貨預り金` / `外貨預り金` / `NISA買付可能額_当年`）は数値のまま運ぶ。
 **0 と「値が無い」は意味が違う**ので、0 を null に潰さない（CUA-11）。
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
-| CUA-01 | 既定モック | `fetchCustomers()` を引数なしで呼ぶ | `GET /api/customers` に `offset=0` だけが載る。日本語のクエリも `limit` も `include_deleted` も送らない | 実装済 |
-| CUA-02 | 既定モック | `fetchCustomers({ branchCode, handlerCode, customerName })` を呼ぶ | クエリ名が `部店コード` / `扱者コード` / `顧客名` になり、値がそのまま載る | 実装済 |
+| CUA-01 | 既定モック | `fetchCustomers()` を引数なしで呼ぶ | `GET /api/masters/customers` に `limit=50` と `offset=0` だけが載る。絞り込みも `include_deleted` も送らない | 実装済 |
+| CUA-02 | 既定モック | `fetchCustomers({ branchCode, handlerCode, customerName })` を呼ぶ | クエリ名が `branch_code` / `customer_name` になり、値がそのまま載る。`handler_code` も同じ形で載る（サーバは受け取らないが、依頼したい綴りで送る） | 実装済 |
 | CUA-03 | 既定モック | 全条件を空文字にして呼ぶ | 空文字の条件はクエリに載らない（「条件なし」を空文字として送らない） | 実装済 |
-| CUA-04 | 既定モック | `fetchCustomers({ accountNumber: '1230001' })` を呼ぶ | `口座番号=1230001` が載る（数字だけの入力は integer として送る） | 実装済 |
-| CUA-05 | 既定モック | 数字以外を含む口座番号（`'123-0001'` / `'abc'` / `' '`）で呼ぶ | `口座番号` を送らない（422 で弾かれて理由が画面に出ない事態を避ける） | 実装済 |
-| CUA-06 | 既定モック | `fetchCustomers({ limit: 20, offset: 50 })` を呼ぶ | `offset=50` は載るが `limit` は載らない（実 API は 1 ページ 50 件固定） | 実装済 |
-| CUA-07 | 既定モック | `fetchCustomers({ restriction, accountType, corporateType })` を呼ぶ | クエリ名が `取引停止区分_全取引` / `口座区分` / `法人区分` になる（openapi に無くモックだけが解釈する条件） | 実装済 |
-| CUA-08 | API が `AccountItem` を 1 件返す | `fetchCustomers()` を呼ぶ | 口座番号・部店・扱者・顧客名・カナ・年齢・各区分名がアプリ内モデルの名前に変換される。`accountNumber` は integer ではなく文字列 | 実装済 |
+| CUA-04 | 既定モック | `fetchCustomers({ accountNumber: '1230001' })` を呼ぶ | `account_no=1230001` が載る（数字だけの入力は integer として送る） | 実装済 |
+| CUA-05 | 既定モック | 数字以外を含む口座番号（`'123-0001'` / `'abc'` / `' '`）で呼ぶ | `account_no` を送らない（422 で弾かれて理由が画面に出ない事態を避ける） | 実装済 |
+| CUA-06 | 既定モック | `fetchCustomers({ limit: 20, offset: 50 })` を呼ぶ | `limit=20` と `offset=50` がそのまま載る | 実装済 |
+| CUA-07 | 既定モック | `fetchCustomers({ restriction, accountType, corporateType })` を呼ぶ | クエリ名が `restriction` / `account_type` / `corporate_type` になる（openapi に無くモックだけが解釈する条件） | 実装済 |
+| CUA-08 | API が `CustomerItem` を 1 件返す | `fetchCustomers()` を呼ぶ | 口座番号・部店・扱者・顧客名・カナ・年齢・各区分名がアプリ内モデルの名前に変換される。`accountNumber` は integer ではなく文字列 | 実装済 |
 | CUA-09 | API が `取引停止区分_全取引` / `ユーザー操作フラグ` を 1 / 0 で返す | `fetchCustomers()` を呼ぶ | `tradingSuspended` / `userModified` が `true` / `false` の boolean になる | 実装済 |
 | CUA-10 | API が `事故処理口座区分` を `'1'` / `'0'` / integer の `1` で返す | `fetchCustomers()` を呼ぶ | 文字列 `'1'` のときだけ `accidentAccount` が `true`（integer の 1 では立たない。キーごとに型が違うことを固定する） | 実装済 |
 | CUA-11 | API が金額を `3500000` / `0` / `null` で返す | `fetchCustomers()` を呼ぶ | `cashJpy` / `cashUsd` / `growthQuota` が数値のまま（整形しない）。`0` は `0` のままで、`null` だけが `null`（0 を「値が無い」に潰さない） | 実装済 |

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { HOLIDAY_TYPE } from './apiEnums'
 import {
   MARKET_HOLIDAY_TYPE_DEFAULT,
   MARKET_HOLIDAY_TYPE_OPTIONS,
@@ -65,5 +66,13 @@ describe('MARKET_HOLIDAY_TYPE_DEFAULT', () => {
   it('[MHT-07] 既定値は選択肢の先頭のコードで、判定も通る', () => {
     expect(MARKET_HOLIDAY_TYPE_DEFAULT).toBe(FULL_DAY.value)
     expect(isMarketHolidayType(MARKET_HOLIDAY_TYPE_DEFAULT)).toBe(true)
+  })
+})
+
+describe('MARKET_HOLIDAY_TYPE_OPTIONS', () => {
+  it('[MHT-08] コードが HolidayTypeEnum と一致する（表示名だけがフロントの持ちもの）', () => {
+    expect(MARKET_HOLIDAY_TYPE_OPTIONS.map((option) => option.value)).toEqual(
+      Object.values(HOLIDAY_TYPE),
+    )
   })
 })

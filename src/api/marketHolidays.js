@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 
 /*
- * 海外休場日マスタ（実 API `/holidays`）。
+ * 海外休場日マスタ（実 API `/masters/market-holidays`）。
  *
  * バックエンドの形を知ってよいのはこの層だけ。この API は特に差が大きいので、
  * 変換の責務がここに閉じていることを意識して読むこと。
@@ -41,7 +41,7 @@ export async function fetchMarketHolidays({
   dateTo = '',
   holidayType = '',
 } = {}) {
-  const { data } = await apiClient.get('/holidays', {
+  const { data } = await apiClient.get('/masters/market-holidays', {
     // クエリ名と日付が integer であることを知ってよいのは、この層だけ。
     // 値が undefined のパラメータは axios が送らない
     params: {
@@ -76,7 +76,7 @@ export async function fetchMarketHolidays({
 export async function validateMarketHoliday({ date, reason, holidayType }) {
   // 新規登録の検証なので holiday_date / is_update は送らない（既定が新規検証）
   const { data } = await apiClient.post(
-    '/holidays/validate',
+    '/masters/market-holidays/validate',
     toHolidayRequest({
       date,
       reason,
@@ -102,7 +102,7 @@ export async function validateMarketHoliday({ date, reason, holidayType }) {
  */
 export async function createMarketHoliday({ date, reason, holidayType }) {
   const { data } = await apiClient.post(
-    '/holidays',
+    '/masters/market-holidays',
     toHolidayRequest({ date, reason, holidayType }),
   )
 
@@ -119,7 +119,7 @@ export async function createMarketHoliday({ date, reason, holidayType }) {
  * @returns {Promise<string>} 削除した id
  */
 export async function deleteMarketHoliday(id) {
-  await apiClient.delete(`/holidays/${encodeURIComponent(id)}`)
+  await apiClient.delete(`/masters/market-holidays/${encodeURIComponent(id)}`)
   return id
 }
 

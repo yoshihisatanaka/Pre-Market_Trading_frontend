@@ -46,15 +46,15 @@ MSW の既定ハンドラ（`src/mocks/handlers/index.js`）に当てて、取�
 | CAS-10 | API の応答が遅い | 2 ページ目 → 1 ページ目の順に `load()` を続けて呼び、先に投げたほうを遅く返す | 最後に投げた `load()` の結果が残る（古い応答が新しい結果を上書きしない） | 実装済 |
 | CAS-11 | 既定モック | `load()` の後に `create({ stockCode: <フィクスチャの銘柄>, caType: '120' })` を呼ぶ | 登録された 1 件が返り、`total` が 1 増える（成功時は今の条件のまま一覧を読み直す） | 実装済 |
 | CAS-12 | 事前検証が不合格を返す（銘柄マスタに無い銘柄コード） | `create()` を呼ぶ | 戻り値が `null`、`validationErrors` に理由が入り、`createError` は `null` のまま。`total` は増えない | 実装済 |
-| CAS-13 | `POST /api/ca` が 500 を返す | `create()` を呼ぶ | 戻り値が `null`、`createError` に理由が入り、`validationErrors` は空のまま | 実装済 |
+| CAS-13 | `POST /api/masters/ca` が 500 を返す | `create()` を呼ぶ | 戻り値が `null`、`createError` に理由が入り、`validationErrors` は空のまま | 実装済 |
 | CAS-14 | 既定モック。前回の `create()` が失敗している | `clearCreateError()` を呼ぶ | `createError` と `validationErrors` が空になる（モーダルを開き直したときに前回の失敗を残さない） | 実装済 |
 | CAS-15 | 既定モック。CA種別で絞り込んだ状態 | 絞り込みに合う CA を `create()` する | 読み直しで絞り込み条件が落ちない（`caType` が残り、一覧も条件に合う行だけ） | 実装済 |
 | CAS-16 | 事前検証が `warnings` を含む応答を返す | `create()` を呼ぶ | 警告では止まらず登録される（`validationWarnings` は空のまま。CA では警告を扱わない） | 実装済 |
 | CAS-17 | 既定モック | `load()` の後に一覧の 1 件の `id` と `updatedAt` を添えて `update()` を呼ぶ | 更新後の 1 件が返り、一覧の該当行が新しい内容になる。`total` は変わらない | 実装済 |
 | CAS-18 | 事前検証が不合格を返す（銘柄マスタに無い銘柄コード） | `update()` を呼ぶ | 戻り値が `null`、`updateValidationErrors` に理由が入り、`updateError` は `null` のまま。一覧は変わらない | 実装済 |
-| CAS-19 | `PUT /api/ca/{id}` が 409 を返す（古い `updatedAt` を送る） | `update()` を呼ぶ | 戻り値が `null`、`updateError` に競合の理由が入る。`updateValidationErrors` は空のまま。一覧は自動で読み直されない | 実装済 |
+| CAS-19 | `PUT /api/masters/ca/{id}` が 409 を返す（古い `updatedAt` を送る） | `update()` を呼ぶ | 戻り値が `null`、`updateError` に競合の理由が入る。`updateValidationErrors` は空のまま。一覧は自動で読み直されない | 実装済 |
 | CAS-20 | 既定モック。登録も更新も失敗させた状態 | `clearUpdateError()` を呼ぶ | 更新側（`updateError` / `updateValidationErrors`）だけが空になり、登録側（`createError` / `validationErrors`）は残る | 実装済 |
 | CAS-21 | 既定モック。CA種別で絞り込んだ状態 | 絞り込みの圏外へ CA種別を変えて `update()` する | 読み直しで絞り込み条件が落ちない（`caType` が残る）。`total` が 1 減る | 実装済 |
 | CAS-22 | 既定モック | `load()` の後に一覧の 1 件を `remove()` する | `true` が返り、`total` が 1 減ってその行が一覧から消える（実 API は論理削除だが、一覧は取消済みを返さない） | 実装済 |
-| CAS-23 | `DELETE /api/ca/{id}` が 500 を返す | `remove()` を呼ぶ | `false` が返り、`deleteError` に理由が入る。`total` は変わらない | 実装済 |
+| CAS-23 | `DELETE /api/masters/ca/{id}` が 500 を返す | `remove()` を呼ぶ | `false` が返り、`deleteError` に理由が入る。`total` は変わらない | 実装済 |
 | CAS-24 | 既定モック。前回の `remove()` が失敗している | `clearDeleteError()` を呼ぶ | `deleteError` が空になる（確認モーダルを開き直したときに前回の失敗を残さない） | 実装済 |

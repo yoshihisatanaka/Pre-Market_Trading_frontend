@@ -5,8 +5,8 @@ import { useCrudList } from '@/composables/useCrudList'
 /**
  * 一覧 1 ページあたりの表示件数。
  *
- * 実 API（`GET /customers`）は 1 ページ 50 件で固定されていて limit クエリを持たない。
- * ここを変えてもリクエストは変わらず、ページャーの表示だけがずれるので触らないこと。
+ * 実 API（`GET /masters/customers`）の limit は 1〜200 で既定 50。
+ * ここの値が api 層から `limit` として送られるので、変えるとリクエストも変わる。
  */
 export const CUSTOMERS_PAGE_SIZE = 50
 

@@ -38,7 +38,7 @@ const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 /** 一覧を 500 にする差し替え */
 function failList() {
   server.use(
-    http.get('*/api/customers', () =>
+    http.get('*/api/masters/customers', () =>
       HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     ),
   )
@@ -52,7 +52,7 @@ function failList() {
  */
 function slowList(waitFor) {
   server.use(
-    http.get('*/api/customers', async ({ request }) => {
+    http.get('*/api/masters/customers', async ({ request }) => {
       const offset = Number(new URL(request.url).searchParams.get('offset') ?? 0)
       await delay(waitFor(offset))
       return HttpResponse.json({

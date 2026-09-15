@@ -73,11 +73,11 @@ const listBody = (blackoutDates) => ({
 
 describe('api/blackoutDates', () => {
   it('[BDA-01] 条件なしのときは offset だけを送る', async () => {
-    record('get', '*/api/blackout-dates', listBody([]))
+    record('get', '*/api/masters/blackout-dates', listBody([]))
 
     await fetchBlackoutDates()
 
-    expect(lastRequest.url.pathname).toBe('/api/blackout-dates')
+    expect(lastRequest.url.pathname).toBe('/api/masters/blackout-dates')
     expect(lastRequest.params.get('offset')).toBe('0')
     // 空の条件はキーごと送らない（サーバ側で「空文字での絞り込み」にしないため）
     expect(lastRequest.params.has('start_date')).toBe(false)
@@ -87,7 +87,7 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-02] 日付の絞り込みは start_date / end_date に YYYYMMDD の整数で載る', async () => {
-    record('get', '*/api/blackout-dates', listBody([]))
+    record('get', '*/api/masters/blackout-dates', listBody([]))
 
     await fetchBlackoutDates({ dateFrom: '2026-01-01', dateTo: '2026-12-31' })
 
@@ -99,7 +99,7 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-03] limit は渡されても送らない（実 API が受け付けない）', async () => {
-    record('get', '*/api/blackout-dates', listBody([]))
+    record('get', '*/api/masters/blackout-dates', listBody([]))
 
     // ストア（useCrudList）は表示件数を limit として渡してくるが、
     // 実 API の一覧は 1 ページ 50 件で固定されていて limit というクエリを持たない
@@ -110,7 +110,7 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-04] BlackoutDateItem がアプリ内モデルに変換される', async () => {
-    record('get', '*/api/blackout-dates', listBody([blackoutDateItem]))
+    record('get', '*/api/masters/blackout-dates', listBody([blackoutDateItem]))
 
     const { items, total } = await fetchBlackoutDates()
 
@@ -128,7 +128,7 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-05] 備考と更新日時が null の行は空文字になる', async () => {
-    record('get', '*/api/blackout-dates', listBody([{ ...blackoutDateItem, 備考: null, 更新日時: null }]))
+    record('get', '*/api/masters/blackout-dates', listBody([{ ...blackoutDateItem, 備考: null, 更新日時: null }]))
 
     const { items } = await fetchBlackoutDates()
 
@@ -138,7 +138,7 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-06] blackout_dates を持たない応答でも空の一覧になる', async () => {
-    record('get', '*/api/blackout-dates', { total: 0, limit: 50, offset: 0 })
+    record('get', '*/api/masters/blackout-dates', { total: 0, limit: 50, offset: 0 })
 
     const { items, total } = await fetchBlackoutDates()
 
@@ -147,17 +147,17 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-07] 新規の事前検証は日本語キーの本文を送り、is_update を付けない', async () => {
-    record('post', '*/api/blackout-dates/validate', { valid: true, errors: [], warnings: [] })
+    record('post', '*/api/masters/blackout-dates/validate', { valid: true, errors: [], warnings: [] })
 
     await validateBlackoutDate({ date: '2026-12-25', reason: 'クリスマス休業' })
 
-    expect(lastRequest.url.pathname).toBe('/api/blackout-dates/validate')
+    expect(lastRequest.url.pathname).toBe('/api/masters/blackout-dates/validate')
     expect(lastRequest.body).toEqual({ 受注不可日: 20261225, 備考: 'クリスマス休業' })
     expect(lastRequest.params.has('is_update')).toBe(false)
   })
 
   it('[BDA-08] 日付を変えない編集の事前検証は is_update=true を付ける', async () => {
-    record('post', '*/api/blackout-dates/validate', { valid: true, errors: [], warnings: [] })
+    record('post', '*/api/masters/blackout-dates/validate', { valid: true, errors: [], warnings: [] })
 
     await validateBlackoutDate({ id: '20261225', date: '2026-12-25', reason: '文言だけ直す' })
 
@@ -168,7 +168,7 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-09] 日付を変える編集の事前検証は is_update を付けない', async () => {
-    record('post', '*/api/blackout-dates/validate', { valid: true, errors: [], warnings: [] })
+    record('post', '*/api/masters/blackout-dates/validate', { valid: true, errors: [], warnings: [] })
 
     await validateBlackoutDate({ id: '20261225', date: '2030-01-01', reason: 'クリスマス休業' })
 
@@ -182,7 +182,7 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-10] 事前検証の valid / errors をそのまま返す', async () => {
-    record('post', '*/api/blackout-dates/validate', {
+    record('post', '*/api/masters/blackout-dates/validate', {
       valid: false,
       errors: ['受注不可日(20261225)は既に登録されています'],
       warnings: [],
@@ -199,7 +199,7 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-11] errors が無い応答でも空配列になる', async () => {
-    record('post', '*/api/blackout-dates/validate', { valid: true })
+    record('post', '*/api/masters/blackout-dates/validate', { valid: true })
 
     const result = await validateBlackoutDate({ date: '2026-12-25', reason: 'クリスマス休業' })
 
@@ -209,14 +209,14 @@ describe('api/blackoutDates', () => {
   it('[BDA-12] 登録は日本語キーの本文を送り、応答の blackout_date を変換して返す', async () => {
     record(
       'post',
-      '*/api/blackout-dates',
+      '*/api/masters/blackout-dates',
       { success: true, blackout_date: blackoutDateItem, message: 'ok' },
       201,
     )
 
     const created = await createBlackoutDate({ date: '2026-12-25', reason: 'クリスマス休業' })
 
-    expect(lastRequest.url.pathname).toBe('/api/blackout-dates')
+    expect(lastRequest.url.pathname).toBe('/api/masters/blackout-dates')
     expect(lastRequest.body).toEqual({ 受注不可日: 20261225, 備考: 'クリスマス休業' })
     expect(created).toEqual({
       id: '20261225',
@@ -228,7 +228,7 @@ describe('api/blackoutDates', () => {
 
   it('[BDA-13] 更新はパスが変更前の日付、本文が変更後の日付と合札になる', async () => {
     const moved = { ...blackoutDateItem, 受注不可日: 20300101 }
-    record('put', '*/api/blackout-dates/:blackoutDate', {
+    record('put', '*/api/masters/blackout-dates/:blackoutDate', {
       success: true,
       blackout_date: moved,
       message: 'ok',
@@ -242,7 +242,7 @@ describe('api/blackoutDates', () => {
     })
 
     // 主キーは受注不可日そのものなので、パスは「変更前」の日付になる
-    expect(lastRequest.url.pathname).toBe('/api/blackout-dates/20261225')
+    expect(lastRequest.url.pathname).toBe('/api/masters/blackout-dates/20261225')
     expect(lastRequest.body).toEqual({
       受注不可日: 20300101,
       備考: '年末年始休業',
@@ -253,7 +253,7 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-14] 合札が空のときは更新日時をキーごと送らない', async () => {
-    record('put', '*/api/blackout-dates/:blackoutDate', {
+    record('put', '*/api/masters/blackout-dates/:blackoutDate', {
       success: true,
       blackout_date: blackoutDateItem,
       message: 'ok',
@@ -272,7 +272,7 @@ describe('api/blackoutDates', () => {
   })
 
   it('[BDA-15] 削除は受注不可日をパスに置き、渡した id を返す', async () => {
-    record('delete', '*/api/blackout-dates/:blackoutDate', {
+    record('delete', '*/api/masters/blackout-dates/:blackoutDate', {
       success: true,
       blackout_date: { ...blackoutDateItem, 取消区分: 1 },
       message: 'ok',
@@ -280,14 +280,14 @@ describe('api/blackoutDates', () => {
 
     const deleted = await deleteBlackoutDate('20261225')
 
-    expect(lastRequest.url.pathname).toBe('/api/blackout-dates/20261225')
+    expect(lastRequest.url.pathname).toBe('/api/masters/blackout-dates/20261225')
     expect(deleted).toBe('20261225')
   })
 
   it('[BDA-16] 更新系には X-User-Code ヘッダが載る', async () => {
     record(
       'post',
-      '*/api/blackout-dates',
+      '*/api/masters/blackout-dates',
       { success: true, blackout_date: blackoutDateItem, message: 'ok' },
       201,
     )

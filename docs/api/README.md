@@ -87,7 +87,7 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 
 | 仮仕様（現在） | 該当ファイル | 確認すること |
 |---|---|---|
-| `GET /api/orders` → `{ items: Order[], total: number }` | `src/api/orders.js`, `src/mocks/fixtures/orders.js` | パス・ページング形式・キー名 |
+| `GET /api/orders` → `{ items: Order[], total: number }` | `src/api/orders.js`, `src/mocks/fixtures/orders.js` | **2026-09-15 の取り込みで実スキーマが付いた。** `OrderListResponse` は `{ total, orders: OrderItemResponse[] }` で、キーは日本語（`ID` / `銘柄コード` / `売買区分` / `数量` / `指値単価` / `処理状況` / `受注日` / `受注時刻`）。**銘柄名は含まれない。** `account_no` / `stock_code` / `status` / `limit` / `offset` での絞り込みも入った。列構成ごと作り直しになるため**別件**として残してある |
 | `Order.side` = `buy` / `sell` | `src/views/OrderListView.vue`（`sideLabels`） | 実際の売買区分の値 |
 | `Order.status` = `working` / `filled` / `canceled` / `rejected` | `src/views/OrderListView.vue`（`statusLabels`） | 実際の注文状態の値と表示名 |
 | `Order.ordered_at` = ISO 8601 (UTC) | `src/api/orders.js`（`toOrder`）, `src/utils/format.js` | 形式とタイムゾーン |
@@ -97,16 +97,16 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 
 | リソース | 実 API | 切り替えた版 | 残っている暫定 |
 |---|---|---|---|
-| 海外休場日マスタ | `/holidays`（一覧・事前検証・登録・論理削除） | `src/api/marketHolidays.js` | `X-User-Code` を `.env` の `VITE_USER_CODE` から付けている（`src/api/client.js` の interceptor）。SSO が入ったら差し替える |
-| 受注不可日マスタ | `/blackout-dates`（一覧・事前検証・登録・変更・論理削除） | `src/api/blackoutDates.js` | `X-User-Code` は上と同じ。日付を変更する更新はバックエンド側の対応待ち（後述） |
-| ハードリミットマスタ（スライス注文設定） | `/hard-limits`（照会・変更） | `src/api/hardLimits.js` | 楽観ロックの 409 が `openapi.json` に未宣言（PUT の description にだけ記載。実 API では実装済み）。`備考` と `スライス有効フラグ` は**省略するとサーバ既定に落ちる**（備考は NULL、有効フラグは 1）ので、現在値を送り返して保持している |
+| 海外休場日マスタ | `/masters/market-holidays`（一覧・事前検証・登録・論理削除） | `src/api/marketHolidays.js` | `X-User-Code` を `.env` の `VITE_USER_CODE` から付けている（`src/api/client.js` の interceptor）。SSO が入ったら差し替える |
+| 受注不可日マスタ | `/masters/blackout-dates`（一覧・事前検証・登録・変更・論理削除） | `src/api/blackoutDates.js` | `X-User-Code` は上と同じ。日付を変更する更新はバックエンド側の対応待ち（後述） |
+| ハードリミットマスタ（スライス注文設定） | `/masters/hard-limits`（照会・変更） | `src/api/hardLimits.js` | `備考` と `スライス有効フラグ` は**省略するとサーバ既定に落ちる**（備考は NULL、有効フラグは 1）ので、現在値を送り返して保持している |
 
 切り替えても MSW ハンドラは**消していない**。単体テストと E2E が同じ `src/mocks/handlers/` を共用しており、
 消すとテストが実 API を叩きにいくため。代わりにハンドラとフィクスチャを**実 API と同じ形**に寄せてある。
 
-- `/holidays` / `/blackout-dates` … 日本語キー / 日付は integer の YYYYMMDD / 降順 /
+- `/masters/market-holidays` / `/masters/blackout-dates` … 日本語キー / 日付は integer の YYYYMMDD / 降順 /
   エラーは `{ detail }` / 論理削除
-- `/hard-limits` … 日本語キー / 拒否は 422 の `HTTPValidationError`（不合格の項目を全部まとめて返す）と
+- `/masters/hard-limits` … 日本語キー / 拒否は 422 の `HTTPValidationError`（不合格の項目を全部まとめて返す）と
   409 の `ErrorResponse`
 
 実 API に当てて動かすときは `.env` の `VITE_ENABLE_MSW=false`。
@@ -120,14 +120,15 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 
 | リソース | 持たない操作 |
 |---|---|
-| 海外休場日マスタ | 変更（`PUT /holidays/{holiday_date}`。楽観ロックあり）、履歴（`GET /holidays/{holiday_date}/history`）、CSV 入出力 |
-| 受注不可日マスタ | 詳細照会（`GET /blackout-dates/{blackout_date}`）、履歴（`GET /blackout-dates/{blackout_date}/history`）、CSV 入出力 |
+| 海外休場日マスタ | 変更（`PUT /masters/market-holidays/{holiday_date}`。楽観ロックあり）、履歴（`GET /masters/market-holidays/{holiday_date}/history`）、CSV 入出力 |
+| 受注不可日マスタ | 詳細照会（`GET /masters/blackout-dates/{blackout_date}`）、履歴（`GET /masters/blackout-dates/{blackout_date}/history`）、CSV 入出力 |
 
 ### 受注不可日マスタで気をつけること
 
 実 API の作りが海外休場日と違う点が 3 つある。取り違えると静かに壊れる。
 
 1. **一覧は `limit` を受け付けない。** 1 ページ 50 件で固定（応答の `limit` は常に 50）。
+   顧客マスタ・CAマスタ・海外休場日は `limit` を持つので、ここだけ違う。
    `src/stores/blackoutDates.js` の `BLACKOUT_DATES_PAGE_SIZE` はこれに合わせた値で、変えられない
 2. **事前検証の `is_update` は「日付を変えたか」で決まる。** 変更検証は「本文の受注不可日が実在し
    取消済みでないこと」を見るので、新しい日付に使うと「存在しません」で弾かれる。
@@ -135,14 +136,41 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 3. **取消済みの日付の再登録に警告が出ない。** 海外休場日は事前検証が warnings を返して
    利用者に確認を求めるが、受注不可日は黙って再有効化される
 
-> **未解決**: `PUT /blackout-dates/{blackout_date}` は現在パスの日付で本文の `受注不可日` を
+> **未解決**: `PUT /masters/blackout-dates/{blackout_date}` は現在パスの日付で本文の `受注不可日` を
 > 上書きするため、**備考しか変更できない**（`save_blackout_date` の `raw_data["受注不可日"] = blackout_date`）。
 > フロントは本文の `受注不可日` が新しい日付として効く前提で実装してある。
 > バックエンド側の対応が入るまで、日付を変更する経路は実 API では通らない。
 
+## 6. マスタ系パスの移動（2026-09-15）
+
+取り込み直しで、マスタ系 36 パスが **`/masters/` 配下へ移動・リネーム**された。
+フロントが叩いていたパスは 1 本も残っていない。
+
+| 旧 | 新 |
+|---|---|
+| `/stocks` | `/masters/symbols`（パス変数も `{stock_code}` → `{symbol}`） |
+| `/accounts` | `/masters/customers`（**一覧 GET が新設**） |
+| `/holidays` | `/masters/market-holidays` |
+| `/blackout-dates` | `/masters/blackout-dates` |
+| `/ca` | `/masters/ca` |
+| `/hard-limits` | `/masters/hard-limits` |
+| `/exchange-rates` | `/masters/fx` |
+| `/balance-adjustments` | `/masters/balance-adjustments` |
+
+あわせて **`/masters/symbols` と `/customers` のクエリ名が日本語から英語の snake_case になった**
+（`銘柄コード` → `symbol`、`部店コード` → `branch_code` など）。パスだけ直してクエリ名を
+そのままにすると、**絞り込みが黙って効かなくなる**（FastAPI は知らないクエリを無視する）ので注意。
+
+顧客マスタ一覧は新設の `/masters/customers` に向けた。ここには **`handler_code` が無い**ため、
+扱者コードでの絞り込みは実 API では効かない（詳細は `src/api/customers.js` の冒頭）。
+
+`enum` が 21 種定義されたので、値の写しを [src/utils/apiEnums.js](../../src/utils/apiEnums.js) に置いてある。
+`src/utils/apiEnums.spec.js` が `openapi.json` と突き合わせるので、次の取り込みで増減すると落ちる。
+
 ## 現状
 
-取り込み済み（65 パス / 87 オペレーション / 104 スキーマ）。海外休場日・受注不可日以外は
-主要レスポンスの中身が未定義など**ギャップが残っている**ため、
-当面 [src/mocks/](../../src/mocks/) の仮フィクスチャで開発を進める。
+取り込み済み（79 パス / 102 オペレーション / 129 スキーマ）。`enum` は 21 種。
+`CustomerItem` / `SymbolItem` / `OrderItemResponse` のように主要レスポンスの型が付いた一方、
+`/batch/*`・`/mizuho/*`・`GET /orders/{order_id}`・`/codes`・`/branches` などは
+**中身が未定義のまま**。当面 [src/mocks/](../../src/mocks/) の仮フィクスチャで開発を進める。
 詳細は [checklist.md](../../.claude/skills/api-spec-sync/checklist.md) の実測欄を参照。

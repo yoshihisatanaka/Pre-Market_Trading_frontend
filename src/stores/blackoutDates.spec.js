@@ -93,19 +93,19 @@ const itemBody = (row) => ({ success: true, blackout_date: row, message: 'ok' })
 // 事前検証（HTTP は常に 200。可否は valid / errors で表す）を差し替えるためのハンドラ
 const validateErrorHandler = (options) =>
   http.post(
-    '*/api/blackout-dates/validate',
+    '*/api/masters/blackout-dates/validate',
     () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     options,
   )
 
 const errorHandler = (options) =>
   http.get(
-    '*/api/blackout-dates',
+    '*/api/masters/blackout-dates',
     () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     options,
   )
 const emptyHandler = (options) =>
-  http.get('*/api/blackout-dates', () => HttpResponse.json(listBody([], 0)), options)
+  http.get('*/api/masters/blackout-dates', () => HttpResponse.json(listBody([], 0)), options)
 
 describe('useBlackoutDatesStore', () => {
   beforeEach(() => {
@@ -161,7 +161,7 @@ describe('useBlackoutDatesStore', () => {
 
   it('[BDS-05] 取得中は loading が true になり完了すると false に戻る', async () => {
     server.use(
-      http.get('*/api/blackout-dates', async () => {
+      http.get('*/api/masters/blackout-dates', async () => {
         await delay(50)
         return HttpResponse.json(listBody(firstPage))
       }),
@@ -220,7 +220,7 @@ describe('useBlackoutDatesStore', () => {
 
   it('[BDS-09] 後から届いた古い応答で結果が巻き戻らない', async () => {
     server.use(
-      http.get('*/api/blackout-dates', async ({ request }) => {
+      http.get('*/api/masters/blackout-dates', async ({ request }) => {
         const offset = Number(new URL(request.url).searchParams.get('offset') ?? 0)
         // 1 ページ目だけ遅らせ、「古い応答が後から返る」状況を作る
         if (offset === 0) await delay(50)
@@ -239,7 +239,7 @@ describe('useBlackoutDatesStore', () => {
   it('[BDS-10] limit は表示件数の定数だがリクエストには載らない', async () => {
     let sentParams = null
     server.use(
-      http.get('*/api/blackout-dates', ({ request }) => {
+      http.get('*/api/masters/blackout-dates', ({ request }) => {
         sentParams = new URL(request.url).searchParams
         return HttpResponse.json(listBody(firstPage))
       }),
@@ -284,7 +284,7 @@ describe('useBlackoutDatesStore', () => {
   it('[BDS-13] 事前検証で弾かれたときは登録の API を呼ばない', async () => {
     let createCalls = 0
     server.use(
-      http.post('*/api/blackout-dates', () => {
+      http.post('*/api/masters/blackout-dates', () => {
         createCalls += 1
         return HttpResponse.json(itemBody(blackoutDates[0]), { status: 201 })
       }),
@@ -307,7 +307,7 @@ describe('useBlackoutDatesStore', () => {
       '理由・備考は45文字以内で指定してください',
     ]
     server.use(
-      http.post('*/api/blackout-dates/validate', () =>
+      http.post('*/api/masters/blackout-dates/validate', () =>
         HttpResponse.json({ valid: false, errors: reasons, warnings: [], details: null }),
       ),
     )
@@ -340,7 +340,7 @@ describe('useBlackoutDatesStore', () => {
     // 実 API の重複エラーは 400（ErrorResponse）で返る
     const detail = duplicateMessage(Number(NEW_DATE.replaceAll('-', '')))
     server.use(
-      http.post('*/api/blackout-dates', () => HttpResponse.json({ detail }, { status: 400 })),
+      http.post('*/api/masters/blackout-dates', () => HttpResponse.json({ detail }, { status: 400 })),
     )
     const store = useBlackoutDatesStore()
     await store.load()
@@ -410,7 +410,7 @@ describe('useBlackoutDatesStore', () => {
       releaseCreate = resolve
     })
     server.use(
-      http.post('*/api/blackout-dates', async () => {
+      http.post('*/api/masters/blackout-dates', async () => {
         createStarted = true
         await createGate
         return HttpResponse.json(
@@ -499,7 +499,7 @@ describe('useBlackoutDatesStore', () => {
 
   it('[BDS-25] 削除中は deleting だけが true になり一覧の loading は false のまま', async () => {
     server.use(
-      http.delete('*/api/blackout-dates/:blackoutDate', async () => {
+      http.delete('*/api/masters/blackout-dates/:blackoutDate', async () => {
         await delay(50)
         return HttpResponse.json(itemBody({ ...DELETE_TARGET, 取消区分: 1 }))
       }),
@@ -564,7 +564,7 @@ describe('useBlackoutDatesStore', () => {
     // 事前検証のリクエストを、既定ハンドラを差し替えずに観測する
     const validateUrls = []
     const record = ({ request }) => {
-      if (request.url.includes('/blackout-dates/validate')) validateUrls.push(request.url)
+      if (request.url.includes('/masters/blackout-dates/validate')) validateUrls.push(request.url)
     }
     server.events.on('request:start', record)
 
@@ -619,7 +619,7 @@ describe('useBlackoutDatesStore', () => {
   it('[BDS-30] 事前検証で弾かれたときは更新の API を呼ばない', async () => {
     let updateCalls = 0
     server.use(
-      http.put('*/api/blackout-dates/:blackoutDate', () => {
+      http.put('*/api/masters/blackout-dates/:blackoutDate', () => {
         updateCalls += 1
         return HttpResponse.json(itemBody(blackoutDates[0]))
       }),
@@ -641,7 +641,7 @@ describe('useBlackoutDatesStore', () => {
 
   it('[BDS-31] 事前検証を通っても更新がサーバエラーなら updateError に入る', async () => {
     server.use(
-      http.put('*/api/blackout-dates/:blackoutDate', () =>
+      http.put('*/api/masters/blackout-dates/:blackoutDate', () =>
         HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
       ),
     )
@@ -765,7 +765,7 @@ describe('useBlackoutDatesStore', () => {
       releaseUpdate = resolve
     })
     server.use(
-      http.put('*/api/blackout-dates/:blackoutDate', async () => {
+      http.put('*/api/masters/blackout-dates/:blackoutDate', async () => {
         updateStarted = true
         await updateGate
         return HttpResponse.json(itemBody({ ...EDIT_TARGET, 備考: EDITED_REASON }))

@@ -1,21 +1,29 @@
+import { ACCIDENT_ACCOUNT_TYPE } from '@/utils/apiEnums'
 import { apiClient } from './client'
 
 /*
- * 顧客マスタ（実 API `/customers`。m_口座情報 の検索）。
+ * 顧客マスタ（実 API `/masters/customers`。m_口座情報 の検索）。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次の 5 点。
  *   - プロパティ名が日本語（口座番号 / 部店コード / 円貨預り金 …）
- *   - **クエリ名まで日本語**（部店コード / 扱者コード / 口座番号 / 顧客名）
- *   - 口座番号が integer。アプリ内は文字列（一覧の行キーと URL で使う）
+ *   - クエリ名は英語の snake_case（branch_code / account_no / customer_name）
+ *   - 口座番号は integer で、クエリ名も `account_no`。アプリ内は文字列
+ *     （一覧の行キーと URL で使う）
  *   - フラグが 0 / 1（取引停止区分_全取引・事故処理口座区分・ユーザー操作フラグ）。
- *     アプリ内は boolean
- *   - 一覧は 1 ページ 50 件固定（`limit` クエリを持たない）
+ *     アプリ内は boolean。**型はキーごとに違う**（前者は integer、後者は文字列）
+ *   - 一覧の配列名が `customers`
+ *
+ * 2026-09-15 の OpenAPI 取り込みで、このマスタ一覧は `/customers` から
+ * **新設の `/masters/customers`** へ移った。あわせてクエリ名が日本語から英語になり、
+ * `limit`（1〜200・既定 50）を送れるようになった。
+ *
+ * **`handler_code`（扱者コード）は `/masters/customers` に無い。**
+ * 旧 `/customers`（注文画面用の顧客検索）には今もあるが、マスタ一覧には移されなかった。
+ * 取引停止区分・口座区分・法人区分と同じく、いまは MSW のモックだけが解釈する条件で、
+ * 実 API に当てるとこの 4 つでは絞り込まれない。仕様追加を依頼する対象。
  *
  * いまは一覧の取得だけを持つ。登録・更新・削除、CSV 入出力は別途。
- *
- * 応答の行の中身は openapi 上まだ未定義（`customers: array<object>`）なので、同じ
- * m_口座情報 由来の **AccountItem スキーマ**の形を前提に変換している。
- * 実 API の形が確定したら直すのは toCustomer() だけで済む。
+ * 応答の行は `CustomerItem` スキーマ（日本語キー）。
  */
 
 /**
@@ -54,9 +62,8 @@ import { apiClient } from './client'
  *
  * 削除済みの行は含めない。実 API の include_deleted は既定 false なので送らない。
  *
- * `limit` は受け取るが送らない。実 API の一覧は 1 ページ 50 件で固定されていて
- * `limit` というクエリを持たない。ページャーの表示件数は
- * stores/customers.js の CUSTOMERS_PAGE_SIZE 側で 50 に合わせてある。
+ * `limit` は 1〜200 で既定 50。ページャーの表示件数は
+ * stores/customers.js の CUSTOMERS_PAGE_SIZE が決め、その値がここへ渡ってくる。
  *
  * @param {{
  *   limit?: number,
@@ -70,10 +77,13 @@ import { apiClient } from './client'
  *   corporateType?: string,
  * }} [params]
  *   customerName は顧客名・顧客名カナの両方に効く（実 API 側の仕様）。
- *   空文字は「条件なし」としてリクエストに載せない
+ *   空文字は「条件なし」としてリクエストに載せない。
+ *   handlerCode / restriction / accountType / corporateType は実 API では無視される
+ *   （`/masters/customers` に対応するクエリが無い。モックだけが解釈する）
  * @returns {Promise<{ items: Customer[], total: number }>} 口座番号の昇順
  */
 export async function fetchCustomers({
+  limit = 50,
   offset = 0,
   branchCode = '',
   handlerCode = '',
@@ -83,23 +93,25 @@ export async function fetchCustomers({
   accountType = '',
   corporateType = '',
 } = {}) {
-  const { data } = await apiClient.get('/customers', {
-    // クエリ名が日本語であることを知ってよいのはこの層だけ。
-    // 値が undefined のパラメータは axios が送らない
+  const { data } = await apiClient.get('/masters/customers', {
+    // クエリ名を知ってよいのはこの層だけ。値が undefined のパラメータは axios が送らない
     params: {
+      limit,
       offset,
-      部店コード: branchCode || undefined,
-      扱者コード: handlerCode || undefined,
-      口座番号: toAccountNo(accountNumber),
-      顧客名: customerName || undefined,
+      branch_code: branchCode || undefined,
+      account_no: toAccountNo(accountNumber),
+      customer_name: customerName || undefined,
       /*
-       * 以下 3 つは画面モックにある条件だが、実 API のクエリには無い（openapi 上そもそも
-       * 受け取らない）。いまはモックだけが解釈する。実 API に切り替えるときに
-       * 仕様追加を依頼し、追加されなければ検索カードから外す。
+       * 以下 4 つは画面モックにある条件だが、`/masters/customers` のクエリには無い
+       * （FastAPI は知らないクエリを無視するので送っても害は無く、モックだけが解釈する）。
+       * 名前はサーバに追加を依頼したい綴りで書いておく。handler_code は
+       * 旧 `/customers`（注文画面用の顧客検索）が実際に持っているクエリ名。
+       * 追加されなければ検索カードから外す。
        */
-      取引停止区分_全取引: restriction || undefined,
-      口座区分: accountType || undefined,
-      法人区分: corporateType || undefined,
+      handler_code: handlerCode || undefined,
+      restriction: restriction || undefined,
+      account_type: accountType || undefined,
+      corporate_type: corporateType || undefined,
     },
   })
 
@@ -109,7 +121,7 @@ export async function fetchCustomers({
   }
 }
 
-/** AccountItem → アプリ内モデル */
+/** CustomerItem → アプリ内モデル */
 function toCustomer(raw) {
   return {
     // 実 API の 口座番号 は integer。画面と URL では文字列として扱う
@@ -123,15 +135,19 @@ function toCustomer(raw) {
     customerNameKana: raw?.顧客名カナ ?? '',
     // 年齢は実 API でも文字列（法人は空）。計算には使わないのでそのまま運ぶ
     age: raw?.年齢 ?? '',
-    // 0 / 1 の integer は、この層で boolean に直して外へ出す
+    /*
+     * 0 / 1 の integer は、この層で boolean に直して外へ出す。
+     * こちらは enum ではなく素の integer フラグなので、リテラルのまま比べる
+     * （下の 事故処理口座区分 だけが定数参照になっているのは、そこに enum があるから）。
+     */
     tradingSuspended: raw?.取引停止区分_全取引 === 1,
     // 表示名はサーバが付けて返す（コード → 名前の対応表をフロントに持たせない）
     restrictionName: raw?.取引停止区分_全取引名 ?? '',
     investmentPolicyName: raw?.投資方針名 ?? '',
     complianceRankName: raw?.コンプラランク名 ?? '',
     accountTypeName: raw?.口座区分名 ?? '',
-    // 事故処理口座区分は AccountItem では文字列の '0' / '1'（取引停止区分と型が違う）
-    accidentAccount: raw?.事故処理口座区分 === '1',
+    // 事故処理口座区分は文字列の '0' / '1'（取引停止区分と型が違う）。AccidentAccountTypeEnum
+    accidentAccount: raw?.事故処理口座区分 === ACCIDENT_ACCOUNT_TYPE.ACCIDENT,
     corporateTypeName: raw?.法人区分名 ?? '',
     /*
      * 金額は数値のまま外へ出す（整形は画面）。nullable なので空文字ではなく null に寄せる。

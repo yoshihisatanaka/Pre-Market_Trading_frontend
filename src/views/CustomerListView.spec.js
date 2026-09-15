@@ -49,12 +49,12 @@ const listBody = (rows, total = rows.length) => ({ total, customers: rows })
 
 const errorHandler = (options) =>
   http.get(
-    '*/api/customers',
+    '*/api/masters/customers',
     () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     options,
   )
 const emptyHandler = (options) =>
-  http.get('*/api/customers', () => HttpResponse.json(listBody([])), options)
+  http.get('*/api/masters/customers', () => HttpResponse.json(listBody([])), options)
 
 const Page = { render: () => h('div') }
 

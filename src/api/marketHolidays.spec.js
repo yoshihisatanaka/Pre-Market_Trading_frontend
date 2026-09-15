@@ -69,11 +69,11 @@ const listBody = (holidays) => ({ total: holidays.length, limit: 50, offset: 0, 
 
 describe('api/marketHolidays', () => {
   it('[MHA-01] 条件なしのときは limit / offset だけを送る', async () => {
-    record('get', '*/api/holidays', listBody([]))
+    record('get', '*/api/masters/market-holidays', listBody([]))
 
     await fetchMarketHolidays()
 
-    expect(lastRequest.url.pathname).toBe('/api/holidays')
+    expect(lastRequest.url.pathname).toBe('/api/masters/market-holidays')
     expect(lastRequest.params.get('limit')).toBe('50')
     expect(lastRequest.params.get('offset')).toBe('0')
     // 空の条件はキーごと送らない（サーバ側で「空文字での絞り込み」にしないため）
@@ -83,7 +83,7 @@ describe('api/marketHolidays', () => {
   })
 
   it('[MHA-02] 日付の絞り込みは start_date / end_date に YYYYMMDD の整数で載る', async () => {
-    record('get', '*/api/holidays', listBody([]))
+    record('get', '*/api/masters/market-holidays', listBody([]))
 
     await fetchMarketHolidays({ dateFrom: '2026-01-01', dateTo: '2026-12-31' })
 
@@ -95,7 +95,7 @@ describe('api/marketHolidays', () => {
   })
 
   it('[MHA-03] 休場区分の絞り込みは holiday_type にコードのまま載る', async () => {
-    record('get', '*/api/holidays', listBody([]))
+    record('get', '*/api/masters/market-holidays', listBody([]))
 
     await fetchMarketHolidays({ holidayType: '1' })
 
@@ -107,7 +107,7 @@ describe('api/marketHolidays', () => {
   })
 
   it('[MHA-04] HolidayItem がアプリ内モデルに変換される', async () => {
-    record('get', '*/api/holidays', listBody([holidayItem]))
+    record('get', '*/api/masters/market-holidays', listBody([holidayItem]))
 
     const { items, total } = await fetchMarketHolidays()
 
@@ -118,7 +118,7 @@ describe('api/marketHolidays', () => {
   })
 
   it('[MHA-05] 休場理由が null の行は空文字になる', async () => {
-    record('get', '*/api/holidays', listBody([{ ...holidayItem, 休場理由: null }]))
+    record('get', '*/api/masters/market-holidays', listBody([{ ...holidayItem, 休場理由: null }]))
 
     const { items } = await fetchMarketHolidays()
 
@@ -126,11 +126,11 @@ describe('api/marketHolidays', () => {
   })
 
   it('[MHA-06] 事前検証は日本語キーの本文を送る', async () => {
-    record('post', '*/api/holidays/validate', { valid: true, errors: [], warnings: [] })
+    record('post', '*/api/masters/market-holidays/validate', { valid: true, errors: [], warnings: [] })
 
     await validateMarketHoliday({ date: '2026-12-25', reason: 'Christmas Day', holidayType: '0' })
 
-    expect(lastRequest.url.pathname).toBe('/api/holidays/validate')
+    expect(lastRequest.url.pathname).toBe('/api/masters/market-holidays/validate')
     expect(lastRequest.body).toEqual({
       休場日: 20261225,
       休場区分: '0',
@@ -139,7 +139,7 @@ describe('api/marketHolidays', () => {
   })
 
   it('[MHA-07] 事前検証の valid / errors / warnings をそのまま返す', async () => {
-    record('post', '*/api/holidays/validate', {
+    record('post', '*/api/masters/market-holidays/validate', {
       valid: false,
       errors: ['休場日 20261225 は既に登録されています'],
       warnings: ['この日付は以前登録され削除されています。再度有効にします'],
@@ -161,7 +161,7 @@ describe('api/marketHolidays', () => {
 
   it('[MHA-08] errors / warnings が無い応答でも空配列になる', async () => {
     // openapi.json では valid だけが required。errors / warnings は既定値も無い
-    record('post', '*/api/holidays/validate', { valid: true })
+    record('post', '*/api/masters/market-holidays/validate', { valid: true })
 
     const result = await validateMarketHoliday({
       date: '2026-12-25',
@@ -173,7 +173,7 @@ describe('api/marketHolidays', () => {
   })
 
   it('[MHA-09] 登録は日本語キーの本文を送り、応答の holiday を変換して返す', async () => {
-    record('post', '*/api/holidays', { success: true, holiday: holidayItem, message: 'ok' }, 201)
+    record('post', '*/api/masters/market-holidays', { success: true, holiday: holidayItem, message: 'ok' }, 201)
 
     const created = await createMarketHoliday({
       date: '2026-12-25',
@@ -181,7 +181,7 @@ describe('api/marketHolidays', () => {
       holidayType: '0',
     })
 
-    expect(lastRequest.url.pathname).toBe('/api/holidays')
+    expect(lastRequest.url.pathname).toBe('/api/masters/market-holidays')
     expect(lastRequest.body).toEqual({
       休場日: 20261225,
       休場区分: '0',
@@ -196,7 +196,7 @@ describe('api/marketHolidays', () => {
   })
 
   it('[MHA-10] 削除は休場日をパスに置き、渡した id を返す', async () => {
-    record('delete', '*/api/holidays/:holidayDate', {
+    record('delete', '*/api/masters/market-holidays/:holidayDate', {
       success: true,
       holiday: { ...holidayItem, 取消区分: 1 },
       message: 'ok',
@@ -204,12 +204,12 @@ describe('api/marketHolidays', () => {
 
     const deleted = await deleteMarketHoliday('20261225')
 
-    expect(lastRequest.url.pathname).toBe('/api/holidays/20261225')
+    expect(lastRequest.url.pathname).toBe('/api/masters/market-holidays/20261225')
     expect(deleted).toBe('20261225')
   })
 
   it('[MHA-11] 更新系には X-User-Code ヘッダが載る', async () => {
-    record('post', '*/api/holidays', { success: true, holiday: holidayItem, message: 'ok' }, 201)
+    record('post', '*/api/masters/market-holidays', { success: true, holiday: holidayItem, message: 'ok' }, 201)
 
     await createMarketHoliday({ date: '2026-12-25', reason: 'Christmas Day', holidayType: '0' })
 

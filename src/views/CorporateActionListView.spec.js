@@ -81,9 +81,9 @@ const listBody = (items, total = items.length) => ({
 })
 
 const errorHandler = (options) =>
-  http.get('*/api/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }), options)
+  http.get('*/api/masters/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }), options)
 const emptyHandler = (options) =>
-  http.get('*/api/ca', () => HttpResponse.json(listBody([])), options)
+  http.get('*/api/masters/ca', () => HttpResponse.json(listBody([])), options)
 
 const Page = { render: () => h('div') }
 
@@ -162,7 +162,7 @@ const fieldError = (wrapper, input) => {
 /** 登録（事前検証は既定のまま）を 500 にする差し替え */
 const failCreate = () =>
   server.use(
-    http.post('*/api/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+    http.post('*/api/masters/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
   )
 
 /* ここから編集モーダル用のヘルパ。testid の -edit- で追加側と取り違えないようにする */
@@ -217,7 +217,7 @@ function gateListResponse() {
     release = resolve
   })
   server.use(
-    http.get('*/api/ca', async () => {
+    http.get('*/api/masters/ca', async () => {
       await gate
       return HttpResponse.json(listBody([], 0))
     }),
@@ -228,7 +228,7 @@ function gateListResponse() {
 /** 削除を 500 にする差し替え */
 const failDelete = () =>
   server.use(
-    http.delete('*/api/ca/:caId', () =>
+    http.delete('*/api/masters/ca/:caId', () =>
       HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     ),
   )
@@ -236,7 +236,7 @@ const failDelete = () =>
 /** 更新を 409（楽観的ロックの競合）にする差し替え */
 const conflictOnUpdate = () =>
   server.use(
-    http.put('*/api/ca/:caId', () =>
+    http.put('*/api/masters/ca/:caId', () =>
       HttpResponse.json({ detail: CONFLICT_MESSAGE }, { status: 409 }),
     ),
   )
@@ -310,7 +310,7 @@ describe('CorporateActionListView', () => {
 
   it('[CAV-06] CA種別名が欠けた応答でもコードから名前を補う', async () => {
     const raw = { ...sorted[0], CA種別: '120', CA種別名: null }
-    server.use(http.get('*/api/ca', () => HttpResponse.json(listBody([raw]))))
+    server.use(http.get('*/api/masters/ca', () => HttpResponse.json(listBody([raw]))))
 
     const { wrapper } = await mountView()
     await settle()
@@ -446,11 +446,11 @@ describe('CorporateActionListView', () => {
     let validateCalls = 0
     let createCalls = 0
     server.use(
-      http.post('*/api/ca/validate', () => {
+      http.post('*/api/masters/ca/validate', () => {
         validateCalls += 1
         return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
       }),
-      http.post('*/api/ca', () => {
+      http.post('*/api/masters/ca', () => {
         createCalls += 1
         return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
       }),
@@ -532,7 +532,7 @@ describe('CorporateActionListView', () => {
 
   it('[CAV-22] 登録中は送信もキャンセルもできない', async () => {
     server.use(
-      http.post('*/api/ca', async () => {
+      http.post('*/api/masters/ca', async () => {
         await delay(20)
         return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
       }),
@@ -603,7 +603,7 @@ describe('CorporateActionListView', () => {
   it('[CAV-32] 分母・分子が未設定の行では空欄になり 0 にならない', async () => {
     // フィクスチャは全行が比率を持つので、未設定の行はここで作る
     const withoutRatio = { ...corporateActions[0], ID: 900, 分母: null, 分子: null, 比率: null }
-    server.use(http.get('*/api/ca', () => HttpResponse.json(listBody([withoutRatio]))))
+    server.use(http.get('*/api/masters/ca', () => HttpResponse.json(listBody([withoutRatio]))))
     const { wrapper } = await mountView()
     await settle()
 
@@ -634,7 +634,7 @@ describe('CorporateActionListView', () => {
   it('[CAV-27] 必須を空にすると項目の直下に理由を出し、API へ送らない', async () => {
     let updateCalls = 0
     server.use(
-      http.put('*/api/ca/:caId', () => {
+      http.put('*/api/masters/ca/:caId', () => {
         updateCalls += 1
         return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
       }),
@@ -687,7 +687,7 @@ describe('CorporateActionListView', () => {
 
   it('[CAV-30] 更新中は送信もキャンセルもできない', async () => {
     server.use(
-      http.put('*/api/ca/:caId', async () => {
+      http.put('*/api/masters/ca/:caId', async () => {
         await delay(20)
         return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
       }),
@@ -746,10 +746,10 @@ describe('CorporateActionListView', () => {
        * 事前検証も差し替える。ここで組んだ行は既定ハンドラの持ち物ではないので、
        * 既定のままだと変更検証が「指定されたCAは存在しません」で弾いてしまう。
        */
-      http.post('*/api/ca/validate', () =>
+      http.post('*/api/masters/ca/validate', () =>
         HttpResponse.json({ valid: true, errors: [], warnings: [], details: null }),
       ),
-      http.get('*/api/ca', ({ request }) => {
+      http.get('*/api/masters/ca', ({ request }) => {
         const params = new URL(request.url).searchParams
         const caType = params.get('ca_type') ?? ''
         const offset = Number(params.get('offset') ?? 0)
@@ -761,7 +761,7 @@ describe('CorporateActionListView', () => {
           ca_list: filtered.slice(offset, offset + PAGE_SIZE),
         })
       }),
-      http.put('*/api/ca/:caId', async ({ params, request }) => {
+      http.put('*/api/masters/ca/:caId', async ({ params, request }) => {
         const body = await request.json()
         const id = Number(params.caId)
         const updated = { ...rowsState.find((ca) => ca.ID === id), CA種別: body.CA種別 }
@@ -838,7 +838,7 @@ describe('CorporateActionListView', () => {
 
   it('[CAV-37] 削除中は削除もキャンセルもできない', async () => {
     server.use(
-      http.delete('*/api/ca/:caId', async () => {
+      http.delete('*/api/masters/ca/:caId', async () => {
         await delay(20)
         return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
       }),
@@ -867,7 +867,7 @@ describe('CorporateActionListView', () => {
     const LAST_ID = 600 + PAGE_SIZE
 
     server.use(
-      http.get('*/api/ca', ({ request }) => {
+      http.get('*/api/masters/ca', ({ request }) => {
         const offset = Number(new URL(request.url).searchParams.get('offset') ?? 0)
         return HttpResponse.json({
           total: rowsState.length,
@@ -876,7 +876,7 @@ describe('CorporateActionListView', () => {
           ca_list: rowsState.slice(offset, offset + PAGE_SIZE),
         })
       }),
-      http.delete('*/api/ca/:caId', ({ params }) => {
+      http.delete('*/api/masters/ca/:caId', ({ params }) => {
         const id = Number(params.caId)
         const target = rowsState.find((ca) => ca.ID === id)
         rowsState = rowsState.filter((ca) => ca.ID !== id)

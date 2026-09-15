@@ -42,7 +42,7 @@ async function usedDatesIn(api, year) {
   let offset = 0
 
   for (;;) {
-    const res = await api.get('/api/holidays', {
+    const res = await api.get('/api/masters/market-holidays', {
       params: {
         start_date: year * 10000 + 101,
         end_date: year * 10000 + 1231,
@@ -158,7 +158,7 @@ test.describe('海外休場日マスタ（実 API 接続）', () => {
       baseURL: process.env.E2E_BASE_URL || 'http://frontend:5173',
       extraHTTPHeaders: { 'X-User-Code': USER_CODE },
     })
-    await api.delete(`/api/holidays/${testDate}`)
+    await api.delete(`/api/masters/market-holidays/${testDate}`)
     await api.dispose()
   })
 

@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 
 /*
- * 受注不可日マスタ（実 API `/blackout-dates`）。
+ * 受注不可日マスタ（実 API `/masters/blackout-dates`）。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次の 6 点。
  *   - プロパティ名が日本語（受注不可日 / 備考 / 取消区分 …）
@@ -37,7 +37,7 @@ import { apiClient } from './client'
  * @returns {Promise<{ items: BlackoutDate[], total: number }>} 受注不可日の降順
  */
 export async function fetchBlackoutDates({ offset = 0, dateFrom = '', dateTo = '' } = {}) {
-  const { data } = await apiClient.get('/blackout-dates', {
+  const { data } = await apiClient.get('/masters/blackout-dates', {
     // クエリ名と日付が integer であることを知ってよいのは、この層だけ。
     // 値が undefined のパラメータは axios が送らない
     params: {
@@ -77,7 +77,7 @@ export async function validateBlackoutDate({ date, reason, id = '' }) {
   const isUpdate = Boolean(id) && id === toApiKey(date)
 
   const { data } = await apiClient.post(
-    '/blackout-dates/validate',
+    '/masters/blackout-dates/validate',
     toBlackoutDateRequest({ date, reason }),
     // 既定が新規検証なので、変更検証のときだけクエリを付ける
     isUpdate ? { params: { is_update: true } } : undefined,
@@ -100,7 +100,7 @@ export async function validateBlackoutDate({ date, reason, id = '' }) {
  * @returns {Promise<BlackoutDate>} 登録された 1 件
  */
 export async function createBlackoutDate({ date, reason }) {
-  const { data } = await apiClient.post('/blackout-dates', toBlackoutDateRequest({ date, reason }))
+  const { data } = await apiClient.post('/masters/blackout-dates', toBlackoutDateRequest({ date, reason }))
 
   return toBlackoutDate(data.blackout_date)
 }
@@ -121,7 +121,7 @@ export async function createBlackoutDate({ date, reason }) {
  */
 export async function updateBlackoutDate({ id, date, reason, updatedAt }) {
   const { data } = await apiClient.put(
-    `/blackout-dates/${encodeURIComponent(id)}`,
+    `/masters/blackout-dates/${encodeURIComponent(id)}`,
     toBlackoutDateRequest({ date, reason, updatedAt }),
   )
 
@@ -138,7 +138,7 @@ export async function updateBlackoutDate({ id, date, reason, updatedAt }) {
  * @returns {Promise<string>} 削除した id
  */
 export async function deleteBlackoutDate(id) {
-  await apiClient.delete(`/blackout-dates/${encodeURIComponent(id)}`)
+  await apiClient.delete(`/masters/blackout-dates/${encodeURIComponent(id)}`)
   return id
 }
 

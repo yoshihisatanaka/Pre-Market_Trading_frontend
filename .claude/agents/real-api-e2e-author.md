@@ -95,7 +95,7 @@ MSW 版 E2E とブラウザでの開発が実 API 頼みになる）。
 - `src/api/<domain>.js` — 実 API の形（snake_case / 日本語キー / エラーの形）に合わせてあるか
 - `docs/api/openapi.json` — そのパスが載っているか。**編集しない**
 - `src/mocks/handlers/index.js` — **ハンドラが残っていても実 API 実装済みの例外がある**
-  （`/holidays` は単体テストと E2E が共用するため残してある）。冒頭のコメントまで読む
+  （`/masters/market-holidays` は単体テストと E2E が共用するため残してある）。冒頭のコメントまで読む
 
 判断がつかないときは推測でテストを書かない。どの画面が実 API に繋がるかをユーザに確認する。
 

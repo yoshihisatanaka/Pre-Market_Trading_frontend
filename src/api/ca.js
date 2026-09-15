@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 
 /*
- * CAマスタ（コーポレートアクション。実 API `/ca`）。
+ * CAマスタ（コーポレートアクション。実 API `/masters/ca`）。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次の 5 点。
  *   - プロパティ名が日本語（ID / 銘柄コード / CA種別 / 権利付最終日 …）
@@ -75,7 +75,7 @@ export async function fetchCorporateActions({
   stockCode = '',
   caType = '',
 } = {}) {
-  const { data } = await apiClient.get('/ca', {
+  const { data } = await apiClient.get('/masters/ca', {
     // クエリ名を知ってよいのはこの層だけ。値が undefined のパラメータは axios が送らない
     params: {
       limit,
@@ -120,7 +120,7 @@ export async function fetchCorporateActions({
  */
 export async function validateCorporateAction({ id = '', updatedAt: _updatedAt = '', ...ca }) {
   const { data } = await apiClient.post(
-    '/ca/validate',
+    '/masters/ca/validate',
     // 更新日時 は本文から落とす（事前検証は楽観的ロックの照合をしない）
     toCaRequest(ca),
     // 既定が新規検証なので、変更検証のときだけクエリを付ける（ca_id は integer 宣言）
@@ -146,7 +146,7 @@ export async function validateCorporateAction({ id = '', updatedAt: _updatedAt =
  * @returns {Promise<CorporateAction>} 登録された 1 件
  */
 export async function createCorporateAction(ca) {
-  const { data } = await apiClient.post('/ca', toCaRequest(ca))
+  const { data } = await apiClient.post('/masters/ca', toCaRequest(ca))
 
   return toCorporateAction(data.ca)
 }
@@ -166,7 +166,7 @@ export async function createCorporateAction(ca) {
  * @returns {Promise<CorporateAction>} 更新後の 1 件
  */
 export async function updateCorporateAction({ id, ...ca }) {
-  const { data } = await apiClient.put(`/ca/${encodeURIComponent(id)}`, toCaRequest(ca))
+  const { data } = await apiClient.put(`/masters/ca/${encodeURIComponent(id)}`, toCaRequest(ca))
 
   return toCorporateAction(data.ca)
 }
@@ -183,7 +183,7 @@ export async function updateCorporateAction({ id, ...ca }) {
  * @returns {Promise<string>} 削除した id
  */
 export async function deleteCorporateAction(id) {
-  await apiClient.delete(`/ca/${encodeURIComponent(id)}`)
+  await apiClient.delete(`/masters/ca/${encodeURIComponent(id)}`)
   return id
 }
 
@@ -222,7 +222,7 @@ function toCaRequest({
      * 書式は変換しない。CAItem は ISO の date-time（'2026-08-20T09:30:00'）を返し、
      * CARequest の説明は 'YYYY-MM-DD HH:MM:SS' と書かれているが、受注不可日
      * （BlackoutDateItem / BlackoutDateRequest）もまったく同じ非対称で、そちらは ISO を
-     * 素通しして実 API の編集が通っている（docs/e2e/blackout-dates-real-api.md の BDR-06）。
+     * 素通しして実 API の編集が通っている（docs/e2e/masters/blackout-dates-real-api.md の BDR-06）。
      * 合札は照合用の不透明なトークンなので、秒未満の桁を落とすような整形はかえって
      * 不一致を作りうる。
      */

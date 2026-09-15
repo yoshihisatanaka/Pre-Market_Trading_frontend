@@ -17,7 +17,7 @@ export const MARKET_HOLIDAYS_PAGE_SIZE = 50
  * 取得・競合防止・登録・削除の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
  * 1 件の形は src/api/marketHolidays.js の JSDoc を参照。
  *
- * 登録は事前検証（POST /holidays/validate）を通してから行う。日付の実在性・重複・
+ * 登録は事前検証（POST /masters/market-holidays/validate）を通してから行う。日付の実在性・重複・
  * 取消済み日付の再有効化はサーバだけが判断できるので、その理由と警告を
  * validationErrors / validationWarnings で受け取る。
  *

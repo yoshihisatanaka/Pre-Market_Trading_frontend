@@ -253,7 +253,7 @@ test.describe('CAマスタ一覧', () => {
   })
 
   test('[CA-07] API がエラーを返したときエラー表示と再試行ボタンが出る', async ({ page }) => {
-    await mockApi(page, [{ path: '*/api/ca', status: 500, body: { detail: ERROR_MESSAGE } }])
+    await mockApi(page, [{ path: '*/api/masters/ca', status: 500, body: { detail: ERROR_MESSAGE } }])
     await page.goto(PATH)
 
     const error = page.getByTestId('ca-error')
@@ -328,7 +328,7 @@ test.describe('CAマスタ一覧', () => {
  *   必須未入力       … FormField の error（CA-13）
  *   事前検証の不合格 … ca-add-validation-error の箇条書き（CA-14）
  *   通信・サーバ障害 … ca-add-error（CA-15）
- * 事前検証と登録は別パス（/ca/validate と /ca）なので、mockApi() で一方だけを差し替えられる。
+ * 事前検証と登録は別パス（/masters/ca/validate と /masters/ca）なので、mockApi() で一方だけを差し替えられる。
  *
  * CA には一意性の規則が無いので、サーバが見るのは銘柄コードが銘柄マスタに実在するか（CA-14）。
  */
@@ -442,9 +442,9 @@ test.describe('CAマスタ 新規追加', () => {
   })
 
   test('[CA-15] 登録に失敗するとモーダルは開いたままエラーが出る', async ({ page }) => {
-    // 事前検証（*/api/ca/validate）はパスが別なので既定ハンドラのまま通る
+    // 事前検証（*/api/masters/ca/validate）はパスが別なので既定ハンドラのまま通る
     await mockApi(page, [
-      { method: 'post', path: '*/api/ca', status: 500, body: { detail: ERROR_MESSAGE } },
+      { method: 'post', path: '*/api/masters/ca', status: 500, body: { detail: ERROR_MESSAGE } },
     ])
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
@@ -580,9 +580,9 @@ test.describe('CAマスタ 編集', () => {
   })
 
   test('[CA-21] 更新が競合するとモーダルは開いたままエラーが出る', async ({ page }) => {
-    // 事前検証（*/api/ca/validate）はパスが別なので既定ハンドラのまま通る
+    // 事前検証（*/api/masters/ca/validate）はパスが別なので既定ハンドラのまま通る
     await mockApi(page, [
-      { method: 'put', path: '*/api/ca/*', status: 409, body: { detail: CONFLICT_MESSAGE } },
+      { method: 'put', path: '*/api/masters/ca/*', status: 409, body: { detail: CONFLICT_MESSAGE } },
     ])
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
@@ -684,7 +684,7 @@ test.describe('CAマスタ 削除', () => {
 
   test('[CA-26] 削除に失敗するとダイアログは開いたままエラーが出る', async ({ page }) => {
     await mockApi(page, [
-      { method: 'delete', path: '*/api/ca/*', status: 500, body: { detail: ERROR_MESSAGE } },
+      { method: 'delete', path: '*/api/masters/ca/*', status: 500, body: { detail: ERROR_MESSAGE } },
     ])
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)

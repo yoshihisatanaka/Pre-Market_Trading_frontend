@@ -17,7 +17,7 @@ test.describe('ハードリミットマスタ', () => {
   test('[HL-02] 取得が失敗したときエラー表示と再試行ボタンが出る', async ({ page }) => {
     await mockApi(page, [
       {
-        path: '*/api/hard-limits',
+        path: '*/api/masters/hard-limits',
         status: 500,
         body: { detail: 'サーバーでエラーが発生しました。' },
       },
@@ -74,7 +74,7 @@ test.describe('ハードリミットマスタ', () => {
     await mockApi(page, [
       {
         method: 'put',
-        path: '*/api/hard-limits',
+        path: '*/api/masters/hard-limits',
         status: 409,
         body: { detail: '他のユーザーによってスライス設定が更新されました。' },
       },

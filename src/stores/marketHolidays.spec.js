@@ -95,7 +95,7 @@ describe('useMarketHolidaysStore', () => {
 
   it('[MHS-02] API がエラーを返したとき error に ApiError が入り items は空のままになる', async () => {
     server.use(
-      http.get('*/api/holidays', () =>
+      http.get('*/api/masters/market-holidays', () =>
         HttpResponse.json({ detail: 'サーバーでエラーが発生しました。' }, { status: 500 }),
       ),
     )
@@ -112,7 +112,7 @@ describe('useMarketHolidaysStore', () => {
 
   it('[MHS-03] 空配列が返ったとき isEmpty が true になる', async () => {
     server.use(
-      http.get('*/api/holidays', () =>
+      http.get('*/api/masters/market-holidays', () =>
         HttpResponse.json({ total: 0, limit: PAGE_SIZE, offset: 0, holidays: [] }),
       ),
     )
@@ -157,7 +157,7 @@ describe('useMarketHolidaysStore', () => {
 
   it('[MHS-07] 後から届いた古い応答で結果が巻き戻らない', async () => {
     server.use(
-      http.get('*/api/holidays', async ({ request }) => {
+      http.get('*/api/masters/market-holidays', async ({ request }) => {
         const offset = Number(new URL(request.url).searchParams.get('offset') ?? 0)
         // 1 ページ目だけ遅らせ、「古い応答が後から返る」状況を作る
         if (offset === 0) await delay(50)
@@ -235,7 +235,7 @@ describe('useMarketHolidaysStore', () => {
 
   it('[MHS-11] clearCreateError で登録エラーと事前検証の理由が消える', async () => {
     server.use(
-      http.post('*/api/holidays', () =>
+      http.post('*/api/masters/market-holidays', () =>
         HttpResponse.json({ detail: 'サーバーでエラーが発生しました。' }, { status: 500 }),
       ),
     )
@@ -252,7 +252,7 @@ describe('useMarketHolidaysStore', () => {
 
   it('[MHS-12] 登録中は creating だけが true になり一覧の loading は false のまま', async () => {
     server.use(
-      http.post('*/api/holidays', async () => {
+      http.post('*/api/masters/market-holidays', async () => {
         await delay(50)
         return HttpResponse.json(
           {
@@ -335,7 +335,7 @@ describe('useMarketHolidaysStore', () => {
 
   it('[MHS-17] 削除中は deleting だけが true になり一覧の loading は false のまま', async () => {
     server.use(
-      http.delete('*/api/holidays/:holidayDate', async () => {
+      http.delete('*/api/masters/market-holidays/:holidayDate', async () => {
         await delay(50)
         return HttpResponse.json({
           success: true,

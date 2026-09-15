@@ -37,3 +37,17 @@
 | 5 | 日時・金額・株数の型 | 判定不能（型が見えるのはページング系のみ。実体は項目 1 の内側） |
 | 6 | ページング形式 | OK（一覧 6 本すべて `total` / `limit` / `offset`） |
 | 7 | パスのプレフィックス | 原本に `/api` は無い。proxy 側の `rewrite` で剥がして整合済み |
+
+## 2026-09-15 時点の実測（`a21018a` の取り込み）
+
+79 パス / 102 オペレーション / 129 スキーマ（前回 66 / 88 / 124）。
+
+| # | 項目 | 実測 |
+|---|---|---|
+| 1 | `response_model` 未宣言 | **改善したが残る。** 主要マスタには `CustomerItem` / `SymbolItem` / `OrderItemResponse` などの型が付いた。中身が未定義のまま残るのは `GET /orders/{order_id}`（`order` / `executions` / `events`）・`/customers`（注文画面用のほう）・`/branches` / `/handlers`（`MasterListResponse.items`）・`/codes`・`/mizuho/*` 4 本・`PUT /orders/{order_id}/dream-correct`・`/batch/*` 10 本。`additionalProperties: true` の Grep は 48 件当たるが、うち相当数は履歴の `変更前データ` / `差分` など**本来自由形式**のものなので、件数だけで判断しない |
+| 2 | `enum` | **21 種**（0 件 → 21 種。`474ac83` の取り込みで入った）。値の写しは [src/utils/apiEnums.js](../../../src/utils/apiEnums.js) にあり、`apiEnums.spec.js` が `openapi.json` と突き合わせるので**次の取り込みで増減するとテストが落ちる** |
+| 3 | エラー応答の形 | 変わらず。400/401/404/409/500 は `ErrorResponse`（`{detail: string}`）、422 は `HTTPValidationError`（`{detail: ValidationError[]}`）。`client.js` の `normalizeError` は両方を読めるようにしてある |
+| 4 | 4XX / 5XX | **大幅に改善。** 102 オペレーション中 68 が 422 以外の 4XX/5XX を宣言、30 は 422 のみ、4 はエラー宣言なし。現れるコードは 200 / 201 / 400 / 401 / 404 / 409 / 422 / 500。`PUT /masters/hard-limits` の楽観ロック 409 も**宣言済みになった**（前回は description にだけ書かれていた） |
+| 5 | 日時・金額・株数の型 | `format:` は 36 箇所。日時は `string(date-time)` と素の `string` の anyOf が多く、**日付は integer の YYYYMMDD**（`受注不可日` / `休場日` / `基準日` など）。金額は `number`、株数は `integer` |
+| 6 | ページング形式 | おおむね `total` / `limit` / `offset` でそろっているが、**`/masters/blackout-dates` と `/customers` は `limit` を持たない**（`offset` のみ）。一覧の配列キーはリソース名と一致しないものがある（`/masters/symbols` → `stocks`、`/masters/fx` → `exchange_rates`、`/masters/ca` → `ca_list`） |
+| 7 | パスのプレフィックス | 原本に `/api` は無く proxy の `rewrite` で整合。ただし**マスタ系 36 パスが `/masters/` 配下へ移動**し、`/masters/symbols` と `/customers` は**クエリ名が日本語から英語の snake_case に変わった**。フロント側の追随は `refactor/masters-api-paths` で実施（銘柄マスタは別途） |

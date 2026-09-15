@@ -13,8 +13,14 @@
  * ユーザー操作フラグ=1（手動操作された行。一覧で色が付く）にしてある。
  */
 
-/** 銘柄。値はバックエンドの seed_data.sql（m_銘柄情報）から借りた実在の組み合わせ */
-const STOCKS = [
+/**
+ * 銘柄。値はバックエンドの seed_data.sql（m_銘柄情報）から借りた実在の組み合わせ。
+ *
+ * **モックの銘柄マスタ（m_銘柄情報）の代役**でもある。実 API の `POST /ca/validate` は
+ * 「銘柄コードマスタ存在検証 & Ticker自動補完」を行うので、ハンドラ側がこの表を引いて
+ * 未知の銘柄コードを弾き、Ticker を補完する。そのため export している。
+ */
+export const caStocks = [
   { stockCode: 'A0001', ticker: 'A001' },
   { stockCode: 'A0002', ticker: 'A002' },
   { stockCode: 'A0003', ticker: 'A003' },
@@ -97,8 +103,14 @@ const CA_EVENTS_PER_STOCK = [
   },
 ]
 
-/** CA種別コード → 表示名。バックエンドの codes.json（CA種別）と同じ対応表 */
-const CA_TYPE_NAMES = {
+/**
+ * CA種別コード → 表示名。バックエンドの codes.json（CA種別）と同じ対応表。
+ *
+ * ハンドラも登録・更新した行の `CA種別名` を組むのに使うので export している
+ * （`src/utils/caTypes.js` にも同じ対応表があるが、モックは「バックエンド側の応答」を
+ * 模すものなのでアプリ内のコードには依存させない。モック側の写しはこの 1 つに保つ）。
+ */
+export const CA_TYPE_NAMES = {
   110: '現金配当',
   112: '株式配当',
   120: '株式分割',
@@ -118,8 +130,11 @@ const YEAR = '2026'
 /**
  * 比率文字列。バックエンドの format_ratio と同じ規則
  * （どちらかが未設定なら空文字、そろっていれば `分母:分子`。小数の余分な 0 は落とす）。
+ *
+ * ハンドラも登録・更新した行の `比率` を組み直すのに使うので export している
+ * （比率は DB の列ではなく、バックエンドが応答を組み立てるときに付ける表示項目）。
  */
-function formatRatio(denominator, numerator) {
+export function formatRatio(denominator, numerator) {
   if (denominator == null || numerator == null) return ''
   return `${String(denominator)}:${String(numerator)}`
 }
@@ -155,7 +170,7 @@ function toCaItem({ id, stock, event, canceled = false }) {
  * 有効な行（取消区分 0）。56 件。
  * 並べ替えは読み出し側（ハンドラ）が実 API と同じ規則で行うので、ここでは生成順のまま置く。
  */
-export const corporateActions = STOCKS.flatMap((stock, stockIndex) =>
+export const corporateActions = caStocks.flatMap((stock, stockIndex) =>
   CA_EVENTS_PER_STOCK.map((event, eventIndex) =>
     toCaItem({
       // ID は 1 から通し。実 API の AUTO_INCREMENT と同じく、後から足した行ほど大きい
@@ -173,7 +188,7 @@ export const corporateActions = STOCKS.flatMap((stock, stockIndex) =>
 export const canceledCorporateActions = [
   toCaItem({
     id: corporateActions.length + 1,
-    stock: STOCKS[0],
+    stock: caStocks[0],
     event: {
       caType: '220',
       exRights: '0210',

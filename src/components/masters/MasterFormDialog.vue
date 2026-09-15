@@ -130,6 +130,7 @@ const pendingLabel = computed(() => `${props.submitLabel}中…`)
       <BaseButton
         :data-testid="`${testidPrefix}-${action}-submit`"
         :disabled="pending"
+        :loading="pending"
         @click="emit('submit')"
       >
         {{ pending ? pendingLabel : submitLabel }}

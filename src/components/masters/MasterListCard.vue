@@ -16,6 +16,7 @@
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BasePagination from '@/components/ui/BasePagination.vue'
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 
 defineProps({
   testidPrefix: {
@@ -64,15 +65,24 @@ const emit = defineEmits(['reload', 'update:offset'])
 <template>
   <BaseCard :title="title" flush>
     <template #header-actions>
-      <!-- 「56 件」を 1 つのテキストとして読ませたいので、数字と単位を改行で分けない -->
-      <span class="master-list-card__count" :data-testid="`${testidPrefix}-count`">
+      <!-- 「56 件」を 1 つのテキストとして読ませたいので、数字と単位を改行で分けない。
+           取得中は出さない（確定前の件数を出すと、前回の値が新しい結果に見える） -->
+      <span
+        v-if="!loading"
+        class="master-list-card__count"
+        :data-testid="`${testidPrefix}-count`"
+      >
         {{ total }} 件
       </span>
     </template>
 
     <!-- ローディング / エラー / 空 / データあり の 4 状態 -->
-    <p v-if="loading" :data-testid="`${testidPrefix}-loading`" class="master-list-card__status">
-      読み込み中…
+    <p
+      v-if="loading"
+      :data-testid="`${testidPrefix}-loading`"
+      class="master-list-card__status is-loading"
+    >
+      <BaseSpinner />
     </p>
 
     <div
@@ -112,6 +122,12 @@ const emit = defineEmits(['reload', 'update:offset'])
 .master-list-card__status {
   padding: var(--space-5);
   color: var(--color-text-muted);
+}
+
+/* スピナーだけを置くので中央に寄せる（文言が無いぶん左端に小さく出ると迷子になる） */
+.master-list-card__status.is-loading {
+  display: flex;
+  justify-content: center;
 }
 
 .master-list-card__status.is-error {

@@ -25,6 +25,8 @@ const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(sto
  * 読み込みが終わった時点で選択肢が自動的に埋まるようにするため。
  */
 const codes = useCodesStore()
+// 一覧の loading と名前がぶつかるので別名で受ける
+const { loading: codesLoading } = storeToRefs(codes)
 const branchOptions = computed(() => codes.optionsFor('部店'))
 const handlerOptions = computed(() => codes.optionsFor('扱者'))
 const restrictionOptions = computed(() => codes.optionsFor('取引停止区分_全取引'))
@@ -109,6 +111,7 @@ function rowClass(row) {
     <MasterSearchCard
       testid-prefix="customers"
       :disabled="loading"
+      :options-loading="codesLoading"
       @submit="submitSearch"
       @clear="clearSearch"
     >

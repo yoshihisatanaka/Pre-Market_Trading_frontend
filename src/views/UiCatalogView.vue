@@ -15,6 +15,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BasePagination from '@/components/ui/BasePagination.vue'
 import BaseSegmentedControl from '@/components/ui/BaseSegmentedControl.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import FileDropZone from '@/components/ui/FileDropZone.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
@@ -58,6 +59,23 @@ const pageOffset = ref(50)
         <BaseButton size="sm">Primary sm</BaseButton>
         <BaseButton variant="secondary" size="sm">Secondary sm</BaseButton>
         <BaseButton disabled>Disabled</BaseButton>
+      </div>
+    </BaseCard>
+
+    <BaseCard title="読み込み表示">
+      <!-- 色は currentColor 継承なので、置いた場所の文字色になることも並べて見せる -->
+      <div class="catalog__row">
+        <!-- lg は画面全体を覆うとき用（AppLoadingOverlay と起動時のスプラッシュ） -->
+        <BaseSpinner size="lg" />
+        <BaseSpinner />
+        <BaseSpinner size="sm" />
+        <span class="catalog__muted"><BaseSpinner size="sm" /> 淡色の文字の中</span>
+      </div>
+
+      <div class="catalog__row catalog__row--top">
+        <BaseButton loading disabled>追加中…</BaseButton>
+        <BaseButton variant="danger" loading disabled>削除中…</BaseButton>
+        <BaseButton variant="secondary" loading disabled>検索</BaseButton>
       </div>
     </BaseCard>
 
@@ -190,6 +208,13 @@ const pageOffset = ref(50)
 }
 
 .catalog__unit {
+  color: var(--color-text-muted);
+}
+
+.catalog__muted {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   color: var(--color-text-muted);
 }
 

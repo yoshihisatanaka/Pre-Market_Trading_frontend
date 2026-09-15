@@ -95,8 +95,8 @@ async function assertRealApi(page) {
 /**
  * 取得が終わるのを待つ。
  *
- * 件数の表示は取得中も出ていて、そのあいだは 0 件になる。
- * 値を読み取ってから比べる場面では、先にここを通さないと 0 を掴む。
+ * 件数の表示は取得中は出ない（確定前の値を見せないため）。
+ * 値を読み取ってから比べる場面では、先にここを通すこと。
  */
 async function settleList(page) {
   await expect(page.getByTestId('market-holidays-loading')).toHaveCount(0)

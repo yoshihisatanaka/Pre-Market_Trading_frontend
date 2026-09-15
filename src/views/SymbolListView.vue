@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -6,8 +7,10 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
+import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
+import SymbolFormFields from '@/components/symbol/SymbolFormFields.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { useSymbolsStore } from '@/stores/symbols'
 import { formatQuantity, formatUsdUnit } from '@/utils/format'
@@ -25,7 +28,18 @@ import {
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する
 const store = useSymbolsStore()
-const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(store)
+const {
+  items,
+  total,
+  limit,
+  offset,
+  loading,
+  error,
+  isEmpty,
+  creating,
+  createError,
+  validationErrors,
+} = storeToRefs(store)
 
 /*
  * 列は画面モック（https://uspreorder-vmbhej3k.manus.space/masters/symbols）に合わせつつ、
@@ -34,7 +48,7 @@ const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(sto
  *     前日終値 / 前日出来高 / 5日平均出来高 の順でまとめている
  *   - ユーザー操作フラグは列にせず、行の色で表す（下の rowClass）
  *   - 市場名・Pre区分はモックに列が無いので出さない（API には項目がある）
- *   - 操作列（編集・削除）は別途。この画面はいま読むだけ
+ *   - 操作列（編集・削除）は別途。いまはヘッダの「新規追加」だけを持つ
  */
 const columns = [
   { key: 'symbolCode', label: '銘柄コード' },
@@ -62,7 +76,11 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
   filters: [
     { key: 'symbolCode', query: 'symbol_code' },
     // 未知のコード（?regulation=9 など）は条件なしとして捨てる
-    { key: 'regulation', query: 'regulation', parse: (value) => (isRegulation(value) ? value : '') },
+    {
+      key: 'regulation',
+      query: 'regulation',
+      parse: (value) => (isRegulation(value) ? value : ''),
+    },
     {
       key: 'orderRoute',
       query: 'order_route',
@@ -100,6 +118,113 @@ function vwapTargetLabel(row) {
 function rowClass(row) {
   return row.userModified ? 'is-user-modified' : null
 }
+
+/*
+ * 新規追加。ヘッダの「新規追加」からモーダルを開く（CAマスタ・受注不可日マスタと同じ形）。
+ * URL は変えない（一覧の単方向フローに触らない）。
+ *
+ * 登録は store 側で「サーバの事前検証 → 登録」の 2 段になっている。ここでの検証は
+ * 必須の未入力を弾いて無駄な往復を防ぐためのもので、銘柄コードの重複・文字数・
+ * 区分コードの実在はサーバが見る。
+ *
+ * エラーは 3 種類あり、出し先を分ける。
+ *   入力の不備      … FormField の error（項目の直下）
+ *   事前検証の不合格 … store.validationErrors をモーダル内の BaseAlert
+ *   通信・サーバ障害 … store.createError を同じ位置の BaseAlert
+ */
+const isAddOpen = ref(false)
+
+// 項目が 10 あるので、ref を項目ごとに分けず 1 つのオブジェクトで持つ
+const addForm = ref(emptyForm())
+const addErrors = ref(emptyErrors())
+
+// 成功メッセージ（編集・削除を足したときも同じ枠に出す）
+const noticeMessage = ref('')
+
+function emptyForm() {
+  return {
+    symbolCode: '',
+    ticker: '',
+    name: '',
+    nameEn: '',
+    /*
+     * 区分 3 つは未選択を作らず、実 API の既定と同じ '0' から始める
+     * （注文ルートは型宣言が null を許さない。理由は api 層の toSymbolRequest）。
+     */
+    regulation: '0',
+    orderRoute: '0',
+    vwapTarget: '0',
+    // 数値 2 つは入力欄が文字列を持つ。数値への変換は api 層に任せる
+    previousClose: '',
+    averageVolume: '',
+    note: '',
+  }
+}
+
+function emptyErrors() {
+  return { symbolCode: '', ticker: '', name: '' }
+}
+
+function openAdd() {
+  addForm.value = emptyForm()
+  addErrors.value = emptyErrors()
+  // 前回の失敗と成功をどちらも持ち込まない
+  store.clearCreateError()
+  noticeMessage.value = ''
+  isAddOpen.value = true
+}
+
+function closeAdd() {
+  // 登録中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (creating.value) return
+  isAddOpen.value = false
+}
+
+async function submitAdd() {
+  const form = addForm.value
+  addErrors.value = {
+    symbolCode: form.symbolCode.trim() ? '' : '銘柄コードを入力してください。',
+    ticker: form.ticker.trim() ? '' : 'ティッカーコードを入力してください。',
+    name: form.name.trim() ? '' : '銘柄名（日本語）を入力してください。',
+  }
+  if (Object.values(addErrors.value).some(Boolean)) return
+
+  await store.create(
+    {
+      ...form,
+      symbolCode: form.symbolCode.trim(),
+      ticker: form.ticker.trim(),
+      name: form.name.trim(),
+      nameEn: form.nameEn.trim(),
+      note: form.note.trim(),
+    },
+    {
+      /*
+       * 閉じるのは登録が受理された時点。store.create の戻り値を待つと、
+       * そこに含まれる一覧の読み直しのあいだモーダルが開いたまま残る。
+       * 失敗時は呼ばれないので、モーダルは開いたままになり入力を直せる
+       * （理由は createError / validationErrors に出る）。
+       */
+      onSuccess: (created) => {
+        isAddOpen.value = false
+        /*
+         * 一覧は銘柄コードの昇順なので、追加した行が 1 ページ目に出るとは限らない。
+         * 行を追いかけることはせず、どの行が増えたのかをメッセージで示して、
+         * ユーザがその銘柄コードで検索できるようにする。
+         */
+        noticeMessage.value = `${symbolLabel(created)} を追加しました。`
+      },
+    },
+  )
+}
+
+/**
+ * 1 件を 1 行で示す文字列（成功メッセージに使う）。
+ * 主キーの銘柄コードだけでは何の銘柄か分からないので、一覧で実際に読む 3 点を並べる。
+ */
+function symbolLabel(symbol) {
+  return [symbol.symbolCode || '—', symbol.ticker || '—', symbol.name || '—'].join(' / ')
+}
 </script>
 
 <template>
@@ -114,7 +239,12 @@ function rowClass(row) {
       >
         再読み込み
       </BaseButton>
+      <BaseButton data-testid="symbols-add" @click="openAdd">新規追加</BaseButton>
     </Teleport>
+
+    <BaseAlert v-if="noticeMessage" variant="success" data-testid="symbols-notice">
+      {{ noticeMessage }}
+    </BaseAlert>
 
     <!-- 画面の説明。4 状態や検索結果に関わらず常時出す -->
     <BaseAlert variant="info" data-testid="symbols-description">
@@ -225,6 +355,19 @@ function rowClass(row) {
         </template>
       </DataTable>
     </MasterListCard>
+
+    <MasterFormDialog
+      :open="isAddOpen"
+      title="銘柄 新規追加"
+      testid-prefix="symbols"
+      :pending="creating"
+      :error="createError"
+      :validation-errors="validationErrors"
+      @close="closeAdd"
+      @submit="submitAdd"
+    >
+      <SymbolFormFields v-model="addForm" testid-prefix="symbols-add" :errors="addErrors" />
+    </MasterFormDialog>
   </section>
 </template>
 

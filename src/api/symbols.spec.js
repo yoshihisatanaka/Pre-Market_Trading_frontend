@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { fetchSymbols } from './symbols'
+import { createSymbol, fetchSymbols, validateSymbol } from './symbols'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -35,6 +35,28 @@ function record(body, status = 200) {
     }),
   )
 }
+
+/**
+ * POST の本文まで記録して、指定の本文を返すハンドラを立てる。
+ * 一覧の `record` と分けてあるのは、GET には読める本文が無いため
+ * （読もうとすると空文字で例外になる）。
+ *
+ * @param {string} path `*` 始まりのパス
+ * @param {unknown} body 返す本文
+ * @param {number} [status]
+ */
+function recordPost(path, body, status = 200) {
+  server.use(
+    http.post(path, async ({ request }) => {
+      const url = new URL(request.url)
+      lastRequest = { url, params: url.searchParams, body: await request.json() }
+      return HttpResponse.json(body, { status })
+    }),
+  )
+}
+
+/** 必須 3 項目だけを埋めた入力（登録・事前検証のテストの土台） */
+const minimalInput = { symbolCode: 'S900', ticker: 'ZZZZ', name: 'テスト銘柄' }
 
 /** SymbolItem 1 件（openapi.json の項目をひととおり埋めたもの） */
 const symbolItem = {
@@ -155,8 +177,15 @@ describe('api/symbols', () => {
         previousVolume: 43_820_000,
         averageVolume: 50_000_000,
         userModified: false,
+        // 更新日時 は楽観的ロックの合札。整形せず素の文字列で持ち、null は空文字に寄せる
+        updatedAt: '',
       },
     ])
+
+    // 更新日時を持つ行では、整形せずその文字列のまま合札として持つ
+    record(listBody([{ ...symbolItem, 更新日時: '2026-08-20T09:30:00' }]))
+    const withTimestamp = await fetchSymbols()
+    expect(withTimestamp.items[0].updatedAt).toBe('2026-08-20T09:30:00')
   })
 
   it('[STA-07] null の文字列項目は空文字に寄せる', async () => {
@@ -237,5 +266,162 @@ describe('api/symbols', () => {
     record({ detail: 'サーバーでエラーが発生しました。' }, 500)
 
     await expect(fetchSymbols()).rejects.toBeTruthy()
+  })
+
+  it('[STA-13] 登録は日本語キーの本文を送り、応答の stock を変換して返す', async () => {
+    recordPost(
+      '*/api/masters/symbols',
+      { success: true, stock: symbolItem, message: '銘柄を登録しました' },
+      201,
+    )
+
+    const created = await createSymbol({
+      ...minimalInput,
+      nameEn: 'Test Inc.',
+      regulation: '0',
+      orderRoute: '1',
+      vwapTarget: '1',
+      previousClose: 12.5,
+      averageVolume: 1000,
+      note: 'メモ',
+    })
+
+    expect(lastRequest.url.pathname).toBe('/api/masters/symbols')
+    expect(lastRequest.body).toEqual({
+      銘柄コード: 'S900',
+      Ticker: 'ZZZZ',
+      銘柄名: 'テスト銘柄',
+      銘柄名_英字: 'Test Inc.',
+      規制情報: '0',
+      注文ルート: '1',
+      VWAP対象区分: '1',
+      備考: 'メモ',
+      前日終値: 12.5,
+      平均出来高: 1000,
+    })
+    // 応答は SymbolItem なので、一覧と同じアプリ内モデルに変換されて返る
+    expect(created).toMatchObject({ symbolCode: symbolItem.銘柄コード, ticker: symbolItem.Ticker })
+  })
+
+  it('[STA-14] 画面が持たない項目は本文に載せない', async () => {
+    recordPost('*/api/masters/symbols', { success: true, stock: symbolItem, message: 'ok' }, 201)
+
+    await createSymbol(minimalInput)
+
+    /*
+     * 市場名 / 前日出来高 / Pre区分 はフォームに無いので送らない。
+     * 更新日時 は登録では持たない（楽観的ロックは更新のときだけ）。
+     */
+    for (const key of ['市場名', '前日出来高', 'Pre区分', '更新日時']) {
+      expect(Object.hasOwn(lastRequest.body, key)).toBe(false)
+    }
+  })
+
+  it('[STA-15] 数値 2 項目の空欄はキーを省かず null で送る', async () => {
+    recordPost('*/api/masters/symbols', { success: true, stock: symbolItem, message: 'ok' }, 201)
+
+    await createSymbol({ ...minimalInput, previousClose: '', averageVolume: '' })
+
+    // SymbolRequest はレコード全体を差し替える形なので、キーを落とすと
+    // 「変えない」と「空にする」が区別できない（クエリパラメータとは扱いが逆）
+    expect(lastRequest.body).toMatchObject({ 前日終値: null, 平均出来高: null })
+    for (const key of ['前日終値', '平均出来高']) {
+      expect(Object.hasOwn(lastRequest.body, key)).toBe(true)
+    }
+  })
+
+  it('[STA-16] 数値 2 項目は文字列で渡しても number で送る', async () => {
+    recordPost('*/api/masters/symbols', { success: true, stock: symbolItem, message: 'ok' }, 201)
+
+    // 入力欄は inputmode を指定しても値を文字列で持つ。数値に直すのはこの層の仕事
+    await createSymbol({ ...minimalInput, previousClose: '12.5', averageVolume: '1000' })
+
+    expect(lastRequest.body).toMatchObject({ 前日終値: 12.5, 平均出来高: 1000 })
+  })
+
+  it('[STA-17] 文字列の任意項目の空欄は null で送る', async () => {
+    recordPost('*/api/masters/symbols', { success: true, stock: symbolItem, message: 'ok' }, 201)
+
+    await createSymbol({ ...minimalInput, nameEn: '', regulation: '', note: '' })
+
+    expect(lastRequest.body).toMatchObject({ 銘柄名_英字: null, 規制情報: null, 備考: null })
+  })
+
+  it('[STA-18] 注文ルートと VWAP対象区分の空欄だけは 0 に寄せる', async () => {
+    recordPost('*/api/masters/symbols', { success: true, stock: symbolItem, message: 'ok' }, 201)
+
+    await createSymbol({ ...minimalInput, orderRoute: '', vwapTarget: '' })
+
+    // 注文ルートは型宣言が null を許さず、どちらも既定が '0'
+    expect(lastRequest.body).toMatchObject({ 注文ルート: '0', VWAP対象区分: '0' })
+  })
+
+  it('[STA-19] 新規の事前検証はクエリを付けず SymbolRequest の本文だけを送る', async () => {
+    recordPost('*/api/masters/symbols/validate', {
+      valid: true,
+      errors: [],
+      warnings: [],
+      details: null,
+    })
+
+    await validateSymbol(minimalInput)
+
+    expect(lastRequest.url.pathname).toBe('/api/masters/symbols/validate')
+    // 既定が新規検証なので、何も付けない
+    expect(lastRequest.url.search).toBe('')
+    expect(lastRequest.body).toMatchObject({
+      銘柄コード: 'S900',
+      Ticker: 'ZZZZ',
+      銘柄名: 'テスト銘柄',
+    })
+  })
+
+  it('[STA-20] 編集からの事前検証は is_update=true をクエリに載せる', async () => {
+    recordPost('*/api/masters/symbols/validate', { valid: true, errors: [] })
+
+    await validateSymbol({ ...minimalInput, isUpdate: true })
+
+    expect(lastRequest.params.get('is_update')).toBe('true')
+    // isUpdate は呼び出し側の都合。本文（SymbolRequest）には出さない
+    expect(lastRequest.body).not.toHaveProperty('isUpdate')
+    expect(lastRequest.body).not.toHaveProperty('is_update')
+  })
+
+  it('[STA-21] 事前検証の不合格は例外にせず valid / errors を返す', async () => {
+    recordPost('*/api/masters/symbols/validate', {
+      valid: false,
+      errors: ['銘柄コード(S001)は既に登録されています'],
+      warnings: [],
+      details: null,
+    })
+
+    // 不合格は通信・サーバ障害とは別物。throw すると呼び出し側が区別できない
+    await expect(validateSymbol(minimalInput)).resolves.toEqual({
+      valid: false,
+      errors: ['銘柄コード(S001)は既に登録されています'],
+    })
+  })
+
+  it('[STA-22] 事前検証の warnings は受け取らない', async () => {
+    recordPost('*/api/masters/symbols/validate', {
+      valid: true,
+      errors: [],
+      warnings: ['確認してください'],
+      details: null,
+    })
+
+    const result = await validateSymbol(minimalInput)
+
+    // 銘柄マスタに「登録できるが確認したいこと」は無い。返すと登録が 1 回で通らなくなる
+    expect(result).toEqual({ valid: true, errors: [] })
+    expect(result).not.toHaveProperty('warnings')
+  })
+
+  it('[STA-23] 登録の 400 は例外になり、サーバの detail が message に入る', async () => {
+    recordPost('*/api/masters/symbols', { detail: '銘柄コード(S001)は既に登録されています' }, 400)
+
+    await expect(createSymbol(minimalInput)).rejects.toMatchObject({
+      message: '銘柄コード(S001)は既に登録されています',
+    })
   })
 })

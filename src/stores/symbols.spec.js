@@ -89,7 +89,9 @@ const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 /** 一覧を 500 にする差し替え */
 function failList() {
   server.use(
-    http.get('*/api/masters/symbols', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+    http.get('*/api/masters/symbols', () =>
+      HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+    ),
   )
 }
 
@@ -113,6 +115,29 @@ function slowList(waitFor) {
     }),
   )
 }
+
+/** 登録を 500 にする差し替え（事前検証は既定ハンドラのまま通す） */
+function failCreate() {
+  server.use(
+    http.post('*/api/masters/symbols', () =>
+      HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+    ),
+  )
+}
+
+/** 事前検証が「合格だが警告あり」を返す差し替え */
+function warnOnValidate(message) {
+  server.use(
+    http.post('*/api/masters/symbols/validate', () =>
+      HttpResponse.json({ valid: true, errors: [], warnings: [message], details: null }),
+    ),
+  )
+}
+
+// フィクスチャに無い銘柄コード（登録に使う）と、既にある銘柄コード（重複で弾かれる）
+const NEW_SYMBOL = { symbolCode: 'S900', ticker: 'ZZZZ', name: 'テスト銘柄' }
+const EXISTING_CODE = sorted[0].銘柄コード
+const duplicateMessage = (code) => `銘柄コード(${code})は既に登録されています`
 
 const codes = (store) => store.items.map((item) => item.symbolCode)
 
@@ -225,13 +250,19 @@ describe('stores/symbols', () => {
     expect(codes(store)).toEqual(PAGED.codes.slice(PAGE_SIZE))
   })
 
-  it('[STS-10] 読むだけの一覧なので登録・更新・削除を公開しない', () => {
+  it('[STS-10] 登録だけを公開し、更新・削除はまだ公開しない', () => {
     const store = useSymbolsStore()
 
-    expect(store.create).toBeUndefined()
+    expect(typeof store.create).toBe('function')
+    expect(typeof store.clearCreateError).toBe('function')
+    expect(store.creating).toBe(false)
+    expect(store.createError).toBeNull()
+    expect(store.validationErrors).toEqual([])
+
+    // 配線していない操作は名前ごと出さない（呼べば「関数が無い」で落ちる）
     expect(store.update).toBeUndefined()
     expect(store.remove).toBeUndefined()
-    expect(store.creating).toBeUndefined()
+    expect(store.updating).toBeUndefined()
     expect(store.deleting).toBeUndefined()
   })
 
@@ -245,5 +276,81 @@ describe('stores/symbols', () => {
     await Promise.all([stale, latest])
 
     expect(codes(store)).toEqual(allCodes.slice(0, PAGE_SIZE))
+  })
+
+  it('[STS-12] 登録に成功すると 1 件返り、一覧を読み直して件数が増える', async () => {
+    const store = useSymbolsStore()
+    await store.load()
+
+    const created = await store.create(NEW_SYMBOL)
+
+    expect(created.symbolCode).toBe(NEW_SYMBOL.symbolCode)
+    expect(created.ticker).toBe(NEW_SYMBOL.ticker)
+    expect(store.total).toBe(TOTAL + 1)
+    expect(store.createError).toBeNull()
+    expect(store.validationErrors).toEqual([])
+  })
+
+  it('[STS-13] 事前検証で弾かれたときは validationErrors に入り、登録しない', async () => {
+    const store = useSymbolsStore()
+    await store.load()
+
+    const created = await store.create({ ...NEW_SYMBOL, symbolCode: EXISTING_CODE })
+
+    expect(created).toBeNull()
+    expect(store.validationErrors).toEqual([duplicateMessage(EXISTING_CODE)])
+    // 通信は成功しているので、サーバ障害の枠には入れない
+    expect(store.createError).toBeNull()
+    expect(store.total).toBe(TOTAL)
+  })
+
+  it('[STS-14] 登録が失敗したときは createError に入る', async () => {
+    failCreate()
+    const store = useSymbolsStore()
+    await store.load()
+
+    const created = await store.create(NEW_SYMBOL)
+
+    expect(created).toBeNull()
+    expect(store.createError.message).toBe(ERROR_MESSAGE)
+    // 事前検証は通っているので、こちらは空のまま
+    expect(store.validationErrors).toEqual([])
+    expect(store.total).toBe(TOTAL)
+  })
+
+  it('[STS-15] clearCreateError は前回の失敗をどちらの枠からも消す', async () => {
+    failCreate()
+    const store = useSymbolsStore()
+    await store.create(NEW_SYMBOL)
+    await store.create({ ...NEW_SYMBOL, symbolCode: EXISTING_CODE })
+
+    store.clearCreateError()
+
+    expect(store.createError).toBeNull()
+    expect(store.validationErrors).toEqual([])
+  })
+
+  it('[STS-16] 登録後の読み直しで絞り込み条件が落ちない', async () => {
+    const store = useSymbolsStore()
+    await store.load({ regulation: REGULATION })
+
+    await store.create({ ...NEW_SYMBOL, regulation: REGULATION })
+
+    expect(store.regulation).toBe(REGULATION)
+    expect(store.total).toBe(regulationCodes.length + 1)
+    expect(store.items.every((item) => item.regulation === REGULATION)).toBe(true)
+  })
+
+  it('[STS-17] 事前検証が警告を返しても登録は止まらない', async () => {
+    warnOnValidate('この銘柄コードは過去に取消されています')
+    const store = useSymbolsStore()
+    await store.load()
+
+    const created = await store.create(NEW_SYMBOL)
+
+    expect(created).not.toBeNull()
+    expect(store.total).toBe(TOTAL + 1)
+    // api 層が warnings を受け取らないので、確認待ちの経路には入らない
+    expect(store.validationWarnings).toEqual([])
   })
 })

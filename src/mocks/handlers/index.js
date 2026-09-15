@@ -22,11 +22,13 @@ import { canceledCustomers, customers } from '../fixtures/customers'
  *  - バックエンドで実装された API は、このリストから削除する。
  *    未定義のリクエストは実 API へ素通しされるため、削除するだけで本物に切り替わる。
  *
- * 例外は海外休場日（/holidays）・受注不可日（/blackout-dates）・ハードリミット（/hard-limits）。
+ * 例外は海外休場日・受注不可日・ハードリミットの 3 つ。
  * 実 API は実装済みだが、単体テストと E2E がこの handlers を共用しているのでハンドラは残し、
  * **実 API と同じ形**に寄せてある。
- *   /holidays / /blackout-dates … 日本語キー / integer の日付 / 降順 / エラーは { detail } / 論理削除
- *   /hard-limits                … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
+ *   /masters/market-holidays … 日本語キー / integer の日付 / 降順 / エラーは { detail } / 論理削除
+ *   /masters/blackout-dates  … 同上
+ *   /masters/hard-limits     … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
+ * マスタ系のパスは 2026-09-15 の OpenAPI 取り込みで /masters/ 配下へ移った。
  * 実 API に当てて動かすときは .env の VITE_ENABLE_MSW=false にする。
  */
 
@@ -197,9 +199,9 @@ export const handlers = [
    * CAマスタ（コーポレートアクション）の一覧。取消済み（取消区分 1）は既定で返さない。
    * 銘柄コードの絞り込みは実 API と同じ**部分一致**で、銘柄コードか Ticker のどちらかに当たればよい
    * （実 API は `銘柄コード LIKE %s OR Ticker LIKE %s`）。
-   * CSV 入出力と更新履歴（/ca/export-csv ほか）は画面が使わないのでモックしない。
+   * CSV 入出力と更新履歴（/masters/ca/export-csv ほか）は画面が使わないのでモックしない。
    */
-  http.get('*/api/ca', ({ request }) => {
+  http.get('*/api/masters/ca', ({ request }) => {
     const params = new URL(request.url).searchParams
     // DB 照合は大文字小文字を区別しないので、モックも大文字に寄せてから比べる
     const stockCode = (params.get('stock_code') ?? '').trim().toUpperCase()
@@ -284,7 +286,7 @@ export const handlers = [
    * `is_update` はクエリの `ca_id` が指す行の存在確認を足すだけ。受注不可日と違い
    * 本文の内容では切り替わらない（CA の同一性は本文ではなく ca_id にある）。
    */
-  http.post('*/api/ca/validate', async ({ request }) => {
+  http.post('*/api/masters/ca/validate', async ({ request }) => {
     const body = await request.json().catch(() => null)
     const violation = caRequestViolation(body)
     if (violation) return violation
@@ -309,7 +311,7 @@ export const handlers = [
   }),
 
   // CA の新規登録。必ず新しい行を INSERT する（再有効化という概念が無い）
-  http.post('*/api/ca', async ({ request }) => {
+  http.post('*/api/masters/ca', async ({ request }) => {
     const body = await request.json().catch(() => null)
     const violation = caRequestViolation(body)
     if (violation) return violation
@@ -334,7 +336,7 @@ export const handlers = [
    * 受注不可日の PUT にある「競合を重複より先に見る」という理由付けは、CA には重複検査が
    * 無いので当てはまらない（写さないこと）。
    */
-  http.put('*/api/ca/:caId', async ({ params, request }) => {
+  http.put('*/api/masters/ca/:caId', async ({ params, request }) => {
     const body = await request.json().catch(() => null)
     const violation = caRequestViolation(body)
     if (violation) return violation
@@ -387,7 +389,7 @@ export const handlers = [
    * 実 API は ユーザー操作フラグ も 1 に立てる（受注不可日のモックは削除時に触らないので、
    * ここは意図的に違う。include_deleted=true で見たときに差が出る）。
    */
-  http.delete('*/api/ca/:caId', ({ params }) => {
+  http.delete('*/api/masters/ca/:caId', ({ params }) => {
     const targetId = Number(params.caId)
     const target = caRows.find((ca) => ca.ID === targetId && ca.取消区分 === 0)
 
@@ -408,7 +410,7 @@ export const handlers = [
   }),
 
   // 海外休場日マスタの一覧。取消済み（取消区分 1）は既定で返さない
-  http.get('*/api/holidays', ({ request }) => {
+  http.get('*/api/masters/market-holidays', ({ request }) => {
     const params = new URL(request.url).searchParams
     const startDate = toNonNegativeInt(params.get('start_date'), 0)
     const endDate = toNonNegativeInt(params.get('end_date'), 0)
@@ -443,7 +445,7 @@ export const handlers = [
    * （通信エラーと区別できるようにするため）。
    * 取消済みの日付は登録できるが、再有効化になることを warnings で伝える。
    */
-  http.post('*/api/holidays/validate', async ({ request }) => {
+  http.post('*/api/masters/market-holidays/validate', async ({ request }) => {
     const { holidayDate, holidayType, reason } = await readHolidayRequest(request)
 
     const errors = []
@@ -471,7 +473,7 @@ export const handlers = [
   }),
 
   // 海外休場日の新規登録。取消済みの同じ日付があれば再有効化する
-  http.post('*/api/holidays', async ({ request }) => {
+  http.post('*/api/masters/market-holidays', async ({ request }) => {
     const { holidayDate, holidayType, reason } = await readHolidayRequest(request)
 
     if (!isHolidayDate(holidayDate)) {
@@ -502,7 +504,7 @@ export const handlers = [
   }),
 
   // 海外休場日の論理削除。行は残したまま取消区分を 1 にする
-  http.delete('*/api/holidays/:holidayDate', ({ params }) => {
+  http.delete('*/api/masters/market-holidays/:holidayDate', ({ params }) => {
     const holidayDate = Number(params.holidayDate)
     const target = marketHolidayRows.find(
       (holiday) => holiday.休場日 === holidayDate && holiday.取消区分 === 0,
@@ -529,7 +531,7 @@ export const handlers = [
    * 実 API は 1 ページ 50 件で固定されていて limit というクエリを持たないので、
    * ここも limit を読まない（応答の limit は常に 50）。
    */
-  http.get('*/api/blackout-dates', ({ request }) => {
+  http.get('*/api/masters/blackout-dates', ({ request }) => {
     const params = new URL(request.url).searchParams
     const startDate = toNonNegativeInt(params.get('start_date'), 0)
     const endDate = toNonNegativeInt(params.get('end_date'), 0)
@@ -567,7 +569,7 @@ export const handlers = [
    * 変更検証は「その日付が実在し取消済みでないか」。実 API は最初に見つけた理由で
    * 打ち切るので、errors も 1 件までにそろえる。
    */
-  http.post('*/api/blackout-dates/validate', async ({ request }) => {
+  http.post('*/api/masters/blackout-dates/validate', async ({ request }) => {
     const { blackoutDate, reason } = await readBlackoutDateRequest(request)
     const violation = blackoutDateRequestViolation({ blackoutDate, reason })
     if (violation) return violation
@@ -592,7 +594,7 @@ export const handlers = [
   }),
 
   // 受注不可日の新規登録。取消済みの同じ日付があれば再有効化する（行は増えない）
-  http.post('*/api/blackout-dates', async ({ request }) => {
+  http.post('*/api/masters/blackout-dates', async ({ request }) => {
     const { blackoutDate, reason } = await readBlackoutDateRequest(request)
     const violation = blackoutDateRequestViolation({ blackoutDate, reason })
     if (violation) return violation
@@ -632,7 +634,7 @@ export const handlers = [
    * 「その日付は既に登録されています」と返すと理由を取り違えさせるため。
    * まず「盤面が古い」ことを伝える。
    */
-  http.put('*/api/blackout-dates/:blackoutDate', async ({ params, request }) => {
+  http.put('*/api/masters/blackout-dates/:blackoutDate', async ({ params, request }) => {
     const targetDate = Number(params.blackoutDate)
     const { blackoutDate, reason, updatedAt } = await readBlackoutDateRequest(request)
     const violation = blackoutDateRequestViolation({ blackoutDate, reason })
@@ -691,7 +693,7 @@ export const handlers = [
   }),
 
   // 受注不可日の論理削除。行は残したまま取消区分を 1 にする
-  http.delete('*/api/blackout-dates/:blackoutDate', ({ params }) => {
+  http.delete('*/api/masters/blackout-dates/:blackoutDate', ({ params }) => {
     const targetDate = Number(params.blackoutDate)
     const target = blackoutDateRows.find(
       (blackout) => blackout.受注不可日 === targetDate && blackout.取消区分 === 0,
@@ -714,7 +716,7 @@ export const handlers = [
   }),
 
   // ハードリミット（バックエンドの呼称は「スライス注文設定」）。1 件だけの設定なので一覧ではない
-  http.get('*/api/hard-limits', () => HttpResponse.json(hardLimitRow)),
+  http.get('*/api/masters/hard-limits', () => HttpResponse.json(hardLimitRow)),
 
   /*
    * ハードリミットの更新。拒否の形は実 API（FastAPI）に合わせる。
@@ -726,7 +728,7 @@ export const handlers = [
    * 409 Conflict）に対応」と書かれた宣言漏れ）が、実 API では実装されている。
    * 画面側では検証しない方針なので、拒否の理由はここが持つ。
    */
-  http.put('*/api/hard-limits', async ({ request }) => {
+  http.put('*/api/masters/hard-limits', async ({ request }) => {
     const body = await request.json().catch(() => null)
 
     // pydantic は不合格の項目を全部まとめて返す（先勝ちで 1 件ではない）
@@ -806,7 +808,7 @@ function isRealYmd(value) {
   return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }
 
-/* ここからハードリミット（/hard-limits）のモック用ヘルパ。実 API の 422 を模すためだけのもの */
+/* ここからハードリミット（/masters/hard-limits）のモック用ヘルパ。実 API の 422 を模すためだけのもの */
 
 /**
  * SliceSettingUpdateRequest の制約（openapi.json）。
@@ -864,7 +866,7 @@ function sliceValidationError(type, field, msg, input, ctx) {
   return { type, loc: ['body', field], msg, input, ...(ctx ? { ctx } : {}) }
 }
 
-/* ここから海外休場日（/holidays）のモック用ヘルパ。実 API の形に合わせるためだけのもの */
+/* ここから海外休場日（/masters/market-holidays）のモック用ヘルパ。実 API の形に合わせるためだけのもの */
 
 /** HolidayRequest（日本語キー）を読み取る。型が違うものは「未入力」に寄せる */
 async function readHolidayRequest(request) {
@@ -913,7 +915,7 @@ function toValidationDetails({ holidayDate, holidayType, reason }) {
   }
 }
 
-/* ここから受注不可日（/blackout-dates）のモック用ヘルパ。実 API の形に合わせるためだけのもの */
+/* ここから受注不可日（/masters/blackout-dates）のモック用ヘルパ。実 API の形に合わせるためだけのもの */
 
 /**
  * BlackoutDateRequest（日本語キー）を読み取る。
@@ -1018,7 +1020,7 @@ function toMockBlackoutDateItem({ blackoutDate, reason, reactivated = false }) {
   }
 }
 
-/* ここから CAマスタ（/ca）のモック用ヘルパ。実 API の形に合わせるためだけのもの */
+/* ここから CAマスタ（/masters/ca）のモック用ヘルパ。実 API の形に合わせるためだけのもの */
 
 /**
  * pydantic（CARequest）が本文を受け取る前に弾くもの。

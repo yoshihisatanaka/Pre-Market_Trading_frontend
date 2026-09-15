@@ -25,7 +25,7 @@
 | BDS-10 | 既定モック | `load()` を呼ぶ | `limit` が表示件数の定数と一致する。ただしリクエストには `limit` を載せない（実 API の一覧は 1 ページ 50 件で固定されていてクエリを持たない） | 実装済 |
 | BDS-11 | 既定モック、`load()` 済み | 一覧に無い日付で `create({ date, reason })` を呼ぶ | 事前検証を通って登録され、登録した 1 件が返る。日付・理由は渡した値。`createError` は null、`validationErrors` は空。`total` が 1 増え、その日付が `items` に入る | 実装済 |
 | BDS-12 | 既定モック、`load()` 済み | すでに登録済みの日付で `create()` を呼ぶ | 戻り値が null。`validationErrors` にサーバが返した理由（重複を知らせる文言）が入り、`createError` は null のまま。`items` / `total` は変わらない | 実装済 |
-| BDS-13 | 事前検証が不合格になる入力 | `create()` を呼ぶ | 登録の API（`POST /blackout-dates`）は 1 度も呼ばれない | 実装済 |
+| BDS-13 | 事前検証が不合格になる入力 | `create()` を呼ぶ | 登録の API（`POST /masters/blackout-dates`）は 1 度も呼ばれない | 実装済 |
 | BDS-14 | 事前検証が理由を 2 件返す（実 API は 1 件で打ち切るので応答を差し替えて作る） | `create()` を呼ぶ | `validationErrors` にその 2 件が、サーバが返した順のまま入る | 実装済 |
 | BDS-15 | 事前検証の API が 500（`detail` 付き）を返す | `create()` を呼ぶ | 戻り値が null、`createError` に status 500 とその message が入る。`validationErrors` は空のまま。`items` / `total` は変わらない | 実装済 |
 | BDS-16 | 登録の API が 400（`detail` 付き。実 API の重複エラー）を返す（事前検証は通る） | `create()` を呼ぶ | 戻り値が null、`createError` に status 400 とその detail が入る（サーバ側の防御に到達した場合も理由が失われない） | 実装済 |
@@ -42,7 +42,7 @@
 | BDS-27 | 既定モック、`load()` 済み | 先頭の行の日付を一覧に無い日付へ変えて `update()` を呼ぶ | 戻り値の日付が新しい日付になる。`total` は変わらず、`items` から元の日付が消えて新しい日付が日付降順の位置に入る | 実装済 |
 | BDS-28 | 既定モック、`load()` 済み | 日付を変えずに（自分自身の日付のまま）`update()` を呼ぶ | 自分自身は重複と見なされず成功する。事前検証のリクエストに変更検証であること（`is_update=true`）が載る。対象を渡す `id` クエリは送らない（実 API に無く、本文の受注不可日が対象を兼ねる） | 実装済 |
 | BDS-29 | 既定モック、`load()` 済み | 先頭の行の日付を**別の行の日付**へ変えて `update()` を呼ぶ | 戻り値が null。`updateValidationErrors` に重複を知らせる文言が入り、`updateError` は null のまま。`items` / `total` は変わらない | 実装済 |
-| BDS-30 | 事前検証が不合格になる入力 | `update()` を呼ぶ | 更新の API（`PUT /blackout-dates/{受注不可日}`）は 1 度も呼ばれない | 実装済 |
+| BDS-30 | 事前検証が不合格になる入力 | `update()` を呼ぶ | 更新の API（`PUT /masters/blackout-dates/{受注不可日}`）は 1 度も呼ばれない | 実装済 |
 | BDS-31 | 更新の API が 500（`detail` 付き）を返す（事前検証は通る） | `update()` を呼ぶ | 戻り値が null、`updateError` に status 500 とその message が入る。`updateValidationErrors` は空のまま。`items` / `total` は変わらない | 実装済 |
 | BDS-32 | 既定モック、`load()` 済み | 行の現在値と違う（古い）`updatedAt` を渡して `update()` を呼ぶ | 戻り値が null、`updateError` に status 409 と競合を知らせる message が入る。`items` は変わらない（他の利用者の変更を上書きしない） | 実装済 |
 | BDS-33 | 既定モック | 存在しない受注不可日を id にして `update()` を呼ぶ（事前検証を通すため日付は変える） | 戻り値が null、`updateError` に status 404 と detail が入る | 実装済 |

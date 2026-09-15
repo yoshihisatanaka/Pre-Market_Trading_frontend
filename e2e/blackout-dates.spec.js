@@ -173,7 +173,7 @@ test.describe('受注不可日マスタ一覧', () => {
   test('[BD-05] API がエラーを返したときエラー表示と再試行ボタンが出る', async ({ page }) => {
     await mockApi(page, [
       {
-        path: '*/api/blackout-dates',
+        path: '*/api/masters/blackout-dates',
         status: 500,
         body: { detail: 'サーバーでエラーが発生しました。' },
       },
@@ -191,7 +191,7 @@ test.describe('受注不可日マスタ一覧', () => {
   })
 
   test('[BD-06] 受注不可日が 0 件のとき空状態が表示される', async ({ page }) => {
-    await mockApi(page, [{ path: '*/api/blackout-dates', body: EMPTY_LIST }])
+    await mockApi(page, [{ path: '*/api/masters/blackout-dates', body: EMPTY_LIST }])
     await page.goto(PATH)
 
     const empty = page.getByTestId('blackout-dates-empty')
@@ -240,7 +240,7 @@ test.describe('受注不可日マスタ一覧', () => {
     await expect(page.getByTestId('blackout-dates-description')).toBeVisible()
 
     // 0 件でも 4 状態の外なので消えない
-    await mockApi(page, [{ path: '*/api/blackout-dates', body: EMPTY_LIST }])
+    await mockApi(page, [{ path: '*/api/masters/blackout-dates', body: EMPTY_LIST }])
     await page.goto(PATH)
 
     await expect(page.getByTestId('blackout-dates-empty')).toBeVisible()
@@ -270,7 +270,7 @@ test.describe('受注不可日マスタ一覧', () => {
  *   必須未入力       … FormField の error（BD-12）
  *   事前検証の不合格 … blackout-dates-add-validation-error の箇条書き（BD-14 / 15）
  *   通信・サーバ障害 … blackout-dates-add-error（BD-16）
- * 事前検証と登録は別パス（/blackout-dates/validate と /blackout-dates）なので、
+ * 事前検証と登録は別パス（/masters/blackout-dates/validate と /masters/blackout-dates）なので、
  * mockApi() で一方だけを差し替えられる。
  */
 test.describe('受注不可日マスタ 新規追加', () => {
@@ -368,7 +368,7 @@ test.describe('受注不可日マスタ 新規追加', () => {
     await mockApi(page, [
       {
         method: 'post',
-        path: '*/api/blackout-dates/validate',
+        path: '*/api/masters/blackout-dates/validate',
         body: { valid: false, errors, warnings: [], details: null },
       },
     ])
@@ -389,11 +389,11 @@ test.describe('受注不可日マスタ 新規追加', () => {
   })
 
   test('[BD-16] 登録に失敗するとモーダルは開いたままエラーが出る', async ({ page }) => {
-    // 事前検証（*/api/blackout-dates/validate）はパスが別なので既定ハンドラのまま通る
+    // 事前検証（*/api/masters/blackout-dates/validate）はパスが別なので既定ハンドラのまま通る
     await mockApi(page, [
       {
         method: 'post',
-        path: '*/api/blackout-dates',
+        path: '*/api/masters/blackout-dates',
         status: 500,
         body: { detail: 'サーバーでエラーが発生しました。' },
       },
@@ -515,7 +515,7 @@ test.describe('受注不可日マスタ 削除', () => {
     await mockApi(page, [
       {
         method: 'delete',
-        path: '*/api/blackout-dates/:blackoutDate',
+        path: '*/api/masters/blackout-dates/:blackoutDate',
         status: 500,
         body: { detail: 'サーバーでエラーが発生しました。' },
       },
@@ -672,12 +672,12 @@ test.describe('受注不可日マスタ 編集', () => {
 
   test('[BD-29] 更新が競合するとモーダルは開いたままエラーが出る', async ({ page }) => {
     // 実ブラウザで「他の利用者」を作れないので、競合の応答そのものを差し替える。
-    // 事前検証（*/api/blackout-dates/validate）はパスが別なので既定ハンドラのまま通る。
+    // 事前検証（*/api/masters/blackout-dates/validate）はパスが別なので既定ハンドラのまま通る。
     // detail を入れるのは、client.js が 409 の既定文言を持たないため（無いと汎用の文言になる）
     await mockApi(page, [
       {
         method: 'put',
-        path: '*/api/blackout-dates/:blackoutDate',
+        path: '*/api/masters/blackout-dates/:blackoutDate',
         status: 409,
         body: { detail: CONFLICT_MESSAGE },
       },

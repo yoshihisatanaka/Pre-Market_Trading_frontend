@@ -36,7 +36,7 @@ let api = null
 let original = null
 
 async function getSettings() {
-  const res = await api.get('/api/hard-limits')
+  const res = await api.get('/api/masters/hard-limits')
   expect(
     res.ok(),
     '実 API からスライス注文設定を取得できない。api コンテナが動いているか確認する',
@@ -51,7 +51,7 @@ async function getSettings() {
  * 楽観的ロックがあるので 更新日時 も base のものを添える。
  */
 async function putSettings(base, patch = {}) {
-  const res = await api.put('/api/hard-limits', {
+  const res = await api.put('/api/masters/hard-limits', {
     data: {
       市場関与率: base['市場関与率'],
       大口数量閾値: base['大口数量閾値'],

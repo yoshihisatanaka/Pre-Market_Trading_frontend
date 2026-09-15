@@ -41,13 +41,13 @@ const INVALID_RATE_MESSAGE = '市場関与率: 指定できる下限を下回っ
 // 実 API のエラー本文は ErrorResponse（{ detail: string }）
 const errorHandler = (options) =>
   http.get(
-    '*/api/hard-limits',
+    '*/api/masters/hard-limits',
     () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     options,
   )
 // 本文なし（204）。実 API では起きないが、画面の 4 状態を保つための空応答
 const emptyHandler = () =>
-  http.get('*/api/hard-limits', () => new HttpResponse(null, { status: 204 }))
+  http.get('*/api/masters/hard-limits', () => new HttpResponse(null, { status: 204 }))
 
 const Page = { render: () => h('div') }
 

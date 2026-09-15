@@ -48,21 +48,21 @@ const unknownStockMessage = (stockCode) => `銘柄コード(${stockCode})は銘�
 /** 一覧を 500 にする差し替え */
 function failList() {
   server.use(
-    http.get('*/api/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+    http.get('*/api/masters/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
   )
 }
 
 /** 登録（事前検証は既定のまま）を 500 にする差し替え */
 function failCreate() {
   server.use(
-    http.post('*/api/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+    http.post('*/api/masters/ca', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
   )
 }
 
 /** 削除を 500 にする差し替え */
 function failDelete() {
   server.use(
-    http.delete('*/api/ca/:caId', () =>
+    http.delete('*/api/masters/ca/:caId', () =>
       HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     ),
   )
@@ -71,7 +71,7 @@ function failDelete() {
 /** 更新（事前検証は既定のまま）を 409 にする差し替え */
 function conflictOnUpdate(detail) {
   server.use(
-    http.put('*/api/ca/:caId', () => HttpResponse.json({ detail }, { status: 409 })),
+    http.put('*/api/masters/ca/:caId', () => HttpResponse.json({ detail }, { status: 409 })),
   )
 }
 
@@ -82,7 +82,7 @@ function conflictOnUpdate(detail) {
  */
 function warnOnValidate(message) {
   server.use(
-    http.post('*/api/ca/validate', () =>
+    http.post('*/api/masters/ca/validate', () =>
       HttpResponse.json({ valid: true, errors: [], warnings: [message], details: null }),
     ),
   )
@@ -96,7 +96,7 @@ function warnOnValidate(message) {
  */
 function slowList(waitFor) {
   server.use(
-    http.get('*/api/ca', async ({ request }) => {
+    http.get('*/api/masters/ca', async ({ request }) => {
       const offset = Number(new URL(request.url).searchParams.get('offset') ?? 0)
       await delay(waitFor(offset))
       return HttpResponse.json({

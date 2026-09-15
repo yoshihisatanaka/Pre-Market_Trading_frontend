@@ -27,15 +27,15 @@ const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
 // 実 API のエラー本文は ErrorResponse（{ detail: string }）
 const errorHandler = () =>
-  http.get('*/api/hard-limits', () =>
+  http.get('*/api/masters/hard-limits', () =>
     HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
   )
 // 本文なし（204）。実 API では起きないが、画面の 4 状態を保つための空応答
 const emptyHandler = () =>
-  http.get('*/api/hard-limits', () => new HttpResponse(null, { status: 204 }))
+  http.get('*/api/masters/hard-limits', () => new HttpResponse(null, { status: 204 }))
 // スライス有効フラグだけを 0 にした設定（画面に無い項目が保存で書き換わらないことの確認用）
 const sliceDisabledHandler = () =>
-  http.get('*/api/hard-limits', () =>
+  http.get('*/api/masters/hard-limits', () =>
     HttpResponse.json({ ...hardLimitSetting, スライス有効フラグ: 0 }),
   )
 

@@ -156,24 +156,24 @@ const itemBody = (item) => ({ success: true, blackout_date: item, message: 'ok' 
 
 const errorHandler = (options) =>
   http.get(
-    '*/api/blackout-dates',
+    '*/api/masters/blackout-dates',
     () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
     options,
   )
 const emptyHandler = (options) =>
-  http.get('*/api/blackout-dates', () => HttpResponse.json(listBody([], 0)), options)
+  http.get('*/api/masters/blackout-dates', () => HttpResponse.json(listBody([], 0)), options)
 
 // 事前検証は HTTP 200 で valid / errors を返す契約なので、不合格も 200 で作る
 const validateInvalidHandler = (errors) =>
-  http.post('*/api/blackout-dates/validate', () =>
+  http.post('*/api/masters/blackout-dates/validate', () =>
     HttpResponse.json({ valid: false, errors, warnings: [], details: null }),
   )
 const validateErrorHandler = () =>
-  http.post('*/api/blackout-dates/validate', () =>
+  http.post('*/api/masters/blackout-dates/validate', () =>
     HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
   )
 const deleteNotFoundHandler = () =>
-  http.delete('*/api/blackout-dates/:blackoutDate', () =>
+  http.delete('*/api/masters/blackout-dates/:blackoutDate', () =>
     HttpResponse.json({ detail: NOT_FOUND_MESSAGE }, { status: 404 }),
   )
 
@@ -189,7 +189,7 @@ function gateListResponse() {
     release = resolve
   })
   server.use(
-    http.get('*/api/blackout-dates', async () => {
+    http.get('*/api/masters/blackout-dates', async () => {
       await gate
       return HttpResponse.json(listBody([], 0))
     }),
@@ -458,11 +458,11 @@ describe('BlackoutDateListView', () => {
     let validateCalls = 0
     let createCalls = 0
     server.use(
-      http.post('*/api/blackout-dates/validate', () => {
+      http.post('*/api/masters/blackout-dates/validate', () => {
         validateCalls += 1
         return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
       }),
-      http.post('*/api/blackout-dates', () => {
+      http.post('*/api/masters/blackout-dates', () => {
         createCalls += 1
         return HttpResponse.json(itemBody(blackoutDates[0]), { status: 201 })
       }),
@@ -582,7 +582,7 @@ describe('BlackoutDateListView', () => {
       releaseValidate = resolve
     })
     server.use(
-      http.post('*/api/blackout-dates/validate', async () => {
+      http.post('*/api/masters/blackout-dates/validate', async () => {
         await validateGate
         return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
       }),
@@ -756,11 +756,11 @@ describe('BlackoutDateListView', () => {
     let validateCalls = 0
     let updateCalls = 0
     server.use(
-      http.post('*/api/blackout-dates/validate', () => {
+      http.post('*/api/masters/blackout-dates/validate', () => {
         validateCalls += 1
         return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
       }),
-      http.put('*/api/blackout-dates/:blackoutDate', () => {
+      http.put('*/api/masters/blackout-dates/:blackoutDate', () => {
         updateCalls += 1
         return HttpResponse.json(itemBody(blackoutDates[0]))
       }),
@@ -785,7 +785,7 @@ describe('BlackoutDateListView', () => {
 
   it('[BDL-32] 更新が 409 のときモーダル内に通信障害用のエラーが出る', async () => {
     server.use(
-      http.put('*/api/blackout-dates/:blackoutDate', () =>
+      http.put('*/api/masters/blackout-dates/:blackoutDate', () =>
         HttpResponse.json({ detail: CONFLICT_MESSAGE }, { status: 409 }),
       ),
     )
@@ -816,7 +816,7 @@ describe('BlackoutDateListView', () => {
       releaseValidate = resolve
     })
     server.use(
-      http.post('*/api/blackout-dates/validate', async () => {
+      http.post('*/api/masters/blackout-dates/validate', async () => {
         await validateGate
         return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
       }),

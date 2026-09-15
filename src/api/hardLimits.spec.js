@@ -46,7 +46,7 @@ function record(method, path, body, status = 200) {
   )
 }
 
-const PATH = '*/api/hard-limits'
+const PATH = '*/api/masters/hard-limits'
 
 /** updateHardLimits() に渡すアプリ内モデル側の引数。個々のテストで一部だけ差し替える */
 const updateArgs = {
@@ -59,12 +59,12 @@ const updateArgs = {
 }
 
 describe('api/hardLimits', () => {
-  it('[HLA-01] 取得は /hard-limits をクエリなしで呼ぶ', async () => {
+  it('[HLA-01] 取得は /masters/hard-limits をクエリなしで呼ぶ', async () => {
     record('get', PATH, hardLimitSetting)
 
     await fetchHardLimits()
 
-    expect(lastRequest.url.pathname).toBe('/api/hard-limits')
+    expect(lastRequest.url.pathname).toBe('/api/masters/hard-limits')
     // 単一リソースなので絞り込みもページングも無い
     expect([...lastRequest.params.keys()]).toEqual([])
   })
@@ -115,7 +115,7 @@ describe('api/hardLimits', () => {
 
     await updateHardLimits(updateArgs)
 
-    expect(lastRequest.url.pathname).toBe('/api/hard-limits')
+    expect(lastRequest.url.pathname).toBe('/api/masters/hard-limits')
     expect(lastRequest.body).toEqual({
       市場関与率: updateArgs.participationRate,
       大口数量閾値: updateArgs.maxQuantity,

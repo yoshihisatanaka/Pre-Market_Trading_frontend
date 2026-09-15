@@ -160,13 +160,13 @@ const pageButton = (wrapper, page) =>
 
 const errorHandler = (options) =>
   http.get(
-    '*/api/holidays',
+    '*/api/masters/market-holidays',
     () => HttpResponse.json({ detail: 'サーバーでエラーが発生しました。' }, { status: 500 }),
     options,
   )
 const emptyHandler = (options) =>
   http.get(
-    '*/api/holidays',
+    '*/api/masters/market-holidays',
     () => HttpResponse.json({ total: 0, limit: PAGE_SIZE, offset: 0, holidays: [] }),
     options,
   )
@@ -182,7 +182,7 @@ function gateListResponse() {
     release = resolve
   })
   server.use(
-    http.get('*/api/holidays', async () => {
+    http.get('*/api/masters/market-holidays', async () => {
       await gate
       return HttpResponse.json({ total: 0, limit: PAGE_SIZE, offset: 0, holidays: [] })
     }),
@@ -191,7 +191,7 @@ function gateListResponse() {
 }
 
 const deleteNotFoundHandler = () =>
-  http.delete('*/api/holidays/:holidayDate', () =>
+  http.delete('*/api/masters/market-holidays/:holidayDate', () =>
     HttpResponse.json({ detail: NOT_FOUND_MESSAGE }, { status: 404 }),
   )
 

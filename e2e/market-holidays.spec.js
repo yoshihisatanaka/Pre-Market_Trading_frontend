@@ -159,7 +159,7 @@ test.describe('海外休場日マスタ一覧', () => {
   test('[MH-05] API がエラーを返したときエラー表示と再試行ボタンが出る', async ({ page }) => {
     await mockApi(page, [
       {
-        path: '*/api/holidays',
+        path: '*/api/masters/market-holidays',
         status: 500,
         body: { detail: 'サーバーでエラーが発生しました。' },
       },
@@ -178,7 +178,7 @@ test.describe('海外休場日マスタ一覧', () => {
 
   test('[MH-06] 休場日が 0 件のとき空状態が表示される', async ({ page }) => {
     await mockApi(page, [
-      { path: '*/api/holidays', body: { total: 0, limit: PAGE_SIZE, offset: 0, holidays: [] } },
+      { path: '*/api/masters/market-holidays', body: { total: 0, limit: PAGE_SIZE, offset: 0, holidays: [] } },
     ])
     await page.goto(PATH)
 
@@ -414,7 +414,7 @@ test.describe('海外休場日マスタ 削除', () => {
     await mockApi(page, [
       {
         method: 'delete',
-        path: '*/api/holidays/:holidayDate',
+        path: '*/api/masters/market-holidays/:holidayDate',
         status: 500,
         body: { detail: 'サーバーでエラーが発生しました。' },
       },

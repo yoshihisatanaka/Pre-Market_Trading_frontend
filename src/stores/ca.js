@@ -11,7 +11,7 @@ import { useCrudList } from '@/composables/useCrudList'
 /**
  * 一覧 1 ページあたりの表示件数。
  *
- * 実 API（`GET /ca`）の limit は既定 50・最大 200 で、こちらから指定できる。
+ * 実 API（`GET /masters/ca`）の limit は既定 50・最大 200 で、こちらから指定できる。
  * ここを変えるとページャーの表示件数もそのまま変わる（api 層が limit として送る）。
  */
 export const CA_PAGE_SIZE = 50

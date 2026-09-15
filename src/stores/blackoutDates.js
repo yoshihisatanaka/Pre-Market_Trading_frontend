@@ -12,7 +12,7 @@ import { useCrudList } from '@/composables/useCrudList'
  * 一覧 1 ページあたりの表示件数。
  *
  * 実 API 側の 1 ページ 50 件に合わせた値で、**勝手に変えられない**。
- * `GET /blackout-dates` は limit というクエリを持たず 50 件で固定されているため、
+ * `GET /masters/blackout-dates` は limit というクエリを持たず 50 件で固定されているため、
  * ここを別の値にするとページャーの見た目と実際の返却件数がずれる。
  */
 export const BLACKOUT_DATES_PAGE_SIZE = 50

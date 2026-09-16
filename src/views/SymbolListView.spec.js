@@ -30,6 +30,7 @@ const TOTAL = symbols.length
  * 期待値は api 層と同じ変換でアプリ内モデルの形に直してから使う。
  */
 const toRow = (symbol) => ({
+  id: String(symbol.ID),
   symbolCode: symbol.銘柄コード,
   ticker: symbol.Ticker ?? '',
   name: symbol.銘柄名 ?? '',
@@ -184,6 +185,72 @@ const failCreate = () =>
     ),
   )
 
+/* ここから編集モーダル用のヘルパ（testid は symbols-edit- に振り替わる） */
+
+const editInput = (wrapper, name) => wrapper.find(`[data-testid="symbols-edit-${name}"]`)
+const editSubmit = (wrapper) => wrapper.find('[data-testid="symbols-edit-submit"]')
+const editCancel = (wrapper) => wrapper.find('[data-testid="symbols-edit-cancel"]')
+
+/** 行の「編集」を押す（ボタンの testid は行の id を含む） */
+const openEditModal = async (wrapper, id = firstPage[0].id) => {
+  await wrapper.find(`[data-testid="symbols-edit-${id}"]`).trigger('click')
+}
+
+const fillEdit = async (wrapper, values) => {
+  for (const [name, value] of Object.entries(values)) {
+    await editInput(wrapper, name).setValue(value)
+  }
+}
+
+const submitEdit = async (wrapper) => {
+  await editSubmit(wrapper).trigger('click')
+  await settle()
+}
+
+const editValidationMessages = (wrapper) =>
+  wrapper.findAll('[data-testid="symbols-edit-validation-error"] li').map((item) => item.text())
+
+/** 更新（事前検証は既定のまま）を差し替える */
+const respondToUpdate = (body, status = 200, wait = 0) =>
+  server.use(
+    http.put('*/api/masters/symbols/:id', async () => {
+      if (wait) await delay(wait)
+      return HttpResponse.json(body, { status })
+    }),
+  )
+
+/* ここから削除確認ダイアログ用のヘルパ（事前検証が無いので差し替えは DELETE の 1 本だけ） */
+
+const deleteSubmit = (wrapper) => wrapper.find('[data-testid="symbols-delete-submit"]')
+const deleteCancel = (wrapper) => wrapper.find('[data-testid="symbols-delete-cancel"]')
+
+/** 行の「削除」を押す（ボタンの testid は行の id を含む） */
+const openDeleteModal = async (wrapper, id = firstPage[0].id) => {
+  await wrapper.find(`[data-testid="symbols-delete-${id}"]`).trigger('click')
+}
+
+const submitDelete = async (wrapper) => {
+  await deleteSubmit(wrapper).trigger('click')
+  await settle()
+}
+
+/** 削除の応答を差し替える（wait を渡すと過渡状態を観測できる） */
+const respondToDelete = (body, status = 200, wait = 0) =>
+  server.use(
+    http.delete('*/api/masters/symbols/:id', async () => {
+      if (wait) await delay(wait)
+      return HttpResponse.json(body, { status })
+    }),
+  )
+
+/** 事前検証を不合格にする差し替え（編集からは重複も存在エラーも起こせないため） */
+const failValidate = (message) =>
+  server.use(
+    http.post('*/api/masters/symbols/validate', () =>
+      HttpResponse.json({ valid: false, errors: [message], warnings: [], details: null }),
+    ),
+  )
+
 describe('SymbolListView', () => {
   it('[STV-01] 応答を待つ間はローディングだけを出す', async () => {
     const { wrapper } = await mountView()
@@ -207,7 +274,7 @@ describe('SymbolListView', () => {
     expect(first).toContain(firstPage[0].name)
   })
 
-  it('[STV-03] 列が銘柄コードから備考まで 11 列この順で並ぶ', async () => {
+  it('[STV-03] 列が銘柄コードから備考まで並び、右端に見出しの無い操作列が付く', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -223,6 +290,8 @@ describe('SymbolListView', () => {
       '預託先区分',
       'VWAP対象区分',
       '備考',
+      // 行ごとの操作。画面モックに合わせて見出しは空
+      '',
     ])
   })
 
@@ -383,14 +452,17 @@ describe('SymbolListView', () => {
     }
   })
 
-  it('[STV-17] ヘッダに追加の導線があり、行には操作が無い', async () => {
+  it('[STV-17] ヘッダに追加の導線があり、行には編集と削除がこの順で並ぶ', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     expect(exists(wrapper, 'symbols-reload')).toBe(true)
     expect(exists(wrapper, 'symbols-add')).toBe(true)
-    // 編集・削除はまだ無い（行の中にボタンが無く、操作列そのものが無い）
-    expect(rows(wrapper)[0].findAll('button')).toHaveLength(0)
+
+    // 破壊的な操作を最後にする既存の並び（編集が左・削除が右端）
+    const buttons = rows(wrapper)[0].findAll('button')
+    expect(buttons).toHaveLength(2)
+    expect(buttons.map((button) => button.text())).toEqual(['編集', '削除'])
   })
 
   it('[STV-18] 新規追加を押すと 10 項目の空のフォームが開く', async () => {
@@ -562,5 +634,332 @@ describe('SymbolListView', () => {
       expect(addInput(wrapper, name).element.value).toBe('0')
       expect(addInput(wrapper, name).findAll('option[value=""]')).toHaveLength(0)
     }
+  })
+
+  it('[STV-26] 「編集」を押すと現在値が入り、銘柄コードは読み取り専用になる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openEditModal(wrapper)
+
+    expect(exists(wrapper, 'symbols-edit-form')).toBe(true)
+    const target = firstPage[0]
+    expect(editInput(wrapper, 'symbol-code').element.value).toBe(target.symbolCode)
+    expect(editInput(wrapper, 'ticker').element.value).toBe(target.ticker)
+    expect(editInput(wrapper, 'name').element.value).toBe(target.name)
+    expect(editInput(wrapper, 'name-en').element.value).toBe(target.nameEn)
+    expect(editInput(wrapper, 'regulation').element.value).toBe(target.regulation)
+    expect(editInput(wrapper, 'order-route').element.value).toBe(target.orderRoute)
+    expect(editInput(wrapper, 'vwap-target').element.value).toBe(target.vwapTarget)
+    expect(editInput(wrapper, 'previous-close').element.value).toBe(String(target.previousClose))
+    expect(editInput(wrapper, 'average-volume').element.value).toBe(String(target.averageVolume))
+    expect(editInput(wrapper, 'note').element.value).toBe(target.note)
+
+    /*
+     * 銘柄コードは主キーではなくなったが、実 API の詳細照会・更新履歴がこの値で 1 件を指すので
+     * 変更させない。見た目（面が一段沈む）は scoped CSS なので jsdom では検証できない。
+     */
+    expect(editInput(wrapper, 'symbol-code').attributes('readonly')).toBeDefined()
+
+    // 項目の増減はしない（追加と同じ 10 個であることが部品化の狙い）
+    const fields = wrapper.findAll('[data-testid^="symbols-edit-"]')
+    const inputs = fields.filter((field) =>
+      ['input', 'select'].includes(field.element.tagName.toLowerCase()),
+    )
+    expect(inputs).toHaveLength(10)
+  })
+
+  it('[STV-27] 更新するとモーダルが閉じ、一覧の該当行が新しい内容になる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+
+    await fillEdit(wrapper, { note: '直した備考' })
+    await submitEdit(wrapper)
+
+    expect(exists(wrapper, 'symbols-edit-form')).toBe(false)
+
+    const target = firstPage[0]
+    const notice = wrapper.find('[data-testid="symbols-notice"]').text()
+    for (const part of [target.symbolCode, target.ticker, target.name]) {
+      expect(notice).toContain(part)
+    }
+
+    // 更新は行を増やさない
+    expect(countText(wrapper)).toContain(String(TOTAL))
+    expect(rowOf(wrapper, target.symbolCode).text()).toContain('直した備考')
+  })
+
+  it('[STV-28] 必須を空にすると項目の直下に理由を出し、API へ送らない', async () => {
+    let putCalls = 0
+    server.use(
+      http.put('*/api/masters/symbols/:id', () => {
+        putCalls += 1
+        return HttpResponse.json({ success: true, stock: {}, message: 'ok' })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+
+    await fillEdit(wrapper, { ticker: '' })
+    await submitEdit(wrapper)
+
+    expect(fieldError(wrapper, editInput(wrapper, 'ticker'))).toBe(
+      'ティッカーコードを入力してください。',
+    )
+    expect(exists(wrapper, 'symbols-edit-form')).toBe(true)
+    expect(putCalls).toBe(0)
+    expect(exists(wrapper, 'symbols-notice')).toBe(false)
+  })
+
+  it('[STV-29] 事前検証の不合格は編集モーダル内に箇条書きで出す', async () => {
+    const message = '注文ルート(9)はコードマスタに存在しません'
+    failValidate(message)
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+
+    await fillEdit(wrapper, { note: '直した備考' })
+    await submitEdit(wrapper)
+
+    expect(exists(wrapper, 'symbols-edit-form')).toBe(true)
+    expect(editValidationMessages(wrapper)).toEqual([message])
+    // 通信は成功しているので、サーバ障害の枠には出さない
+    expect(exists(wrapper, 'symbols-edit-error')).toBe(false)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[STV-30] 競合(409)は事前検証ではなく通信・サーバ障害の枠に出す', async () => {
+    const detail = '他のユーザーによって銘柄データが更新されています。'
+    respondToUpdate({ detail }, 409)
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+
+    await fillEdit(wrapper, { note: '直した備考' })
+    await submitEdit(wrapper)
+
+    expect(exists(wrapper, 'symbols-edit-form')).toBe(true)
+    expect(wrapper.find('[data-testid="symbols-edit-error"]').text()).toContain(detail)
+    // 画面は 409 を特別扱いしない（事前検証の枠には出さない）
+    expect(exists(wrapper, 'symbols-edit-validation-error')).toBe(false)
+  })
+
+  it('[STV-31] 更新中は送信もキャンセルもできない', async () => {
+    respondToUpdate({ detail: ERROR_MESSAGE }, 500, 20)
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+    await fillEdit(wrapper, { note: '直した備考' })
+
+    // 応答を待たずに押した直後を見る
+    const pending = editSubmit(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(editSubmit(wrapper).text()).toContain('更新中')
+    expect(editSubmit(wrapper).attributes('disabled')).toBeDefined()
+    // 結果の行き先が無くなるので、閉じさせない
+    expect(editCancel(wrapper).attributes('disabled')).toBeDefined()
+
+    await pending
+    await settle()
+    expect(exists(wrapper, 'symbols-edit-form')).toBe(true)
+  })
+
+  it('[STV-32] 追加の失敗理由が編集モーダルに漏れない', async () => {
+    failCreate()
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+    await fillAdd(wrapper, NEW_SYMBOL)
+    await submitAdd(wrapper)
+    expect(exists(wrapper, 'symbols-add-error')).toBe(true)
+
+    await addCancel(wrapper).trigger('click')
+    await openEditModal(wrapper)
+
+    // 登録側と更新側で枠が分かれている（共用すると前回の理由が漏れる）
+    expect(exists(wrapper, 'symbols-edit-error')).toBe(false)
+    expect(exists(wrapper, 'symbols-edit-validation-error')).toBe(false)
+  })
+
+  it('[STV-33] 相場が未取得の行を開くと入力欄が空欄になる', async () => {
+    const blank = {
+      ...symbols[0],
+      ID: 9001,
+      銘柄コード: 'S901',
+      前日終値: null,
+      前日出来高: null,
+      平均出来高: null,
+    }
+    server.use(http.get('*/api/masters/symbols', () => HttpResponse.json(listBody([blank]))))
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openEditModal(wrapper, '9001')
+
+    // 0 に読み替えると、備考を直すだけの更新で 0 が書き込まれてしまう
+    expect(editInput(wrapper, 'previous-close').element.value).toBe('')
+    expect(editInput(wrapper, 'average-volume').element.value).toBe('')
+  })
+
+  it('[STV-34] 絞り込み中に最終ページの最後の 1 件を圏外へ変えると 1 ページ戻る', async () => {
+    /*
+     * 絞り込み結果がちょうど「1 ページ + 1 件」になる状況はフィクスチャに無いのでここで組む。
+     * 同じ理由で E2E には置けない（mockApi は固定の body を返すだけで、
+     * 更新の前後で件数を変えられない）。
+     */
+    const FILTER_VALUE = '0'
+    const OTHER_VALUE = '1'
+    const LAST_ID = 900 + PAGE_SIZE
+    let rowsState = Array.from({ length: PAGE_SIZE + 1 }, (_, index) => ({
+      ...symbols[0],
+      ID: 900 + index,
+      銘柄コード: `T${String(index).padStart(3, '0')}`,
+      規制情報: FILTER_VALUE,
+    }))
+
+    server.use(
+      /*
+       * 事前検証も差し替える。ここで組んだ行は既定ハンドラの持ち物ではないので、
+       * 既定のままだと変更検証が「指定された銘柄は存在しません」で弾いてしまう。
+       */
+      http.post('*/api/masters/symbols/validate', () =>
+        HttpResponse.json({ valid: true, errors: [], warnings: [], details: null }),
+      ),
+      http.get('*/api/masters/symbols', ({ request }) => {
+        const params = new URL(request.url).searchParams
+        const regulation = params.get('restriction') ?? ''
+        const offset = Number(params.get('offset') ?? 0)
+        const rows = rowsState.filter((row) => !regulation || row.規制情報 === regulation)
+        return HttpResponse.json({
+          total: rows.length,
+          limit: PAGE_SIZE,
+          offset,
+          stocks: rows.slice(offset, offset + PAGE_SIZE),
+        })
+      }),
+      http.put('*/api/masters/symbols/:id', async ({ params, request }) => {
+        const body = await request.json()
+        const id = Number(params.id)
+        const updated = { ...rowsState.find((row) => row.ID === id), 規制情報: body.規制情報 }
+        rowsState = rowsState.map((row) => (row.ID === id ? updated : row))
+        return HttpResponse.json({ success: true, stock: updated, message: 'ok' })
+      }),
+    )
+
+    const { wrapper, router } = await mountView({
+      regulation: FILTER_VALUE,
+      offset: String(PAGE_SIZE),
+    })
+    await settle()
+    expect(rows(wrapper)).toHaveLength(1)
+
+    await openEditModal(wrapper, String(LAST_ID))
+    await fillEdit(wrapper, { regulation: OTHER_VALUE })
+    await submitEdit(wrapper)
+    // 事前検証 → 更新 → 読み直し → ページ戻し → 再取得 と続くので、settle を重ねて待つ
+    await settle()
+    await settle()
+
+    // 空のページに取り残さない。絞り込み条件は残したまま 1 ページ前へ戻す
+    expect(router.currentRoute.value.query.offset).toBeUndefined()
+    expect(router.currentRoute.value.query.regulation).toBe(FILTER_VALUE)
+    expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
+  })
+
+  it('[STV-35] 編集モーダルを開き直すと前回の失敗理由が残らない', async () => {
+    respondToUpdate({ detail: ERROR_MESSAGE }, 500)
+    const { wrapper } = await mountView()
+    await settle()
+    await openEditModal(wrapper)
+    await fillEdit(wrapper, { note: '直した備考' })
+    await submitEdit(wrapper)
+    expect(exists(wrapper, 'symbols-edit-error')).toBe(true)
+
+    await editCancel(wrapper).trigger('click')
+    await openEditModal(wrapper)
+
+    expect(exists(wrapper, 'symbols-edit-error')).toBe(false)
+    // 入力もその行の現在値に戻る（前回の書きかけを持ち込まない）
+    expect(editInput(wrapper, 'note').element.value).toBe(firstPage[0].note)
+  })
+
+  it('[STV-36] 削除確認は消す対象と取り消せない旨を出す', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openDeleteModal(wrapper)
+
+    // 銘柄コードだけでは何の銘柄か分からないので、一覧で実際に読む 3 点を並べる
+    const dialog = wrapper.find('[role="dialog"]')
+    expect(dialog.text()).toContain(firstPage[0].symbolCode)
+    expect(dialog.text()).toContain(firstPage[0].ticker)
+    expect(dialog.text()).toContain(firstPage[0].name)
+    expect(dialog.text()).toContain('この操作は元に戻せません。')
+  })
+
+  it('[STV-37] 削除が成功するとダイアログが閉じ、件数が 1 減る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+
+    await submitDelete(wrapper)
+
+    expect(exists(wrapper, 'symbols-delete-submit')).toBe(false)
+    const notice = wrapper.find('[data-testid="symbols-notice"]').text()
+    expect(notice).toContain(firstPage[0].symbolCode)
+    expect(notice).toContain(firstPage[0].ticker)
+    expect(notice).toContain(firstPage[0].name)
+    expect(countText(wrapper)).toContain(String(TOTAL - 1))
+    // 論理削除だが、一覧は取消済みを返さないので消えたように見える
+    expect(exists(wrapper, `symbols-edit-${firstPage[0].id}`)).toBe(false)
+  })
+
+  it('[STV-38] 削除に失敗するとダイアログは開いたまま理由を出す', async () => {
+    respondToDelete({ detail: ERROR_MESSAGE }, 500)
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+
+    await submitDelete(wrapper)
+
+    expect(exists(wrapper, 'symbols-delete-submit')).toBe(true)
+    expect(wrapper.find('[data-testid="symbols-delete-error"]').text()).toContain(ERROR_MESSAGE)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+    expect(exists(wrapper, 'symbols-notice')).toBe(false)
+  })
+
+  it('[STV-39] 削除中は削除もキャンセルもできない', async () => {
+    respondToDelete({ detail: ERROR_MESSAGE }, 500, 20)
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+
+    const pending = deleteSubmit(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(deleteSubmit(wrapper).text()).toContain('削除中…')
+    expect(deleteSubmit(wrapper).attributes('disabled')).toBeDefined()
+    // 結果の行き先が無くなるので、終わるまで閉じさせない
+    expect(deleteCancel(wrapper).attributes('disabled')).toBeDefined()
+
+    await pending
+    await settle()
+  })
+
+  it('[STV-40] 削除確認を開き直すと前回の失敗理由が残らない', async () => {
+    respondToDelete({ detail: ERROR_MESSAGE }, 500)
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+    await submitDelete(wrapper)
+    expect(exists(wrapper, 'symbols-delete-error')).toBe(true)
+
+    await deleteCancel(wrapper).trigger('click')
+    await openDeleteModal(wrapper)
+
+    expect(exists(wrapper, 'symbols-delete-error')).toBe(false)
   })
 })

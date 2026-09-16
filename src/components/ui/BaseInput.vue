@@ -57,6 +57,15 @@ const model = defineModel({ type: [String, Number], default: '' })
   cursor: not-allowed;
 }
 
+/*
+ * 読み取り専用（変更できない項目の表示）。面は disabled と同じ一段沈んだ色を借りるが、
+ * 文字色も cursor も変えない。「操作を受け付けない」ではなく「この値は動かない」と見せる
+ * （値は選択してコピーできるべきもの）。
+ */
+.base-input:read-only {
+  background-color: var(--color-surface-muted);
+}
+
 .base-input--boxed {
   width: 100%;
   padding: var(--space-2) var(--space-3);

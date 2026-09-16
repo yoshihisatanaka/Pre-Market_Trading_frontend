@@ -7,12 +7,13 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
+import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
 import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import SymbolFormFields from '@/components/symbol/SymbolFormFields.vue'
 import { useListQuery } from '@/composables/useListQuery'
-import { useSymbolsStore } from '@/stores/symbols'
+import { SYMBOLS_PAGE_SIZE, useSymbolsStore } from '@/stores/symbols'
 import { formatQuantity, formatUsdUnit } from '@/utils/format'
 import {
   ORDER_ROUTE_OPTIONS,
@@ -39,6 +40,11 @@ const {
   creating,
   createError,
   validationErrors,
+  updating,
+  updateError,
+  updateValidationErrors,
+  deleting,
+  deleteError,
 } = storeToRefs(store)
 
 /*
@@ -48,7 +54,9 @@ const {
  *     前日終値 / 前日出来高 / 5日平均出来高 の順でまとめている
  *   - ユーザー操作フラグは列にせず、行の色で表す（下の rowClass）
  *   - 市場名・Pre区分はモックに列が無いので出さない（API には項目がある）
- *   - 操作列（編集・削除）は別途。いまはヘッダの「新規追加」だけを持つ
+ *   - 操作列の「編集」「削除」は画面モックには無いが、行から直せないと備考の誤記を直すだけでも
+ *     作り直しが要るため足している。新規追加はヘッダのボタンから開く。
+ *     並びは編集が左・削除が右端（破壊的な操作を最後にする既存の並び）
  */
 const columns = [
   { key: 'symbolCode', label: '銘柄コード' },
@@ -62,6 +70,8 @@ const columns = [
   { key: 'orderRoute', label: '預託先区分' },
   { key: 'vwapTarget', label: 'VWAP対象区分' },
   { key: 'note', label: '備考' },
+  // 行ごとの操作（編集・削除）。画面モックに合わせて見出しは空にする
+  { key: 'actions', label: '' },
 ]
 
 /*
@@ -218,9 +228,159 @@ async function submitAdd() {
   )
 }
 
+/*
+ * 編集。モーダルは「開いているか」と「どの行か」を editTarget 1 つで持つ。
+ * 入力欄はその行の現在値で初期化し、editTarget が握っている id が更新対象を、
+ * updatedAt が楽観的ロックの合札を受け持つ（他の利用者が先に更新していればサーバが 409 で弾く）。
+ *
+ * **銘柄コードは変更させない**（SymbolFormFields に symbol-code-locked を渡す）。
+ * 主キーではなくなったが、実 API の詳細照会・更新履歴がこの値で 1 件を指すため。
+ *
+ * エラーの出し先は新規追加と同じ 3 系統。409 の競合も通信・サーバ障害と同じ枠に出すので、
+ * ここに競合専用のコードは無い（code を見て分岐すると、view が API のコード値を知る約束事が増える）。
+ * 競合時に一覧を自動で読み直すこともしない。一覧だけ読み直してもモーダルが握る合札は古いままで
+ * 再度 409 になり、モーダル側まで差し替えると他人の変更を見せずに上書きさせることになる。
+ */
+const editTarget = ref(null)
+const editForm = ref(emptyForm())
+const editErrors = ref(emptyErrors())
+
+/** 一覧の 1 行を編集フォームの形に開く（相場の 2 値は入力欄が文字列を持つので寄せる） */
+function toForm(symbol) {
+  return {
+    symbolCode: symbol.symbolCode,
+    ticker: symbol.ticker,
+    name: symbol.name,
+    nameEn: symbol.nameEn,
+    regulation: symbol.regulation,
+    orderRoute: symbol.orderRoute,
+    vwapTarget: symbol.vwapTarget,
+    // null（未取得）と 0 を混ぜないよう、空文字に寄せるのは null のときだけ
+    previousClose: symbol.previousClose ?? '',
+    averageVolume: symbol.averageVolume ?? '',
+    note: symbol.note,
+  }
+}
+
+function openEdit(symbol) {
+  editForm.value = toForm(symbol)
+  editErrors.value = emptyErrors()
+  // 前回の失敗と成功をどちらも持ち込まない
+  store.clearUpdateError()
+  noticeMessage.value = ''
+  editTarget.value = symbol
+}
+
+function closeEdit() {
+  // 更新中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (updating.value) return
+  editTarget.value = null
+}
+
+async function submitEdit() {
+  const target = editTarget.value
+  if (!target) return
+
+  const form = editForm.value
+  /*
+   * 検査項目は追加と揃える。銘柄コードは読み取り専用なので空にはなり得ず常に '' になるが、
+   * 外すと add / edit で検査が非対称になり、フォームを部品化した理由に逆行する。
+   */
+  editErrors.value = {
+    symbolCode: form.symbolCode.trim() ? '' : '銘柄コードを入力してください。',
+    ticker: form.ticker.trim() ? '' : 'ティッカーコードを入力してください。',
+    name: form.name.trim() ? '' : '銘柄名（日本語）を入力してください。',
+  }
+  if (Object.values(editErrors.value).some(Boolean)) return
+
+  const updated = await store.update(
+    {
+      ...form,
+      // id と合札はフォームの外から来る（利用者が触れる値ではない）
+      id: target.id,
+      symbolCode: form.symbolCode.trim(),
+      ticker: form.ticker.trim(),
+      name: form.name.trim(),
+      nameEn: form.nameEn.trim(),
+      note: form.note.trim(),
+      updatedAt: target.updatedAt,
+    },
+    {
+      // 追加と同じく、一覧の読み直しを待たずに閉じる。失敗時は呼ばれないので
+      // モーダルは開いたままになり入力を直せる（理由は updateError に出る）
+      onSuccess: (item) => {
+        editTarget.value = null
+        noticeMessage.value = `${symbolLabel(item)} を更新しました。`
+      },
+    },
+  )
+  if (!updated) return
+
+  /*
+   * 絞り込み中に区分を条件の圏外へ変えると total が 1 減り、最終ページが空になり得る。
+   * 行が別ページへ移ったことそのものは追わない（サーバが新しいインデックスを返さないため）。
+   * 成功メッセージが銘柄コードを含むので、ユーザはその条件で検索できる。
+   */
+  stepBackIfPageEmpty()
+}
+
+/*
+ * 削除。確認モーダルは「開いているか」と「何を消すか」を deleteTarget 1 つで持つ（編集と同じ形）。
+ * 実 API は論理削除で、一覧は既定で取消済みを返さないので、読み直すと行が消える。
+ *
+ * エラーの系統は追加・編集と違って 1 つだけ。事前検証が無く（DELETE は本文を取らない）、
+ * 楽観的ロックも無い（合札を送らないので 409 が起きない）ので、サーバの拒否はすべて
+ * deleteError をモーダル内に出す。
+ */
+const deleteTarget = ref(null)
+
+function openDelete(symbol) {
+  // 前回の失敗と成功をどちらも持ち込まない
+  store.clearDeleteError()
+  noticeMessage.value = ''
+  deleteTarget.value = symbol
+}
+
+function closeDelete() {
+  // 削除中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (deleting.value) return
+  deleteTarget.value = null
+}
+
+async function submitDelete() {
+  const target = deleteTarget.value
+  if (!target) return
+
+  const deleted = await store.remove(target.id, {
+    // 追加・編集と同じく、一覧の読み直しを待たずに閉じる。失敗時は呼ばれないので
+    // モーダルは開いたままになり、理由（deleteError）を読ませられる
+    onSuccess: () => {
+      deleteTarget.value = null
+      noticeMessage.value = `${symbolLabel(target)} を削除しました。`
+    },
+  })
+  if (!deleted) return
+
+  /*
+   * 最終ページの最後の 1 件を消すと、読み直した結果がそのページで 0 件になる。
+   * 編集側と同じ後始末なので、同じ関数を通す。
+   */
+  stepBackIfPageEmpty()
+}
+
+/**
+ * 読み直した結果が 0 件になったら 1 ページ戻す。
+ * 最終ページの最後の 1 件が今の offset から居なくなる操作（削除、絞り込み中の変更）で使う。
+ */
+function stepBackIfPageEmpty() {
+  if (items.value.length === 0 && offset.value > 0) {
+    goToOffset(offset.value - SYMBOLS_PAGE_SIZE)
+  }
+}
+
 /**
  * 1 件を 1 行で示す文字列（成功メッセージに使う）。
- * 主キーの銘柄コードだけでは何の銘柄か分からないので、一覧で実際に読む 3 点を並べる。
+ * 銘柄コードだけでは何の銘柄か分からないので、一覧で実際に読む 3 点を並べる。
  */
 function symbolLabel(symbol) {
   return [symbol.symbolCode || '—', symbol.ticker || '—', symbol.name || '—'].join(' / ')
@@ -308,9 +468,9 @@ function symbolLabel(symbol) {
       @reload="store.reload()"
       @update:offset="goToOffset"
     >
+      <!-- 行のキーは DataTable の既定（id）に任せる。主キーは銘柄コードではない -->
       <DataTable
         flat
-        row-key="symbolCode"
         data-testid="symbols-table"
         :columns="columns"
         :rows="items"
@@ -353,6 +513,28 @@ function symbolLabel(symbol) {
         <template #cell-note="{ value }">
           <span class="symbol-list__note">{{ value || '—' }}</span>
         </template>
+
+        <!-- 編集を左、削除を右端に置く（破壊的な操作を最後にする既存の並び） -->
+        <template #cell-actions="{ row }">
+          <div class="symbol-list__row-actions">
+            <BaseButton
+              variant="secondary"
+              :data-testid="`symbols-edit-${row.id}`"
+              :disabled="updating"
+              @click="openEdit(row)"
+            >
+              編集
+            </BaseButton>
+            <BaseButton
+              variant="danger"
+              :data-testid="`symbols-delete-${row.id}`"
+              :disabled="deleting"
+              @click="openDelete(row)"
+            >
+              削除
+            </BaseButton>
+          </div>
+        </template>
       </DataTable>
     </MasterListCard>
 
@@ -368,6 +550,36 @@ function symbolLabel(symbol) {
     >
       <SymbolFormFields v-model="addForm" testid-prefix="symbols-add" :errors="addErrors" />
     </MasterFormDialog>
+
+    <MasterFormDialog
+      :open="Boolean(editTarget)"
+      title="銘柄 編集"
+      testid-prefix="symbols"
+      action="edit"
+      submit-label="更新"
+      :pending="updating"
+      :error="updateError"
+      :validation-errors="updateValidationErrors"
+      @close="closeEdit"
+      @submit="submitEdit"
+    >
+      <SymbolFormFields
+        v-model="editForm"
+        testid-prefix="symbols-edit"
+        symbol-code-locked
+        :errors="editErrors"
+      />
+    </MasterFormDialog>
+
+    <ConfirmDeleteDialog
+      :open="Boolean(deleteTarget)"
+      testid-prefix="symbols"
+      :label="deleteTarget ? symbolLabel(deleteTarget) : ''"
+      :pending="deleting"
+      :error="deleteError"
+      @close="closeDelete"
+      @confirm="submitDelete"
+    />
   </section>
 </template>
 
@@ -399,6 +611,11 @@ function symbolLabel(symbol) {
 .symbol-list__note {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
+}
+
+.symbol-list__row-actions {
+  display: flex;
+  gap: var(--space-2);
 }
 
 .symbol-list__flag {

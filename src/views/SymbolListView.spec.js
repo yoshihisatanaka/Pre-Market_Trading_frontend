@@ -219,6 +219,30 @@ const respondToUpdate = (body, status = 200, wait = 0) =>
     }),
   )
 
+/* ここから削除確認ダイアログ用のヘルパ（事前検証が無いので差し替えは DELETE の 1 本だけ） */
+
+const deleteSubmit = (wrapper) => wrapper.find('[data-testid="symbols-delete-submit"]')
+const deleteCancel = (wrapper) => wrapper.find('[data-testid="symbols-delete-cancel"]')
+
+/** 行の「削除」を押す（ボタンの testid は行の id を含む） */
+const openDeleteModal = async (wrapper, id = firstPage[0].id) => {
+  await wrapper.find(`[data-testid="symbols-delete-${id}"]`).trigger('click')
+}
+
+const submitDelete = async (wrapper) => {
+  await deleteSubmit(wrapper).trigger('click')
+  await settle()
+}
+
+/** 削除の応答を差し替える（wait を渡すと過渡状態を観測できる） */
+const respondToDelete = (body, status = 200, wait = 0) =>
+  server.use(
+    http.delete('*/api/masters/symbols/:id', async () => {
+      if (wait) await delay(wait)
+      return HttpResponse.json(body, { status })
+    }),
+  )
+
 /** 事前検証を不合格にする差し替え（編集からは重複も存在エラーも起こせないため） */
 const failValidate = (message) =>
   server.use(
@@ -428,17 +452,17 @@ describe('SymbolListView', () => {
     }
   })
 
-  it('[STV-17] ヘッダに追加の導線があり、行には編集だけがある', async () => {
+  it('[STV-17] ヘッダに追加の導線があり、行には編集と削除がこの順で並ぶ', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     expect(exists(wrapper, 'symbols-reload')).toBe(true)
     expect(exists(wrapper, 'symbols-add')).toBe(true)
 
-    // 行の操作は編集 1 つだけ（削除はまだ配線していないので見せない）
+    // 破壊的な操作を最後にする既存の並び（編集が左・削除が右端）
     const buttons = rows(wrapper)[0].findAll('button')
-    expect(buttons).toHaveLength(1)
-    expect(buttons[0].text()).toBe('編集')
+    expect(buttons).toHaveLength(2)
+    expect(buttons.map((button) => button.text())).toEqual(['編集', '削除'])
   })
 
   it('[STV-18] 新規追加を押すと 10 項目の空のフォームが開く', async () => {
@@ -860,5 +884,82 @@ describe('SymbolListView', () => {
     expect(exists(wrapper, 'symbols-edit-error')).toBe(false)
     // 入力もその行の現在値に戻る（前回の書きかけを持ち込まない）
     expect(editInput(wrapper, 'note').element.value).toBe(firstPage[0].note)
+  })
+
+  it('[STV-36] 削除確認は消す対象と取り消せない旨を出す', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openDeleteModal(wrapper)
+
+    // 銘柄コードだけでは何の銘柄か分からないので、一覧で実際に読む 3 点を並べる
+    const dialog = wrapper.find('[role="dialog"]')
+    expect(dialog.text()).toContain(firstPage[0].symbolCode)
+    expect(dialog.text()).toContain(firstPage[0].ticker)
+    expect(dialog.text()).toContain(firstPage[0].name)
+    expect(dialog.text()).toContain('この操作は元に戻せません。')
+  })
+
+  it('[STV-37] 削除が成功するとダイアログが閉じ、件数が 1 減る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+
+    await submitDelete(wrapper)
+
+    expect(exists(wrapper, 'symbols-delete-submit')).toBe(false)
+    const notice = wrapper.find('[data-testid="symbols-notice"]').text()
+    expect(notice).toContain(firstPage[0].symbolCode)
+    expect(notice).toContain(firstPage[0].ticker)
+    expect(notice).toContain(firstPage[0].name)
+    expect(countText(wrapper)).toContain(String(TOTAL - 1))
+    // 論理削除だが、一覧は取消済みを返さないので消えたように見える
+    expect(exists(wrapper, `symbols-edit-${firstPage[0].id}`)).toBe(false)
+  })
+
+  it('[STV-38] 削除に失敗するとダイアログは開いたまま理由を出す', async () => {
+    respondToDelete({ detail: ERROR_MESSAGE }, 500)
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+
+    await submitDelete(wrapper)
+
+    expect(exists(wrapper, 'symbols-delete-submit')).toBe(true)
+    expect(wrapper.find('[data-testid="symbols-delete-error"]').text()).toContain(ERROR_MESSAGE)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+    expect(exists(wrapper, 'symbols-notice')).toBe(false)
+  })
+
+  it('[STV-39] 削除中は削除もキャンセルもできない', async () => {
+    respondToDelete({ detail: ERROR_MESSAGE }, 500, 20)
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+
+    const pending = deleteSubmit(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(deleteSubmit(wrapper).text()).toContain('削除中…')
+    expect(deleteSubmit(wrapper).attributes('disabled')).toBeDefined()
+    // 結果の行き先が無くなるので、終わるまで閉じさせない
+    expect(deleteCancel(wrapper).attributes('disabled')).toBeDefined()
+
+    await pending
+    await settle()
+  })
+
+  it('[STV-40] 削除確認を開き直すと前回の失敗理由が残らない', async () => {
+    respondToDelete({ detail: ERROR_MESSAGE }, 500)
+    const { wrapper } = await mountView()
+    await settle()
+    await openDeleteModal(wrapper)
+    await submitDelete(wrapper)
+    expect(exists(wrapper, 'symbols-delete-error')).toBe(true)
+
+    await deleteCancel(wrapper).trigger('click')
+    await openDeleteModal(wrapper)
+
+    expect(exists(wrapper, 'symbols-delete-error')).toBe(false)
   })
 })

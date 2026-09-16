@@ -134,6 +134,15 @@ function failUpdate() {
   )
 }
 
+/** 削除を 500 にする差し替え（削除は事前検証を通さないので、差し替えはこの 1 本だけ） */
+function failDelete() {
+  server.use(
+    http.delete('*/api/masters/symbols/:id', () =>
+      HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+    ),
+  )
+}
+
 /** 事前検証が「合格だが警告あり」を返す差し替え */
 function warnOnValidate(message) {
   server.use(
@@ -273,7 +282,7 @@ describe('stores/symbols', () => {
     expect(codes(store)).toEqual(PAGED.codes.slice(PAGE_SIZE))
   })
 
-  it('[STS-10] 登録と更新を公開し、削除はまだ公開しない', () => {
+  it('[STS-10] 登録・更新・削除の 3 系統をすべて公開する', () => {
     const store = useSymbolsStore()
 
     expect(typeof store.create).toBe('function')
@@ -289,10 +298,11 @@ describe('stores/symbols', () => {
     // 登録側と更新側で入れ物が分かれている（片方の理由がもう片方のモーダルに漏れない）
     expect(store.updateValidationErrors).toEqual([])
 
-    // 配線していない操作は名前ごと出さない（呼べば「関数が無い」で落ちる）
-    expect(store.remove).toBeUndefined()
-    expect(store.deleting).toBeUndefined()
-    expect(store.deleteError).toBeUndefined()
+    expect(typeof store.remove).toBe('function')
+    expect(typeof store.clearDeleteError).toBe('function')
+    expect(store.deleting).toBe(false)
+    // 削除は事前検証を通さないので、理由の入れ物は deleteError の 1 つだけ
+    expect(store.deleteError).toBeNull()
   })
 
   it('[STS-11] 古い応答が新しい結果を上書きしない', async () => {
@@ -485,5 +495,42 @@ describe('stores/symbols', () => {
     expect(store.regulation).toBe(REGULATION)
     expect(store.total).toBe(regulationCodes.length - 1)
     expect(store.items.every((item) => item.regulation === REGULATION)).toBe(true)
+  })
+
+  it('[STS-24] 削除すると件数が 1 減り、その行が一覧から消える', async () => {
+    const store = useSymbolsStore()
+    await store.load()
+    const target = store.items[0]
+
+    const deleted = await store.remove(target.id)
+
+    expect(deleted).toBe(true)
+    // 実 API は論理削除だが、一覧は取消済みを返さないので消えたように見える
+    expect(store.total).toBe(TOTAL - 1)
+    expect(codesOf(store.items)).not.toContain(target.symbolCode)
+  })
+
+  it('[STS-25] 削除が失敗したときは deleteError に入り、件数が変わらない', async () => {
+    failDelete()
+    const store = useSymbolsStore()
+    await store.load()
+
+    const deleted = await store.remove(store.items[0].id)
+
+    expect(deleted).toBe(false)
+    expect(store.deleteError.message).toBe(ERROR_MESSAGE)
+    expect(store.total).toBe(TOTAL)
+  })
+
+  it('[STS-26] clearDeleteError で前回の失敗理由が消える', async () => {
+    failDelete()
+    const store = useSymbolsStore()
+    await store.load()
+    await store.remove(store.items[0].id)
+    expect(store.deleteError).not.toBeNull()
+
+    store.clearDeleteError()
+
+    expect(store.deleteError).toBeNull()
   })
 })

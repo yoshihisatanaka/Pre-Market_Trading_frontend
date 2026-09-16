@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { createSymbol, fetchSymbols, updateSymbol, validateSymbol } from './symbols'
+import { createSymbol, deleteSymbol, fetchSymbols, updateSymbol, validateSymbol } from './symbols'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -67,6 +67,23 @@ function recordPut(body, status = 200) {
     http.put('*/api/masters/symbols/:id', async ({ request }) => {
       const url = new URL(request.url)
       lastRequest = { url, params: url.searchParams, body: await request.json() }
+      return HttpResponse.json(body, { status })
+    }),
+  )
+}
+
+/**
+ * DELETE を記録して、指定の本文を返すハンドラを立てる。
+ * 本文は text で読む（DELETE は本文を取らないので、JSON として読むと空文字で例外になる）。
+ *
+ * @param {unknown} body 返す本文
+ * @param {number} [status]
+ */
+function recordDelete(body, status = 200) {
+  server.use(
+    http.delete('*/api/masters/symbols/:id', async ({ request }) => {
+      const url = new URL(request.url)
+      lastRequest = { url, params: url.searchParams, body: await request.text() }
       return HttpResponse.json(body, { status })
     }),
   )
@@ -544,5 +561,26 @@ describe('api/symbols', () => {
     expect(Object.hasOwn(lastRequest.body, 'id')).toBe(false)
     expect(Object.hasOwn(lastRequest.body, 'ID')).toBe(false)
     expect(lastRequest.body).toMatchObject({ 銘柄コード: 'S900' })
+  })
+
+  it('[STA-30] 削除は id をパスに載せ、本文を送らず、削除した id を返す', async () => {
+    recordDelete({ success: true, stock: symbolItem, message: '銘柄を削除しました' })
+
+    // 渡すのは行の id。銘柄コード（'S001'）ではない
+    const deleted = await deleteSymbol('7')
+
+    expect(lastRequest.url.pathname).toBe('/api/masters/symbols/7')
+    // DELETE は本文を取らない。合札（更新日時）も送らないので楽観的ロックは働かない
+    expect(lastRequest.body).toBe('')
+    expect(lastRequest.params.has('更新日時')).toBe(false)
+    // 応答の 1 件は使わない。useAsync が成否を判定できるよう id を返す
+    expect(deleted).toBe('7')
+  })
+
+  it('[STA-31] 削除の 404 は例外になり、サーバの detail が message に入る', async () => {
+    const detail = '指定された銘柄が存在しないか、既に削除されています'
+    recordDelete({ detail }, 404)
+
+    await expect(deleteSymbol('7')).rejects.toMatchObject({ message: detail, status: 404 })
   })
 })

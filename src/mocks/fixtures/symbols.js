@@ -5,6 +5,11 @@
  * （プロパティ名は日本語、Pre区分・取消区分・ユーザー操作フラグは 0/1 の integer）。
  * ブラウザ(MSW worker)・単体テスト・E2E で共用する。
  *
+ * **`ID` だけは仕様より先行している。** 取り込み時点の openapi.json は SymbolItem に ID を
+ * 持たず `銘柄コード (主キー)` と書いているが、DB 全テーブルの主キーを id に統一する方針に
+ * 合わせて先に置いてある（CAItem の ID と同じ integer）。実 API が返すようになるまでは
+ * このフィクスチャだけが持つ値で、食い違いはバックエンドへの確認事項。
+ *
  * 規制情報名 / 注文ルート名 / VWAP対象区分名 は DB の列ではなく、バックエンドが応答を
  * 組み立てるときにコードマスタから付ける表示項目。生の応答には載るのでここでも持つ。
  *
@@ -235,6 +240,12 @@ function toSymbolItem({
   const hasQuote = !WITHOUT_QUOTE.has(symbolCode)
 
   return {
+    /*
+     * 主キー。実 API の AUTO_INCREMENT を模して serial（1..57）をそのまま使う。
+     * 銘柄コードと同順に並ぶので、一覧の並び（銘柄コードの昇順）とも矛盾しない。
+     */
+    ID: serial,
+    // 主キーではなくなったが、行を人が識別する一意な業務コードとして残る
     銘柄コード: symbolCode,
     Ticker: ticker,
     銘柄名: name,

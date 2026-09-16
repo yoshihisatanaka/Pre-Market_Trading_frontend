@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { createSymbol, fetchSymbols, validateSymbol } from '@/api/symbols'
+import { createSymbol, fetchSymbols, updateSymbol, validateSymbol } from '@/api/symbols'
 import { useCrudList } from '@/composables/useCrudList'
 
 /**
@@ -17,12 +17,13 @@ export const SYMBOLS_PAGE_SIZE = 50
  * 取得・競合防止の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
  * 1 件の形は src/api/symbols.js の JSDoc を参照。
  *
- * **いまは一覧と新規追加まで。** updateItem / deleteItem を渡していないので、
- * useCrudList は更新・削除の名前を公開しない（store.update() などは存在しない）。
- * 編集・削除は別途入れる。
+ * **いまは一覧・新規追加・編集まで。** deleteItem を渡していないので、useCrudList は
+ * 削除の名前を公開しない（store.remove() は存在しない）。削除は別途入れる。
  *
- * 登録は「サーバの事前検証（validateItem）→ 登録（createItem）」の 2 段。
- * 不合格は validationErrors、通信・サーバ障害は createError と、入れ物が分かれる。
+ * 登録も編集も「サーバの事前検証（validateItem）→ 登録・更新」の 2 段。
+ * 不合格は validationErrors / updateValidationErrors、通信・サーバ障害は
+ * createError / updateError と、入れ物が 4 つに分かれる。楽観的ロックの競合（409）は
+ * 事前検証の不合格ではなく updateError に入る。
  *
  * 並べ替えはサーバの責務で、ここでは触らない。
  */
@@ -33,5 +34,6 @@ export const useSymbolsStore = defineStore('symbols', () =>
     fetchPage: fetchSymbols,
     createItem: createSymbol,
     validateItem: validateSymbol,
+    updateItem: updateSymbol,
   }),
 )

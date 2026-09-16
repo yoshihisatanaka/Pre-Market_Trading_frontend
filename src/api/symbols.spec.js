@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { createSymbol, fetchSymbols, validateSymbol } from './symbols'
+import { createSymbol, fetchSymbols, updateSymbol, validateSymbol } from './symbols'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -55,11 +55,33 @@ function recordPost(path, body, status = 200) {
   )
 }
 
+/**
+ * PUT の本文まで記録して、指定の本文を返すハンドラを立てる。
+ * パスは `:id` で受けて、実際に叩かれたパスを url から読む。
+ *
+ * @param {unknown} body 返す本文
+ * @param {number} [status]
+ */
+function recordPut(body, status = 200) {
+  server.use(
+    http.put('*/api/masters/symbols/:id', async ({ request }) => {
+      const url = new URL(request.url)
+      lastRequest = { url, params: url.searchParams, body: await request.json() }
+      return HttpResponse.json(body, { status })
+    }),
+  )
+}
+
 /** 必須 3 項目だけを埋めた入力（登録・事前検証のテストの土台） */
 const minimalInput = { symbolCode: 'S900', ticker: 'ZZZZ', name: 'テスト銘柄' }
 
+/** 編集からの呼び出しの土台（id と合札はフォームの外から来る） */
+const editInput = { ...minimalInput, id: '1', updatedAt: '2026-08-20T09:30:00' }
+
 /** SymbolItem 1 件（openapi.json の項目をひととおり埋めたもの） */
 const symbolItem = {
+  // 主キー。SymbolItem に ID が載るのはバックエンド側の id 統一後（いまは先行して持つ）
+  ID: 1,
   銘柄コード: 'S001',
   Ticker: 'AAPL',
   銘柄名: 'アップル',
@@ -161,6 +183,8 @@ describe('api/symbols', () => {
     expect(total).toBe(1)
     expect(items).toEqual([
       {
+        // 実 API の ID は integer。画面と URL では文字列として扱う
+        id: '1',
         symbolCode: 'S001',
         ticker: 'AAPL',
         name: 'アップル',
@@ -376,15 +400,20 @@ describe('api/symbols', () => {
     })
   })
 
-  it('[STA-20] 編集からの事前検証は is_update=true をクエリに載せる', async () => {
+  it('[STA-20] 編集からの事前検証は id の有無で is_update=true を載せる', async () => {
     recordPost('*/api/masters/symbols/validate', { valid: true, errors: [] })
 
-    await validateSymbol({ ...minimalInput, isUpdate: true })
+    await validateSymbol({ ...minimalInput, id: '42' })
 
     expect(lastRequest.params.get('is_update')).toBe('true')
-    // isUpdate は呼び出し側の都合。本文（SymbolRequest）には出さない
-    expect(lastRequest.body).not.toHaveProperty('isUpdate')
-    expect(lastRequest.body).not.toHaveProperty('is_update')
+    /*
+     * 対象は本文の 銘柄コード から引かれる前提。CA の ca_id にあたるクエリは
+     * /masters/symbols/validate の宣言（openapi.json）に存在しないので送らない。
+     */
+    expect(lastRequest.params.has('symbol_id')).toBe(false)
+    // id は呼び出し側の都合。本文（SymbolRequest）には出さない
+    expect(lastRequest.body).not.toHaveProperty('id')
+    expect(lastRequest.body).not.toHaveProperty('ID')
   })
 
   it('[STA-21] 事前検証の不合格は例外にせず valid / errors を返す', async () => {
@@ -423,5 +452,97 @@ describe('api/symbols', () => {
     await expect(createSymbol(minimalInput)).rejects.toMatchObject({
       message: '銘柄コード(S001)は既に登録されています',
     })
+  })
+
+  it('[STA-24] ID を持たない応答では id が空文字になる', async () => {
+    const { ID: _id, ...withoutId } = symbolItem
+    record(listBody([withoutId]))
+
+    const { items } = await fetchSymbols()
+
+    /*
+     * 取り込み時点の openapi.json は SymbolItem に ID を持たない。
+     * **銘柄コードへフォールバックしない**ことをここで固定する。値で取り繕うと、
+     * 実 API が ID を返し始めるまで行のキーが壊れていることに気づけない。
+     */
+    expect(items[0].id).toBe('')
+    expect(items[0].symbolCode).toBe('S001')
+  })
+
+  it('[STA-25] 更新は id をパスに入れ、合札込みの日本語キーの本文を送る', async () => {
+    recordPut({ success: true, stock: symbolItem, message: '銘柄を更新しました' })
+
+    const updated = await updateSymbol({
+      ...editInput,
+      nameEn: 'Test Inc.',
+      regulation: '0',
+      orderRoute: '1',
+      vwapTarget: '1',
+      previousClose: 12.5,
+      averageVolume: 1000,
+      note: 'メモ',
+    })
+
+    // 対象を指すのはパスだけ（本文ではない）
+    expect(lastRequest.url.pathname).toBe('/api/masters/symbols/1')
+    expect(lastRequest.body).toEqual({
+      銘柄コード: 'S900',
+      Ticker: 'ZZZZ',
+      銘柄名: 'テスト銘柄',
+      銘柄名_英字: 'Test Inc.',
+      規制情報: '0',
+      注文ルート: '1',
+      VWAP対象区分: '1',
+      備考: 'メモ',
+      前日終値: 12.5,
+      平均出来高: 1000,
+      // 合札は整形せず、取得した文字列をそのまま送り返す
+      更新日時: '2026-08-20T09:30:00',
+    })
+
+    expect(updated).toMatchObject({ id: '1', symbolCode: symbolItem.銘柄コード })
+  })
+
+  it('[STA-26] 更新の本文に ID と画面が持たない 3 項目を載せない', async () => {
+    recordPut({ success: true, stock: symbolItem, message: '銘柄を更新しました' })
+
+    await updateSymbol(editInput)
+
+    // どの行かはパスが決める。本文に識別子を二重に置くと、食い違ったとき仕様が無い
+    expect(Object.hasOwn(lastRequest.body, 'ID')).toBe(false)
+    expect(Object.hasOwn(lastRequest.body, 'id')).toBe(false)
+    // 画面のフォームが持たない 3 項目（保持はバックエンドの責務）
+    expect(Object.hasOwn(lastRequest.body, '市場名')).toBe(false)
+    expect(Object.hasOwn(lastRequest.body, '前日出来高')).toBe(false)
+    expect(Object.hasOwn(lastRequest.body, 'Pre区分')).toBe(false)
+  })
+
+  it('[STA-27] 合札を持たない行の更新は 更新日時 のキーごと送らない', async () => {
+    recordPut({ success: true, stock: symbolItem, message: '銘柄を更新しました' })
+
+    await updateSymbol({ ...minimalInput, id: '1', updatedAt: '' })
+
+    // 実 API は未指定を「照合しない」と解釈する。空文字を送ると照合されて弾かれうる
+    expect(Object.hasOwn(lastRequest.body, '更新日時')).toBe(false)
+  })
+
+  it('[STA-28] 更新の 409 は例外になり、サーバの detail が message に入る', async () => {
+    const detail = '他のユーザーによって銘柄データが更新されています。最新データを再取得してください。'
+    recordPut({ detail }, 409)
+
+    // 競合も事前検証の不合格ではなく通信・サーバ障害として扱う
+    await expect(updateSymbol(editInput)).rejects.toMatchObject({ message: detail, status: 409 })
+  })
+
+  it('[STA-29] 編集の payload をそのまま渡しても本文に id と 更新日時 は出ない', async () => {
+    recordPost('*/api/masters/symbols/validate', { valid: true, errors: [] })
+
+    await validateSymbol(editInput)
+
+    // 事前検証は楽観的ロックの照合をしない。id は対象を決めるための呼び出し側の都合
+    expect(Object.hasOwn(lastRequest.body, '更新日時')).toBe(false)
+    expect(Object.hasOwn(lastRequest.body, 'id')).toBe(false)
+    expect(Object.hasOwn(lastRequest.body, 'ID')).toBe(false)
+    expect(lastRequest.body).toMatchObject({ 銘柄コード: 'S900' })
   })
 })

@@ -125,6 +125,15 @@ function failCreate() {
   )
 }
 
+/** 更新を 500 にする差し替え（事前検証は既定ハンドラのまま通す） */
+function failUpdate() {
+  server.use(
+    http.put('*/api/masters/symbols/:id', () =>
+      HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+    ),
+  )
+}
+
 /** 事前検証が「合格だが警告あり」を返す差し替え */
 function warnOnValidate(message) {
   server.use(
@@ -140,6 +149,20 @@ const EXISTING_CODE = sorted[0].銘柄コード
 const duplicateMessage = (code) => `銘柄コード(${code})は既に登録されています`
 
 const codes = (store) => store.items.map((item) => item.symbolCode)
+
+/*
+ * 事前検証を落とすための値。コードマスタに無い注文ルートは既定ハンドラが
+ * `注文ルート(9)はコードマスタに存在しません` で弾く。画面のセレクトは有効なコードしか
+ * 出さないのでこの経路は通らないが、ストアから直に渡せば事前検証の不合格を再現できる。
+ */
+const UNKNOWN_ORDER_ROUTE = '9'
+const unknownRouteMessage = `注文ルート(${UNKNOWN_ORDER_ROUTE})はコードマスタに存在しません`
+
+/*
+ * 合札を持つ行（ユーザー操作フラグ=1）。モックは「どちらかが null なら照合しない」ので、
+ * 印の付いていない行に古い合札を送っても 409 にならない。
+ */
+const withTimestamp = (store) => store.items.find((item) => item.updatedAt)
 
 describe('stores/symbols', () => {
   beforeEach(() => {
@@ -250,7 +273,7 @@ describe('stores/symbols', () => {
     expect(codes(store)).toEqual(PAGED.codes.slice(PAGE_SIZE))
   })
 
-  it('[STS-10] 登録だけを公開し、更新・削除はまだ公開しない', () => {
+  it('[STS-10] 登録と更新を公開し、削除はまだ公開しない', () => {
     const store = useSymbolsStore()
 
     expect(typeof store.create).toBe('function')
@@ -259,11 +282,17 @@ describe('stores/symbols', () => {
     expect(store.createError).toBeNull()
     expect(store.validationErrors).toEqual([])
 
+    expect(typeof store.update).toBe('function')
+    expect(typeof store.clearUpdateError).toBe('function')
+    expect(store.updating).toBe(false)
+    expect(store.updateError).toBeNull()
+    // 登録側と更新側で入れ物が分かれている（片方の理由がもう片方のモーダルに漏れない）
+    expect(store.updateValidationErrors).toEqual([])
+
     // 配線していない操作は名前ごと出さない（呼べば「関数が無い」で落ちる）
-    expect(store.update).toBeUndefined()
     expect(store.remove).toBeUndefined()
-    expect(store.updating).toBeUndefined()
     expect(store.deleting).toBeUndefined()
+    expect(store.deleteError).toBeUndefined()
   })
 
   it('[STS-11] 古い応答が新しい結果を上書きしない', async () => {
@@ -352,5 +381,109 @@ describe('stores/symbols', () => {
     expect(store.total).toBe(TOTAL + 1)
     // api 層が warnings を受け取らないので、確認待ちの経路には入らない
     expect(store.validationWarnings).toEqual([])
+  })
+
+  it('[STS-18] 更新に成功すると該当行だけが新しい内容になる', async () => {
+    const store = useSymbolsStore()
+    await store.load()
+    const target = store.items[0]
+
+    const updated = await store.update({ ...target, note: '直した備考' })
+
+    expect(updated.note).toBe('直した備考')
+    // 更新は行を増やさない。並びも銘柄コード順のままなので同じ位置に居る
+    expect(store.total).toBe(TOTAL)
+    expect(codes(store)).toEqual(allCodes.slice(0, PAGE_SIZE))
+    expect(store.items[0].note).toBe('直した備考')
+    expect(store.updateError).toBeNull()
+    expect(store.updateValidationErrors).toEqual([])
+  })
+
+  it('[STS-19] 事前検証で弾かれたときは updateValidationErrors に入り、更新しない', async () => {
+    const store = useSymbolsStore()
+    await store.load()
+    const target = store.items[0]
+
+    const updated = await store.update({ ...target, orderRoute: UNKNOWN_ORDER_ROUTE })
+
+    expect(updated).toBeNull()
+    expect(store.updateValidationErrors).toEqual([unknownRouteMessage])
+    // 通信は成功しているので、サーバ障害の枠には入れない
+    expect(store.updateError).toBeNull()
+    expect(store.items[0].orderRoute).toBe(target.orderRoute)
+  })
+
+  it('[STS-20] 古い合札を送ると updateError に競合の理由が入る', async () => {
+    const store = useSymbolsStore()
+    await store.load()
+    const target = withTimestamp(store)
+    const before = codes(store)
+
+    const updated = await store.update({
+      ...target,
+      note: '直した備考',
+      updatedAt: '2020-01-01T00:00:00',
+    })
+
+    expect(updated).toBeNull()
+    expect(store.updateError.status).toBe(409)
+    // 競合は事前検証の不合格ではない。枠が混ざっていないこと
+    expect(store.updateValidationErrors).toEqual([])
+    // 一覧は自動で読み直さない（読み直しても画面が握る合札は古いままで再度 409 になる）
+    expect(codes(store)).toEqual(before)
+  })
+
+  it('[STS-21] 更新が失敗したときは updateError に入る', async () => {
+    failUpdate()
+    const store = useSymbolsStore()
+    await store.load()
+
+    const updated = await store.update({ ...store.items[0], note: '直した備考' })
+
+    expect(updated).toBeNull()
+    expect(store.updateError.message).toBe(ERROR_MESSAGE)
+    // 事前検証は通っているので、こちらは空のまま
+    expect(store.updateValidationErrors).toEqual([])
+  })
+
+  it('[STS-22] clearUpdateError は更新側だけを消し、登録側を残す', async () => {
+    const store = useSymbolsStore()
+    await store.load()
+
+    /*
+     * create / update は呼ぶたびに自分の枠を空にするので、1 回の実行では片方しか埋まらない。
+     * 更新側の 2 枠は順に埋めて、最後に残るのが「事前検証の不合格」と「通信・サーバ障害」の
+     * 両方であるようにする。
+     */
+    await store.update({ ...store.items[0], orderRoute: UNKNOWN_ORDER_ROUTE })
+    expect(store.updateValidationErrors).toEqual([unknownRouteMessage])
+
+    failUpdate()
+    await store.update({ ...store.items[0], note: '直した備考' })
+    expect(store.updateError.message).toBe(ERROR_MESSAGE)
+
+    // 登録側にも理由を残しておく（消えてはいけないほう）
+    await store.create({ ...NEW_SYMBOL, symbolCode: EXISTING_CODE })
+    expect(store.validationErrors).toEqual([duplicateMessage(EXISTING_CODE)])
+
+    store.clearUpdateError()
+
+    expect(store.updateError).toBeNull()
+    expect(store.updateValidationErrors).toEqual([])
+    // 登録側は残る（枠を共用していたら、ここで消えてしまう）
+    expect(store.validationErrors).toEqual([duplicateMessage(EXISTING_CODE)])
+  })
+
+  it('[STS-23] 絞り込みの圏外へ変えても条件は落ちず、件数が 1 減る', async () => {
+    const store = useSymbolsStore()
+    await store.load({ regulation: REGULATION })
+    // フィクスチャに現れる規制情報のうち、いま絞り込んでいるものではないほう
+    const other = valuesByCount('規制情報').find((value) => value !== REGULATION)
+
+    await store.update({ ...store.items[0], regulation: other })
+
+    expect(store.regulation).toBe(REGULATION)
+    expect(store.total).toBe(regulationCodes.length - 1)
+    expect(store.items.every((item) => item.regulation === REGULATION)).toBe(true)
   })
 })

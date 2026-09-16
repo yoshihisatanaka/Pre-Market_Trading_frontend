@@ -324,7 +324,7 @@ headless なので**ブラウザ画面をリアルタイムには覗けない**�
 - **このリポジトリはフロントエンド専用。** バックエンドは別リポジトリ・別サーバ。`/api` は Vite dev サーバが
   `.env` の `VITE_PROXY_TARGET`（既定 `http://host.docker.internal:8000`）へプロキシする。
   取り決めは README の「バックエンドとの連携」
-- API 仕様は `docs/api/openapi.json` に取り込み済み（79 パス / 102 オペレーション / 129 スキーマ）。
+- API 仕様は `docs/api/openapi.json` に取り込み済み（93 パス / 122 オペレーション / 161 スキーマ。2026-09-16 時点）。
   原本は FastAPI が生成する **OpenAPI 3.1 の JSON** なので **YAML へ変換しない**（二度手間）。
   `/api-spec-sync` を実行すると、隣のバックエンドリポジトリ（`../Pre-Market_Trading`。**相対パスで参照する**。
   絶対パスは guard フックが弾く）の稼働中 `api` コンテナから取得し直し、lint・HTML 生成・仕様ギャップの点検まで通す。
@@ -333,9 +333,14 @@ headless なので**ブラウザ画面をリアルタイムには覗けない**�
 - **マスタ系のパスは 2026-09-15 の取り込みで `/masters/` 配下へ移った**（`/ca` → `/masters/ca` ほか）。
   あわせて `/masters/symbols` と `/customers` の**クエリ名が日本語から英語の snake_case になっている**。
   パスだけ直してクエリ名を残すと絞り込みが黙って効かなくなる（FastAPI は知らないクエリを無視する）
+- **クエリ名は 2026-09-16 の取り込みでさらに変わった。** `stock_code` → `symbol`、
+  `name_ja` / `name_en` → `symbol_name_ja` / `symbol_name_en` など。**パスが同じでもクエリ名だけ変わる**ので、
+  取り込みのたびに `src/api/` の送出名を突き合わせる。旧名は無視されるだけでエラーにならず、気づけない
+- **更新系は部分更新（`*UpdateRequest`）になった。** 本文に含めた項目だけが更新され、
+  明示的に `null` を送ったときだけクリアされる。いまの `src/api/` は全項目を明示して送るので挙動は同じ
 - `enum` は 21 種定義済みで、値の写しは `src/utils/apiEnums.js`（`openapi.json` と突き合わせるテスト付き）。
-  ただし `/batch/*`・`/mizuho/*`・`GET /orders/{order_id}`・`/codes`・`/branches` は
-  **レスポンスの中身が未定義のまま**（→ `.claude/skills/api-spec-sync/checklist.md`）。
+  ただし `/batch/*` 10 本・`/codes`・`/mizuho/*`・`GET /orders/{order_id}`・`/branches` / `/handlers`・
+  `/customers`（注文画面用）は **レスポンスの中身が未定義のまま**（→ `.claude/skills/api-spec-sync/checklist.md`）。
   埋まるまでは `src/mocks/` の仮フィクスチャで進める
 - Manus の画面モックは受領済（素の CSS。Tailwind ではないので導入しない）。
   共通レイアウト部分だけ取り込み済み（原本 `docs/mock/layout/masters-users.html`、`tokens.css` は

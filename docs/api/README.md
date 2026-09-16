@@ -169,8 +169,22 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 
 ## 現状
 
-取り込み済み（79 パス / 102 オペレーション / 129 スキーマ）。`enum` は 21 種。
-`CustomerItem` / `SymbolItem` / `OrderItemResponse` のように主要レスポンスの型が付いた一方、
-`/batch/*`・`/mizuho/*`・`GET /orders/{order_id}`・`/codes`・`/branches` などは
-**中身が未定義のまま**。当面 [src/mocks/](../../src/mocks/) の仮フィクスチャで開発を進める。
+取り込み済み（**93 パス / 122 オペレーション / 161 スキーマ**。2026-09-16 時点）。`enum` は 21 種で増減なし。
+前回（79 / 102 / 129）からの増分は **操作ログ横断照会（`/operations/activity-logs`）** と
+**手数料パターン / 手数料優遇のマスタ（`/masters/fee-patterns` / `/masters/fee-preferences`）**。
+
+この取り込みで**マスタ系のクエリ名がさらに英語の snake_case へ整理された**。
+`stock_code` → `symbol`、`name_ja` / `name_en` → `symbol_name_ja` / `symbol_name_en` など。
+**パスが同じでもクエリ名だけ変わる**ことがあり、旧名のままだと FastAPI に無視されて
+絞り込みが黙って効かなくなる。取り込みのたびにここを確かめる。
+
+更新系の本文が **部分更新（`CAUpdateRequest` などの `*UpdateRequest`）** に変わった。
+本文に含めた項目だけが更新され、明示的に `null` を送ったときだけクリアされる。
+いまの `src/api/` は全項目を明示して送るので挙動は変わらないが、
+「送らない＝変えない」が使えるようになった。
+
+`CustomerItem` / `SymbolItem` / `OrderItemResponse` のように主要レスポンスの型が付く一方、
+`/batch/*` 10 本・`/codes`・`/mizuho/*`・`GET /orders/{order_id}`・`/branches` / `/handlers`・
+`/customers`（注文画面用）は **中身が未定義のまま**。当面 [src/mocks/](../../src/mocks/) の
+仮フィクスチャで開発を進める。
 詳細は [checklist.md](../../.claude/skills/api-spec-sync/checklist.md) の実測欄を参照。

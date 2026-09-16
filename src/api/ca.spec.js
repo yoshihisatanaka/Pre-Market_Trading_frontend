@@ -72,7 +72,10 @@ function recordPut(path, body, status = 200) {
   )
 }
 
-/** CAItem 1 件（openapi.json の項目をひととおり埋めたもの） */
+/**
+ * CAItem 1 件（openapi.json の項目をひととおり埋めたもの）。
+ * `ステータス` だけは openapi に無い仮の項目（src/api/ca.js のファイル冒頭コメント参照）。
+ */
 const caItem = {
   ID: 1,
   銘柄コード: 'A0030',
@@ -86,6 +89,7 @@ const caItem = {
   分子: 2,
   比率: '1:2',
   備考: '1:2 株式分割',
+  ステータス: '2',
   取消区分: 0,
   ユーザー操作フラグ: 0,
   作成日時: '2026-08-10T10:00:00',
@@ -166,6 +170,7 @@ describe('api/ca', () => {
         numerator: 2,
         ratio: '1:2',
         note: '1:2 株式分割',
+        status: '2',
         userModified: false,
         // 更新日時 が null の行。undefined ではなく空文字に寄せる
         updatedAt: '',
@@ -229,6 +234,7 @@ describe('api/ca', () => {
       denominator: 1,
       numerator: 2,
       note: 'メモ',
+      status: '2',
     })
 
     expect(lastRequest.url.pathname).toBe('/api/masters/ca')
@@ -242,6 +248,7 @@ describe('api/ca', () => {
       分母: 1,
       分子: 2,
       備考: 'メモ',
+      ステータス: '2',
     })
     // Ticker は送らない（実 API が銘柄マスタから補完する）
     expect(lastRequest.body).not.toHaveProperty('Ticker')
@@ -267,8 +274,17 @@ describe('api/ca', () => {
       分母: null,
       分子: null,
       備考: null,
+      ステータス: null,
     })
-    for (const key of ['権利付最終日', '効力発生日', '支払日', '分母', '分子', '備考']) {
+    for (const key of [
+      '権利付最終日',
+      '効力発生日',
+      '支払日',
+      '分母',
+      '分子',
+      '備考',
+      'ステータス',
+    ]) {
       expect(Object.hasOwn(lastRequest.body, key)).toBe(true)
     }
   })
@@ -359,6 +375,7 @@ describe('api/ca', () => {
       denominator: 1,
       numerator: 2,
       note: '1:2 株式分割',
+      status: '3',
     })
 
     expect(lastRequest.url.pathname).toBe('/api/masters/ca/7')
@@ -372,6 +389,7 @@ describe('api/ca', () => {
       分母: 1,
       分子: 2,
       備考: '1:2 株式分割',
+      ステータス: '3',
     })
     // 応答は CAResponse。1 件は ca というキーに入る
     expect(updated.id).toBe(String(caItem.ID))
@@ -446,5 +464,53 @@ describe('api/ca', () => {
     )
 
     await expect(deleteCorporateAction('999')).rejects.toMatchObject({ status: 404, message: detail })
+  })
+
+  it('[CAA-26] ステータスの絞り込みは status という名前で送る', async () => {
+    record(listBody([]))
+
+    await fetchCorporateActions({ status: '2' })
+
+    // 実 API にはまだ無いクエリ（モックだけが解釈する）。名前と値だけをここで固定する
+    expect(lastRequest.params.get('status')).toBe('2')
+  })
+
+  it('[CAA-27] 空文字のステータスはクエリに載せない', async () => {
+    record(listBody([]))
+
+    await fetchCorporateActions({ status: '' })
+
+    expect(lastRequest.params.has('status')).toBe(false)
+  })
+
+  it('[CAA-28] ステータスを持つ CAItem はコード値がそのまま入る', async () => {
+    record(listBody([{ ...caItem, ステータス: '3' }]))
+
+    const { items } = await fetchCorporateActions()
+
+    // 表示名は付いてこない（画面がコードマスタから引く）
+    expect(items[0].status).toBe('3')
+  })
+
+  it('[CAA-29] ステータスを持たない CAItem では空文字になる', async () => {
+    // 実 API 相当（CAItem にこの項目は無い）。項目ごと欠けた応答を作る
+    const withoutStatus = { ...caItem }
+    delete withoutStatus.ステータス
+    record(listBody([withoutStatus]))
+
+    const { items } = await fetchCorporateActions()
+
+    // 他の空値と同じ扱い（画面は '—' を出す）
+    expect(items[0].status).toBe('')
+  })
+
+  it('[CAA-30] 未選択のステータスは null で送る', async () => {
+    recordPost('*/api/masters/ca', { success: true, ca: caItem, message: 'ok' }, 201)
+
+    await createCorporateAction({ stockCode: 'A0001', caType: '120', status: '' })
+
+    // 備考と同じく、キーごと省かず null で「未設定」を明示する
+    expect(lastRequest.body.ステータス).toBeNull()
+    expect(Object.hasOwn(lastRequest.body, 'ステータス')).toBe(true)
   })
 })

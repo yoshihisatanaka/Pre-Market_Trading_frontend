@@ -43,7 +43,7 @@ export const CA_PAGE_SIZE = 50
 export const useCaStore = defineStore('ca', () =>
   useCrudList({
     pageSize: CA_PAGE_SIZE,
-    filterKeys: ['stockCode', 'caType'],
+    filterKeys: ['stockCode', 'caType', 'status'],
     fetchPage: fetchCorporateActions,
     createItem: createCorporateAction,
     validateItem: validateCorporateAction,

@@ -59,3 +59,8 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 | CAA-23 | `PUT /api/masters/ca/{id}` が 409 を返す | `updateCorporateAction()` を呼ぶ | 例外が投げられ、`status` が 409、`message` にサーバの `detail` が入る | 実装済 |
 | CAA-24 | 既定モック | `deleteCorporateAction('7')` を呼ぶ | `DELETE /api/masters/ca/7` を叩き、本文を送らない。戻り値は削除した id（`'7'`） | 実装済 |
 | CAA-25 | `DELETE /api/masters/ca/{id}` が 404 を返す | `deleteCorporateAction()` を呼ぶ | 例外が投げられ、`message` にサーバの `detail` が入る | 実装済 |
+| CAA-26 | 既定モック | `fetchCorporateActions({ status: '2' })` を呼ぶ | クエリに `status=2` が載る（実 API に無い仮のクエリ。モックだけが解釈する） | 実装済 |
+| CAA-27 | 既定モック | `fetchCorporateActions({ status: '' })` を呼ぶ | クエリに `status` が載らない（空文字は「条件なし」） | 実装済 |
+| CAA-28 | `ステータス` を持つ CAItem を返す | `fetchCorporateActions()` を呼ぶ | 1 件の `status` がそのコード値になる | 実装済 |
+| CAA-29 | `ステータス` を持たない（実 API 相当の）CAItem を返す | `fetchCorporateActions()` を呼ぶ | `status` が空文字になる（画面は他の空値と同じく `—` を出す） | 実装済 |
+| CAA-30 | 既定モック | `createCorporateAction({ status: '' })` を呼ぶ | 本文の `ステータス` が `null` になる（キーは省かない。備考と同じ扱い） | 実装済 |

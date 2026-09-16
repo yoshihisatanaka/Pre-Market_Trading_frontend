@@ -8,6 +8,11 @@
  * 比率 と CA種別名 は DB の列ではなく、バックエンドが応答を組み立てるときに付ける表示項目
  * （比率は `分母:分子`、CA種別名は codes.json の対応表）。生の応答には載るのでここでも持つ。
  *
+ * **`ステータス` は実 API 未実装の仮項目。** CAItem にこの項目は無く、コードマスタ
+ * （`GET /codes` の `ステータス`）もまだ返ってこない。値は fixtures/codes.js の statusCodes
+ * （'1' 予定 / '2' 確定 / '3' 完了）と同じ仮のコード。バックエンドが実装したら、ここと
+ * src/api/ca.js の toCorporateAction() / toCaRequest() を実際の項目名に合わせて直す。
+ *
  * ページャーの動作確認には 1 ページ（50 件）を超えるデータが要る。
  * 銘柄 8 件 × CA 7 件 = 56 件を 2026 年分として作り、うち 16 件を
  * ユーザー操作フラグ=1（手動操作された行。一覧で色が付く）にしてある。
@@ -34,6 +39,9 @@ export const caStocks = [
 /**
  * 1 銘柄あたりの CA。日付は 2026 年の月日で、支払日の無い CA（分割・併合・割当）は null。
  * userModified が付いた 2 件は「画面から手を入れた行」を表す（一覧で色が付く側）。
+ *
+ * status は 3 値すべてが出るように配る。この 7 件が銘柄 8 件ぶん繰り返されるので、
+ * ステータスで絞り込んだときの件数は必ず 8 の倍数になる（完了 16 / 確定 24 / 予定 16）。
  */
 const CA_EVENTS_PER_STOCK = [
   {
@@ -44,6 +52,7 @@ const CA_EVENTS_PER_STOCK = [
     denominator: 1,
     numerator: 0.5,
     note: 'Q1現金配当',
+    status: '3',
   },
   {
     caType: '110',
@@ -53,6 +62,7 @@ const CA_EVENTS_PER_STOCK = [
     denominator: 1,
     numerator: 0.55,
     note: 'Q2現金配当',
+    status: '3',
   },
   {
     caType: '110',
@@ -62,6 +72,7 @@ const CA_EVENTS_PER_STOCK = [
     denominator: 1,
     numerator: 0.55,
     note: 'Q3現金配当',
+    status: '2',
     userModified: true,
   },
   {
@@ -72,6 +83,7 @@ const CA_EVENTS_PER_STOCK = [
     denominator: 1,
     numerator: 2,
     note: '1:2 株式分割',
+    status: '2',
   },
   {
     caType: '140',
@@ -81,6 +93,7 @@ const CA_EVENTS_PER_STOCK = [
     denominator: 5,
     numerator: 1,
     note: '5:1 株式併合',
+    status: '2',
   },
   {
     caType: '112',
@@ -90,6 +103,7 @@ const CA_EVENTS_PER_STOCK = [
     denominator: 100,
     numerator: 5,
     note: '5% 株式配当',
+    status: '1',
     userModified: true,
   },
   {
@@ -100,6 +114,7 @@ const CA_EVENTS_PER_STOCK = [
     denominator: 10,
     numerator: 1,
     note: '10:1 無償割当',
+    status: '1',
   },
 ]
 
@@ -155,6 +170,8 @@ function toCaItem({ id, stock, event, canceled = false }) {
     分子: event.numerator,
     比率: formatRatio(event.denominator, event.numerator),
     備考: event.note,
+    // 実 API 未実装の仮項目（ファイル冒頭のコメント参照）。未設定は null
+    ステータス: event.status ?? null,
     取消区分: canceled ? 1 : 0,
     ユーザー操作フラグ: event.userModified ? 1 : 0,
     作成日時: '2026-08-10T10:00:00',
@@ -197,6 +214,7 @@ export const canceledCorporateActions = [
       denominator: 1,
       numerator: 1,
       note: '取消済みの通常償還',
+      status: '3',
     },
     canceled: true,
   }),

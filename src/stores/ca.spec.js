@@ -28,6 +28,8 @@ const TICKER = sorted[0].Ticker
 const tickerIds = sorted.filter((ca) => ca.Ticker === TICKER).map((ca) => String(ca.ID))
 const CA_TYPE = sorted[0].CA種別
 const caTypeIds = sorted.filter((ca) => ca.CA種別 === CA_TYPE).map((ca) => String(ca.ID))
+const STATUS = sorted[0].ステータス
+const statusIds = sorted.filter((ca) => ca.ステータス === STATUS).map((ca) => String(ca.ID))
 
 // フィクスチャのどの銘柄コード・Ticker にも当たらない文字列
 const NO_MATCH = 'ZZZZ'
@@ -422,5 +424,22 @@ describe('stores/ca', () => {
     store.clearDeleteError()
 
     expect(store.deleteError).toBeNull()
+  })
+
+  it('[CAS-25] ステータスで絞り込み、条件が読み直しでも落ちない', async () => {
+    const store = useCaStore()
+
+    await store.load({ status: STATUS })
+
+    expect(store.status).toBe(STATUS)
+    expect(store.total).toBe(statusIds.length)
+    expect(store.items.map((item) => item.id)).toEqual(statusIds)
+    // 全件が同じステータスだと、このシナリオは意味を失う
+    expect(statusIds.length).toBeLessThan(TOTAL)
+
+    await store.reload()
+
+    expect(store.status).toBe(STATUS)
+    expect(store.items.map((item) => item.id)).toEqual(statusIds)
   })
 })

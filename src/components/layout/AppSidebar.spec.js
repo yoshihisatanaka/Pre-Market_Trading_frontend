@@ -22,11 +22,11 @@ function createTestRouter() {
   })
 }
 
-async function mountAt(path) {
+async function mountAt(path, props = {}) {
   const router = createTestRouter()
   // mount 前に遷移を済ませておけば router.isReady() を待つ必要がない
   await router.push(path)
-  const wrapper = mount(AppSidebar, { global: { plugins: [router] } })
+  const wrapper = mount(AppSidebar, { props, global: { plugins: [router] } })
   return { wrapper, router }
 }
 
@@ -70,5 +70,22 @@ describe('AppSidebar', () => {
     await flushPromises()
 
     expect(router.currentRoute.value.path).toBe('/customers/search')
+  })
+
+  it('[ASB-05] open を省略すると展開状態で描画する', async () => {
+    const { wrapper } = await mountAt('/')
+
+    const aside = wrapper.find('[data-testid="app-sidebar"]')
+    expect(aside.classes()).not.toContain('is-collapsed')
+    // inert は値ではなく有無で見る（'' と 'true' のどちらになるかは環境差がある）
+    expect(aside.attributes('inert')).toBeUndefined()
+  })
+
+  it('[ASB-06] open が false だと折りたたみ、中のリンクを操作対象から外す', async () => {
+    const { wrapper } = await mountAt('/', { open: false })
+
+    const aside = wrapper.find('[data-testid="app-sidebar"]')
+    expect(aside.classes()).toContain('is-collapsed')
+    expect(aside.attributes('inert')).toBeDefined()
   })
 })

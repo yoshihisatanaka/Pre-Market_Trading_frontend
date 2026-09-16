@@ -21,12 +21,14 @@ function createTestRouter() {
   })
 }
 
-async function mountAt(path) {
+async function mountAt(path, props = {}) {
   const router = createTestRouter()
   await router.push(path)
-  const wrapper = mount(AppHeader, { global: { plugins: [router] } })
+  const wrapper = mount(AppHeader, { props, global: { plugins: [router] } })
   return { wrapper, router }
 }
+
+const toggleButton = (wrapper) => wrapper.find('[data-testid="sidebar-toggle"]')
 
 const marketStatus = (wrapper) => wrapper.find('[data-testid="market-status"]')
 
@@ -89,5 +91,27 @@ describe('AppHeader', () => {
     wrapper.unmount()
 
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('[AHD-07] サイドメニューが開いているとメニューボタンが展開中を示す', async () => {
+    const { wrapper } = await mountAt('/', { sidebarOpen: true })
+
+    expect(toggleButton(wrapper).attributes('aria-expanded')).toBe('true')
+    expect(toggleButton(wrapper).attributes('aria-controls')).toBe('app-sidebar')
+  })
+
+  it('[AHD-08] サイドメニューが閉じているとメニューボタンが折りたたみ中を示す', async () => {
+    const { wrapper } = await mountAt('/', { sidebarOpen: false })
+
+    expect(toggleButton(wrapper).attributes('aria-expanded')).toBe('false')
+  })
+
+  it('[AHD-09] メニューボタンの click は開閉を通知するだけで自分では変えない', async () => {
+    const { wrapper } = await mountAt('/', { sidebarOpen: true })
+
+    await toggleButton(wrapper).trigger('click')
+
+    expect(wrapper.emitted('toggle-sidebar')).toHaveLength(1)
+    expect(toggleButton(wrapper).attributes('aria-expanded')).toBe('true')
   })
 })

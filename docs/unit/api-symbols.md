@@ -13,8 +13,13 @@
 そこでこの文書では、モックの応答ではなく**送信されたリクエストそのもの**を
 `docs/api/openapi.json` の宣言と突き合わせる。CAマスタの同種の文書は [api-ca.md](api-ca.md)。
 
-取り違えやすい点を 6 つ固定する。
+取り違えやすい点を 7 つ固定する。
 
+- **主キーは `id`（実 API の integer な `ID`）で、`銘柄コード` ではない。** 銘柄コードは
+  一意な業務コードに格下げされ、画面が行を見分けるのに使う。`ID` が欠けた応答では
+  `id` を空文字のまま外へ出し、**銘柄コードへフォールバックしない**（STA-24）。
+  取り込み時点の `openapi.json` はまだ `SymbolItem` に `ID` を持たず `銘柄コード (主キー)` と
+  書いてあるが、DB 全テーブルの主キーを id に統一する方針に合わせてこちらが先行している
 - **パスは `/masters/symbols`。** 他のマスタ（`/ca` など）と違って `/masters` 配下にある
 - **リクエストのクエリ名は英語、レスポンスのキーは日本語。** 送るのは
   `symbol` / `restriction` / `route` / `vwap_target` で、返ってくるのは
@@ -47,7 +52,7 @@ STA-06 以降のアプリ内モデルには現れない。
 | STA-03 | 既定モック | 銘柄コード・規制情報・注文ルート・VWAP対象区分を渡して呼ぶ | クエリ名が `symbol` / `restriction` / `route` / `vwap_target` になり、値がそのまま載る。日本語の `銘柄コード` では送らない | 実装済 |
 | STA-04 | 既定モック | 4 つの条件に空文字を渡して呼ぶ | どれもクエリに載らない（「条件なし」を空文字として送らない） | 実装済 |
 | STA-05 | 既定モック | `fetchSymbols({ offset: 50 })` を呼ぶ | `offset` が渡した値で載る | 実装済 |
-| STA-06 | API が `SymbolItem` を 1 件返す | `fetchSymbols()` を呼ぶ | `{ symbolCode, ticker, name, nameEn, marketName, regulation, regulationName, orderRoute, orderRouteName, vwapTarget, vwapTargetName, note, previousClose, previousVolume, averageVolume, userModified, updatedAt }` に変換される。`更新日時` は楽観的ロックの合札なので整形せず素の文字列で持ち、`null` は空文字に寄せる | 実装済 |
+| STA-06 | API が `SymbolItem` を 1 件返す | `fetchSymbols()` を呼ぶ | `{ id, symbolCode, ticker, name, nameEn, marketName, regulation, regulationName, orderRoute, orderRouteName, vwapTarget, vwapTargetName, note, previousClose, previousVolume, averageVolume, userModified, updatedAt }` に変換される。`id` は実 API の integer な `ID` を文字列に寄せたもの。`更新日時` は楽観的ロックの合札なので整形せず素の文字列で持ち、`null` は空文字に寄せる | 実装済 |
 | STA-07 | API が `Ticker` / 区分名 / `備考` などを `null` で返す | `fetchSymbols()` を呼ぶ | 該当項目が空文字になる（`null` を画面へ流さない） | 実装済 |
 | STA-08 | API が相場の 3 項目を `null` で返す | `fetchSymbols()` を呼ぶ | `previousClose` / `previousVolume` / `averageVolume` が `null` のまま返る（空文字や 0 に寄せない） | 実装済 |
 | STA-09 | API が相場の 3 項目を `0` で返す | `fetchSymbols()` を呼ぶ | 3 項目が `0` のまま返る（未取得と混ざらない） | 実装済 |
@@ -65,3 +70,4 @@ STA-06 以降のアプリ内モデルには現れない。
 | STA-21 | 事前検証が `{ valid: false, errors: ['…'] }` を返す | `validateSymbol()` を呼ぶ | 例外にならず `{ valid: false, errors }` が返る（不合格は通信エラーと区別する） | 実装済 |
 | STA-22 | 事前検証が `warnings` を含む応答を返す | `validateSymbol()` を呼ぶ | 戻り値は `{ valid, errors }` だけで `warnings` を含まない（銘柄マスタでは警告を扱わない） | 実装済 |
 | STA-23 | `POST /api/masters/symbols` が 400 を返す | `createSymbol()` を呼ぶ | 例外が投げられ、`message` にサーバの `detail` が入る | 実装済 |
+| STA-24 | API が `ID` を持たない `SymbolItem` を返す | `fetchSymbols()` を呼ぶ | `id` が空文字になり、`symbolCode` は従来どおり入る（**銘柄コードへフォールバックしない**。実 API が `ID` を返し始めるまでの取り違えを、値で取り繕わずテストで検知する） | 実装済 |

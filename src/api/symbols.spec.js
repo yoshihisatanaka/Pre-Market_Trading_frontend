@@ -60,6 +60,8 @@ const minimalInput = { symbolCode: 'S900', ticker: 'ZZZZ', name: 'テスト銘�
 
 /** SymbolItem 1 件（openapi.json の項目をひととおり埋めたもの） */
 const symbolItem = {
+  // 主キー。SymbolItem に ID が載るのはバックエンド側の id 統一後（いまは先行して持つ）
+  ID: 1,
   銘柄コード: 'S001',
   Ticker: 'AAPL',
   銘柄名: 'アップル',
@@ -161,6 +163,8 @@ describe('api/symbols', () => {
     expect(total).toBe(1)
     expect(items).toEqual([
       {
+        // 実 API の ID は integer。画面と URL では文字列として扱う
+        id: '1',
         symbolCode: 'S001',
         ticker: 'AAPL',
         name: 'アップル',
@@ -423,5 +427,20 @@ describe('api/symbols', () => {
     await expect(createSymbol(minimalInput)).rejects.toMatchObject({
       message: '銘柄コード(S001)は既に登録されています',
     })
+  })
+
+  it('[STA-24] ID を持たない応答では id が空文字になる', async () => {
+    const { ID: _id, ...withoutId } = symbolItem
+    record(listBody([withoutId]))
+
+    const { items } = await fetchSymbols()
+
+    /*
+     * 取り込み時点の openapi.json は SymbolItem に ID を持たない。
+     * **銘柄コードへフォールバックしない**ことをここで固定する。値で取り繕うと、
+     * 実 API が ID を返し始めるまで行のキーが壊れていることに気づけない。
+     */
+    expect(items[0].id).toBe('')
+    expect(items[0].symbolCode).toBe('S001')
   })
 })

@@ -3,7 +3,9 @@ import { apiClient } from './client'
 /*
  * 銘柄マスタ（実 API `/masters/symbols`）。
  *
- * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次の 5 点。
+ * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次の 6 点。
+ *   - 主キーが integer の `ID`。アプリ内は文字列の `id`（src/api/ca.js と同じ扱い）。
+ *     **`銘柄コード` は主キーではない** — 一意な業務コードで、画面が行を見分けるのに使う
  *   - レスポンスのプロパティ名が日本語（銘柄コード / Ticker / 銘柄名_英字 / 前日終値 …）
  *   - **検索クエリ名だけは英語**（`symbol` / `ticker` / `restriction` / `route` / `vwap_target`）。
  *     レスポンスの日本語キーと対応しないので、両者を混同しない
@@ -26,6 +28,7 @@ import { apiClient } from './client'
  * 1 件のアプリ内モデル（このファイルの JSDoc で使う）
  *
  * @typedef {{
+ *   id: string,
  *   symbolCode: string,
  *   ticker: string,
  *   name: string,
@@ -44,7 +47,9 @@ import { apiClient } from './client'
  *   userModified: boolean,
  *   updatedAt: string,
  * }} Symbol
- *   symbolCode が主キー（実 API も銘柄コードをキーにしている）。
+ *   id が主キー（実 API の integer な ID を文字列にしたもの。src/api/ca.js と同じ扱い）。
+ *   symbolCode は主キーではなく、行を人が識別する一意な業務コード
+ *   （実 API の詳細照会・更新履歴が `/masters/symbols/{symbol}` としてこの値で 1 件を指す）。
  *   数値 3 種は null のまま通す。0 と「未取得」を区別したいので空文字や 0 に寄せない
  *   （整形は utils/format.js の formatUsd / formatQuantity が null を '—' にする）。
  *   userModified は ユーザー操作フラグ=1（手動操作された行）。一覧で色を付ける印になる。
@@ -139,7 +144,8 @@ export async function validateSymbol({ isUpdate = false, ...symbol }) {
 /**
  * 銘柄を 1 件登録する。
  *
- * 主キーは銘柄コードそのものなので、既にあるコードはサーバが弾く（事前検証で先に分かる）。
+ * 主キー（ID）はサーバが採番するので送らない。銘柄コードは主キーではなくなったが
+ * 一意制約は残るので、既にあるコードはサーバが弾く（事前検証で先に分かる）。
  * ユーザー操作フラグ=1 はサーバが立てる。
  *
  * @param {Symbol} symbol
@@ -213,7 +219,15 @@ function toApiNumber(value) {
 /** SymbolItem → アプリ内モデル */
 function toSymbol(raw) {
   return {
-    // 主キーは銘柄コードそのもの（CA のような数値 ID は無い）
+    /*
+     * 実 API の主キーは integer の ID。画面と URL では文字列として扱う（src/api/ca.js と同じ）。
+     *
+     * **銘柄コードへフォールバックしない。** 取り込み時点の openapi.json はまだ SymbolItem に
+     * ID を持たないが、欠けていたら空文字のまま外へ出して、行のキーが壊れていることを
+     * テストで検知させる（値で取り繕うと、実 API が ID を返し始めるまで気づけない）。
+     */
+    id: String(raw?.ID ?? ''),
+    // 主キーではなくなったが、一意な業務コードとして残る
     symbolCode: raw?.銘柄コード ?? '',
     // nullable な項目は空文字に寄せて、画面が null を出さないようにする
     ticker: raw?.Ticker ?? '',

@@ -308,9 +308,9 @@ function symbolLabel(symbol) {
       @reload="store.reload()"
       @update:offset="goToOffset"
     >
+      <!-- 行のキーは DataTable の既定（id）に任せる。主キーは銘柄コードではない -->
       <DataTable
         flat
-        row-key="symbolCode"
         data-testid="symbols-table"
         :columns="columns"
         :rows="items"

@@ -264,7 +264,12 @@ export const handlers = [
           (!orderRoute || symbol.注文ルート === orderRoute) &&
           (!vwapTarget || symbol.VWAP対象区分 === vwapTarget),
       )
-      // 実 API の ORDER BY は仕様に書かれていないので、主キーの昇順を仮に置く
+      /*
+       * 実 API の ORDER BY は仕様に書かれていないので、銘柄コードの昇順を仮に置く。
+       * 主キーが ID になっても ID 昇順には寄せない。画面は銘柄コードで探し、追加・更新の
+       * 成功メッセージも銘柄コードで示すので、人が読む並びとしてはこちらが一貫する
+       * （実 API の並びはバックエンドへの確認事項）。
+       */
       .sort((a, b) => a.銘柄コード.localeCompare(b.銘柄コード))
 
     return HttpResponse.json({
@@ -1433,9 +1438,15 @@ function findSymbolRow(symbolCode) {
   return symbolRows.find((row) => row.銘柄コード.toUpperCase() === needle) ?? null
 }
 
+/** ID の採番。実 API の AUTO_INCREMENT と同じく単調増加（取消済みの行も母数に入れる） */
+function nextSymbolId() {
+  return Math.max(0, ...symbolRows.map((symbol) => symbol.ID)) + 1
+}
+
 /** SymbolItem を組み立てる（登録の応答用） */
 function toMockSymbolItem(symbol) {
   return {
+    ID: nextSymbolId(),
     銘柄コード: symbol.symbolCode,
     Ticker: symbol.ticker,
     銘柄名: symbol.name,

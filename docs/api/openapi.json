@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pre-Market Trading API",
-    "description": "\n### 米国株プレマーケット取引システム API 仕様書\n\n- **検証ステータス**: `Phase 1〜15 完了 / Slice Step 1 完了`\n- **推奨ブランチ**: `main`\n- **対応機能**: 注文発注/取消/照会、口座・銘柄・為替・受注不可日・CA・海外休場日・残高補正マスタ管理（楽観ロック/差分履歴対応）、締め管理、みずほ連携Excel出力、部店/扱者マスタ、預り残高検索、スライス注文設定\n",
+    "description": "\n### 米国株プレマーケット取引システム API 仕様書\n\n- **検証ステータス**: `Phase 1〜15 完了 / Slice Step 1 完了`\n- **推奨ブランチ**: `main`\n- **対応機能**: 注文発注/取消/照会、口座・銘柄・為替・受注不可日・CA・海外休場日・残高補正マスタ管理（楽観ロック/差分履歴対応）、締め管理、みずほ連携Excel出力、部店/扱者マスタ、預り残高検索、スライス注文設定、操作ログ横断照会\n",
     "version": "1.0.0 [Verified: Phase 1-13]"
   },
   "paths": {
@@ -34,7 +34,7 @@
             "description": "口座番号フィルタ"
           },
           {
-            "name": "stock_code",
+            "name": "symbol",
             "in": "query",
             "required": false,
             "schema": {
@@ -47,7 +47,7 @@
                 }
               ],
               "description": "銘柄コードフィルタ",
-              "title": "Stock Code"
+              "title": "Symbol"
             },
             "description": "銘柄コードフィルタ"
           },
@@ -1255,7 +1255,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CustomerRequest"
+                "$ref": "#/components/schemas/CustomerValidateRequest"
               }
             }
           }
@@ -1636,7 +1636,7 @@
           "MasterCustomers"
         ],
         "summary": "Update Customer Endpoint",
-        "description": "口座情報変更API。URLの口座番号を更新対象とする。",
+        "description": "口座情報変更API（部分更新）。URLの口座番号を更新対象とする。\n\nリクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持する。\n項目を明示的に null で送信した場合のみクリアされる。",
         "operationId": "update_customer_endpoint_masters_customers__account_no__put",
         "parameters": [
           {
@@ -1690,7 +1690,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CustomerRequest"
+                "$ref": "#/components/schemas/CustomerUpdateRequest"
               }
             }
           }
@@ -2028,7 +2028,7 @@
             "description": "ティッカーコード絞り込み"
           },
           {
-            "name": "name_ja",
+            "name": "symbol_name_ja",
             "in": "query",
             "required": false,
             "schema": {
@@ -2041,7 +2041,7 @@
                 }
               ],
               "description": "銘柄名（日本語）絞り込み",
-              "title": "Name Ja"
+              "title": "Symbol Name Ja"
             },
             "description": "銘柄名（日本語）絞り込み"
           },
@@ -2275,7 +2275,7 @@
             "description": "ティッカーコード絞り込み"
           },
           {
-            "name": "name_en",
+            "name": "symbol_name_en",
             "in": "query",
             "required": false,
             "schema": {
@@ -2288,12 +2288,12 @@
                 }
               ],
               "description": "銘柄名（英字）絞り込み",
-              "title": "Name En"
+              "title": "Symbol Name En"
             },
             "description": "銘柄名（英字）絞り込み"
           },
           {
-            "name": "name_ja",
+            "name": "symbol_name_ja",
             "in": "query",
             "required": false,
             "schema": {
@@ -2306,7 +2306,7 @@
                 }
               ],
               "description": "銘柄名（日本語）絞り込み",
-              "title": "Name Ja"
+              "title": "Symbol Name Ja"
             },
             "description": "銘柄名（日本語）絞り込み"
           },
@@ -2552,7 +2552,7 @@
           "MasterSymbols"
         ],
         "summary": "Validate Symbol Endpoint",
-        "description": "銘柄情報の事前検証API（確認画面用・DB登録/更新なし）\n- 必須項目・文字数制限チェック\n- コードマスタ（注文ルート、VWAP対象区分）検証\n- 新規登録時の銘柄コード重複チェック / 変更時の銘柄存在チェック\n- 各種コードの表示名称付加",
+        "description": "銘柄情報の事前検証API（確認画面用・DB登録/更新なし）\n- 必須項目・文字数制限チェック\n- コードマスタ（注文ルート、VWAP対象区分）検証\n- 新規登録時の銘柄コード重複チェック / 変更時の銘柄存在チェック\n- 各種コードの表示名称付加\n- 変更検証 (is_update=True) では、リクエストに含めなかった項目は既存値として扱う",
         "operationId": "validate_symbol_endpoint_masters_symbols_validate_post",
         "parameters": [
           {
@@ -2573,7 +2573,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SymbolRequest"
+                "$ref": "#/components/schemas/SymbolValidateRequest"
               }
             }
           }
@@ -2679,7 +2679,7 @@
           "MasterSymbols"
         ],
         "summary": "Update Symbol Endpoint",
-        "description": "銘柄情報変更API（楽観的ロック・差分履歴記録対応）。",
+        "description": "銘柄情報変更API（部分更新・楽観的ロック・差分履歴記録対応）。\n\nリクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持する。\n項目を明示的に null で送信した場合のみクリアされる。",
         "operationId": "update_symbol_endpoint_masters_symbols__symbol__put",
         "parameters": [
           {
@@ -2733,7 +2733,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SymbolRequest"
+                "$ref": "#/components/schemas/SymbolUpdateRequest"
               }
             }
           }
@@ -4439,7 +4439,7 @@
         "operationId": "export_ca_csv_endpoint_masters_ca_export_csv_get",
         "parameters": [
           {
-            "name": "stock_code",
+            "name": "symbol",
             "in": "query",
             "required": false,
             "schema": {
@@ -4452,7 +4452,7 @@
                 }
               ],
               "description": "銘柄コードまたはTickerフィルタ",
-              "title": "Stock Code"
+              "title": "Symbol"
             },
             "description": "銘柄コードまたはTickerフィルタ"
           },
@@ -4650,7 +4650,7 @@
         "operationId": "list_ca_endpoint_masters_ca_get",
         "parameters": [
           {
-            "name": "stock_code",
+            "name": "symbol",
             "in": "query",
             "required": false,
             "schema": {
@@ -4663,7 +4663,7 @@
                 }
               ],
               "description": "銘柄コードまたはTickerフィルタ",
-              "title": "Stock Code"
+              "title": "Symbol"
             },
             "description": "銘柄コードまたはTickerフィルタ"
           },
@@ -4912,7 +4912,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CARequest"
+                "$ref": "#/components/schemas/CAUpdateRequest"
               }
             }
           }
@@ -5028,7 +5028,7 @@
           "MasterCA"
         ],
         "summary": "Update Ca Endpoint",
-        "description": "CAマスタ変更API\n\n- 楽観的ロック（更新日時照合・409 Conflict）\n- ユーザー操作フラグ=1 自動設定\n- d_ca履歴 へ変更ログ（操作区分: UPDATE）保存",
+        "description": "CAマスタ変更API（部分更新）\n\n- リクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持\n  （項目を明示的に null で送信した場合のみクリア）\n- 楽観的ロック（更新日時照合・409 Conflict）\n- ユーザー操作フラグ=1 自動設定\n- d_ca履歴 へ変更ログ（操作区分: UPDATE）保存",
         "operationId": "update_ca_endpoint_masters_ca__ca_id__put",
         "parameters": [
           {
@@ -5082,7 +5082,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CARequest"
+                "$ref": "#/components/schemas/CAUpdateRequest"
               }
             }
           }
@@ -6944,7 +6944,7 @@
           "MasterMarketHolidays"
         ],
         "summary": "Update Market Holiday Endpoint",
-        "description": "海外休場日変更API\n\n- 楽観的ロック（更新日時チェック）対応\n- ユーザー操作フラグ=1、更新者・更新日時を設定\n- 履歴テーブル（d_海外休場日履歴）への差分記録",
+        "description": "海外休場日変更API（部分更新）\n\n- リクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持\n- 楽観的ロック（更新日時チェック）対応\n- ユーザー操作フラグ=1、更新者・更新日時を設定\n- 履歴テーブル（d_海外休場日履歴）への差分記録",
         "operationId": "update_market_holiday_endpoint_masters_market_holidays__holiday_date__put",
         "parameters": [
           {
@@ -6998,7 +6998,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MarketHolidayRequest"
+                "$ref": "#/components/schemas/MarketHolidayUpdateRequest"
               }
             }
           }
@@ -7332,7 +7332,7 @@
             "description": "部店コード完全一致フィルタ"
           },
           {
-            "name": "account_number",
+            "name": "account_no",
             "in": "query",
             "required": false,
             "schema": {
@@ -7345,12 +7345,12 @@
                 }
               ],
               "description": "口座番号完全一致フィルタ",
-              "title": "Account Number"
+              "title": "Account No"
             },
             "description": "口座番号完全一致フィルタ"
           },
           {
-            "name": "stock_code",
+            "name": "symbol",
             "in": "query",
             "required": false,
             "schema": {
@@ -7363,7 +7363,7 @@
                 }
               ],
               "description": "銘柄コードまたはティッカー検索",
-              "title": "Stock Code"
+              "title": "Symbol"
             },
             "description": "銘柄コードまたはティッカー検索"
           },
@@ -7665,7 +7665,7 @@
             "description": "部店コード完全一致フィルタ"
           },
           {
-            "name": "account_number",
+            "name": "account_no",
             "in": "query",
             "required": false,
             "schema": {
@@ -7678,12 +7678,12 @@
                 }
               ],
               "description": "口座番号完全一致フィルタ",
-              "title": "Account Number"
+              "title": "Account No"
             },
             "description": "口座番号完全一致フィルタ"
           },
           {
-            "name": "stock_code",
+            "name": "symbol",
             "in": "query",
             "required": false,
             "schema": {
@@ -7696,7 +7696,7 @@
                 }
               ],
               "description": "銘柄コードまたはティッカー検索",
-              "title": "Stock Code"
+              "title": "Symbol"
             },
             "description": "銘柄コードまたはティッカー検索"
           },
@@ -8327,6 +8327,2078 @@
         }
       }
     },
+    "/masters/fee-patterns/export-csv": {
+      "get": {
+        "tags": [
+          "MasterFeePatterns"
+        ],
+        "summary": "Export Fee Patterns Csv Endpoint",
+        "description": "手数料パターンマスタCSVエクスポートAPI（UTF-8 with BOM / Excel対応）。",
+        "operationId": "export_fee_patterns_csv_endpoint_masters_fee_patterns_export_csv_get",
+        "parameters": [
+          {
+            "name": "fee_pattern",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "手数料パターン絞り込み（空文字: デフォルトパターン）",
+              "title": "Fee Pattern"
+            },
+            "description": "手数料パターン絞り込み（空文字: デフォルトパターン）"
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "削除済みデータを含めるか（デフォルト: False）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "手数料パターンマスタCSVファイル（UTF-8 with BOM）",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-patterns/import-csv": {
+      "post": {
+        "tags": [
+          "MasterFeePatterns"
+        ],
+        "summary": "Import Fee Patterns Csv Endpoint",
+        "description": "手数料パターンマスタCSVインポートAPI\n\n- ID列ありの行は更新、ID列なしの行は新規登録\n- エラー時は全行ロールバックし、エラー行明細を返却",
+        "operationId": "import_fee_patterns_csv_endpoint_masters_fee_patterns_import_csv_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_fee_patterns_csv_endpoint_masters_fee_patterns_import_csv_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-patterns": {
+      "get": {
+        "tags": [
+          "MasterFeePatterns"
+        ],
+        "summary": "List Fee Patterns Endpoint",
+        "description": "手数料パターン一覧検索API\n\n- 手数料パターン昇順・金額帯昇順で返却\n- ページネーション対応 (limit, offset)",
+        "operationId": "list_fee_patterns_endpoint_masters_fee_patterns_get",
+        "parameters": [
+          {
+            "name": "fee_pattern",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "手数料パターン絞り込み（空文字: デフォルトパターン）",
+              "title": "Fee Pattern"
+            },
+            "description": "手数料パターン絞り込み（空文字: デフォルトパターン）"
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "削除済みデータを含めるか（デフォルト: False）"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数（デフォルト: 50）",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数（デフォルト: 50）"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "取得開始位置",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "取得開始位置"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePatternListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "MasterFeePatterns"
+        ],
+        "summary": "Create Fee Pattern Endpoint",
+        "description": "手数料パターン（1金額帯）新規登録API。",
+        "operationId": "create_fee_pattern_endpoint_masters_fee_patterns_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeePatternRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePatternResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (バリデーションエラー・金額帯重複等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-patterns/validate": {
+      "post": {
+        "tags": [
+          "MasterFeePatterns"
+        ],
+        "summary": "Validate Fee Pattern Endpoint",
+        "description": "手数料パターンの事前検証API（確認画面用・DB登録/更新なし）\n\n- 必須項目・数値範囲・金額帯の大小関係チェック\n- 同一パターン内の金額帯重複チェック（エラー）\n- パターン全体の金額帯の連続性チェック（警告）\n- 変更検証 (is_update=True) では、リクエストに含めなかった項目は既存値として扱う",
+        "operationId": "validate_fee_pattern_endpoint_masters_fee_patterns_validate_post",
+        "parameters": [
+          {
+            "name": "fee_pattern_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "変更検証時の手数料パターンID",
+              "title": "Fee Pattern Id"
+            },
+            "description": "変更検証時の手数料パターンID"
+          },
+          {
+            "name": "is_update",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "変更検証フラグ (True: 変更検証, False: 新規検証)",
+              "default": false,
+              "title": "Is Update"
+            },
+            "description": "変更検証フラグ (True: 変更検証, False: 新規検証)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeePatternValidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePatternValidationResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-patterns/{fee_pattern_id}": {
+      "get": {
+        "tags": [
+          "MasterFeePatterns"
+        ],
+        "summary": "Get Fee Pattern Endpoint",
+        "description": "手数料パターン（1金額帯）詳細照会API。",
+        "operationId": "get_fee_pattern_endpoint_masters_fee_patterns__fee_pattern_id__get",
+        "parameters": [
+          {
+            "name": "fee_pattern_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fee Pattern Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePatternDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "MasterFeePatterns"
+        ],
+        "summary": "Update Fee Pattern Endpoint",
+        "description": "手数料パターン（1金額帯）変更API（部分更新・楽観的ロック・差分履歴記録対応）。\n\nリクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持する。",
+        "operationId": "update_fee_pattern_endpoint_masters_fee_patterns__fee_pattern_id__put",
+        "parameters": [
+          {
+            "name": "fee_pattern_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fee Pattern Id"
+            }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeePatternUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePatternResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (楽観的ロック競合)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "MasterFeePatterns"
+        ],
+        "summary": "Delete Fee Pattern Endpoint",
+        "description": "手数料パターン（1金額帯）論理削除API（ユーザー操作フラグ=1、差分履歴記録）。",
+        "operationId": "delete_fee_pattern_endpoint_masters_fee_patterns__fee_pattern_id__delete",
+        "parameters": [
+          {
+            "name": "fee_pattern_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fee Pattern Id"
+            }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePatternResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-patterns/{fee_pattern_id}/history": {
+      "get": {
+        "tags": [
+          "MasterFeePatterns"
+        ],
+        "summary": "Get Fee Pattern History Endpoint",
+        "description": "手数料パターンの変更履歴一覧照会API。",
+        "operationId": "get_fee_pattern_history_endpoint_masters_fee_patterns__fee_pattern_id__history_get",
+        "parameters": [
+          {
+            "name": "fee_pattern_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fee Pattern Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "取得開始位置",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "取得開始位置"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePatternHistoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-preferences/export-csv": {
+      "get": {
+        "tags": [
+          "MasterFeePreferences"
+        ],
+        "summary": "Export Fee Preferences Csv Endpoint",
+        "description": "手数料優遇マスタCSVエクスポートAPI（UTF-8 with BOM / Excel対応）。",
+        "operationId": "export_fee_preferences_csv_endpoint_masters_fee_preferences_export_csv_get",
+        "parameters": [
+          {
+            "name": "account_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "口座番号絞り込み",
+              "title": "Account No"
+            },
+            "description": "口座番号絞り込み"
+          },
+          {
+            "name": "fee_pattern",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "手数料パターン絞り込み（空文字: デフォルトパターン）",
+              "title": "Fee Pattern"
+            },
+            "description": "手数料パターン絞り込み（空文字: デフォルトパターン）"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード絞り込み",
+              "title": "Branch Code"
+            },
+            "description": "部店コード絞り込み"
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "削除済みデータを含めるか（デフォルト: False）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "手数料優遇マスタCSVファイル（UTF-8 with BOM）",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-preferences/import-csv": {
+      "post": {
+        "tags": [
+          "MasterFeePreferences"
+        ],
+        "summary": "Import Fee Preferences Csv Endpoint",
+        "description": "手数料優遇マスタCSVインポートAPI\n\n- ID列ありの行は更新、ID列なしの行は新規登録\n- エラー時は全行ロールバックし、エラー行明細を返却",
+        "operationId": "import_fee_preferences_csv_endpoint_masters_fee_preferences_import_csv_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_fee_preferences_csv_endpoint_masters_fee_preferences_import_csv_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (CSVフォーマットエラー等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-preferences": {
+      "get": {
+        "tags": [
+          "MasterFeePreferences"
+        ],
+        "summary": "List Fee Preferences Endpoint",
+        "description": "手数料優遇マスタ一覧検索API\n\n- 顧客単位で変更のある口座のみが登録されている（未登録の口座はデフォルト計算）\n- `適用方式` に `BASIS`（ベイシス方式）/ `PATTERN`（パターン方式）を付与して返却",
+        "operationId": "list_fee_preferences_endpoint_masters_fee_preferences_get",
+        "parameters": [
+          {
+            "name": "account_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "口座番号絞り込み",
+              "title": "Account No"
+            },
+            "description": "口座番号絞り込み"
+          },
+          {
+            "name": "fee_pattern",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "手数料パターン絞り込み（空文字: デフォルトパターン）",
+              "title": "Fee Pattern"
+            },
+            "description": "手数料パターン絞り込み（空文字: デフォルトパターン）"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード絞り込み",
+              "title": "Branch Code"
+            },
+            "description": "部店コード絞り込み"
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "削除済みデータを含めるか（デフォルト: False）"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "取得開始位置",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "取得開始位置"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePreferenceListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "MasterFeePreferences"
+        ],
+        "summary": "Create Fee Preference Endpoint",
+        "description": "手数料優遇新規登録API（1口座1レコード）。",
+        "operationId": "create_fee_preference_endpoint_masters_fee_preferences_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeePreferenceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePreferenceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (バリデーションエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-preferences/validate": {
+      "post": {
+        "tags": [
+          "MasterFeePreferences"
+        ],
+        "summary": "Validate Fee Preference Endpoint",
+        "description": "手数料優遇事前検証API（DB更新なし）\n\n- 口座の存在確認、1口座1レコードの重複チェック、掛目・ベイシス・金額の範囲検証\n- 参照先の手数料パターンがマスタ未登録の場合は警告（仮計算ではデフォルトパターンを使用）\n- ベイシス方式・パターン方式で使用されない項目が入力されている場合は警告",
+        "operationId": "validate_fee_preference_endpoint_masters_fee_preferences_validate_post",
+        "parameters": [
+          {
+            "name": "fee_preference_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "変更検証時の手数料優遇ID（未指定時は新規登録検証）",
+              "title": "Fee Preference Id"
+            },
+            "description": "変更検証時の手数料優遇ID（未指定時は新規登録検証）"
+          },
+          {
+            "name": "is_update",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "変更検証フラグ（True: 変更, False: 新規登録）",
+              "default": false,
+              "title": "Is Update"
+            },
+            "description": "変更検証フラグ（True: 変更, False: 新規登録）"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeePreferenceValidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePreferenceValidationResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-preferences/{fee_preference_id}": {
+      "get": {
+        "tags": [
+          "MasterFeePreferences"
+        ],
+        "summary": "Get Fee Preference Endpoint",
+        "description": "手数料優遇詳細照会API。",
+        "operationId": "get_fee_preference_endpoint_masters_fee_preferences__fee_preference_id__get",
+        "parameters": [
+          {
+            "name": "fee_preference_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fee Preference Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePreferenceDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "MasterFeePreferences"
+        ],
+        "summary": "Update Fee Preference Endpoint",
+        "description": "手数料優遇変更API（部分更新）\n\n- リクエストに含めた項目のみ更新し、含めない項目は既存値を維持する\n- `更新日時` を指定した場合は楽観ロック判定を行い、競合時は 409 を返却",
+        "operationId": "update_fee_preference_endpoint_masters_fee_preferences__fee_preference_id__put",
+        "parameters": [
+          {
+            "name": "fee_preference_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fee Preference Id"
+            }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeePreferenceUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePreferenceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (バリデーションエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (楽観ロック競合)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "MasterFeePreferences"
+        ],
+        "summary": "Delete Fee Preference Endpoint",
+        "description": "手数料優遇論理削除API（削除後はデフォルトパターンで計算される）。",
+        "operationId": "delete_fee_preference_endpoint_masters_fee_preferences__fee_preference_id__delete",
+        "parameters": [
+          {
+            "name": "fee_preference_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fee Preference Id"
+            }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePreferenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/fee-preferences/{fee_preference_id}/history": {
+      "get": {
+        "tags": [
+          "MasterFeePreferences"
+        ],
+        "summary": "Get Fee Preference History Endpoint",
+        "description": "手数料優遇変更履歴照会API（変更前後の差分付き）。",
+        "operationId": "get_fee_preference_history_endpoint_masters_fee_preferences__fee_preference_id__history_get",
+        "parameters": [
+          {
+            "name": "fee_preference_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fee Preference Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "取得開始位置",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "取得開始位置"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeePreferenceHistoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/activity-logs/targets": {
+      "get": {
+        "tags": [
+          "ActivityLogs"
+        ],
+        "summary": "List Activity Log Targets Endpoint",
+        "description": "操作ログ対象種別一覧取得API（画面の対象種別プルダウン用）。",
+        "operationId": "list_activity_log_targets_endpoint_operations_activity_logs_targets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityLogTargetListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/activity-logs": {
+      "get": {
+        "tags": [
+          "ActivityLogs"
+        ],
+        "summary": "Search Activity Logs Endpoint",
+        "description": "操作ログ一覧検索API（各マスタの変更履歴を横断・差分付き）。\n\n- `d_口座情報履歴` 等、共通形式の履歴テーブルを UNION ALL で横断して取得する\n- 各行には変更前後のJSONに加え、項目別差分（`差分`）と変更項目名一覧（`変更項目`）を付加する\n- `対象ID` は各マスタの個別履歴API（例: `GET /masters/customers/{account_no}/history`）へ引き渡せる",
+        "operationId": "search_activity_logs_endpoint_operations_activity_logs_get",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作日時の開始日（YYYY-MM-DD または YYYYMMDD・当日00:00:00から）",
+              "title": "Date From"
+            },
+            "description": "操作日時の開始日（YYYY-MM-DD または YYYYMMDD・当日00:00:00から）"
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作日時の終了日（YYYY-MM-DD または YYYYMMDD・当日23:59:59まで）",
+              "title": "Date To"
+            },
+            "description": "操作日時の終了日（YYYY-MM-DD または YYYYMMDD・当日23:59:59まで）"
+          },
+          {
+            "name": "operator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者コード（完全一致）",
+              "title": "Operator"
+            },
+            "description": "操作者コード（完全一致）"
+          },
+          {
+            "name": "operation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作区分（CREATE / UPDATE / DELETE / BATCH）",
+              "title": "Operation"
+            },
+            "description": "操作区分（CREATE / UPDATE / DELETE / BATCH）"
+          },
+          {
+            "name": "target_types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "対象種別コード（カンマ区切りで複数指定可・未指定は全マスタ横断）。指定可能値は /operations/activity-logs/targets を参照",
+              "title": "Target Types"
+            },
+            "description": "対象種別コード（カンマ区切りで複数指定可・未指定は全マスタ横断）。指定可能値は /operations/activity-logs/targets を参照"
+          },
+          {
+            "name": "target_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "対象キー部分一致（口座番号・銘柄コード等）",
+              "title": "Target Key"
+            },
+            "description": "対象キー部分一致（口座番号・銘柄コード等）"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(asc|desc)$",
+              "description": "操作日時の並び順（desc: 新しい順）",
+              "default": "desc",
+              "title": "Sort"
+            },
+            "description": "操作日時の並び順（desc: 新しい順）"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "取得開始位置",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "取得開始位置"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityLogListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "検索条件不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/holdings": {
       "get": {
         "tags": [
@@ -8355,7 +10427,7 @@
             "description": "部店コード完全一致フィルタ"
           },
           {
-            "name": "account_number",
+            "name": "account_no",
             "in": "query",
             "required": false,
             "schema": {
@@ -8368,27 +10440,9 @@
                 }
               ],
               "description": "口座番号完全一致フィルタ",
-              "title": "Account Number"
+              "title": "Account No"
             },
             "description": "口座番号完全一致フィルタ"
-          },
-          {
-            "name": "customer_query",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "顧客名または顧客名カナ（部分一致）",
-              "title": "Customer Query"
-            },
-            "description": "顧客名または顧客名カナ（部分一致）"
           },
           {
             "name": "customer_name",
@@ -8403,13 +10457,13 @@
                   "type": "null"
                 }
               ],
-              "description": "エイリアス: 顧客名または顧客名カナ",
+              "description": "顧客名または顧客名カナ（部分一致）",
               "title": "Customer Name"
             },
-            "description": "エイリアス: 顧客名または顧客名カナ"
+            "description": "顧客名または顧客名カナ（部分一致）"
           },
           {
-            "name": "stock_query",
+            "name": "symbol",
             "in": "query",
             "required": false,
             "schema": {
@@ -8422,27 +10476,9 @@
                 }
               ],
               "description": "銘柄コードまたはティッカー（完全一致）",
-              "title": "Stock Query"
+              "title": "Symbol"
             },
             "description": "銘柄コードまたはティッカー（完全一致）"
-          },
-          {
-            "name": "stock_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "エイリアス: 銘柄コードまたはティッカー",
-              "title": "Stock Code"
-            },
-            "description": "エイリアス: 銘柄コードまたはティッカー"
           },
           {
             "name": "ticker",
@@ -8457,13 +10493,13 @@
                   "type": "null"
                 }
               ],
-              "description": "エイリアス: 銘柄コードまたはティッカー",
+              "description": "ティッカー（完全一致・symbol と同一項目を検索）",
               "title": "Ticker"
             },
-            "description": "エイリアス: 銘柄コードまたはティッカー"
+            "description": "ティッカー（完全一致・symbol と同一項目を検索）"
           },
           {
-            "name": "stock_name",
+            "name": "symbol_name",
             "in": "query",
             "required": false,
             "schema": {
@@ -8476,12 +10512,12 @@
                 }
               ],
               "description": "銘柄名または銘柄名_英字（部分一致）",
-              "title": "Stock Name"
+              "title": "Symbol Name"
             },
             "description": "銘柄名または銘柄名_英字（部分一致）"
           },
           {
-            "name": "account_type",
+            "name": "specific_deposit",
             "in": "query",
             "required": false,
             "schema": {
@@ -8494,27 +10530,9 @@
                 }
               ],
               "description": "特定預り区分コード完全一致",
-              "title": "Account Type"
+              "title": "Specific Deposit"
             },
             "description": "特定預り区分コード完全一致"
-          },
-          {
-            "name": "specific_account_division",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "エイリアス: 特定預り区分コード",
-              "title": "Specific Account Division"
-            },
-            "description": "エイリアス: 特定預り区分コード"
           },
           {
             "name": "limit",
@@ -9769,6 +11787,211 @@
         ],
         "title": "AccountTypeEnum"
       },
+      "ActivityLogItem": {
+        "properties": {
+          "対象種別": {
+            "type": "string",
+            "title": "対象種別",
+            "description": "対象種別コード（customers, symbols, fx 等）"
+          },
+          "対象種別名": {
+            "type": "string",
+            "title": "対象種別名",
+            "description": "対象種別名（画面表示用）"
+          },
+          "履歴ID": {
+            "type": "integer",
+            "title": "履歴Id",
+            "description": "履歴テーブル内の履歴ID"
+          },
+          "対象ID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "対象Id",
+            "description": "各マスタの個別履歴API呼出に使用するキー"
+          },
+          "対象キー": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "対象キー",
+            "description": "対象レコードの識別キー（画面表示用）"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分",
+            "description": "操作区分 (CREATE, UPDATE, DELETE, BATCH)"
+          },
+          "操作者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作者",
+            "description": "操作者コード"
+          },
+          "操作日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作日時",
+            "description": "操作日時"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ",
+            "description": "変更前レコードJSON"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ",
+            "description": "変更後レコードJSON"
+          },
+          "差分": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "差分",
+            "description": "項目別差分 {項目名: {before: x, after: y}}"
+          },
+          "変更項目": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "変更項目",
+            "description": "変更された項目名一覧"
+          }
+        },
+        "type": "object",
+        "required": [
+          "対象種別",
+          "対象種別名",
+          "履歴ID",
+          "操作区分"
+        ],
+        "title": "ActivityLogItem",
+        "description": "操作ログ（マスタ変更履歴横断）1件"
+      },
+      "ActivityLogListResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "検索該当総件数"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "取得上限件数"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "取得開始位置"
+          },
+          "activity_logs": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityLogItem"
+            },
+            "type": "array",
+            "title": "Activity Logs",
+            "description": "操作ログ一覧（操作日時の降順）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "ActivityLogListResponse",
+        "description": "操作ログ一覧レスポンス"
+      },
+      "ActivityLogTargetItem": {
+        "properties": {
+          "対象種別": {
+            "type": "string",
+            "title": "対象種別",
+            "description": "対象種別コード（target_types パラメータ値）"
+          },
+          "対象種別名": {
+            "type": "string",
+            "title": "対象種別名",
+            "description": "対象種別名（画面表示用）"
+          },
+          "対象キー項目": {
+            "type": "string",
+            "title": "対象キー項目",
+            "description": "対象キーの項目名"
+          },
+          "履歴テーブル": {
+            "type": "string",
+            "title": "履歴テーブル",
+            "description": "参照元の履歴テーブル名"
+          }
+        },
+        "type": "object",
+        "required": [
+          "対象種別",
+          "対象種別名",
+          "対象キー項目",
+          "履歴テーブル"
+        ],
+        "title": "ActivityLogTargetItem",
+        "description": "操作ログの対象種別定義"
+      },
+      "ActivityLogTargetListResponse": {
+        "properties": {
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityLogTargetItem"
+            },
+            "type": "array",
+            "title": "Targets",
+            "description": "対象種別定義一覧"
+          }
+        },
+        "type": "object",
+        "title": "ActivityLogTargetListResponse",
+        "description": "操作ログ対象種別一覧レスポンス（画面のプルダウン用）"
+      },
       "BalanceAdjustmentDetailResponse": {
         "properties": {
           "balance": {
@@ -10819,6 +13042,36 @@
         ],
         "title": "Body_import_customers_csv_endpoint_masters_customers_import_csv_post"
       },
+      "Body_import_fee_patterns_csv_endpoint_masters_fee_patterns_import_csv_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "取り込み対象CSVファイル"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_fee_patterns_csv_endpoint_masters_fee_patterns_import_csv_post"
+      },
+      "Body_import_fee_preferences_csv_endpoint_masters_fee_preferences_import_csv_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "取り込み対象CSVファイル"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_fee_preferences_csv_endpoint_masters_fee_preferences_import_csv_post"
+      },
       "Body_import_fx_csv_endpoint_masters_fx_import_csv_post": {
         "properties": {
           "file": {
@@ -11539,6 +13792,123 @@
           "220"
         ],
         "title": "CATypeEnum"
+      },
+      "CAUpdateRequest": {
+        "properties": {
+          "銘柄コード": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 14,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄コード",
+            "description": "当社銘柄コード"
+          },
+          "CA種別": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CATypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CA種別コード（codes.json参照）"
+          },
+          "権利付最終日": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "権利付最終日",
+            "description": "権利付最終日（YYYYMMDD形式）"
+          },
+          "効力発生日": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "効力発生日",
+            "description": "効力発生日（YYYYMMDD形式）"
+          },
+          "支払日": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "支払日",
+            "description": "支払日（YYYYMMDD形式）"
+          },
+          "分母": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "分母",
+            "description": "比率の分母（正の数値）"
+          },
+          "分子": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "分子",
+            "description": "比率の分子（正の数値）"
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考",
+            "description": "備考"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+          }
+        },
+        "type": "object",
+        "title": "CAUpdateRequest",
+        "description": "CAマスタ変更APIの入力モデル（部分更新: リクエストに含めた項目のみ更新）\n\n未指定の項目はDBの既存値を維持する。明示的に null を指定した項目のみクリアされる。"
       },
       "CAValidationResponse": {
         "properties": {
@@ -13007,6 +15377,681 @@
         "title": "CustomerResponse",
         "description": "口座マスタ単一操作レスポンス"
       },
+      "CustomerUpdateRequest": {
+        "properties": {
+          "部店コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店コード",
+            "description": "部店コード (3桁)"
+          },
+          "扱者コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "扱者コード",
+            "description": "扱者コード (100〜999)"
+          },
+          "法人区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CorporateTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "法人区分 (0: 個人, 1: 法人)"
+          },
+          "顧客名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名",
+            "description": "顧客名"
+          },
+          "顧客名カナ": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名カナ",
+            "description": "顧客名カナ"
+          },
+          "生年月日": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "生年月日",
+            "description": "生年月日 (個人: YYYYMMDD形式, 法人: '0')"
+          },
+          "コンプラランク": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComplianceRankEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "コンプラランク"
+          },
+          "投資方針": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "投資方針",
+            "description": "投資方針コード"
+          },
+          "VWAP書類受入": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap書類受入",
+            "description": "VWAP書類受入区分 (0/1)"
+          },
+          "リスク外株書類受入": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "リスク外株書類受入",
+            "description": "リスク外株書類受入区分 (0/1)"
+          },
+          "外国証券同意書受入": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "外国証券同意書受入",
+            "description": "外国証券同意書受入区分 (0/1)"
+          },
+          "総預り資産": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000000000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "総預り資産",
+            "description": "総預り資産（通常は朝バッチが更新）"
+          },
+          "NISA契約": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NisaContractEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "NISA契約区分 (0/1/9)"
+          },
+          "NISA買付可能額_当年": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1200000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa買付可能額 当年",
+            "description": "NISA買付可能額_当年"
+          },
+          "NISA買付可能額_翌年": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1200000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa買付可能額 翌年",
+            "description": "NISA買付可能額_翌年"
+          },
+          "円貨預り金": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100000000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "円貨預り金",
+            "description": "円貨預り金（通常は朝バッチが更新）"
+          },
+          "外貨預り金": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "外貨預り金",
+            "description": "外貨預り金（通常は朝バッチが更新）"
+          },
+          "取引停止区分_全取引": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 全取引",
+            "description": "取引停止区分_全取引 (0/1)"
+          },
+          "取引停止区分_エクイティ商品取引_売買": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 売買",
+            "description": "取引停止区分_エクイティ商品取引_売買 (0/1)"
+          },
+          "取引停止区分_リスク商品取引_売買": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 売買",
+            "description": "取引停止区分_リスク商品取引_売買 (0/1)"
+          },
+          "取引停止区分_エクイティ商品取引_買": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 買",
+            "description": "取引停止区分_エクイティ商品取引_買 (0/1)"
+          },
+          "取引停止区分_リスク商品取引_買": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 買",
+            "description": "取引停止区分_リスク商品取引_買 (0/1)"
+          },
+          "特定口座区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpecificAccountTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "特定口座区分 (0/1/2/3)"
+          },
+          "口座区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "口座区分 (0: 一般, 1: 自己, 2: 同業者)"
+          },
+          "事故処理口座区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccidentAccountTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "事故処理口座区分 (0: 通常, 1: 事故処理)"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（ISO8601形式 または YYYY-MM-DD HH:MM:SS形式）"
+          }
+        },
+        "type": "object",
+        "title": "CustomerUpdateRequest",
+        "description": "口座・顧客情報変更APIの入力モデル（部分更新: リクエストに含めた項目のみ更新）\n\n未指定の項目はDBの既存値を維持する。明示的に null を指定した項目のみクリアされる。"
+      },
+      "CustomerValidateRequest": {
+        "properties": {
+          "部店コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店コード",
+            "description": "部店コード (3桁)"
+          },
+          "扱者コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "扱者コード",
+            "description": "扱者コード (100〜999)"
+          },
+          "法人区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CorporateTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "法人区分 (0: 個人, 1: 法人)"
+          },
+          "顧客名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名",
+            "description": "顧客名"
+          },
+          "顧客名カナ": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名カナ",
+            "description": "顧客名カナ"
+          },
+          "生年月日": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "生年月日",
+            "description": "生年月日 (個人: YYYYMMDD形式, 法人: '0')"
+          },
+          "コンプラランク": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComplianceRankEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "コンプラランク"
+          },
+          "投資方針": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "投資方針",
+            "description": "投資方針コード"
+          },
+          "VWAP書類受入": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap書類受入",
+            "description": "VWAP書類受入区分 (0/1)"
+          },
+          "リスク外株書類受入": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "リスク外株書類受入",
+            "description": "リスク外株書類受入区分 (0/1)"
+          },
+          "外国証券同意書受入": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "外国証券同意書受入",
+            "description": "外国証券同意書受入区分 (0/1)"
+          },
+          "総預り資産": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000000000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "総預り資産",
+            "description": "総預り資産（通常は朝バッチが更新）"
+          },
+          "NISA契約": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NisaContractEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "NISA契約区分 (0/1/9)"
+          },
+          "NISA買付可能額_当年": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1200000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa買付可能額 当年",
+            "description": "NISA買付可能額_当年"
+          },
+          "NISA買付可能額_翌年": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1200000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa買付可能額 翌年",
+            "description": "NISA買付可能額_翌年"
+          },
+          "円貨預り金": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100000000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "円貨預り金",
+            "description": "円貨預り金（通常は朝バッチが更新）"
+          },
+          "外貨預り金": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "外貨預り金",
+            "description": "外貨預り金（通常は朝バッチが更新）"
+          },
+          "取引停止区分_全取引": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 全取引",
+            "description": "取引停止区分_全取引 (0/1)"
+          },
+          "取引停止区分_エクイティ商品取引_売買": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 売買",
+            "description": "取引停止区分_エクイティ商品取引_売買 (0/1)"
+          },
+          "取引停止区分_リスク商品取引_売買": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 売買",
+            "description": "取引停止区分_リスク商品取引_売買 (0/1)"
+          },
+          "取引停止区分_エクイティ商品取引_買": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 買",
+            "description": "取引停止区分_エクイティ商品取引_買 (0/1)"
+          },
+          "取引停止区分_リスク商品取引_買": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 買",
+            "description": "取引停止区分_リスク商品取引_買 (0/1)"
+          },
+          "特定口座区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpecificAccountTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "特定口座区分 (0/1/2/3)"
+          },
+          "口座区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "口座区分 (0: 一般, 1: 自己, 2: 同業者)"
+          },
+          "事故処理口座区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccidentAccountTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "事故処理口座区分 (0: 通常, 1: 事故処理)"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（ISO8601形式 または YYYY-MM-DD HH:MM:SS形式）"
+          },
+          "口座番号": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "口座番号",
+            "description": "口座番号 (正の整数)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "口座番号"
+        ],
+        "title": "CustomerValidateRequest",
+        "description": "口座情報事前検証APIの入力モデル（口座番号のみ必須、他項目は任意）"
+      },
       "CustomerValidationResponse": {
         "properties": {
           "valid": {
@@ -13188,6 +16233,1557 @@
           "06"
         ],
         "title": "ExecutionScopeEnum"
+      },
+      "FeePatternDetailResponse": {
+        "properties": {
+          "fee_pattern": {
+            "$ref": "#/components/schemas/FeePatternItem",
+            "description": "手数料パターン詳細（1金額帯）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fee_pattern"
+        ],
+        "title": "FeePatternDetailResponse",
+        "description": "手数料パターン詳細レスポンス"
+      },
+      "FeePatternHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "履歴ID"
+          },
+          "手数料パターンID": {
+            "type": "integer",
+            "title": "手数料パターンId",
+            "description": "手数料パターンID"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分",
+            "description": "操作区分 (CREATE, UPDATE, DELETE)"
+          },
+          "操作者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作者",
+            "description": "操作者コード"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ",
+            "description": "変更前レコードJSON"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ",
+            "description": "変更後レコードJSON"
+          },
+          "差分": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "差分",
+            "description": "項目別差分 {項目名: {before: x, after: y}}"
+          },
+          "操作日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作日時",
+            "description": "履歴記録日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "手数料パターンID",
+          "操作区分"
+        ],
+        "title": "FeePatternHistoryItem",
+        "description": "手数料パターンマスタ変更履歴項目モデル"
+      },
+      "FeePatternHistoryResponse": {
+        "properties": {
+          "fee_pattern_id": {
+            "type": "integer",
+            "title": "Fee Pattern Id",
+            "description": "手数料パターンID"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "履歴総件数"
+          },
+          "histories": {
+            "items": {
+              "$ref": "#/components/schemas/FeePatternHistoryItem"
+            },
+            "type": "array",
+            "title": "Histories",
+            "description": "履歴データ一覧"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fee_pattern_id",
+          "total"
+        ],
+        "title": "FeePatternHistoryResponse",
+        "description": "手数料パターン履歴レスポンス"
+      },
+      "FeePatternItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "手数料パターンID (主キー)"
+          },
+          "手数料パターン": {
+            "type": "string",
+            "title": "手数料パターン",
+            "description": "手数料パターン（空文字: デフォルト）",
+            "default": ""
+          },
+          "邦貨精算金額_超": {
+            "type": "integer",
+            "title": "邦貨精算金額 超",
+            "description": "適用金額帯の下限（この金額を超える・円）"
+          },
+          "邦貨精算金額_以下": {
+            "type": "integer",
+            "title": "邦貨精算金額 以下",
+            "description": "適用金額帯の上限（この金額以下・円）"
+          },
+          "国内手数料率": {
+            "type": "number",
+            "title": "国内手数料率",
+            "description": "国内手数料率（税抜・%）"
+          },
+          "手数料加算金額": {
+            "type": "number",
+            "title": "手数料加算金額",
+            "description": "手数料加算金額（税抜・円）",
+            "default": 0
+          },
+          "手数料最低金額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料最低金額",
+            "description": "手数料の下限（税抜・円）"
+          },
+          "手数料最高金額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料最高金額",
+            "description": "手数料の上限（税抜・円）"
+          },
+          "取消区分": {
+            "type": "integer",
+            "title": "取消区分",
+            "description": "取消区分 (0:有効, 1:削除済)",
+            "default": 0
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "ユーザー操作フラグ (0:自動/初期, 1:手動変更)",
+            "default": 0
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時",
+            "description": "作成日時"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者",
+            "description": "作成者コード"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "更新日時"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者",
+            "description": "更新者コード"
+          },
+          "取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消日時",
+            "description": "取消日時"
+          },
+          "取消者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消者",
+            "description": "取消者コード"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "邦貨精算金額_超",
+          "邦貨精算金額_以下",
+          "国内手数料率"
+        ],
+        "title": "FeePatternItem",
+        "description": "手数料パターンマスタのエンティティモデル（1金額帯）"
+      },
+      "FeePatternListResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "検索該当総件数"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "取得上限件数"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "取得開始位置"
+          },
+          "fee_patterns": {
+            "items": {
+              "$ref": "#/components/schemas/FeePatternItem"
+            },
+            "type": "array",
+            "title": "Fee Patterns",
+            "description": "手数料パターン一覧"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "FeePatternListResponse",
+        "description": "手数料パターン一覧レスポンス"
+      },
+      "FeePatternRequest": {
+        "properties": {
+          "手数料パターン": {
+            "type": "string",
+            "maxLength": 1,
+            "title": "手数料パターン",
+            "description": "手数料パターン（空文字: デフォルト, A〜Z: 個別パターン）",
+            "default": ""
+          },
+          "邦貨精算金額_超": {
+            "type": "integer",
+            "maximum": 9999999999999.0,
+            "minimum": 0.0,
+            "title": "邦貨精算金額 超",
+            "description": "適用金額帯の下限（この金額を超える・円）",
+            "default": 0
+          },
+          "邦貨精算金額_以下": {
+            "type": "integer",
+            "maximum": 9999999999999.0,
+            "exclusiveMinimum": 0.0,
+            "title": "邦貨精算金額 以下",
+            "description": "適用金額帯の上限（この金額以下・円）。最終帯は 9999999999999"
+          },
+          "国内手数料率": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "国内手数料率",
+            "description": "国内手数料率（税抜・%・小数第4位まで）"
+          },
+          "手数料加算金額": {
+            "type": "number",
+            "maximum": 9999999999999.0,
+            "minimum": 0.0,
+            "title": "手数料加算金額",
+            "description": "手数料加算金額（税抜・円）",
+            "default": 0
+          },
+          "手数料最低金額": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料最低金額",
+            "description": "手数料の下限（税抜・円）"
+          },
+          "手数料最高金額": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料最高金額",
+            "description": "手数料の上限（税抜・円）。上限なしは 9999999999999"
+          }
+        },
+        "type": "object",
+        "required": [
+          "邦貨精算金額_以下",
+          "国内手数料率"
+        ],
+        "title": "FeePatternRequest",
+        "description": "手数料パターン（1金額帯）の登録APIの入力モデル"
+      },
+      "FeePatternResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "成否フラグ"
+          },
+          "fee_pattern": {
+            "$ref": "#/components/schemas/FeePatternItem",
+            "description": "対象の手数料パターン（1金額帯）"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "パターン全体の金額帯の連続性に関する警告（登録は成功している）"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "処理結果メッセージ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "fee_pattern",
+          "message"
+        ],
+        "title": "FeePatternResponse",
+        "description": "手数料パターン登録・変更・削除レスポンス"
+      },
+      "FeePatternUpdateRequest": {
+        "properties": {
+          "手数料パターン": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料パターン",
+            "description": "手数料パターン（空文字: デフォルト, A〜Z: 個別パターン）"
+          },
+          "邦貨精算金額_超": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "邦貨精算金額 超",
+            "description": "適用金額帯の下限（この金額を超える・円）"
+          },
+          "邦貨精算金額_以下": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9999999999999.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "邦貨精算金額 以下",
+            "description": "適用金額帯の上限（この金額以下・円）"
+          },
+          "国内手数料率": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "国内手数料率",
+            "description": "国内手数料率（税抜・%・小数第4位まで）"
+          },
+          "手数料加算金額": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料加算金額",
+            "description": "手数料加算金額（税抜・円）"
+          },
+          "手数料最低金額": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料最低金額",
+            "description": "手数料の下限（税抜・円）"
+          },
+          "手数料最高金額": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料最高金額",
+            "description": "手数料の上限（税抜・円）。上限なしは 9999999999999"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+          }
+        },
+        "type": "object",
+        "title": "FeePatternUpdateRequest",
+        "description": "手数料パターン（1金額帯）の変更APIの入力モデル（部分更新: リクエストに含めた項目のみ更新）\n\n未指定の項目はDBの既存値を維持する。"
+      },
+      "FeePatternValidateRequest": {
+        "properties": {
+          "手数料パターン": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料パターン",
+            "description": "手数料パターン（空文字: デフォルト, A〜Z: 個別パターン）"
+          },
+          "邦貨精算金額_超": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "邦貨精算金額 超",
+            "description": "適用金額帯の下限（この金額を超える・円）"
+          },
+          "邦貨精算金額_以下": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9999999999999.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "邦貨精算金額 以下",
+            "description": "適用金額帯の上限（この金額以下・円）"
+          },
+          "国内手数料率": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "国内手数料率",
+            "description": "国内手数料率（税抜・%・小数第4位まで）"
+          },
+          "手数料加算金額": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料加算金額",
+            "description": "手数料加算金額（税抜・円）"
+          },
+          "手数料最低金額": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料最低金額",
+            "description": "手数料の下限（税抜・円）"
+          },
+          "手数料最高金額": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料最高金額",
+            "description": "手数料の上限（税抜・円）。上限なしは 9999999999999"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+          }
+        },
+        "type": "object",
+        "title": "FeePatternValidateRequest",
+        "description": "手数料パターン事前検証APIの入力モデル（全項目任意。新規検証時は必須項目をサービス側で検証）"
+      },
+      "FeePatternValidationResponse": {
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "title": "Valid",
+            "description": "バリデーション成否"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors",
+            "description": "エラーメッセージ一覧"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "警告メッセージ一覧"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details",
+            "description": "検証後詳細データ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "valid"
+        ],
+        "title": "FeePatternValidationResponse",
+        "description": "手数料パターン事前検証レスポンス"
+      },
+      "FeePreferenceDetailResponse": {
+        "properties": {
+          "fee_preference": {
+            "$ref": "#/components/schemas/FeePreferenceItem",
+            "description": "手数料優遇の詳細"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fee_preference"
+        ],
+        "title": "FeePreferenceDetailResponse",
+        "description": "手数料優遇の詳細レスポンス"
+      },
+      "FeePreferenceHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "履歴ID"
+          },
+          "手数料優遇ID": {
+            "type": "integer",
+            "title": "手数料優遇Id",
+            "description": "手数料優遇ID"
+          },
+          "口座番号": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "口座番号",
+            "description": "対象口座番号"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分",
+            "description": "操作区分 (CREATE, UPDATE, DELETE)"
+          },
+          "操作者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作者",
+            "description": "操作者コード"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ",
+            "description": "変更前レコードJSON"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ",
+            "description": "変更後レコードJSON"
+          },
+          "差分": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "差分",
+            "description": "項目別差分 {項目名: {before: x, after: y}}"
+          },
+          "操作日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作日時",
+            "description": "履歴記録日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "手数料優遇ID",
+          "操作区分"
+        ],
+        "title": "FeePreferenceHistoryItem",
+        "description": "手数料優遇マスタ変更履歴項目モデル"
+      },
+      "FeePreferenceHistoryResponse": {
+        "properties": {
+          "fee_preference_id": {
+            "type": "integer",
+            "title": "Fee Preference Id",
+            "description": "手数料優遇ID"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "履歴総件数"
+          },
+          "histories": {
+            "items": {
+              "$ref": "#/components/schemas/FeePreferenceHistoryItem"
+            },
+            "type": "array",
+            "title": "Histories",
+            "description": "履歴データ一覧"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fee_preference_id",
+          "total"
+        ],
+        "title": "FeePreferenceHistoryResponse",
+        "description": "手数料優遇の履歴レスポンス"
+      },
+      "FeePreferenceItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "手数料優遇ID (主キー)"
+          },
+          "口座番号": {
+            "type": "integer",
+            "title": "口座番号",
+            "description": "対象口座番号"
+          },
+          "手数料パターン": {
+            "type": "string",
+            "title": "手数料パターン",
+            "description": "適用する手数料パターン（空文字: デフォルト）",
+            "default": ""
+          },
+          "掛目": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "掛目",
+            "description": "手数料の掛目（%表記）"
+          },
+          "下限手数料": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "下限手数料",
+            "description": "パターン方式の手数料下限（税抜・円）"
+          },
+          "上限手数料": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "上限手数料",
+            "description": "パターン方式の手数料上限（税抜・円）"
+          },
+          "ベイシス": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "ベイシス",
+            "description": "ベイシス（bp）"
+          },
+          "下限ベイシス円": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "下限ベイシス円",
+            "description": "ベイシス方式の手数料下限（税抜・円）"
+          },
+          "上限ベイシス円": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "上限ベイシス円",
+            "description": "ベイシス方式の手数料上限（税抜・円）"
+          },
+          "部店コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店コード",
+            "description": "口座の部店コード（口座マスタ結合）"
+          },
+          "顧客名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名",
+            "description": "顧客名（口座マスタ結合）"
+          },
+          "適用方式": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "適用方式",
+            "description": "適用される手数料方式（BASIS: ベイシス方式, PATTERN: パターン方式）"
+          },
+          "取消区分": {
+            "type": "integer",
+            "title": "取消区分",
+            "description": "取消区分 (0:有効, 1:削除済)",
+            "default": 0
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "ユーザー操作フラグ (0:自動/初期, 1:手動変更)",
+            "default": 0
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時",
+            "description": "作成日時"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者",
+            "description": "作成者コード"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "更新日時"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者",
+            "description": "更新者コード"
+          },
+          "取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消日時",
+            "description": "取消日時"
+          },
+          "取消者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消者",
+            "description": "取消者コード"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "口座番号"
+        ],
+        "title": "FeePreferenceItem",
+        "description": "手数料優遇マスタのエンティティモデル"
+      },
+      "FeePreferenceListResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "検索該当総件数"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "取得上限件数"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "取得開始位置"
+          },
+          "fee_preferences": {
+            "items": {
+              "$ref": "#/components/schemas/FeePreferenceItem"
+            },
+            "type": "array",
+            "title": "Fee Preferences",
+            "description": "手数料優遇一覧"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "FeePreferenceListResponse",
+        "description": "手数料優遇の一覧レスポンス"
+      },
+      "FeePreferenceRequest": {
+        "properties": {
+          "口座番号": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "口座番号",
+            "description": "対象口座番号（1口座1レコード）"
+          },
+          "手数料パターン": {
+            "type": "string",
+            "maxLength": 1,
+            "title": "手数料パターン",
+            "description": "適用する手数料パターン（空文字: デフォルト, A〜Z: 個別パターン）",
+            "default": ""
+          },
+          "掛目": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "掛目",
+            "description": "手数料の掛目（%表記。未設定時は100%として扱う）"
+          },
+          "下限手数料": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "下限手数料",
+            "description": "パターン方式の手数料下限（税抜・円）"
+          },
+          "上限手数料": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "上限手数料",
+            "description": "パターン方式の手数料上限（税抜・円）"
+          },
+          "ベイシス": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "ベイシス",
+            "description": "ベイシス（bp）。設定時はパターン方式の適用外"
+          },
+          "下限ベイシス円": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "下限ベイシス円",
+            "description": "ベイシス方式の手数料下限（税抜・円）"
+          },
+          "上限ベイシス円": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "上限ベイシス円",
+            "description": "ベイシス方式の手数料上限（税抜・円）。加算判定の閾値も兼ねる"
+          }
+        },
+        "type": "object",
+        "required": [
+          "口座番号"
+        ],
+        "title": "FeePreferenceRequest",
+        "description": "手数料優遇の登録APIの入力モデル"
+      },
+      "FeePreferenceResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "成否フラグ"
+          },
+          "fee_preference": {
+            "$ref": "#/components/schemas/FeePreferenceItem",
+            "description": "対象の手数料優遇"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "適用方式・参照先パターンに関する警告（登録は成功している）"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "処理結果メッセージ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "fee_preference",
+          "message"
+        ],
+        "title": "FeePreferenceResponse",
+        "description": "手数料優遇の登録・変更・削除レスポンス"
+      },
+      "FeePreferenceUpdateRequest": {
+        "properties": {
+          "口座番号": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "口座番号",
+            "description": "対象口座番号"
+          },
+          "手数料パターン": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料パターン",
+            "description": "適用する手数料パターン（空文字: デフォルト）"
+          },
+          "掛目": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "掛目",
+            "description": "手数料の掛目（%表記）"
+          },
+          "下限手数料": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "下限手数料",
+            "description": "パターン方式の手数料下限（税抜・円）"
+          },
+          "上限手数料": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "上限手数料",
+            "description": "パターン方式の手数料上限（税抜・円）"
+          },
+          "ベイシス": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "ベイシス",
+            "description": "ベイシス（bp）"
+          },
+          "下限ベイシス円": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "下限ベイシス円",
+            "description": "ベイシス方式の手数料下限（税抜・円）"
+          },
+          "上限ベイシス円": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "上限ベイシス円",
+            "description": "ベイシス方式の手数料上限（税抜・円）"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+          }
+        },
+        "type": "object",
+        "title": "FeePreferenceUpdateRequest",
+        "description": "手数料優遇の変更APIの入力モデル（部分更新: リクエストに含めた項目のみ更新）\n\n未指定の項目はDBの既存値を維持する。"
+      },
+      "FeePreferenceValidateRequest": {
+        "properties": {
+          "口座番号": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "口座番号",
+            "description": "対象口座番号"
+          },
+          "手数料パターン": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料パターン",
+            "description": "適用する手数料パターン（空文字: デフォルト）"
+          },
+          "掛目": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "掛目",
+            "description": "手数料の掛目（%表記）"
+          },
+          "下限手数料": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "下限手数料",
+            "description": "パターン方式の手数料下限（税抜・円）"
+          },
+          "上限手数料": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "上限手数料",
+            "description": "パターン方式の手数料上限（税抜・円）"
+          },
+          "ベイシス": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "ベイシス",
+            "description": "ベイシス（bp）"
+          },
+          "下限ベイシス円": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "下限ベイシス円",
+            "description": "ベイシス方式の手数料下限（税抜・円）"
+          },
+          "上限ベイシス円": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9999999999999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "上限ベイシス円",
+            "description": "ベイシス方式の手数料上限（税抜・円）"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+          }
+        },
+        "type": "object",
+        "title": "FeePreferenceValidateRequest",
+        "description": "手数料優遇の事前検証APIの入力モデル（全項目任意。新規検証時の必須項目はサービス側で検証）"
+      },
+      "FeePreferenceValidationResponse": {
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "title": "Valid",
+            "description": "バリデーション成否"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors",
+            "description": "エラーメッセージ一覧"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "警告メッセージ一覧"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details",
+            "description": "検証後詳細データ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "valid"
+        ],
+        "title": "FeePreferenceValidationResponse",
+        "description": "手数料優遇の事前検証レスポンス"
       },
       "FundNatureEnum": {
         "type": "string",
@@ -14359,6 +18955,49 @@
         ],
         "title": "MarketHolidayResponse",
         "description": "海外休場日単一操作レスポンス"
+      },
+      "MarketHolidayUpdateRequest": {
+        "properties": {
+          "休場区分": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HolidayTypeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "海外休場区分コード（0: 終日休場, 1: 半日立会）"
+          },
+          "休場理由": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 45
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "休場理由",
+            "description": "休場理由（例: New Year's Day）"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+          }
+        },
+        "type": "object",
+        "title": "MarketHolidayUpdateRequest",
+        "description": "海外休場日変更APIの入力モデル（部分更新: リクエストに含めた項目のみ更新）\n\n未指定の項目はDBの既存値を維持する。"
       },
       "MarketHolidayValidationDetails": {
         "properties": {
@@ -16387,6 +21026,368 @@
         "title": "SymbolResponse",
         "description": "銘柄登録・更新・削除レスポンス"
       },
+      "SymbolUpdateRequest": {
+        "properties": {
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker",
+            "description": "ティッカーコード"
+          },
+          "銘柄名": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名",
+            "description": "銘柄名（日本語）"
+          },
+          "銘柄名_英字": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名 英字",
+            "description": "銘柄名（英字）"
+          },
+          "市場名": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "市場名",
+            "description": "市場名"
+          },
+          "規制情報": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "規制情報",
+            "description": "取引可否・規制情報"
+          },
+          "注文ルート": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文ルート",
+            "description": "預託先区分 (0:みずほ, 1:IB)"
+          },
+          "VWAP対象区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap対象区分",
+            "description": "VWAP対象区分 (0:非対象, 1:対象)"
+          },
+          "Pre区分": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pre区分",
+            "description": "プレ区分 (0:不可, 1:可能)"
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考",
+            "description": "備考"
+          },
+          "前日終値": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "前日終値",
+            "description": "前日終値（通常は朝バッチが更新）"
+          },
+          "前日出来高": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "前日出来高",
+            "description": "前日出来高（通常は朝バッチが更新）"
+          },
+          "平均出来高": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "平均出来高",
+            "description": "5日間平均出来高（通常は朝バッチが更新）"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+          }
+        },
+        "type": "object",
+        "title": "SymbolUpdateRequest",
+        "description": "銘柄情報変更APIの入力モデル（部分更新: リクエストに含めた項目のみ更新）\n\n未指定の項目はDBの既存値を維持する。明示的に null を指定した項目のみクリアされる。"
+      },
+      "SymbolValidateRequest": {
+        "properties": {
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker",
+            "description": "ティッカーコード"
+          },
+          "銘柄名": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名",
+            "description": "銘柄名（日本語）"
+          },
+          "銘柄名_英字": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名 英字",
+            "description": "銘柄名（英字）"
+          },
+          "市場名": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "市場名",
+            "description": "市場名"
+          },
+          "規制情報": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "規制情報",
+            "description": "取引可否・規制情報"
+          },
+          "注文ルート": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文ルート",
+            "description": "預託先区分 (0:みずほ, 1:IB)"
+          },
+          "VWAP対象区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap対象区分",
+            "description": "VWAP対象区分 (0:非対象, 1:対象)"
+          },
+          "Pre区分": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pre区分",
+            "description": "プレ区分 (0:不可, 1:可能)"
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考",
+            "description": "備考"
+          },
+          "前日終値": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "前日終値",
+            "description": "前日終値（通常は朝バッチが更新）"
+          },
+          "前日出来高": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "前日出来高",
+            "description": "前日出来高（通常は朝バッチが更新）"
+          },
+          "平均出来高": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "平均出来高",
+            "description": "5日間平均出来高（通常は朝バッチが更新）"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+          },
+          "銘柄コード": {
+            "type": "string",
+            "maxLength": 14,
+            "minLength": 1,
+            "title": "銘柄コード",
+            "description": "銘柄コード"
+          }
+        },
+        "type": "object",
+        "required": [
+          "銘柄コード"
+        ],
+        "title": "SymbolValidateRequest",
+        "description": "銘柄事前検証APIの入力モデル（銘柄コードのみ必須、他項目は任意）"
+      },
       "SymbolValidationResponse": {
         "properties": {
           "valid": {
@@ -16774,6 +21775,10 @@
       "description": "【検証済 / Verified】残高補正マスタ（登録・変更・削除・詳細・履歴・一覧検索・事前検証）API（全テスト通過済）"
     },
     {
+      "name": "MasterFeePatterns",
+      "description": "手数料パターンマスタ（邦貨精算金額帯別の料率・登録・変更・削除・詳細・履歴・一覧検索・事前検証）API"
+    },
+    {
       "name": "HoldingSearch",
       "description": "【検証済 / Verified】預り残高・評価額・損益・CA検索 API"
     },
@@ -16784,6 +21789,10 @@
     {
       "name": "Batch",
       "description": "朝バッチ・日次処理（前日未約定IB注文不出来更新等）API"
+    },
+    {
+      "name": "ActivityLogs",
+      "description": "操作ログ（各マスタ変更履歴の横断検索・差分付き）API"
     },
     {
       "name": "Masters",

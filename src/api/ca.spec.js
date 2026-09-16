@@ -117,18 +117,21 @@ describe('api/ca', () => {
     expect(lastRequest.params.get('limit')).toBe('50')
     expect(lastRequest.params.get('offset')).toBe('0')
     // 条件なしのときは送らない（実 API 側の既定に任せる）
-    expect(lastRequest.params.has('stock_code')).toBe(false)
+    expect(lastRequest.params.has('symbol')).toBe(false)
     expect(lastRequest.params.has('ca_type')).toBe(false)
     expect(lastRequest.params.has('include_deleted')).toBe(false)
   })
 
-  it('[CAA-02] 絞り込み条件は stock_code / ca_type という名前で送る', async () => {
+  it('[CAA-02] 絞り込み条件は symbol / ca_type という名前で送る', async () => {
     record(listBody([]))
 
     await fetchCorporateActions({ stockCode: 'AAPL', caType: '110' })
 
-    expect(lastRequest.params.get('stock_code')).toBe('AAPL')
+    // 銘柄は `symbol`。2026-09-16 の仕様取り込みで stock_code から改名された
+    expect(lastRequest.params.get('symbol')).toBe('AAPL')
     expect(lastRequest.params.get('ca_type')).toBe('110')
+    // 旧名で送っていないこと（残っていても FastAPI は無視するので気づけない）
+    expect(lastRequest.params.has('stock_code')).toBe(false)
   })
 
   it('[CAA-03] 空文字の条件はクエリに載せない', async () => {
@@ -136,7 +139,7 @@ describe('api/ca', () => {
 
     await fetchCorporateActions({ stockCode: '', caType: '' })
 
-    expect(lastRequest.params.has('stock_code')).toBe(false)
+    expect(lastRequest.params.has('symbol')).toBe(false)
     expect(lastRequest.params.has('ca_type')).toBe(false)
   })
 

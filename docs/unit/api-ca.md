@@ -34,8 +34,8 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
-| CAA-01 | 既定モック | `fetchCorporateActions()` を引数なしで呼ぶ | `GET /api/masters/ca` に `limit=50` と `offset=0` だけが載る。`stock_code` / `ca_type` / `include_deleted` は送らない | 実装済 |
-| CAA-02 | 既定モック | `fetchCorporateActions({ stockCode: 'AAPL', caType: '110' })` を呼ぶ | クエリ名が `stock_code` / `ca_type` になり、値がそのまま載る | 実装済 |
+| CAA-01 | 既定モック | `fetchCorporateActions()` を引数なしで呼ぶ | `GET /api/masters/ca` に `limit=50` と `offset=0` だけが載る。`symbol` / `ca_type` / `include_deleted` は送らない | 実装済 |
+| CAA-02 | 既定モック | `fetchCorporateActions({ stockCode: 'AAPL', caType: '110' })` を呼ぶ | クエリ名が `symbol` / `ca_type` になり、値がそのまま載る。旧名の `stock_code` では送らない | 実装済 |
 | CAA-03 | 既定モック | `fetchCorporateActions({ stockCode: '', caType: '' })` を呼ぶ | 空文字の条件はクエリに載らない（「条件なし」を空文字として送らない） | 実装済 |
 | CAA-04 | 既定モック | `fetchCorporateActions({ limit: 20, offset: 40 })` を呼ぶ | `limit` / `offset` が渡した値で載る | 実装済 |
 | CAA-05 | API が `CAItem` を 1 件返す | `fetchCorporateActions()` を呼ぶ | `{ id: '1', stockCode, ticker, caType, caTypeName, exRightsDate, effectiveDate, paymentDate, denominator, numerator, ratio, note, userModified, updatedAt }` に変換される。`id` は文字列、日付 3 種は `'YYYY-MM-DD'` | 実装済 |

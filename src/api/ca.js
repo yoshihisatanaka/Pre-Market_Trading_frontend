@@ -93,7 +93,14 @@ export async function fetchCorporateActions({
     params: {
       limit,
       offset,
-      stock_code: stockCode || undefined,
+      /*
+       * 銘柄の絞り込みは `symbol`（2026-09-16 の仕様取り込みで `stock_code` から改名された。
+       * `/masters/symbols` や `/masters/ca/export-csv` も同じ改名）。
+       * アプリ内の名前（stockCode）と URL クエリ（stock_code）は変えていない。
+       * FastAPI は知らないクエリを黙って無視するので、旧名のままだと絞り込みが
+       * エラーにならずに効かなくなる。
+       */
+      symbol: stockCode || undefined,
       ca_type: caType || undefined,
       /*
        * `status` は実 API に無いクエリで、いまは MSW のモックだけが解釈する。

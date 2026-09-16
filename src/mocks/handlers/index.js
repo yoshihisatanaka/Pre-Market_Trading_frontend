@@ -212,7 +212,8 @@ export const handlers = [
   http.get('*/api/masters/ca', ({ request }) => {
     const params = new URL(request.url).searchParams
     // DB 照合は大文字小文字を区別しないので、モックも大文字に寄せてから比べる
-    const stockCode = (params.get('stock_code') ?? '').trim().toUpperCase()
+    // クエリ名は 2026-09-16 の仕様取り込みで stock_code から symbol に改名された
+    const stockCode = (params.get('symbol') ?? '').trim().toUpperCase()
     const caType = params.get('ca_type') ?? ''
     const status = params.get('status') ?? ''
     const includeDeleted = params.get('include_deleted') === 'true'

@@ -285,12 +285,17 @@ export const handlers = [
   /*
    * 銘柄の入力内容の事前検証（登録・更新はしない）。
    *
-   * 銘柄マスタの主キーは銘柄コードそのものなので、実 API は**新規登録のときだけ重複を見る**。
-   * `is_update=true`（編集からの呼び出し）では自分自身が必ず在るため、重複の検査を外す
-   * （編集を足すときは、代わりに「その銘柄が在るか」の検査をここに入れる）。
+   * 仕様（`新規登録時の銘柄コード重複チェック / 変更時の銘柄存在チェック`）どおり、
+   * `is_update` で見るものが切り替わる。
+   *
+   * **変更検証では対象を本文の `銘柄コード` から引く。** CA は対象をクエリの `ca_id` で
+   * 受け取るが、`/masters/symbols/validate` のパラメータは `is_update` ただ 1 つで、
+   * id にあたるクエリが仕様に無い。銘柄コードは編集フォームで変更不可にしてあるので、
+   * ここで引けた行が更新対象そのもの。その ID を currentId として渡せば、重複検査は
+   * 自分自身を重複と見なさなくなる（→ バックエンドへの確認事項）。
    *
    * 必須と文字数は pydantic（SymbolRequest）が先に見るので、ここではなく 422 になる。
-   * この事前検証に残るのはコードマスタの照合と重複だけ。
+   * この事前検証に残るのはコードマスタの照合と、重複または存在の確認だけ。
    */
   http.post('*/api/masters/symbols/validate', async ({ request }) => {
     const body = await request.json().catch(() => null)
@@ -299,7 +304,12 @@ export const handlers = [
 
     const isUpdate = new URL(request.url).searchParams.get('is_update') === 'true'
     const symbol = toSymbolInput(body)
-    const errors = symbolServiceErrors(symbol, { isUpdate })
+
+    const target = isUpdate ? findSymbolRow(symbol.symbolCode) : null
+    const errors = symbolServiceErrors(symbol, { currentId: target?.ID ?? null })
+    if (isUpdate && (!target || target.取消区分 === 1)) {
+      errors.push(`指定された銘柄(${symbol.symbolCode})は存在しません`)
+    }
 
     return HttpResponse.json({
       valid: errors.length === 0,
@@ -313,14 +323,14 @@ export const handlers = [
     })
   }),
 
-  // 銘柄の新規登録。銘柄コードが主キーなので、既にあるコードは重複として弾かれる
+  // 銘柄の新規登録。ID はサーバが採番し、銘柄コードは一意制約で重複を弾く
   http.post('*/api/masters/symbols', async ({ request }) => {
     const body = await request.json().catch(() => null)
     const violation = symbolRequestViolation(body)
     if (violation) return violation
 
     const symbol = toSymbolInput(body)
-    const errors = symbolServiceErrors(symbol, { isUpdate: false })
+    const errors = symbolServiceErrors(symbol)
     if (errors.length > 0) return detailError(400, errors[0])
 
     const created = toMockSymbolItem(symbol)
@@ -331,6 +341,53 @@ export const handlers = [
       { success: true, stock: created, message: '銘柄を登録しました' },
       { status: 201 },
     )
+  }),
+
+  /*
+   * 銘柄の更新（銘柄コード以外を変更できる）。
+   *
+   * 検査の順序は CA と同じ「本文の形(422) → 対象が居るか(404) → 値の妥当性(400) →
+   * 盤面が古くないか(409)」。受注不可日の PUT にある「競合を重複より先に見る」という
+   * 理由付けは写さないこと（あちらは主キーが日付そのもので、重複と競合が同じ行を指すため）。
+   *
+   * **パスキーは ID。** 取り込み時点の openapi.json はまだ `/masters/symbols/{symbol}`
+   * （銘柄コード）だが、DB の主キーを id に寄せる方針に合わせて先に置いている
+   * （src/api/symbols.js の updateSymbol と対）。実 API が {symbol} のままなら、
+   * 直すのはここと api 層の 1 行ずつ。
+   */
+  http.put('*/api/masters/symbols/:id', async ({ params, request }) => {
+    const body = await request.json().catch(() => null)
+    const violation = symbolRequestViolation(body)
+    if (violation) return violation
+
+    const targetId = Number(params.id)
+    const current = symbolRows.find((row) => row.ID === targetId && row.取消区分 === 0)
+    if (!current) {
+      return detailError(404, '指定された銘柄データが存在しません')
+    }
+
+    const symbol = toSymbolInput(body)
+    const errors = symbolServiceErrors(symbol, { currentId: targetId })
+    if (errors.length > 0) return detailError(400, errors[0])
+
+    // 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば弾く
+    if (!isSameTimestamp(symbol.updatedAt, current.更新日時)) {
+      return detailError(
+        409,
+        '他のユーザーによって銘柄データが更新されています。最新データを再取得してください。',
+      )
+    }
+
+    const updated = {
+      // 送られてこなかった項目は消える（保持はバックエンドの責務。理由は toMockSymbolItem）
+      ...toMockSymbolItem(symbol, { id: targetId }),
+      // 作成の記録だけは引き継ぐ（UPDATE は INSERT の記録を書き換えない）
+      作成日時: current.作成日時,
+      作成者: current.作成者,
+    }
+    symbolRows = symbolRows.map((row) => (row.ID === targetId ? updated : row))
+
+    return HttpResponse.json({ success: true, stock: updated, message: '銘柄を更新しました' })
   }),
 
   /*
@@ -1407,15 +1464,28 @@ function toSymbolInput(body) {
  * pydantic と違い**まとめて全件返す**（事前検証の応答は errors の配列なので、
  * 直せるところを一度に見せられる）。
  *
- * @param {{ isUpdate: boolean }} options
- *   isUpdate のときは重複を見ない（対象自身が必ず在るため）
+ * **重複検査の根拠は主キーではなく一意制約。** 主キーが ID になっても、実 API が
+ * `/masters/symbols/{symbol}`（詳細照会・更新履歴）として銘柄コードで 1 件を指し続ける以上、
+ * 銘柄コードは行を一意に指せなければならない。ここはその一意制約を模すもので、
+ * 「同じコードの行が既にあるが、それが自分ではない」を違反とする。
+ *
+ * 取消済みの行も母数に入れるのは、その一意制約が取消区分を条件に持たない
+ * （部分索引ではない）と見ているため。**この点はバックエンド未確認。**
+ * 論理削除した銘柄コードを再登録できるようにするなら、ここを 取消区分 === 0 に絞り、
+ * 同時に「再有効化」の経路（海外休場日の warnings のような）が要る。
+ *
+ * 対象の存在確認はここに入れない（本文だけを見る関数のままにしておく）。
+ * validate と PUT のハンドラがそれぞれ見る（CA と同じ形）。
+ *
+ * @param {{ currentId?: number|null }} [options]
+ *   currentId は更新対象の行 ID。新規登録では null（自分自身が存在しないため）
  * @returns {string[]} 問題が無ければ空配列
  */
-function symbolServiceErrors({ symbolCode, orderRoute, vwapTarget }, { isUpdate }) {
+function symbolServiceErrors({ symbolCode, orderRoute, vwapTarget }, { currentId = null } = {}) {
   const errors = []
 
-  if (!isUpdate && findSymbolRow(symbolCode)) {
-    // 取消済みの行も母数に入れる（主キーが銘柄コードそのものなので INSERT できない）
+  const duplicate = findSymbolRow(symbolCode)
+  if (duplicate && duplicate.ID !== currentId) {
     errors.push(`銘柄コード(${symbolCode})は既に登録されています`)
   }
 
@@ -1443,10 +1513,23 @@ function nextSymbolId() {
   return Math.max(0, ...symbolRows.map((symbol) => symbol.ID)) + 1
 }
 
-/** SymbolItem を組み立てる（登録の応答用） */
-function toMockSymbolItem(symbol) {
+/**
+ * SymbolItem を組み立てる（登録・更新の応答用）。
+ *
+ * **更新でも「現在の行を広げて上書き」はしない。** 引き継ぐのは ID と作成の記録だけで
+ * （それはハンドラ側がやる）、残りは送られてきた本文だけから組む。こうすると
+ * `市場名` / `前日出来高` / `Pre区分` のように **画面が送らない項目が更新で消える**ことが
+ * モックの上でもそのまま起きる。送られてこなかった項目を保つのはバックエンドの責務だが、
+ * それは**まだ確認中**なので、モックが先回りして保つと「実 API に繋いだ瞬間に値が消える」
+ * 事故を隠してしまう。CA の PUT は `{ ...current, … }` と書いているが、
+ * CA は全項目をフォームが持つので差が出ない。**ここへは写さないこと。**
+ *
+ * @param {object} [options]
+ * @param {number} [options.id] 更新のときは対象の ID。省略すると新しい ID を採番する
+ */
+function toMockSymbolItem(symbol, { id = nextSymbolId() } = {}) {
   return {
-    ID: nextSymbolId(),
+    ID: id,
     銘柄コード: symbol.symbolCode,
     Ticker: symbol.ticker,
     銘柄名: symbol.name,

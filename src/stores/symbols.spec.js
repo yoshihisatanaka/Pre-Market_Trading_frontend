@@ -250,7 +250,7 @@ describe('stores/symbols', () => {
     expect(codes(store)).toEqual(PAGED.codes.slice(PAGE_SIZE))
   })
 
-  it('[STS-10] 登録だけを公開し、更新・削除はまだ公開しない', () => {
+  it('[STS-10] 登録と更新を公開し、削除はまだ公開しない', () => {
     const store = useSymbolsStore()
 
     expect(typeof store.create).toBe('function')
@@ -259,11 +259,17 @@ describe('stores/symbols', () => {
     expect(store.createError).toBeNull()
     expect(store.validationErrors).toEqual([])
 
+    expect(typeof store.update).toBe('function')
+    expect(typeof store.clearUpdateError).toBe('function')
+    expect(store.updating).toBe(false)
+    expect(store.updateError).toBeNull()
+    // 登録側と更新側で入れ物が分かれている（片方の理由がもう片方のモーダルに漏れない）
+    expect(store.updateValidationErrors).toEqual([])
+
     // 配線していない操作は名前ごと出さない（呼べば「関数が無い」で落ちる）
-    expect(store.update).toBeUndefined()
     expect(store.remove).toBeUndefined()
-    expect(store.updating).toBeUndefined()
     expect(store.deleting).toBeUndefined()
+    expect(store.deleteError).toBeUndefined()
   })
 
   it('[STS-11] 古い応答が新しい結果を上書きしない', async () => {

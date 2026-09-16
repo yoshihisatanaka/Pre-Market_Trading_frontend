@@ -15,6 +15,10 @@
  * 区分 3 つは未選択を作らない（placeholder を置かない）。`注文ルート` は実 API の型宣言が
  * null を許さず、どちらも既定が '0' なので、選択肢の先頭から始めるほうが実 API と噛み合う。
  *
+ * 唯一の add / edit 差は `symbolCodeLocked`（編集で銘柄コードを読み取り専用にする）。
+ * **項目の増減ではなく 1 属性の切り替えに留めてある** ので、「10 項目が両画面で一致する」
+ * という部品化の狙いは保たれる。
+ *
  * 出す data-testid（testidPrefix が 'symbols-add' なら symbols-add-symbol-code など）:
  *   {prefix}-symbol-code / {prefix}-ticker / {prefix}-name / {prefix}-name-en
  *   / {prefix}-regulation / {prefix}-order-route / {prefix}-vwap-target
@@ -34,6 +38,22 @@ defineProps({
   testidPrefix: {
     type: String,
     required: true,
+  },
+  /**
+   * 銘柄コードを変更不可にする（編集で true）。
+   *
+   * 銘柄コードは主キーではなくなったが一意な業務コードとして残り、実 API の詳細照会と
+   * 更新履歴が `/masters/symbols/{symbol}` としてこの値で 1 件を指す。編集で書き換えられると
+   * 「どの行を直したのか」が指せなくなるので、表示だけにする。
+   *
+   * `disabled` ではなく `readonly` にするのは 2 つの理由から。この画面群で `disabled` は
+   * 既に「処理中」の意味を持っていて（MasterFormDialog / MasterSearchCard / 行の操作ボタン）
+   * 2 つ目の意味を重ねると理由が読めなくなること、銘柄コードは選択してコピーしたい値であること。
+   * 値そのものは SymbolRequest の必須項目なので、読み取り専用でもサーバへ送る。
+   */
+  symbolCodeLocked: {
+    type: Boolean,
+    default: false,
   },
   /**
    * 項目ごとの入力エラー（`{ symbolCode, ticker, name }`）。
@@ -62,6 +82,7 @@ const form = defineModel({ type: Object, required: true })
         v-model="form.symbolCode"
         placeholder="例: S001"
         maxlength="14"
+        :readonly="symbolCodeLocked"
         :data-testid="`${testidPrefix}-symbol-code`"
       />
     </FormField>

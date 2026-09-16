@@ -242,7 +242,7 @@ test.describe('銘柄マスタ一覧', () => {
     expect(markedColor).not.toBe(plainColor)
   })
 
-  test('[SM-10] 列順が仕様どおりで行の操作が無い', async ({ page }) => {
+  test('[SM-10] 列順が仕様どおりで、右端の操作列に編集がある', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
@@ -258,11 +258,15 @@ test.describe('銘柄マスタ一覧', () => {
       '預託先区分',
       'VWAP対象区分',
       '備考',
+      // 行ごとの操作。画面モックに合わせて見出しは空
+      '',
     ])
 
-    // 追加はヘッダから行う。行ごとの操作（編集・削除）はまだ持たない
+    // 追加はヘッダから行う。行の操作は編集 1 つだけ（削除はまだ無い）
     await expect(page.getByTestId('symbols-add')).toBeVisible()
-    await expect(rowsOf(page).first().getByRole('button')).toHaveCount(0)
+    const rowButtons = rowsOf(page).first().getByRole('button')
+    await expect(rowButtons).toHaveCount(1)
+    await expect(rowButtons).toHaveText('編集')
   })
 
   test('[SM-11] 相場の 3 列は整形され、未取得の行は「—」になる', async ({ page }) => {

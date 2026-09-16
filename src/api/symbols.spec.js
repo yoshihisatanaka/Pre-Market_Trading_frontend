@@ -380,15 +380,20 @@ describe('api/symbols', () => {
     })
   })
 
-  it('[STA-20] 編集からの事前検証は is_update=true をクエリに載せる', async () => {
+  it('[STA-20] 編集からの事前検証は id の有無で is_update=true を載せる', async () => {
     recordPost('*/api/masters/symbols/validate', { valid: true, errors: [] })
 
-    await validateSymbol({ ...minimalInput, isUpdate: true })
+    await validateSymbol({ ...minimalInput, id: '42' })
 
     expect(lastRequest.params.get('is_update')).toBe('true')
-    // isUpdate は呼び出し側の都合。本文（SymbolRequest）には出さない
-    expect(lastRequest.body).not.toHaveProperty('isUpdate')
-    expect(lastRequest.body).not.toHaveProperty('is_update')
+    /*
+     * 対象は本文の 銘柄コード から引かれる前提。CA の ca_id にあたるクエリは
+     * /masters/symbols/validate の宣言（openapi.json）に存在しないので送らない。
+     */
+    expect(lastRequest.params.has('symbol_id')).toBe(false)
+    // id は呼び出し側の都合。本文（SymbolRequest）には出さない
+    expect(lastRequest.body).not.toHaveProperty('id')
+    expect(lastRequest.body).not.toHaveProperty('ID')
   })
 
   it('[STA-21] 事前検証の不合格は例外にせず valid / errors を返す', async () => {

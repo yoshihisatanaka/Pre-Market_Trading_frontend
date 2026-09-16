@@ -207,7 +207,7 @@ describe('SymbolListView', () => {
     expect(first).toContain(firstPage[0].name)
   })
 
-  it('[STV-03] 列が銘柄コードから備考まで 11 列この順で並ぶ', async () => {
+  it('[STV-03] 列が銘柄コードから備考まで並び、右端に見出しの無い操作列が付く', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -223,6 +223,8 @@ describe('SymbolListView', () => {
       '預託先区分',
       'VWAP対象区分',
       '備考',
+      // 行ごとの操作。画面モックに合わせて見出しは空
+      '',
     ])
   })
 
@@ -383,14 +385,17 @@ describe('SymbolListView', () => {
     }
   })
 
-  it('[STV-17] ヘッダに追加の導線があり、行には操作が無い', async () => {
+  it('[STV-17] ヘッダに追加の導線があり、行には編集だけがある', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     expect(exists(wrapper, 'symbols-reload')).toBe(true)
     expect(exists(wrapper, 'symbols-add')).toBe(true)
-    // 編集・削除はまだ無い（行の中にボタンが無く、操作列そのものが無い）
-    expect(rows(wrapper)[0].findAll('button')).toHaveLength(0)
+
+    // 行の操作は編集 1 つだけ（削除はまだ配線していないので見せない）
+    const buttons = rows(wrapper)[0].findAll('button')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0].text()).toBe('編集')
   })
 
   it('[STV-18] 新規追加を押すと 10 項目の空のフォームが開く', async () => {

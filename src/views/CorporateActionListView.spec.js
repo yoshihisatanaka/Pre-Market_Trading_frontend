@@ -1,17 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
-import { createPinia } from 'pinia'
+import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { caStocks, corporateActions } from '@/mocks/fixtures/ca'
+import { statusCodes } from '@/mocks/fixtures/codes'
 import { CA_PAGE_SIZE } from '@/stores/ca'
+import { useCodesStore } from '@/stores/codes'
 import CorporateActionListView from './CorporateActionListView.vue'
 
 /*
  * 画面テスト。実際の Pinia ストア + vue-router + MSW(node) を通し、
  * 4状態の出し分けと「URL クエリが正」の単方向フローを検証する。
+ *
+ * この画面はコードマスタ（ステータスの選択肢）を自分では読み込まない
+ * （main.js が起動時に 1 回だけ読む）ので、ステータスのラベルや選択肢を見るテストだけ
+ * マウント前に codes ストアを読み込んでおく（mountView の withCodes）。
  *
  * シナリオ: docs/unit/views-corporate-action-list-view.md
  */
@@ -58,6 +64,15 @@ const TICKER = allRows[0].ticker
 const CA_TYPE = sorted[0].CA種別
 const bothFiltered = sorted.filter((ca) => ca.Ticker === TICKER && ca.CA種別 === CA_TYPE)
 
+// ステータスも同じくフィクスチャから導く（コード値も表示名も直接書かない）
+const STATUS = sorted[0].ステータス
+const STATUS_LABEL = statusCodes.find((code) => code.code === STATUS).label
+const statusFiltered = sorted.filter((ca) => ca.ステータス === STATUS)
+// 新規追加の初期値（「予定」= コードマスタの先頭）
+const DEFAULT_STATUS = statusCodes[0].code
+// 表のステータス列の位置（columns の並び: 銘柄・CA種別・日付 3 種・比率・備考・ステータス）
+const STATUS_CELL = 7
+
 /*
  * 追加に使う値。銘柄コードはモックの銘柄マスタ（caStocks）に実在するものでなければ
  * 事前検証で弾かれるので、フィクスチャから採る。
@@ -87,7 +102,15 @@ const emptyHandler = (options) =>
 
 const Page = { render: () => h('div') }
 
-async function mountView(query = {}) {
+/**
+ * 画面をマウントする。
+ *
+ * @param {object} [query] URL クエリ
+ * @param {{ withCodes?: boolean }} [options]
+ *   withCodes を立てるとコードマスタを先に読み込む（ステータスの選択肢とラベルが埋まる）。
+ *   既定は読み込まない＝ main.js が読む前の状態で、ステータスは '—' になる
+ */
+async function mountView(query = {}, { withCodes = false } = {}) {
   // 実 router/index.js は createWebHistory 固定で差し替えられないため、テスト用に最小定義する。
   // この画面が見るのは route.query だけ（見出しは AppHeader が meta.title から出す）
   const router = createRouter({
@@ -100,9 +123,15 @@ async function mountView(query = {}) {
   // mount 前に遷移を済ませておけば router.isReady() を待たなくてよい
   await router.push({ path: PATH, query })
 
+  const pinia = createPinia()
+  if (withCodes) {
+    setActivePinia(pinia)
+    await useCodesStore().load()
+  }
+
   const wrapper = mount(CorporateActionListView, {
     global: {
-      plugins: [createPinia(), router],
+      plugins: [pinia, router],
       // teleport を stub して、ヘッダへ差し込むボタンを wrapper 内に描画させる
       stubs: { teleport: true },
     },
@@ -266,7 +295,7 @@ describe('CorporateActionListView', () => {
     expect(first).toContain(firstPage[0].note)
   })
 
-  it('[CAV-03] 列が銘柄・CA種別・日付 3 種・比率・備考の順で並ぶ', async () => {
+  it('[CAV-03] 列が銘柄・CA種別・日付 3 種・比率・備考・ステータスの順で並ぶ', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -278,6 +307,7 @@ describe('CorporateActionListView', () => {
       '支払日',
       '比率',
       '備考',
+      'ステータス',
       // 行ごとの操作。画面モックに合わせて見出しは空にする
       '',
     ])
@@ -952,5 +982,93 @@ describe('CorporateActionListView', () => {
 
     releaseList()
     await settle()
+  })
+
+  it('[CAV-42] ステータス列にコードマスタの表示名が出る', async () => {
+    const { wrapper } = await mountView({}, { withCodes: true })
+    await settle()
+
+    expect(rows(wrapper)[0].findAll('td')[STATUS_CELL].text()).toBe(STATUS_LABEL)
+  })
+
+  it('[CAV-43] ステータスが欠けた行・未知のコードの行はどちらも — になる', async () => {
+    // 実 API 相当（項目ごと欠ける）の行
+    const withoutStatus = { ...sorted[0], ID: 901 }
+    delete withoutStatus.ステータス
+    // コードマスタに無いコードの行（手で入れた URL や将来のコード追加で起こりうる）
+    const unknownStatus = { ...sorted[0], ID: 902, ステータス: '9' }
+    server.use(
+      http.get('*/api/masters/ca', () =>
+        HttpResponse.json(listBody([withoutStatus, unknownStatus])),
+      ),
+    )
+
+    const { wrapper } = await mountView({}, { withCodes: true })
+    await settle()
+
+    expect(rows(wrapper).map((row) => row.findAll('td')[STATUS_CELL].text())).toEqual(['—', '—'])
+  })
+
+  it('[CAV-44] コードマスタが未読込でも描画でき、ステータスは — になる', async () => {
+    // main.js の読み込みが終わる前の状態（この画面は完了を待たない）
+    const { wrapper } = await mountView()
+    await settle()
+
+    expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
+    expect(rows(wrapper)[0].findAll('td')[STATUS_CELL].text()).toBe('—')
+    // 検索のセレクトは placeholder だけで描ける
+    expect(wrapper.find('[data-testid="ca-status"]').findAll('option')).toHaveLength(1)
+  })
+
+  it('[CAV-45] 検索のステータスの選択肢はコードマスタから来る', async () => {
+    const { wrapper } = await mountView({}, { withCodes: true })
+    await settle()
+
+    // 先頭は placeholder（-- すべて --）なので、その後ろを突き合わせる
+    const options = wrapper.find('[data-testid="ca-status"]').findAll('option').slice(1)
+    expect(options.map((option) => option.attributes('value'))).toEqual(
+      statusCodes.map((code) => code.code),
+    )
+    expect(options.map((option) => option.text())).toEqual(statusCodes.map((code) => code.label))
+  })
+
+  it('[CAV-46] URL の status で絞り込んだ状態で開く', async () => {
+    const { wrapper } = await mountView({ status: STATUS }, { withCodes: true })
+    await settle()
+
+    expect(wrapper.find('[data-testid="ca-status"]').element.value).toBe(STATUS)
+    expect(countText(wrapper)).toContain(String(statusFiltered.length))
+    // 全件が同じステータスだと、このシナリオは意味を失う
+    expect(statusFiltered.length).toBeLessThan(TOTAL)
+  })
+
+  it('[CAV-47] ステータスで検索すると URL に status が乗り絞り込まれる', async () => {
+    const { wrapper, router } = await mountView({}, { withCodes: true })
+    await settle()
+
+    await wrapper.find('[data-testid="ca-status"]').setValue(STATUS)
+    await wrapper.find('[data-testid="ca-search"]').trigger('submit')
+    await settle()
+
+    expect(router.currentRoute.value.query).toEqual({ status: STATUS })
+    expect(countText(wrapper)).toContain(String(statusFiltered.length))
+  })
+
+  it('[CAV-48] 新規追加のステータスは「予定」で開く', async () => {
+    const { wrapper } = await mountView({}, { withCodes: true })
+    await settle()
+
+    await openAddModal(wrapper)
+
+    expect(addInput(wrapper, 'status').element.value).toBe(DEFAULT_STATUS)
+  })
+
+  it('[CAV-49] 編集のステータスはその行の現在値で開く', async () => {
+    const { wrapper } = await mountView({}, { withCodes: true })
+    await settle()
+
+    await openEditModal(wrapper)
+
+    expect(editInput(wrapper, 'status').element.value).toBe(STATUS)
   })
 })

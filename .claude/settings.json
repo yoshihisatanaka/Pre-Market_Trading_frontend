@@ -148,7 +148,8 @@
       "mcp__playwright__browser_press_key",
       "mcp__playwright__browser_select_option",
       "mcp__playwright__browser_drag",
-      "mcp__playwright__browser_drop"
+      "mcp__playwright__browser_drop",
+      "mcp__playwright__browser_evaluate"
     ],
     "deny": [
       "Read(**/.env)",
@@ -201,8 +202,8 @@
         "hooks": [
           {
             "type": "command",
-            "shell": "bash",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard-secret-paths.sh\"",
+            "shell": "bash",
             "timeout": 10
           }
         ]
@@ -212,8 +213,8 @@
         "hooks": [
           {
             "type": "command",
-            "shell": "bash",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard-main-checkout.sh\"",
+            "shell": "bash",
             "timeout": 10
           }
         ]
@@ -225,8 +226,8 @@
         "hooks": [
           {
             "type": "command",
-            "shell": "bash",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/session-worktree-notice.sh\"",
+            "shell": "bash",
             "timeout": 10
           }
         ]
@@ -237,8 +238,8 @@
         "hooks": [
           {
             "type": "command",
-            "shell": "bash",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/lint-on-stop.sh\"",
+            "shell": "bash",
             "timeout": 180,
             "statusMessage": "ESLint を実行中（docker compose run frontend npm run lint）"
           }

@@ -51,6 +51,11 @@
 （`SymbolRequest` の型宣言が `注文ルート` に null を許さず、どちらも既定が `'0'` のため）。
 STA-17 / 18 がその非対称を守る。
 
+**削除は本文も合札も送らない。** `DELETE /masters/symbols/{id}` は本文を取らず、`更新日時` の照合も
+しない（更新と違い競合の 409 が無い）。応答は削除後の 1 件だが画面は削除前の行でメッセージを出すので
+使い道が無く、呼び出し側（`useAsync`）が成否を判定できるよう**削除した id を返す**
+（`src/api/ca.js` の `deleteCorporateAction` と同じ。STA-30）。
+
 応答の配列名だけは `stocks`（モデル名は `SymbolListResponse` なのにワイヤ上はここだけ stock を名乗る）。
 登録の応答（`SymbolResponse`）も 1 件の入れ物が `stock`。この層で吸収して外へは出さないので、
 STA-06 以降のアプリ内モデルには現れない。
@@ -86,3 +91,5 @@ STA-06 以降のアプリ内モデルには現れない。
 | STA-27 | 既定モック | `updateSymbol()` に `updatedAt` を空文字で渡す | 本文に `更新日時` のキーごと載らない（合札を持たない行も更新できる） | 実装済 |
 | STA-28 | `PUT /api/masters/symbols/{id}` が 409 を返す | `updateSymbol()` を呼ぶ | 例外が投げられ、`message` にサーバの `detail` が入る（競合も通信・サーバ障害として扱う） | 実装済 |
 | STA-29 | 既定モック | 編集の payload（`id` と `updatedAt` 込み）をそのまま `validateSymbol()` に渡す | 本文（`SymbolRequest`）に `id` / `ID` / `更新日時` が載らない（事前検証は楽観的ロックを照合しない） | 実装済 |
+| STA-30 | 既定モック | `deleteSymbol('7')` を呼ぶ | `DELETE /api/masters/symbols/7` を叩き、本文を送らない（合札の `更新日時` も送らない ＝ 削除に楽観的ロックは無い）。パスに載るのは **`id` であって銘柄コードではない**。戻り値は削除した id（`'7'`） | 実装済 |
+| STA-31 | `DELETE /api/masters/symbols/{id}` が 404 を返す | `deleteSymbol()` を呼ぶ | 例外が投げられ、`message` にサーバの `detail` が入る | 実装済 |

@@ -397,6 +397,36 @@ export const handlers = [
   }),
 
   /*
+   * 銘柄の論理削除。行は残したまま 取消区分 を 1 にする（一覧は既定で取消済みを返さないので
+   * 読み直すと消える）。CA と同じく ユーザー操作フラグ も 1 に立てる
+   * （include_deleted=true で見たときに「画面から消された行」だと分かる）。
+   *
+   * 本文も合札も見ない。実 API の DELETE は本文を取らず 更新日時 を照合しないので、
+   * PUT にある 409 の経路はここに無い。
+   *
+   * **パスキーは PUT と同じく ID**（src/api/symbols.js の deleteSymbol と対）。
+   */
+  http.delete('*/api/masters/symbols/:id', ({ params }) => {
+    const targetId = Number(params.id)
+    const target = symbolRows.find((row) => row.ID === targetId && row.取消区分 === 0)
+
+    if (!target) {
+      return detailError(404, '指定された銘柄が存在しないか、既に削除されています')
+    }
+
+    const deleted = {
+      ...target,
+      取消区分: 1,
+      ユーザー操作フラグ: 1,
+      取消日時: nowIsoTimestamp(),
+      取消者: '006',
+    }
+    symbolRows = symbolRows.map((row) => (row.ID === targetId ? deleted : row))
+
+    return HttpResponse.json({ success: true, stock: deleted, message: '銘柄を削除しました' })
+  }),
+
+  /*
    * CA の入力内容の事前検証（登録・更新はしない）。
    *
    * **CA には一意性の規則が無い。** 自然キーを持たず、同じ銘柄・同じ CA種別・同じ日付の行が

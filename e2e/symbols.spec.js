@@ -100,6 +100,26 @@ async function openEdit(page, row = firstRow) {
 const NEW_SYMBOL = { symbolCode: 'S900', ticker: 'ZZZZ', name: 'テスト銘柄' }
 const duplicateMessage = (code) => `銘柄コード(${code})は既に登録されています`
 
+/** 削除確認ダイアログ。追加・編集と同じくタイトルで絞る */
+function deleteDialogOf(page) {
+  return page.getByRole('dialog', { name: '削除確認' })
+}
+
+/** 行の「削除」を押す（ボタンの data-testid は行の id を含む） */
+async function openDelete(page, row = firstRow) {
+  await page.getByTestId(`symbols-delete-${row.id}`).click()
+  await expect(deleteDialogOf(page)).toBeVisible()
+}
+
+/*
+ * 取引可（規制情報 0）で絞った行。フィクスチャでは 51 件（= 1 ページ + 1 件）なので、
+ * 2 ページ目がちょうど 1 行になる。その 1 行を消すと最終ページが空になり、
+ * ページ戻しが起きる（SM-34）。
+ */
+const OPEN_REGULATION = '0'
+const byOpenRegulation = allRows.filter((row) => row.regulation === OPEN_REGULATION)
+const lastPageRow = byOpenRegulation[PAGE_SIZE]
+
 /** 必須 3 項目を埋める */
 async function fillRequired(page, symbol = NEW_SYMBOL) {
   await page.getByTestId('symbols-add-symbol-code').fill(symbol.symbolCode)
@@ -255,7 +275,7 @@ test.describe('銘柄マスタ一覧', () => {
     expect(markedColor).not.toBe(plainColor)
   })
 
-  test('[SM-10] 列順が仕様どおりで、右端の操作列に編集がある', async ({ page }) => {
+  test('[SM-10] 列順が仕様どおりで、右端の操作列に編集と削除がある', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
@@ -275,11 +295,11 @@ test.describe('銘柄マスタ一覧', () => {
       '',
     ])
 
-    // 追加はヘッダから行う。行の操作は編集 1 つだけ（削除はまだ無い）
+    // 追加はヘッダから行う。行の操作は編集が左・削除が右端（破壊的な操作を最後にする）
     await expect(page.getByTestId('symbols-add')).toBeVisible()
     const rowButtons = rowsOf(page).first().getByRole('button')
-    await expect(rowButtons).toHaveCount(1)
-    await expect(rowButtons).toHaveText('編集')
+    await expect(rowButtons).toHaveCount(2)
+    await expect(rowButtons).toHaveText(['編集', '削除'])
   })
 
   test('[SM-11] 相場の 3 列は整形され、未取得の行は「—」になる', async ({ page }) => {
@@ -708,5 +728,96 @@ test.describe('銘柄マスタ 編集', () => {
     await expect(page.getByTestId('symbols-edit-validation-error')).toBeHidden()
     await expect(page.getByTestId('symbols-edit-note')).toHaveValue(firstRow.note)
     await expect(page.getByTestId('symbols-edit-ticker')).toHaveValue(firstRow.ticker)
+  })
+})
+
+test.describe('銘柄マスタ 削除', () => {
+  test('[SM-30] 削除確認は消す対象と取り消せない旨を出す', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openDelete(page)
+
+    // 銘柄コードだけでは何の銘柄か分からないので、一覧で実際に読む 3 点を並べる
+    const dialog = deleteDialogOf(page)
+    await expect(dialog).toContainText(
+      `${firstRow.symbolCode} / ${firstRow.ticker} / ${firstRow.name}`,
+    )
+    await expect(dialog).toContainText('を削除しますか？')
+    await expect(dialog).toContainText('この操作は元に戻せません。')
+  })
+
+  test('[SM-31] キャンセルすると何も起きない', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openDelete(page)
+    await page.getByTestId('symbols-delete-cancel').click()
+
+    await expect(deleteDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('symbols-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('symbols-notice')).toBeHidden()
+  })
+
+  test('[SM-32] 削除するとダイアログが閉じ、件数が 1 減って行が消える', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openDelete(page)
+    await page.getByTestId('symbols-delete-submit').click()
+
+    await expect(deleteDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('symbols-notice')).toContainText(
+      `${firstRow.symbolCode} / ${firstRow.ticker} / ${firstRow.name} を削除しました。`,
+    )
+
+    // 論理削除だが、一覧は取消済みを返さないので消えたように見える
+    await expect(page.getByTestId('symbols-count')).toHaveText(`${TOTAL - 1} 件`)
+    await expect(page.getByTestId(`symbols-edit-${firstRow.id}`)).toHaveCount(0)
+
+    // 一覧の単方向フローには触らない（削除で URL は変わらない）
+    await expect(page).toHaveURL(new RegExp(`${PATH}$`))
+  })
+
+  test('[SM-33] 削除に失敗するとダイアログは開いたまま理由を出す', async ({ page }) => {
+    await mockApi(page, [
+      {
+        method: 'delete',
+        path: '*/api/masters/symbols/:id',
+        status: 500,
+        body: { detail: ERROR_MESSAGE },
+      },
+    ])
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openDelete(page)
+    await page.getByTestId('symbols-delete-submit').click()
+
+    await expect(deleteDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('symbols-delete-error')).toContainText(ERROR_MESSAGE)
+
+    // 行も件数も変わらず、成功メッセージも出ない
+    await expect(page.getByTestId('symbols-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('symbols-notice')).toBeHidden()
+  })
+
+  test('[SM-34] 最終ページの最後の 1 件を消すと 1 ページ戻る', async ({ page }) => {
+    // 取引可で絞ると 51 件。2 ページ目は 1 行だけになる
+    await page.goto(`${PATH}?regulation=${OPEN_REGULATION}&offset=${PAGE_SIZE}`)
+    await expect(rowsOf(page)).toHaveCount(1)
+
+    await openDelete(page, lastPageRow)
+    await page.getByTestId('symbols-delete-submit').click()
+    await expect(deleteDialogOf(page)).toBeHidden()
+
+    // 空のページに取り残さない。絞り込み条件は残したまま 1 ページ前へ戻す
+    await expect(page).toHaveURL(new RegExp(`${PATH}\\?regulation=${OPEN_REGULATION}$`))
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('symbols-count')).toHaveText(
+      `${byOpenRegulation.length - 1} 件`,
+    )
   })
 })

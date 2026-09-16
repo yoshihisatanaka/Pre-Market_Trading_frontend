@@ -7,11 +7,15 @@
 MSW の既定ハンドラ（`src/mocks/handlers/index.js`）に当てて、取得・ページング・絞り込みと
 4 状態のもとになる `loading` / `error` / `isEmpty` を守る。
 
-この一覧は**新規追加と編集まで**を持つ。`useCrudList` は渡した関数のぶんだけ名前を公開するので、
-登録系（`create` / `creating` / `createError` / `validationErrors` / `clearCreateError`）と
-更新系（`update` / `updating` / `updateError` / `updateValidationErrors` / `clearUpdateError`）が
-公開され、**削除の名前はまだ公開されない**ことを守る（STS-10）。
-CRUD 一式まで持つストアの例は [stores-ca.md](stores-ca.md)。
+この一覧は**取得・登録・更新・削除**の CRUD 一式を持つ。`useCrudList` は渡した関数のぶんだけ
+名前を公開するので、登録系（`create` / `creating` / `createError` / `validationErrors` /
+`clearCreateError`）・更新系（`update` / `updating` / `updateError` / `updateValidationErrors` /
+`clearUpdateError`）・削除系（`remove` / `deleting` / `deleteError` / `clearDeleteError`）が
+すべて公開されることを守る（STS-10）。同じ形のストアは [stores-ca.md](stores-ca.md)。
+
+削除は実 API 側が論理削除（取消区分=1）。一覧は既定で取消済みを返さないので、読み直すと行が消えて
+`total` が 1 減る（STS-24）。登録・更新と違い**事前検証を通さない**（DELETE は本文を取らない）ので、
+拒否の理由はすべて `deleteError` に入る（STS-25）。楽観的ロックも無いので 409 は起きない。
 
 登録も編集も「サーバの事前検証 → 登録・更新」の 2 段で、**不合格（`validationErrors` /
 `updateValidationErrors`）と通信・サーバ障害（`createError` / `updateError`）は別の入れ物に入る**。
@@ -46,7 +50,7 @@ CRUD 一式まで持つストアの例は [stores-ca.md](stores-ca.md)。
 | STS-07 | API が 500 を返す | `load()` を呼ぶ | `error` に理由が入り、`items` が空のまま。`isEmpty` は `false`（空とエラーを別の状態として出し分けるため） | 実装済 |
 | STS-08 | API の応答が遅い | `load()` を await せずに `loading` を読む | 取得中は `true`、完了後に `false` になる | 実装済 |
 | STS-09 | 既定モック。絞り込んだ 2 ページ目を読み込み済み | `reload()` を呼ぶ | 同じ条件・同じ `offset` のまま読み直す（条件が落ちない） | 実装済 |
-| STS-10 | 既定モック | ストアの公開名を読む | `create` と `update` の 2 系統とその状態（`creating` / `createError` / `validationErrors` / `updating` / `updateError` / `updateValidationErrors` と各 `clear*`）を公開する。`remove` とその状態（`deleting` / `deleteError`）は持たない（まだ配線していない操作を見せない） | 実装済 |
+| STS-10 | 既定モック | ストアの公開名を読む | `create` / `update` / `remove` の 3 系統とその状態（`creating` / `createError` / `validationErrors` / `updating` / `updateError` / `updateValidationErrors` / `deleting` / `deleteError` と各 `clear*`）をすべて公開する | 実装済 |
 | STS-11 | API の応答が遅い | 2 ページ目 → 1 ページ目の順に `load()` を続けて呼び、先に投げたほうを遅く返す | 最後に投げた `load()` の結果が残る（古い応答が新しい結果を上書きしない） | 実装済 |
 | STS-12 | 既定モック | `load()` の後に一覧に無い銘柄コードで `create()` を呼ぶ | 登録された 1 件が返り、`total` が 1 増える（成功時は今の条件のまま一覧を読み直す） | 実装済 |
 | STS-13 | 事前検証が不合格を返す（既にある銘柄コード） | `create()` を呼ぶ | 戻り値が `null`、`validationErrors` に理由が入り、`createError` は `null` のまま。`total` は増えない | 実装済 |
@@ -60,3 +64,6 @@ CRUD 一式まで持つストアの例は [stores-ca.md](stores-ca.md)。
 | STS-21 | `PUT /api/masters/symbols/{id}` が 500 を返す | `update()` を呼ぶ | 戻り値が `null`、`updateError` に理由が入り、`updateValidationErrors` は空のまま | 実装済 |
 | STS-22 | 既定モック。登録も更新も失敗させた状態 | `clearUpdateError()` を呼ぶ | 更新側（`updateError` / `updateValidationErrors`）だけが空になり、登録側（`createError` / `validationErrors`）は残る | 実装済 |
 | STS-23 | 既定モック。取引可否で絞り込んだ状態 | 絞り込みの圏外へ取引可否を変えて `update()` する | 読み直しで絞り込み条件が落ちない（`regulation` が残る）。`total` が 1 減る | 実装済 |
+| STS-24 | 既定モック | `load()` の後に一覧の 1 件を `remove()` する | `true` が返り、`total` が 1 減ってその行が一覧から消える（実 API は論理削除だが、一覧は取消済みを返さない） | 実装済 |
+| STS-25 | `DELETE /api/masters/symbols/{id}` が 500 を返す | `remove()` を呼ぶ | `false` が返り、`deleteError` に理由が入る。`total` は変わらない | 実装済 |
+| STS-26 | 既定モック。前回の `remove()` が失敗している | `clearDeleteError()` を呼ぶ | `deleteError` が空になる（確認モーダルを開き直したときに前回の失敗を残さない） | 実装済 |

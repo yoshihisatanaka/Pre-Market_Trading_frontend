@@ -18,7 +18,7 @@ import { apiClient } from './client'
  * 実 API は `symbol` / `ticker` / `name_ja` / `name_en` をそれぞれ別のパラメータに
  * 分けていて、まとめて 1 語で探すパラメータが無いため、**この欄では銘柄名では絞れない**。
  *
- * いまは一覧の取得・登録・更新を持つ。削除、CSV 入出力、更新履歴は別途。
+ * いまは一覧の取得・登録・更新・削除を持つ。CSV 入出力と更新履歴は別途。
  *
  * **登録・更新の本文（SymbolRequest）には `市場名` / `前日出来高` / `Pre区分` を載せない。**
  * 画面のフォームがこの 3 項目を持たないため。理由は toSymbolRequest() のコメントを参照。
@@ -197,6 +197,26 @@ export async function updateSymbol({ id, ...symbol }) {
   )
 
   return toSymbol(data.stock)
+}
+
+/**
+ * 銘柄を 1 件削除する（実 API は論理削除。取消区分=1・ユーザー操作フラグ=1 になる）。
+ *
+ * 応答は削除後の 1 件（SymbolResponse）だが、画面は削除前の行を使ってメッセージを出すので
+ * 使い道が無い。呼び出し側が useAsync で成否を判定できるよう、削除した id を返す
+ * （src/api/ca.js の deleteCorporateAction と同じ）。
+ *
+ * 楽観的ロックは無い（実 API の DELETE は本文を取らず、更新日時 を照合しない）。
+ * 更新と違い競合の 409 が起きないので、拒否の理由は 1 つの入れ物（deleteError）で足りる。
+ *
+ * **パスキーは updateSymbol と同じく ID。** 仕様との食い違いについてはそちらの JSDoc を参照。
+ *
+ * @param {string} id 削除対象の行 ID
+ * @returns {Promise<string>} 削除した id
+ */
+export async function deleteSymbol(id) {
+  await apiClient.delete(`/masters/symbols/${encodeURIComponent(id)}`)
+  return id
 }
 
 /**

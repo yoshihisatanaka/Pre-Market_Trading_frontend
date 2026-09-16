@@ -7,6 +7,7 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
+import ConfirmDeleteDialog from '@/components/masters/ConfirmDeleteDialog.vue'
 import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
@@ -42,6 +43,8 @@ const {
   updating,
   updateError,
   updateValidationErrors,
+  deleting,
+  deleteError,
 } = storeToRefs(store)
 
 /*
@@ -51,9 +54,9 @@ const {
  *     前日終値 / 前日出来高 / 5日平均出来高 の順でまとめている
  *   - ユーザー操作フラグは列にせず、行の色で表す（下の rowClass）
  *   - 市場名・Pre区分はモックに列が無いので出さない（API には項目がある）
- *   - 操作列の「編集」は画面モックには無いが、行から直せないと備考の誤記を直すだけでも
- *     「新規追加 → 削除」の 2 操作が必要になるため足している。新規追加はヘッダのボタンから開く
- *   - 「削除」はまだ無い。足すときは編集の右端に置く（破壊的な操作を最後にする既存の並び）
+ *   - 操作列の「編集」「削除」は画面モックには無いが、行から直せないと備考の誤記を直すだけでも
+ *     作り直しが要るため足している。新規追加はヘッダのボタンから開く。
+ *     並びは編集が左・削除が右端（破壊的な操作を最後にする既存の並び）
  */
 const columns = [
   { key: 'symbolCode', label: '銘柄コード' },
@@ -67,7 +70,7 @@ const columns = [
   { key: 'orderRoute', label: '預託先区分' },
   { key: 'vwapTarget', label: 'VWAP対象区分' },
   { key: 'note', label: '備考' },
-  // 行ごとの操作（いまは編集だけ）。画面モックに合わせて見出しは空にする
+  // 行ごとの操作（編集・削除）。画面モックに合わせて見出しは空にする
   { key: 'actions', label: '' },
 ]
 
@@ -321,9 +324,53 @@ async function submitEdit() {
   stepBackIfPageEmpty()
 }
 
+/*
+ * 削除。確認モーダルは「開いているか」と「何を消すか」を deleteTarget 1 つで持つ（編集と同じ形）。
+ * 実 API は論理削除で、一覧は既定で取消済みを返さないので、読み直すと行が消える。
+ *
+ * エラーの系統は追加・編集と違って 1 つだけ。事前検証が無く（DELETE は本文を取らない）、
+ * 楽観的ロックも無い（合札を送らないので 409 が起きない）ので、サーバの拒否はすべて
+ * deleteError をモーダル内に出す。
+ */
+const deleteTarget = ref(null)
+
+function openDelete(symbol) {
+  // 前回の失敗と成功をどちらも持ち込まない
+  store.clearDeleteError()
+  noticeMessage.value = ''
+  deleteTarget.value = symbol
+}
+
+function closeDelete() {
+  // 削除中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (deleting.value) return
+  deleteTarget.value = null
+}
+
+async function submitDelete() {
+  const target = deleteTarget.value
+  if (!target) return
+
+  const deleted = await store.remove(target.id, {
+    // 追加・編集と同じく、一覧の読み直しを待たずに閉じる。失敗時は呼ばれないので
+    // モーダルは開いたままになり、理由（deleteError）を読ませられる
+    onSuccess: () => {
+      deleteTarget.value = null
+      noticeMessage.value = `${symbolLabel(target)} を削除しました。`
+    },
+  })
+  if (!deleted) return
+
+  /*
+   * 最終ページの最後の 1 件を消すと、読み直した結果がそのページで 0 件になる。
+   * 編集側と同じ後始末なので、同じ関数を通す。
+   */
+  stepBackIfPageEmpty()
+}
+
 /**
  * 読み直した結果が 0 件になったら 1 ページ戻す。
- * 最終ページの最後の 1 件が今の offset から居なくなる操作（絞り込み中の変更）で使う。
+ * 最終ページの最後の 1 件が今の offset から居なくなる操作（削除、絞り込み中の変更）で使う。
  */
 function stepBackIfPageEmpty() {
   if (items.value.length === 0 && offset.value > 0) {
@@ -467,7 +514,7 @@ function symbolLabel(symbol) {
           <span class="symbol-list__note">{{ value || '—' }}</span>
         </template>
 
-        <!-- 行ごとの操作。削除を足すときは編集の右に置く -->
+        <!-- 編集を左、削除を右端に置く（破壊的な操作を最後にする既存の並び） -->
         <template #cell-actions="{ row }">
           <div class="symbol-list__row-actions">
             <BaseButton
@@ -477,6 +524,14 @@ function symbolLabel(symbol) {
               @click="openEdit(row)"
             >
               編集
+            </BaseButton>
+            <BaseButton
+              variant="danger"
+              :data-testid="`symbols-delete-${row.id}`"
+              :disabled="deleting"
+              @click="openDelete(row)"
+            >
+              削除
             </BaseButton>
           </div>
         </template>
@@ -515,6 +570,16 @@ function symbolLabel(symbol) {
         :errors="editErrors"
       />
     </MasterFormDialog>
+
+    <ConfirmDeleteDialog
+      :open="Boolean(deleteTarget)"
+      testid-prefix="symbols"
+      :label="deleteTarget ? symbolLabel(deleteTarget) : ''"
+      :pending="deleting"
+      :error="deleteError"
+      @close="closeDelete"
+      @confirm="submitDelete"
+    />
   </section>
 </template>
 

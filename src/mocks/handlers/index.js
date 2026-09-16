@@ -11,7 +11,7 @@ import {
 } from '../fixtures/ca'
 import { canceledSymbols, symbols } from '../fixtures/symbols'
 import { hardLimitSetting } from '../fixtures/hardLimits'
-import { codeMasters, statusCodes } from '../fixtures/codes'
+import { codeMasters } from '../fixtures/codes'
 import { canceledCustomers, customers } from '../fixtures/customers'
 
 /*
@@ -204,10 +204,6 @@ export const handlers = [
    * 銘柄コードの絞り込みは実 API と同じ**部分一致**で、銘柄コードか Ticker のどちらかに当たればよい
    * （実 API は `銘柄コード LIKE %s OR Ticker LIKE %s`）。
    * CSV 入出力と更新履歴（/masters/ca/export-csv ほか）は画面が使わないのでモックしない。
-   *
-   * `status` は `/masters/ca` に無いクエリで、画面の絞り込みをモックだけで成立させるためのもの
-   * （ステータス自体が実 API 未実装。fixtures/ca.js のコメント参照）。実 API に切り替えるときは
-   * 仕様追加を依頼する。それまで実 API は知らないクエリとして黙って無視する。
    */
   http.get('*/api/masters/ca', ({ request }) => {
     const params = new URL(request.url).searchParams
@@ -215,7 +211,6 @@ export const handlers = [
     // クエリ名は 2026-09-16 の仕様取り込みで stock_code から symbol に改名された
     const stockCode = (params.get('symbol') ?? '').trim().toUpperCase()
     const caType = params.get('ca_type') ?? ''
-    const status = params.get('status') ?? ''
     const includeDeleted = params.get('include_deleted') === 'true'
     const limit = toNonNegativeInt(params.get('limit'), 50)
     const offset = toNonNegativeInt(params.get('offset'), 0)
@@ -228,8 +223,7 @@ export const handlers = [
             ca.銘柄コード.toUpperCase().includes(stockCode) ||
             // Ticker は nullable。銘柄マスタに無いコードで登録された行では欠ける
             (ca.Ticker ?? '').toUpperCase().includes(stockCode)) &&
-          (!caType || ca.CA種別 === caType) &&
-          (!status || ca.ステータス === status),
+          (!caType || ca.CA種別 === caType),
       )
       .sort((a, b) => caSortKey(b) - caSortKey(a) || b.ID - a.ID)
 
@@ -532,7 +526,6 @@ export const handlers = [
       分子: ca.numerator,
       比率: formatRatio(ca.denominator, ca.numerator),
       備考: ca.note,
-      ステータス: ca.status,
       ユーザー操作フラグ: 1,
       // 合札はサーバが新しくする（リクエストで来た値は照合に使うだけ）
       更新日時: nowIsoTimestamp(),
@@ -1251,23 +1244,6 @@ function caRequestViolation(body) {
     )
   }
 
-  /*
-   * ステータス は実 API 未実装の仮項目（fixtures/ca.js のコメント参照）。
-   * 実装されれば CA種別 と同じく enum になる見込みなので、モックも同じ形で弾いておく。
-   * 任意項目なので未設定（null / 送っていない）は通す。
-   */
-  const status = body?.ステータス
-  if (status !== null && status !== undefined) {
-    const codes = statusCodes.map((entry) => entry.code)
-    if (!codes.includes(status)) {
-      return requestValidationError(
-        ['body', 'ステータス'],
-        `Input should be ${codes.join(', ')}`,
-        'enum',
-      )
-    }
-  }
-
   return null
 }
 
@@ -1286,7 +1262,6 @@ function toCaInput(body) {
     numerator: body.分子 ?? null,
     // 備考は nullable。空文字に寄せず、送られてきた形のまま保存する
     note: typeof body.備考 === 'string' ? body.備考 : null,
-    status: typeof body.ステータス === 'string' ? body.ステータス : null,
     updatedAt: typeof body.更新日時 === 'string' ? body.更新日時 : null,
   }
 }
@@ -1386,7 +1361,6 @@ function toMockCaItem(ca) {
     分子: ca.numerator,
     比率: formatRatio(ca.denominator, ca.numerator),
     備考: ca.note,
-    ステータス: ca.status,
     取消区分: 0,
     // 画面からの登録なので 1（システム連携ではない）
     ユーザー操作フラグ: 1,

@@ -11,7 +11,6 @@
  * （法人区分 0: 個人 / 1: 法人、口座区分 0: 一般 / 1: 自己 / 2: 同業者 など）。
  * 部店・扱者は画面モック（docs/mock/customers-holdings/index.html の部店プルダウン）の値。
  * 投資方針だけは仕様に手掛かりが無いので仮の 5 段階を置いている。
- * ステータス（CAマスタ）は実 API にまだ無いコードマスタで、コード値ごと仮置き（下記）。
  */
 
 /**
@@ -81,20 +80,6 @@ export const investmentPolicyCodes = [
 ]
 
 /**
- * ステータス（CAマスタの進行状況）。**コードも名前も仮置き。**
- *
- * `GET /codes` にこのコードマスタはまだ無く、バックエンドの codes.json にも載っていない。
- * 予定 / 確定 / 完了 の 3 値は CAマスタの仕様から起こしたもので、コードは他の区分系
- * （口座区分・法人区分）と同じ 1 桁の連番に寄せた。実 API の対応表が確認できたら
- * **ここだけ**差し替える（画面と api 層はコードの中身を知らない）。
- */
-export const statusCodes = [
-  { code: '1', label: '予定' },
-  { code: '2', label: '確定' },
-  { code: '3', label: '完了' },
-]
-
-/**
  * `GET /codes` の応答そのもの。
  * 部店・扱者の label はモックのプルダウン表示（「123 A支店」）に合わせてコードを前置する。
  */
@@ -106,5 +91,4 @@ export const codeMasters = {
   法人区分: corporateTypeCodes,
   コンプラランク: complianceRankCodes,
   投資方針: investmentPolicyCodes,
-  ステータス: statusCodes,
 }

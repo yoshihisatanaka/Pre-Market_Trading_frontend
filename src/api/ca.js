@@ -10,12 +10,6 @@ import { apiClient } from './client'
  *   - 一覧の配列名が `ca_list`、1 件の応答のキーが `ca`
  *   - 削除は論理削除（取消区分=1）。一覧は既定で取消済みを返さない
  *
- * **`ステータス` だけは実 API に無い仮の項目。** CAItem にも CARequest にも宣言が無く、
- * いまは MSW のモックだけが返し・受け取る（src/mocks/fixtures/ca.js のコメント参照）。
- * 実 API に当てると値は欠けて空文字になり、絞り込みのクエリは無視される。バックエンドが
- * 実装したら、この層の 3 箇所（fetch のクエリ名・toCorporateAction・toCaRequest）を
- * 実際の項目名へ直せば、画面より上は変えずに済む。
- *
  * 一覧の取得と登録・更新（事前検証つき）・削除を持つ。CSV 入出力と更新履歴は別途。
  * 更新系は `X-User-Code` ヘッダが必須。付与は client.js の interceptor が全 API 共通で行う。
  */
@@ -36,15 +30,12 @@ import { apiClient } from './client'
  *   numerator: number|null,
  *   ratio: string,
  *   note: string,
- *   status: string,
  *   userModified: boolean,
  *   updatedAt: string,
  * }} CorporateAction
  *   id は実 API の ID を文字列にしたもの。日付 3 種は 'YYYY-MM-DD'（未設定は空文字）。
  *   denominator / numerator は編集フォームの初期値に使う生の数値（未設定は null。
  *   `比率` は表示用にサーバが組んだ文字列で、こちらは入力へ戻せない）。
- *   status はステータスコード（'1' 予定 / '2' 確定 / '3' 完了。未設定は空文字）。
- *   表示名は持たない（コードマスタ `ステータス` を画面が引く）。
  *   userModified は ユーザー操作フラグ=1（手動操作された行）。一覧で色を付ける印になる。
  *   updatedAt は編集の楽観的ロックで送り返す合札
  */
@@ -61,7 +52,6 @@ import { apiClient } from './client'
  *   denominator?: number|string|null,
  *   numerator?: number|string|null,
  *   note?: string,
- *   status?: string,
  * }} CorporateActionInput
  *   日付 3 種は 'YYYY-MM-DD'、空文字は「未設定」。denominator / numerator は
  *   画面の `type="number"` が文字列を持つので数値でも文字列でも受ける（この層で数値に直す）
@@ -74,10 +64,8 @@ import { apiClient } from './client'
  *
  * 取消済み（論理削除）の行は含めない。実 API の include_deleted は既定 false なので送らない。
  *
- * @param {{ limit?: number, offset?: number, stockCode?: string, caType?: string,
- *   status?: string }} [params]
+ * @param {{ limit?: number, offset?: number, stockCode?: string, caType?: string }} [params]
  *   stockCode は銘柄コードまたは Ticker。caType は CA種別コード（'110' など）。
- *   status はステータスコード（'1' / '2' / '3'）。
  *   空文字は「条件なし」としてリクエストに載せない
  * @returns {Promise<{ items: CorporateAction[], total: number }>}
  */
@@ -86,7 +74,6 @@ export async function fetchCorporateActions({
   offset = 0,
   stockCode = '',
   caType = '',
-  status = '',
 } = {}) {
   const { data } = await apiClient.get('/masters/ca', {
     // クエリ名を知ってよいのはこの層だけ。値が undefined のパラメータは axios が送らない
@@ -102,12 +89,6 @@ export async function fetchCorporateActions({
        */
       symbol: stockCode || undefined,
       ca_type: caType || undefined,
-      /*
-       * `status` は実 API に無いクエリで、いまは MSW のモックだけが解釈する。
-       * FastAPI は知らないクエリを黙って無視するので、実 API に当てると
-       * **エラーにはならず、絞り込みが効かないまま全件が返る**。
-       */
-      status: status || undefined,
     },
   })
 
@@ -229,7 +210,6 @@ function toCaRequest({
   denominator = null,
   numerator = null,
   note = '',
-  status = '',
   updatedAt = '',
 }) {
   return {
@@ -242,8 +222,6 @@ function toCaRequest({
     分子: toApiNumber(numerator),
     // 備考は nullable。空欄は「備考なし」なので空文字ではなく null を送る
     備考: note || null,
-    // ステータスも同じく、未選択は「未設定」なので null を送る（実 API には無い仮の項目）
-    ステータス: status || null,
     /*
      * 楽観的ロックの合札。無いときはキーごと送らない（実 API 側は未指定を「照合しない」と
      * 解釈する。登録直後の行は実 API 側の更新日時が未設定で、照合する相手が無い）。
@@ -282,11 +260,6 @@ function toCorporateAction(raw) {
     numerator: raw?.分子 ?? null,
     ratio: raw?.比率 ?? '',
     note: raw?.備考 ?? '',
-    /*
-     * ステータスコード。実 API はまだ返さないので、そのときは空文字になる
-     * （画面は他の列と同じく '—' を出す）。表示名は付いてこないので写さない。
-     */
-    status: raw?.ステータス ?? '',
     // 0 / 1 の integer は、この層で boolean に直して外へ出す
     userModified: raw?.ユーザー操作フラグ === 1,
     /*

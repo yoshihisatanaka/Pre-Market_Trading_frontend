@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -14,7 +14,6 @@ import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { CA_PAGE_SIZE, useCaStore } from '@/stores/ca'
-import { useCodesStore } from '@/stores/codes'
 import { CA_TYPE_OPTIONS, formatCaType, isCaType } from '@/utils/caTypes'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
@@ -38,22 +37,10 @@ const {
 } = storeToRefs(store)
 
 /*
- * ステータスの選択肢はコードマスタから。読み込みは main.js が起動時に 1 回だけ行うので、
- * ここでは load を呼ばない。storeToRefs ではなく computed で受けるのは、
- * 読み込みが終わった時点で選択肢が自動的に埋まるようにするため。
- */
-const codes = useCodesStore()
-// 一覧の loading と名前がぶつかるので別名で受ける
-const { loading: codesLoading } = storeToRefs(codes)
-const statusOptions = computed(() => codes.optionsFor('ステータス'))
-
-/*
- * 列は画面モック（https://uspreorder-vmbhej3k.manus.space/masters/ca）に合わせる。
- *   - ステータスは実 API（docs/api/openapi.json の CAItem）に無い**仮の項目**。値は MSW の
- *     モックだけが返し、選択肢とラベルはコードマスタ `ステータス` から引く。実 API に当てると
- *     空になり '—' が並ぶ（src/api/ca.js のコメント参照）
- *   - モックの「権利確定日」は実 API に無く、列に対応する値の当てもないので依然として出さない。
- *     日付は 権利付最終日 / 効力発生日 / 支払日 の 3 つ
+ * 列は画面モック（https://uspreorder-vmbhej3k.manus.space/masters/ca）に合わせつつ、
+ * 実 API（docs/api/openapi.json の CAItem）が持つ項目だけを出す。
+ *   - ステータスは実 API に無い（モックにはあるが、対応する列も値も無いので出さない）
+ *   - モックの「権利確定日」も実 API に無い。日付は 権利付最終日 / 効力発生日 / 支払日 の 3 つ
  *   - 操作列の「編集」は画面モックには無いが、行から直せないと備考の誤記を直すだけでも
  *     「新規追加 → 削除」の 2 操作が必要になるため足している。新規追加はヘッダのボタンから開く
  *   - 「削除」は編集の右端に置く。破壊的な操作を最後にする既存の並び
@@ -67,7 +54,6 @@ const columns = [
   { key: 'paymentDate', label: '支払日' },
   { key: 'ratio', label: '比率' },
   { key: 'note', label: '備考' },
-  { key: 'status', label: 'ステータス' },
   // 行ごとの操作（編集・削除）。画面モックに合わせて見出しは空にする
   { key: 'actions', label: '' },
 ]
@@ -85,13 +71,6 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
       query: 'ca_type',
       parse: (value) => (isCaType(value) ? value : ''),
     },
-    /*
-     * ステータスには parse を付けない。選択肢がコードマスタ（`GET /codes`）由来で、
-     * URL を読む時点では読み込みが終わっているとは限らず、静的な集合として検証できない。
-     * `/codes` 由来の他の条件（CustomerListView の取引規制・口座区分）も同じく素通ししており、
-     * 未知の値は「該当 0 件」として現れる。
-     */
-    { key: 'status', query: 'status' },
   ],
   load: (params) => store.load(params),
 })
@@ -102,16 +81,6 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
  */
 function caTypeLabel(row) {
   return row.caTypeName || formatCaType(row.caType)
-}
-
-/**
- * ステータスの表示名。コードマスタの選択肢から引く。
- *
- * CA種別と違いサーバは表示名を返さない（項目そのものが実 API 未実装）。未設定・未知のコード・
- * コードマスタ未読込のいずれも '—' になる（他の列の空値表現とそろえる）。
- */
-function statusLabel(row) {
-  return statusOptions.value.find((option) => option.value === row.status)?.label || '—'
 }
 
 /**
@@ -155,11 +124,6 @@ function emptyForm() {
     denominator: '',
     numerator: '',
     note: '',
-    /*
-     * ステータスは任意だが、新しく登録する CA は「予定」から始まるのが自然なので
-     * 未選択ではなくこれを初期値にする（コード値の意味は fixtures/codes.js の statusCodes）。
-     */
-    status: '1',
   }
 }
 
@@ -243,7 +207,6 @@ function toForm(ca) {
     denominator: ca.denominator ?? '',
     numerator: ca.numerator ?? '',
     note: ca.note,
-    status: ca.status,
   }
 }
 
@@ -422,7 +385,6 @@ function caLabel(ca) {
     <MasterSearchCard
       testid-prefix="ca"
       :disabled="loading"
-      :options-loading="codesLoading"
       @submit="submitSearch"
       @clear="clearSearch"
     >
@@ -441,15 +403,6 @@ function caLabel(ca) {
           :options="CA_TYPE_OPTIONS"
           placeholder="-- すべて --"
           data-testid="ca-type"
-        />
-      </FormField>
-      <FormField v-slot="{ field }" label="ステータス">
-        <BaseSelect
-          v-bind="field"
-          v-model="inputs.status"
-          :options="statusOptions"
-          placeholder="-- すべて --"
-          data-testid="ca-status"
         />
       </FormField>
     </MasterSearchCard>
@@ -494,8 +447,6 @@ function caLabel(ca) {
 
         <template #cell-note="{ value }">{{ value || '—' }}</template>
 
-        <template #cell-status="{ row }">{{ statusLabel(row) }}</template>
-
         <!-- 編集を左、削除を右端に置く（破壊的な操作を最後にする既存の並び） -->
         <template #cell-actions="{ row }">
           <div class="ca-list__row-actions">
@@ -533,7 +484,6 @@ function caLabel(ca) {
       <CorporateActionFormFields
         v-model="addForm"
         testid-prefix="ca-add"
-        :status-options="statusOptions"
         :errors="addErrors"
       />
     </MasterFormDialog>
@@ -553,7 +503,6 @@ function caLabel(ca) {
       <CorporateActionFormFields
         v-model="editForm"
         testid-prefix="ca-edit"
-        :status-options="statusOptions"
         :errors="editErrors"
       />
     </MasterFormDialog>

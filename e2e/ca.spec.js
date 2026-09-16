@@ -1,13 +1,12 @@
 import { expect, test } from '@playwright/test'
 import { caStocks, corporateActions } from '../src/mocks/fixtures/ca'
-import { statusCodes } from '../src/mocks/fixtures/codes'
 import { CA_TYPE_OPTIONS } from '../src/utils/caTypes'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/ca.md（タイトル先頭の [CA-xx] が対応 ID）
 // ページ位置と検索条件は URL クエリを正とするため、URL と画面の同期をここで守る。
-// mockApi() は固定の body を返すだけで offset / stock_code / ca_type / status を解釈しない。
-// ページングと絞り込み（CA-02 / 03 / 04 / 05 / 28 / 29）は
+// mockApi() は固定の body を返すだけで offset / stock_code / ca_type を解釈しない。
+// ページングと絞り込み（CA-02 / 03 / 04 / 05）は
 // クエリを実際に処理する既定ハンドラで検証する。
 
 const PATH = '/masters/ca'
@@ -52,14 +51,6 @@ const CA_TYPE = sorted[0].CA種別
 const CA_TYPE_NAME = firstRow.caTypeName
 const byCaType = allRows.filter((row) => row.caTypeName === CA_TYPE_NAME)
 
-/*
- * ステータス（実 API 未実装の仮項目）。選択肢はコードマスタ（GET /codes の ステータス）から来るので、
- * 期待するコード値も表示名も statusCodes から引く（'2' や '確定' を直接書かない）。
- */
-const statusOf = (label) => statusCodes.find((code) => code.label === label)
-const FILTER_STATUS = statusOf('確定')
-const byStatus = sorted.filter((ca) => ca.ステータス === FILTER_STATUS.code)
-
 // フィクスチャのどの銘柄コード・Ticker にも当たらない文字列
 const NO_MATCH = 'ZZZZ'
 
@@ -75,8 +66,6 @@ const NEW_CA_TYPE = CA_TYPE_OPTIONS.find((option) => option.label === '株式分
 const NEW_DENOMINATOR = '1'
 const NEW_NUMERATOR = '2'
 const NEW_RATIO = `${NEW_DENOMINATOR}:${NEW_NUMERATOR}`
-// 追加フォームの初期値（'1' 予定）とは違う値を選んで、選んだものが反映されたと言えるようにする
-const NEW_STATUS = statusOf('完了')
 
 // 銘柄マスタ（caStocks）のどのコードにも当たらない文字列
 const UNKNOWN_STOCK_CODE = 'ZZZZZ'
@@ -99,11 +88,8 @@ const EDIT_TARGET = {
   denominator: String(firstCa.分母 ?? ''),
   numerator: String(firstCa.分子 ?? ''),
   note: firstCa.備考 ?? '',
-  status: firstCa.ステータス ?? '',
 }
 const EDITED_NOTE = `${EDIT_TARGET.note}（訂正）`
-// 切り替え先は 1 行目の現在のステータス以外なら何でもよい（変化したことが見たい）
-const EDITED_STATUS = statusCodes.find((code) => code.code !== EDIT_TARGET.status)
 
 /*
  * 削除の対象も一覧の 1 行目（EDIT_TARGET と同じ行）。確認ダイアログに出る対象ラベルは
@@ -120,14 +106,6 @@ const CONFLICT_MESSAGE =
 /** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function rowsOf(page) {
   return page.getByTestId('ca-table').getByTestId('data-table-row')
-}
-
-/**
- * 行のステータス列。ステータスは操作列の左（最後から 2 番目のセル）に置く。
- * 列そのものの位置は CA-09 が守るので、ここはその約束に乗って位置で採る。
- */
-function statusCellOf(rows) {
-  return rows.locator('td:nth-last-child(2)')
 }
 
 /** 追加モーダル。role=dialog の aria-label はモーダルのタイトル（BaseModal） */
@@ -304,13 +282,11 @@ test.describe('CAマスタ一覧', () => {
     expect(markedColor).not.toBe(plainColor)
   })
 
-  test('[CA-09] 列順が仕様どおりで操作列の左にステータスがあり行に編集と削除がある', async ({
-    page,
-  }) => {
+  test('[CA-09] 列順が仕様どおりでステータス列が無く行に編集と削除がある', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    // 右端は行ごとの操作列。画面モックに合わせて見出しを持たない（その左がステータス）
+    // 右端は行ごとの操作列。画面モックに合わせて見出しを持たない（ステータス列は無い）
     await expect(page.getByTestId('ca-table').locator('th')).toHaveText([
       '銘柄',
       'CA種別',
@@ -319,7 +295,6 @@ test.describe('CAマスタ一覧', () => {
       '支払日',
       '比率',
       '備考',
-      'ステータス',
       '',
     ])
 
@@ -342,38 +317,6 @@ test.describe('CAマスタ一覧', () => {
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(rowsOf(page).first()).toContainText(firstRow.stockCode)
-  })
-
-  test('[CA-28] ステータスで絞り込むと URL と一覧に反映される', async ({ page }) => {
-    await page.goto(PATH)
-    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
-
-    await page.getByTestId('ca-status').selectOption(FILTER_STATUS.code)
-    await page.getByTestId('ca-search-submit').click()
-
-    await expect(page).toHaveURL(new RegExp(`status=${FILTER_STATUS.code}`))
-    await expect(page.getByTestId('ca-count')).toHaveText(`${byStatus.length} 件`)
-
-    // 絞り込んだステータス以外が混ざっていない（該当は 1 ページに収まる件数）
-    const rows = rowsOf(page)
-    await expect(rows).toHaveCount(byStatus.length)
-    await expect(statusCellOf(rows)).toHaveText(Array(byStatus.length).fill(FILTER_STATUS.label))
-  })
-
-  test('[CA-29] 「クリア」を押すとステータスの絞り込みが解除される', async ({ page }) => {
-    await page.goto(PATH)
-
-    await page.getByTestId('ca-status').selectOption(FILTER_STATUS.code)
-    await page.getByTestId('ca-search-submit').click()
-    await expect(rowsOf(page)).toHaveCount(byStatus.length)
-
-    await page.getByTestId('ca-search-clear').click()
-
-    await expect(page).toHaveURL(new RegExp(`${PATH}$`))
-    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
-    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
-    // 選択も「-- すべて --」（空値）に戻る
-    await expect(page.getByTestId('ca-status')).toHaveValue('')
   })
 })
 
@@ -536,24 +479,6 @@ test.describe('CAマスタ 新規追加', () => {
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(rowsOf(page).first()).toContainText(firstRow.stockCode)
   })
-
-  test('[CA-30] 選んだステータスが追加した行に出る', async ({ page }) => {
-    await page.goto(PATH)
-    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
-
-    await page.getByTestId('ca-add').click()
-    await fillRequiredAddFields(page)
-    await page.getByTestId('ca-add-status').selectOption(NEW_STATUS.code)
-    await page.getByTestId('ca-add-submit').click()
-
-    await expect(addDialogOf(page)).toBeHidden()
-    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL + 1} 件`)
-
-    // 日付を入れていないので、この行はサーバの並びで先頭に来る（CA-12 と同じ）
-    const created = rowsOf(page).first()
-    await expect(created).toContainText(NEW_STOCK.stockCode)
-    await expect(statusCellOf(created)).toHaveText(NEW_STATUS.label)
-  })
 })
 
 /*
@@ -698,24 +623,6 @@ test.describe('CAマスタ 編集', () => {
     await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(rowsOf(page).first()).toContainText(EDIT_TARGET.note)
-  })
-
-  test('[CA-31] ステータスを変えて更新すると一覧のその行が変わる', async ({ page }) => {
-    await page.goto(PATH)
-    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
-
-    await openEditOfFirstRow(page)
-    // 開いた時点では一覧と同じ値が入っている
-    await expect(page.getByTestId('ca-edit-status')).toHaveValue(EDIT_TARGET.status)
-
-    await page.getByTestId('ca-edit-status').selectOption(EDITED_STATUS.code)
-    await page.getByTestId('ca-edit-submit').click()
-
-    await expect(editDialogOf(page)).toBeHidden()
-
-    // 効力発生日を変えていないので並びは動かない。その行のステータスだけが新しくなる
-    await expect(statusCellOf(rowsOf(page).first())).toHaveText(EDITED_STATUS.label)
-    await expect(page.getByTestId('ca-count')).toHaveText(`${TOTAL} 件`)
   })
 })
 

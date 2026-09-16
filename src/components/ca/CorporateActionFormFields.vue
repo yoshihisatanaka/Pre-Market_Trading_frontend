@@ -5,18 +5,13 @@
  * `MasterFormDialog` の既定スロットに差す中身だけを持つ。枠・ボタン・エラーの出し先は
  * ダイアログ側の責務で、この部品は「どんな項目を、どの制約で並べるか」だけを決める。
  *
- * 項目が 9 つあり、追加と編集で 1 つでもずれると（maxlength の付け忘れなど）
+ * 項目が 8 つあり、追加と編集で 1 つでもずれると（maxlength の付け忘れなど）
  * 画面のどちらか片方だけが実 API に弾かれる。**そのずれを起こさないために部品にしている**
  * ので、ここに画面ごとの分岐を持ち込まないこと。
  *
- * ステータスの選択肢だけは props で受け取る。出どころがコードマスタ（`GET /codes`）で、
- * ここで `useCodesStore` を触ると追加・編集のダイアログぶんストア参照が増えるため、
- * 画面側に 1 本だけ持たせて渡す（CA種別は静的な対応表なので直に import している）。
- *
  * 出す data-testid（testidPrefix が 'ca-add' なら ca-add-stock-code など）:
- *   {prefix}-stock-code / {prefix}-type / {prefix}-status / {prefix}-ex-rights-date
- *   / {prefix}-effective-date / {prefix}-payment-date / {prefix}-denominator
- *   / {prefix}-numerator / {prefix}-note
+ *   {prefix}-stock-code / {prefix}-type / {prefix}-ex-rights-date / {prefix}-effective-date
+ *   / {prefix}-payment-date / {prefix}-denominator / {prefix}-numerator / {prefix}-note
  *
  * 単体テストは持たない。挙動は `src/views/CorporateActionListView.spec.js`（CAV）が
  * 追加・編集それぞれのダイアログを通して担保する（`src/components/masters/` と同じ扱い）。
@@ -31,14 +26,6 @@ defineProps({
   /** data-testid の接頭辞。'ca-add' / 'ca-edit' のように操作まで含めて渡す */
   testidPrefix: {
     type: String,
-    required: true,
-  },
-  /**
-   * ステータスの選択肢（コードマスタ `ステータス` の `{ value, label }`）。
-   * 読み込み前は空配列で渡ってくる（select は placeholder だけの状態で描ける）。
-   */
-  statusOptions: {
-    type: Array,
     required: true,
   },
   /**
@@ -60,11 +47,8 @@ const form = defineModel({ type: Object, required: true })
 </script>
 
 <template>
-  <!--
-    銘柄コード・CA種別（必須）とステータス。どれも短いので日付の行と同じ 3 列に並べる。
-    ステータスは任意（未選択なら「未設定」として null を送る）。
-  -->
-  <FormGrid :columns="3">
+  <!-- 銘柄コードと CA種別 は必須。どちらも短いので横に並べる -->
+  <FormGrid :columns="2">
     <!-- maxlength は実 API（CARequest の 銘柄コード）の 14 文字に合わせる -->
     <FormField v-slot="{ field }" label="銘柄コード" required :error="errors.stockCode">
       <BaseInput
@@ -82,15 +66,6 @@ const form = defineModel({ type: Object, required: true })
         :options="CA_TYPE_OPTIONS"
         placeholder="-- 選択してください --"
         :data-testid="`${testidPrefix}-type`"
-      />
-    </FormField>
-    <FormField v-slot="{ field }" label="ステータス">
-      <BaseSelect
-        v-bind="field"
-        v-model="form.status"
-        :options="statusOptions"
-        placeholder="-- 選択してください --"
-        :data-testid="`${testidPrefix}-status`"
       />
     </FormField>
   </FormGrid>

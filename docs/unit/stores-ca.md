@@ -58,4 +58,3 @@ MSW の既定ハンドラ（`src/mocks/handlers/index.js`）に当てて、取�
 | CAS-22 | 既定モック | `load()` の後に一覧の 1 件を `remove()` する | `true` が返り、`total` が 1 減ってその行が一覧から消える（実 API は論理削除だが、一覧は取消済みを返さない） | 実装済 |
 | CAS-23 | `DELETE /api/masters/ca/{id}` が 500 を返す | `remove()` を呼ぶ | `false` が返り、`deleteError` に理由が入る。`total` は変わらない | 実装済 |
 | CAS-24 | 既定モック。前回の `remove()` が失敗している | `clearDeleteError()` を呼ぶ | `deleteError` が空になる（確認モーダルを開き直したときに前回の失敗を残さない） | 実装済 |
-| CAS-25 | 既定モック | `load({ status: '2' })` を呼ぶ | ステータスで絞り込まれた一覧が入り、`status` が検索条件として保持される（読み直しでも落ちない） | 実装済 |

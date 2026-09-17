@@ -10,13 +10,13 @@
 
 ## モックと開発環境の食い違い（分母はモック）
 
-モックのサイドバーは **4 区分 21 項目**で、`src/components/layout/navigation.js` の 16 項目と次の差がある。
+モックのサイドバーは **4 区分 21 項目**で、`src/components/layout/navigation.js` の 15 項目と次の差がある。
 
 | 種別 | 対象 |
 |---|---|
 | モックにあり `navigation.js` に無い | `権限マスタ` / `手数料優遇マスタ` / `みずほ注文締` / 区分「運用管理」の 4 項目（`お知らせ管理` / `滞留注文抽出` / `操作ログ` / `障害管理`） |
 | モックのサイドバーに無いがモックに画面がある | `新規注文`（`/orders/new`）/ `顧客詳細`（`/customers/{id}/summary`・`/customers/{id}/orders`）/ `仮計算`（顧客詳細のタブ）/ 注文の確認・完了・訂正・取消（`/orders/{id}/amend` ほか）/ CSV の確認・完了 |
-| `navigation.js` にありモックに無い | `ユーザマスタ`（`/masters/users`）。**モックの `/masters/users` は `/masters/permissions` へ 302 リダイレクトする過去互換の口**で、画面としては `権限マスタ` に統合済み |
+| `navigation.js` にありモックに無い | なし（`ユーザマスタ` は 2026-09-17 に削除した。ユーザ情報は Entra ID 側で持つため画面が不要になった） |
 | パスがずれている | 受注不可日マスタ: モック `/masters/blocked-dates` / 実装 `/masters/blackout-dates`（API の命名に合わせた）。約定照会: モック `/executions/` / 実装 `/executions` |
 
 **今回から分母をモックの git（`python_app/templates` / `python_app/routers`）に切り替えた。**

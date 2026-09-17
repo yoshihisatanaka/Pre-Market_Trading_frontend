@@ -6,6 +6,397 @@
     "version": "1.0.0 [Verified: Phase 1-13]"
   },
   "paths": {
+    "/orders/dream-status/statuses": {
+      "get": {
+        "tags": [
+          "DreamStatus"
+        ],
+        "summary": "List Dream Status Codes Endpoint",
+        "description": "Dream状況コード一覧取得API（画面のDream登録状況プルダウン用）。\n\n- `Dream登録状況` と `Dream取消状況` を統合した表示用コードを返却する\n- 擬似コード `ERROR` を指定すると、登録失敗・取消失敗の両方を一括で絞り込める",
+        "operationId": "list_dream_status_codes_endpoint_orders_dream_status_statuses_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DreamStatusCodeListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/dream-status": {
+      "get": {
+        "tags": [
+          "DreamStatus"
+        ],
+        "summary": "Search Dream Orders Endpoint",
+        "description": "Dream注文一覧検索API（Dream連携に特化した画面用）。\n\n- `Dream登録状況` と `Dream取消状況` を1列（`Dream状況`）へ統合して返却する\n  （取消状況が `0` 以外なら取消フェーズを優先。生値も併せて返却）\n- 「登録日時」列は `Dream完了日時` として返却する（取消フェーズなら `Dream取消日時`）\n- エラー内容はDream連携由来の `Dreamエラー内容` を表示用に返却する\n  （IB連携由来のエラーは参考として `エラー内容` に格納）\n- `STS変更可` が true の行は `PUT /orders/dream-status/{order_id}` でDream状況を変更できる",
+        "operationId": "search_dream_orders_endpoint_orders_dream_status_get",
+        "parameters": [
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）"
+          },
+          {
+            "name": "account_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "口座番号（完全一致）",
+              "title": "Account No"
+            },
+            "description": "口座番号（完全一致）"
+          },
+          {
+            "name": "symbol",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "銘柄コード または Ticker（m_銘柄情報に紐づけて検索）",
+              "title": "Symbol"
+            },
+            "description": "銘柄コード または Ticker（m_銘柄情報に紐づけて検索）"
+          },
+          {
+            "name": "dream_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Dream登録状況（統合コード）。指定可能値は /orders/dream-status/statuses を参照",
+              "title": "Dream Status"
+            },
+            "description": "Dream登録状況（統合コード）。指定可能値は /orders/dream-status/statuses を参照"
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "登録日FROM（作成日・YYYYMMDD または YYYY-MM-DD・当日00:00:00から）",
+              "title": "Date From"
+            },
+            "description": "登録日FROM（作成日・YYYYMMDD または YYYY-MM-DD・当日00:00:00から）"
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "登録日TO（作成日・YYYYMMDD または YYYY-MM-DD・当日23:59:59まで）",
+              "title": "Date To"
+            },
+            "description": "登録日TO（作成日・YYYYMMDD または YYYY-MM-DD・当日23:59:59まで）"
+          },
+          {
+            "name": "receipt_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "DREAM受注番号（受注番号・完全一致）",
+              "title": "Receipt Number"
+            },
+            "description": "DREAM受注番号（受注番号・完全一致）"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(asc|desc)$",
+              "description": "作成日時の並び順（desc: 新しい順）",
+              "default": "desc",
+              "title": "Sort"
+            },
+            "description": "作成日時の並び順（desc: 新しい順）"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "取得開始位置",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "取得開始位置"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DreamOrderListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "検索条件不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/dream-status/{order_id}": {
+      "put": {
+        "tags": [
+          "DreamStatus"
+        ],
+        "summary": "Change Dream Status Endpoint",
+        "description": "Dream状況手動変更API（STS変更）。\n\n- 対象は登録失敗（`9`）・取消失敗（`C9`）の注文のみ。それ以外は400で拒否する\n- 遷移可能: `9` -> `0`（再送待ち） / `2`（登録済・手動消し込み） / `8`（登録対象外）、\n  `C9` -> `C0`（取消再送待ち） / `C2`（取消済・手動消し込み）\n- `2` へ変更する場合、受注番号が未設定なら `受注番号` の指定が必須\n  （以降のDream取消連携が受注番号を前提とするため）\n- `C2` へ変更した場合は自動連携時と同様に処理状況を `034`（取消済）へ進める\n- 楽観ロック（更新日時照合・409 Conflict）\n- `d_注文イベント` に `DREAM_STATUS_MANUAL` を記録する",
+        "operationId": "change_dream_status_endpoint_orders_dream_status__order_id__put",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DreamStatusChangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DreamStatusChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "遷移不可・入力不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "対象注文が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "楽観ロック競合",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/orders": {
       "get": {
         "tags": [
@@ -10165,6 +10556,68 @@
         }
       }
     },
+    "/calculations": {
+      "post": {
+        "tags": [
+          "Calculations"
+        ],
+        "summary": "Calculate Endpoint",
+        "description": "仮計算（概算損益・受渡概算額試算）API（DB更新なし）\n\n- 現地約定金額 → 現地手数料(15bp) → 現地取引所税(売のみ) → 現地精算金額 → 為替換算で邦貨精算金額を算出\n- 口座の手数料優遇に `ベイシス` があればベイシス方式、なければ手数料パターン方式で国内手数料を算定\n- 消費税は外税として加算し、受渡概算額を円貨・外貨で返却\n- `特定預り区分` 指定時は残高明細の平均取得単価から概算損益（売却時）を算出",
+        "operationId": "calculate_endpoint_calculations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalculationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalculationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (口座・銘柄が存在しない、金額帯未登録等)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/operations/activity-logs/targets": {
       "get": {
         "tags": [
@@ -13950,6 +14403,344 @@
         "title": "CAValidationResponse",
         "description": "CA事前検証レスポンス"
       },
+      "CalculationRequest": {
+        "properties": {
+          "口座番号": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "口座番号",
+            "description": "対象口座番号"
+          },
+          "銘柄コード": {
+            "type": "string",
+            "maxLength": 14,
+            "minLength": 1,
+            "title": "銘柄コード",
+            "description": "銘柄コード"
+          },
+          "売買区分": {
+            "type": "string",
+            "pattern": "^(1|3)$",
+            "title": "売買区分",
+            "description": "1: 売, 3: 買"
+          },
+          "数量": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "数量",
+            "description": "株数"
+          },
+          "単価": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "単価",
+            "description": "想定単価 (USD)"
+          },
+          "特定預り区分": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "特定預り区分",
+            "description": "残高明細の特定預り区分。指定時は平均取得単価から概算損益を算出する"
+          },
+          "為替レート": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "為替レート",
+            "description": "為替レート（手入力）。未指定時は m_為替 の直近有効レートを使用"
+          }
+        },
+        "type": "object",
+        "required": [
+          "口座番号",
+          "銘柄コード",
+          "売買区分",
+          "数量",
+          "単価"
+        ],
+        "title": "CalculationRequest",
+        "description": "仮計算（概算損益・受渡概算額試算）APIの入力モデル"
+      },
+      "CalculationResponse": {
+        "properties": {
+          "口座番号": {
+            "type": "integer",
+            "title": "口座番号"
+          },
+          "銘柄コード": {
+            "type": "string",
+            "title": "銘柄コード"
+          },
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          },
+          "銘柄名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名"
+          },
+          "売買区分": {
+            "type": "string",
+            "title": "売買区分"
+          },
+          "数量": {
+            "type": "integer",
+            "title": "数量"
+          },
+          "単価": {
+            "type": "number",
+            "title": "単価"
+          },
+          "特定預り区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "特定預り区分"
+          },
+          "為替レート": {
+            "type": "number",
+            "title": "為替レート"
+          },
+          "為替レート取得元": {
+            "type": "string",
+            "title": "為替レート取得元",
+            "description": "手入力 または m_為替"
+          },
+          "為替基準日": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "為替基準日"
+          },
+          "現地約定金額": {
+            "type": "number",
+            "title": "現地約定金額",
+            "description": "単価 × 株数 (USD)"
+          },
+          "現地手数料": {
+            "type": "number",
+            "title": "現地手数料",
+            "description": "現地約定金額 × 15bp (USD, 小数第3位四捨五入)"
+          },
+          "現地取引所税": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "現地取引所税",
+            "description": "現地約定金額 × 0.0000206 (USD, 小数第3位切上。売却時のみ)"
+          },
+          "現地精算金額": {
+            "type": "number",
+            "title": "現地精算金額",
+            "description": "売: 約定 − 手数料 − 税 / 買: 約定 ＋ 手数料 (USD)"
+          },
+          "邦貨精算金額": {
+            "type": "number",
+            "title": "邦貨精算金額",
+            "description": "現地精算金額 × 為替レート (円)。手数料算定の基準額"
+          },
+          "手数料方式": {
+            "type": "string",
+            "title": "手数料方式",
+            "description": "BASIS: ベイシス方式 / PATTERN: パターン方式"
+          },
+          "手数料パターン": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料パターン",
+            "description": "適用した手数料パターン（空文字: デフォルト）"
+          },
+          "手数料優遇適用": {
+            "type": "boolean",
+            "title": "手数料優遇適用",
+            "description": "手数料優遇マスタの設定を適用したか"
+          },
+          "適用金額帯": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "適用金額帯",
+            "description": "パターン方式で該当した金額帯"
+          },
+          "税抜手数料": {
+            "type": "number",
+            "title": "税抜手数料",
+            "description": "国内手数料 (円・税抜)"
+          },
+          "消費税": {
+            "type": "number",
+            "title": "消費税",
+            "description": "消費税 (円・外税)"
+          },
+          "消費税率": {
+            "type": "number",
+            "title": "消費税率"
+          },
+          "手数料合計": {
+            "type": "number",
+            "title": "手数料合計",
+            "description": "税抜手数料 ＋ 消費税 (円)"
+          },
+          "受渡概算額_JPY": {
+            "type": "number",
+            "title": "受渡概算額 Jpy",
+            "description": "売: 邦貨精算金額 − 手数料合計 / 買: 邦貨精算金額 ＋ 手数料合計"
+          },
+          "受渡概算額_USD": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受渡概算額 Usd",
+            "description": "受渡概算額の外貨換算"
+          },
+          "残高数量": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "残高数量"
+          },
+          "平均取得単価": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "平均取得単価"
+          },
+          "取得金額_JPY": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取得金額 Jpy",
+            "description": "平均取得単価 × 数量 × 為替レート"
+          },
+          "概算損益_JPY": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "概算損益 Jpy",
+            "description": "売却時のみ: 受渡概算額_JPY − 取得金額_JPY"
+          },
+          "概算損益_USD": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "概算損益 Usd"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "口座番号",
+          "銘柄コード",
+          "売買区分",
+          "数量",
+          "単価",
+          "為替レート",
+          "為替レート取得元",
+          "現地約定金額",
+          "現地手数料",
+          "現地精算金額",
+          "邦貨精算金額",
+          "手数料方式",
+          "手数料優遇適用",
+          "税抜手数料",
+          "消費税",
+          "消費税率",
+          "手数料合計",
+          "受渡概算額_JPY"
+        ],
+        "title": "CalculationResponse",
+        "description": "仮計算APIのレスポンスモデル"
+      },
       "CashBalanceDetail": {
         "properties": {
           "currency": {
@@ -16206,6 +16997,479 @@
         "type": "object",
         "title": "DreamOrderCorrectionRequest",
         "description": "Dreamエラー注文の属性補正 & 再送信リクエストモデル"
+      },
+      "DreamOrderItem": {
+        "properties": {
+          "Dream状況": {
+            "type": "string",
+            "title": "Dream状況",
+            "description": "Dream登録状況と取消状況を統合した表示用コード（0:未登録 / 1:登録中 / 2:登録済 / 8:登録対象外 / 9:登録失敗 / C1:取消中 / C2:取消済 / C9:取消失敗）"
+          },
+          "Dream状況名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream状況名",
+            "description": "Dream状況の名称"
+          },
+          "STS変更可": {
+            "type": "boolean",
+            "title": "Sts変更可",
+            "description": "STS変更が可能か（登録失敗・取消失敗のときTrue）"
+          },
+          "変更可能状況": {
+            "items": {
+              "$ref": "#/components/schemas/DreamStatusTransitionItem"
+            },
+            "type": "array",
+            "title": "変更可能状況",
+            "description": "STS変更で選択可能な遷移先一覧"
+          },
+          "受注番号": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注番号",
+            "description": "DREAM受注番号（受付番号）"
+          },
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "注文ID"
+          },
+          "部店": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店",
+            "description": "部店コード"
+          },
+          "部店名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店名",
+            "description": "部店名"
+          },
+          "口座番号": {
+            "type": "integer",
+            "title": "口座番号",
+            "description": "口座番号"
+          },
+          "顧客名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名",
+            "description": "顧客名"
+          },
+          "銘柄コード": {
+            "type": "string",
+            "title": "銘柄コード",
+            "description": "銘柄コード"
+          },
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker",
+            "description": "Ticker（m_銘柄情報）"
+          },
+          "売買区分": {
+            "type": "string",
+            "title": "売買区分",
+            "description": "売買区分コード"
+          },
+          "売買区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "売買区分名",
+            "description": "売買区分名"
+          },
+          "数量": {
+            "type": "integer",
+            "title": "数量",
+            "description": "注文数量"
+          },
+          "Dream完了日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream完了日時",
+            "description": "画面の「登録日時」列。取消フェーズならDream取消日時、登録フェーズならDream登録日時"
+          },
+          "Dreamエラー内容": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dreamエラー内容",
+            "description": "Dream連携のエラー内容"
+          },
+          "Dream登録状況": {
+            "type": "string",
+            "title": "Dream登録状況",
+            "description": "Dream登録状況の生値"
+          },
+          "Dream登録状況名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream登録状況名",
+            "description": "Dream登録状況の名称"
+          },
+          "Dream取消状況": {
+            "type": "string",
+            "title": "Dream取消状況",
+            "description": "Dream取消状況の生値"
+          },
+          "Dream取消状況名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream取消状況名",
+            "description": "Dream取消状況の名称"
+          },
+          "Dream登録日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream登録日時",
+            "description": "Dreamへの登録が完了した日時"
+          },
+          "Dream取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream取消日時",
+            "description": "Dreamでの取消が完了した日時"
+          },
+          "エラー内容": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "エラー内容",
+            "description": "IB・その他連携のエラー内容（参考表示用）"
+          },
+          "銘柄名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名",
+            "description": "銘柄名"
+          },
+          "処理状況": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "処理状況",
+            "description": "注文の処理状況コード"
+          },
+          "処理状況名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "処理状況名",
+            "description": "注文の処理状況名"
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時",
+            "description": "注文の作成日時（検索の登録日）"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用。STS変更時にそのまま送信する"
+          }
+        },
+        "type": "object",
+        "required": [
+          "Dream状況",
+          "STS変更可",
+          "ID",
+          "口座番号",
+          "銘柄コード",
+          "売買区分",
+          "数量",
+          "Dream登録状況",
+          "Dream取消状況"
+        ],
+        "title": "DreamOrderItem",
+        "description": "Dream注文一覧の1件"
+      },
+      "DreamOrderListResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "検索該当総件数"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "取得上限件数"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "取得開始位置"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/DreamOrderItem"
+            },
+            "type": "array",
+            "title": "Orders",
+            "description": "Dream注文一覧"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "DreamOrderListResponse",
+        "description": "Dream注文一覧レスポンス"
+      },
+      "DreamStatusChangeRequest": {
+        "properties": {
+          "変更後状況": {
+            "type": "string",
+            "title": "変更後状況",
+            "description": "変更後のDream状況コード。登録失敗(9)からは 0 / 2 / 8、取消失敗(C9)からは C0 / C2 を指定できる"
+          },
+          "受注番号": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注番号",
+            "description": "DREAM受注番号。変更後状況=2 かつ既存の受注番号が未設定の場合は必須"
+          },
+          "理由": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "理由",
+            "description": "変更理由（注文イベントへ記録）"
+          },
+          "更新日時": {
+            "type": "string",
+            "title": "更新日時",
+            "description": "楽観ロック用: 一覧取得時の更新日時（YYYY-MM-DD HH:MM:SS または ISO8601形式）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "変更後状況",
+          "更新日時"
+        ],
+        "title": "DreamStatusChangeRequest",
+        "description": "STS変更リクエスト"
+      },
+      "DreamStatusChangeResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "処理成否"
+          },
+          "order": {
+            "$ref": "#/components/schemas/DreamOrderItem",
+            "description": "変更後のDream注文情報"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "処理結果メッセージ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "order",
+          "message"
+        ],
+        "title": "DreamStatusChangeResponse",
+        "description": "STS変更レスポンス"
+      },
+      "DreamStatusCodeItem": {
+        "properties": {
+          "コード": {
+            "type": "string",
+            "title": "コード",
+            "description": "Dream状況コード（検索の dream_status パラメータ値）"
+          },
+          "名称": {
+            "type": "string",
+            "title": "名称",
+            "description": "表示名"
+          },
+          "区分": {
+            "type": "string",
+            "title": "区分",
+            "description": "登録 / 取消 / 絞込"
+          }
+        },
+        "type": "object",
+        "required": [
+          "コード",
+          "名称",
+          "区分"
+        ],
+        "title": "DreamStatusCodeItem",
+        "description": "Dream状況コード定義（画面のプルダウン用）"
+      },
+      "DreamStatusCodeListResponse": {
+        "properties": {
+          "statuses": {
+            "items": {
+              "$ref": "#/components/schemas/DreamStatusCodeItem"
+            },
+            "type": "array",
+            "title": "Statuses",
+            "description": "Dream状況コード定義一覧"
+          }
+        },
+        "type": "object",
+        "title": "DreamStatusCodeListResponse",
+        "description": "Dream状況コード一覧レスポンス"
+      },
+      "DreamStatusTransitionItem": {
+        "properties": {
+          "コード": {
+            "type": "string",
+            "title": "コード",
+            "description": "遷移先のDream状況コード"
+          },
+          "名称": {
+            "type": "string",
+            "title": "名称",
+            "description": "遷移先の意味（画面のプルダウン表示用）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "コード",
+          "名称"
+        ],
+        "title": "DreamStatusTransitionItem",
+        "description": "STS変更で選択可能な遷移先"
       },
       "ErrorResponse": {
         "properties": {
@@ -19325,6 +20589,28 @@
             "type": "string",
             "title": "銘柄コード"
           },
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          },
+          "銘柄名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名"
+          },
           "売買区分": {
             "type": "string",
             "title": "売買区分"
@@ -19565,6 +20851,30 @@
             ],
             "title": "Dream取消状況"
           },
+          "Dream登録日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream登録日時"
+          },
+          "Dream取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream取消日時"
+          },
           "VWAP区分": {
             "anyOf": [
               {
@@ -19659,6 +20969,17 @@
               }
             ],
             "title": "エラー内容"
+          },
+          "Dreamエラー内容": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dreamエラー内容"
           },
           "メモ": {
             "anyOf": [
@@ -21729,6 +23050,10 @@
     {
       "name": "Orders",
       "description": "【検証済 / Verified】注文登録・事前検証・注文取消・注文詳細照会・一覧照会 API（全テスト通過済）"
+    },
+    {
+      "name": "DreamStatus",
+      "description": "Dream注文画面（Dream連携に特化した一覧検索・状況コード一覧・STS変更）API"
     },
     {
       "name": "Customers",

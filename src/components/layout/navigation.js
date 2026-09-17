@@ -29,6 +29,7 @@ export const navSections = [
     label: 'マスタメンテ',
     items: [
       { label: '顧客マスタ', to: '/masters/customers' },
+      { label: '権限マスタ', to: '/masters/permissions' },
       { label: '銘柄マスタ', to: '/masters/symbols' },
       { label: '為替マスタ', to: '/masters/fx' },
       // docs/mock/layout/ の原本には無いが、公開モックのサイドバーには

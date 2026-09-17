@@ -24,6 +24,12 @@ const routes = [
     meta: { title: '顧客マスタ' },
   },
   {
+    path: '/masters/permissions',
+    name: 'permission-list',
+    component: () => import('@/views/PermissionListView.vue'),
+    meta: { title: '権限マスタ' },
+  },
+  {
     path: '/masters/market-holidays',
     name: 'market-holiday-list',
     component: () => import('@/views/MarketHolidayListView.vue'),

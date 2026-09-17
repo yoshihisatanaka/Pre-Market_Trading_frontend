@@ -56,12 +56,12 @@ test.describe('共通レイアウト', () => {
   })
 
   test('[LAY-04] 未実装の画面を直接開いてもレイアウトは表示される', async ({ page }) => {
-    await page.goto('/masters/users')
+    await page.goto('/masters/fx')
 
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
     await expect(nav).toBeVisible()
     await expect(page.getByRole('heading', { name: 'ページが見つかりません' })).toBeVisible()
-    await expect(nav.getByRole('link', { name: 'ユーザマスタ', exact: true })).toHaveAttribute(
+    await expect(nav.getByRole('link', { name: '為替マスタ', exact: true })).toHaveAttribute(
       'aria-current',
       'page',
     )

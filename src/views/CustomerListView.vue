@@ -193,10 +193,10 @@ function rowClass(row) {
       @reload="store.reload()"
       @update:offset="goToOffset"
     >
+      <!-- 行のキーは DataTable の既定（id）に任せる。主キーは口座番号ではない -->
       <DataTable
         flat
         data-testid="customers-table"
-        row-key="accountNumber"
         :columns="columns"
         :rows="items"
         :row-class="rowClass"

@@ -33,11 +33,21 @@ const BLACKOUT_DATES_PER_YEAR = [
  */
 const UPDATED_AT_TIME = 'T09:00:00'
 
-function toBlackoutDateItem({ blackoutDate, reason, canceled = false }) {
+/*
+ * **`ID` だけは仕様より先行している。** 取り込み時点の openapi.json の BlackoutDateItem に
+ * `ID` は無く、パスも `/masters/blackout-dates/{blackout_date}` のままだが、DB 全テーブルの
+ * 主キーを id に統一する方針に合わせて先に置いてある（src/mocks/fixtures/symbols.js と同じ扱い）。
+ *
+ * 採番は実 API の AUTO_INCREMENT を模して単調増加させる。取消済みの行も母数に入れるので、
+ * blackoutDates と canceledBlackoutDates を通して一意になる。
+ */
+function toBlackoutDateItem({ id, blackoutDate, reason, canceled = false }) {
   const digits = String(blackoutDate)
   const isoDate = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 
   return {
+    ID: id,
+    // 主キーではなくなったが、一意制約を持つ業務上の日付として残る
     受注不可日: blackoutDate,
     備考: reason,
     取消区分: canceled ? 1 : 0,
@@ -55,9 +65,14 @@ function toBlackoutDateItem({ blackoutDate, reason, canceled = false }) {
  * 有効な行（取消区分 0）。実 API と同じく受注不可日の降順。
  * YEARS もひな型も昇順なので、生成してから反転する。
  */
-export const blackoutDates = YEARS.flatMap((year) =>
-  BLACKOUT_DATES_PER_YEAR.map(({ monthDay, reason }) =>
-    toBlackoutDateItem({ blackoutDate: Number(`${year}${monthDay}`), reason }),
+export const blackoutDates = YEARS.flatMap((year, yearIndex) =>
+  BLACKOUT_DATES_PER_YEAR.map(({ monthDay, reason }, index) =>
+    toBlackoutDateItem({
+      // 受注不可日の昇順に 1..56。反転しても行に付いたまま動く
+      id: yearIndex * BLACKOUT_DATES_PER_YEAR.length + index + 1,
+      blackoutDate: Number(`${year}${monthDay}`),
+      reason,
+    }),
   ),
 ).reverse()
 
@@ -69,5 +84,11 @@ export const blackoutDates = YEARS.flatMap((year) =>
  * ひな型の 8 件と重ならない月日を選んでいる。
  */
 export const canceledBlackoutDates = [
-  toBlackoutDateItem({ blackoutDate: 20260429, reason: '臨時休業（取消済み）', canceled: true }),
+  toBlackoutDateItem({
+    // 有効な行（1..56）の続き。YEARS やひな型が増えても一意のまま
+    id: YEARS.length * BLACKOUT_DATES_PER_YEAR.length + 1,
+    blackoutDate: 20260429,
+    reason: '臨時休業（取消済み）',
+    canceled: true,
+  }),
 ]

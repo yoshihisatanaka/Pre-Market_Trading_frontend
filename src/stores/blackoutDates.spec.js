@@ -13,7 +13,8 @@ const toIsoDate = (blackoutDate) => {
   const digits = String(blackoutDate)
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
-const toId = (blackout) => String(blackout.受注不可日)
+// 主キーは受注不可日ではなく ID（api 層が文字列にして返す）
+const toId = (blackout) => String(blackout.ID)
 
 // 期待値はフィクスチャと表示件数から導く（56 / 50 を直接書かない）
 const PAGE_SIZE = BLACKOUT_DATES_PAGE_SIZE
@@ -54,11 +55,11 @@ const duplicateMessage = (blackoutDate) => `受注不可日(${blackoutDate})は�
 // 取消済み（論理削除）の日付。実 API は警告を出さず、そのまま再有効化する
 const CANCELED_DATE = toIsoDate(canceledBlackoutDates[0].受注不可日)
 
-// 削除・更新の対象と、既定ハンドラが 404 を返す「存在しない受注不可日」
+// 削除・更新の対象と、既定ハンドラが 404 を返す「存在しない id」
 const DELETE_TARGET = blackoutDates[0]
 const DELETE_TARGET_ID = toId(DELETE_TARGET)
-// フィクスチャは 2023 年以降しか持たないので、この日付は必ず存在しない
-const MISSING_ID = '19000101'
+// 採番は取消済みも含めて 1..57 なので、この id は必ず存在しない
+const MISSING_ID = '999999'
 const DELETE_NOT_FOUND_MESSAGE = '指定された受注不可日が存在しないか、既に削除されています'
 const UPDATE_NOT_FOUND_MESSAGE = '指定された受注不可日データが存在しません'
 
@@ -687,7 +688,17 @@ describe('useBlackoutDatesStore', () => {
     expect(ids(store.items)).toEqual(expectedIds(firstPage))
   })
 
-  it('[BDS-33] 存在しない id のとき updateError に 404 が入る', async () => {
+  /*
+   * 主キーが ID になってからは、存在しない id は**事前検証が先に弾く**（→ BDS-40）。
+   * 更新の 404 が出るのは「事前検証を通ったあとに対象が消えていた」ときだけなので、
+   * 事前検証を通る応答に差し替えてその経路を作る。
+   */
+  it('[BDS-33] 事前検証を通ったあとに対象が消えていると updateError に 404 が入る', async () => {
+    server.use(
+      http.post('*/api/masters/blackout-dates/validate', () =>
+        HttpResponse.json({ valid: true, errors: [], warnings: [] }),
+      ),
+    )
     const store = useBlackoutDatesStore()
 
     const updated = await store.update({
@@ -701,6 +712,30 @@ describe('useBlackoutDatesStore', () => {
     expect(store.updateError).toBeInstanceOf(Error)
     expect(store.updateError.status).toBe(404)
     expect(store.updateError.message).toBe(UPDATE_NOT_FOUND_MESSAGE)
+  })
+
+  it('[BDS-40] 存在しない id の編集は事前検証で弾かれ、更新の API を呼ばない', async () => {
+    let putCalled = false
+    server.use(
+      http.put('*/api/masters/blackout-dates/:id', () => {
+        putCalled = true
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const store = useBlackoutDatesStore()
+
+    const updated = await store.update({
+      id: MISSING_ID,
+      date: NEW_DATE,
+      reason: EDITED_REASON,
+      updatedAt: EDIT_TARGET.更新日時,
+    })
+
+    expect(updated).toBeNull()
+    expect(putCalled).toBe(false)
+    // 対象を id で指すようになったので、日付ではなく id で「存在しない」と分かる
+    expect(store.updateValidationErrors).toEqual([`指定された受注不可日(ID=${MISSING_ID})は存在しません`])
+    expect(store.updateError).toBeNull()
   })
 
   it('[BDS-34] update 後の読み直しでもページ位置と絞り込みが保たれる', async () => {

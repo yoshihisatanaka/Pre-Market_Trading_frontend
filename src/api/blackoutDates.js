@@ -6,7 +6,8 @@ import { apiClient } from './client'
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次の 6 点。
  *   - プロパティ名が日本語（受注不可日 / 備考 / 取消区分 …）
  *   - 受注不可日は integer の YYYYMMDD（20260101）。アプリ内は 'YYYY-MM-DD'
- *   - id が無い。主キーは受注不可日そのもの
+ *   - 主キーが integer の `ID`。アプリ内は文字列の `id`（src/api/ca.js と同じ扱い）。
+ *     **受注不可日は主キーではない** — 一意制約を持つ業務上の日付
  *   - 一覧は受注不可日の降順で、1 ページ 50 件固定（`limit` を受け付けない）
  *   - 削除は論理削除（取消区分=1）。一覧は既定で取消済みを返さない
  *   - 対象市場に相当する項目が無い（一覧にも列を出さない）
@@ -16,7 +17,8 @@ import { apiClient } from './client'
 /** 1 件のアプリ内モデル（このファイルの JSDoc で使う） */
 /**
  * @typedef {{ id: string, date: string, reason: string, updatedAt: string }} BlackoutDate
- *   id は受注不可日を文字列にしたもの（'20260101'）。date は 'YYYY-MM-DD'、
+ *   id が主キー（実 API の integer な ID を文字列にしたもの。src/api/ca.js と同じ扱い）。
+ *   date は 'YYYY-MM-DD' で、主キーではなく一意制約を持つ業務上の日付。
  *   reason は実 API の 備考。updatedAt は編集の楽観的ロックで送り返す合札
  */
 
@@ -63,24 +65,25 @@ export async function fetchBlackoutDates({ offset = 0, dateFrom = '', dateTo = '
  * warnings は実 API が常に空配列を返すため受け取らない（海外休場日と違い、取消済みの日付を
  * 登録し直しても実 API は警告を出さず、そのまま再有効化する）。
  *
- * `is_update` の使いかたに注意がある。実 API の変更検証は「本文の受注不可日が実在し、かつ
- * 取消済みでないこと」を確かめるものなので、**日付を変えるときに使うと「存在しません」で弾かれる**。
- * 一方、日付を変えないときに新規検証を使うと自分自身が重複として弾かれる。
- * そこで日付を変えたかどうかで使い分ける（id は変更前の受注不可日そのもの）。
+ * `is_update` は **編集からの呼び出しかどうか（= id を持つか）だけで決まる**（src/api/ca.js と同じ）。
+ * 対象は本文の受注不可日ではなくクエリの id で指すので、日付を変える編集でも対象を見失わず、
+ * 自分自身が重複として弾かれることもない。
+ * （主キーが受注不可日だった頃は「日付を変えたかどうか」で新規検証と変更検証を使い分けていた）
+ *
+ * **クエリ名 `blackout_date_id` は決め打ち。** 取り込み時点の openapi.json に対象 id を渡す
+ * クエリは無く、CA の `ca_id` に倣って先に置いている（→ バックエンドへの確認事項）。
  *
  * @param {{ date: string, reason: string, id?: string }} params date は 'YYYY-MM-DD'。
- *   id は編集のときだけ渡す（変更前の受注不可日。'20260101'）
+ *   id は編集のときだけ渡す（対象の id。受注不可日ではない）
  * @returns {Promise<{ valid: boolean, errors: string[] }>}
  *   valid が false のときだけ errors に理由が入る
  */
 export async function validateBlackoutDate({ date, reason, id = '' }) {
-  const isUpdate = Boolean(id) && id === toApiKey(date)
-
   const { data } = await apiClient.post(
     '/masters/blackout-dates/validate',
     toBlackoutDateRequest({ date, reason }),
     // 既定が新規検証なので、変更検証のときだけクエリを付ける
-    isUpdate ? { params: { is_update: true } } : undefined,
+    id ? { params: { blackout_date_id: Number(id), is_update: true } } : undefined,
   )
 
   return {
@@ -108,7 +111,11 @@ export async function createBlackoutDate({ date, reason }) {
 /**
  * 受注不可日を 1 件更新する（日付と理由の両方を変更できる）。
  *
- * パスは変更前の受注不可日、本文の 受注不可日 が変更後の日付になる。
+ * パスは対象の id、本文の 受注不可日 が変更後の日付になる。
+ *
+ * **パスキーを ID にしているのは決め打ち。** 取り込み時点の openapi.json は
+ * `/masters/blackout-dates/{blackout_date}`（受注不可日・integer）で、BlackoutDateItem も
+ * ID を持たない。DB の主キーを id に寄せる方針に合わせて先に置いている（src/api/symbols.js と同じ）。
  *
  * updatedAt は一覧取得時の更新日時をそのまま送り返す楽観的ロックの合札で、
  * サーバ側の現在値と違えば 409 で弾かれる（他の利用者が先に更新していた場合）。
@@ -116,7 +123,7 @@ export async function createBlackoutDate({ date, reason }) {
  * （登録直後の行は実 API 側の更新日時が未設定で、照合する相手が無い）。
  *
  * @param {{ id: string, date: string, reason: string, updatedAt: string }} params
- *   id は変更前の受注不可日（'20260101'）、date は変更後の 'YYYY-MM-DD'
+ *   id は対象の id（実 API の ID。受注不可日ではない）、date は変更後の 'YYYY-MM-DD'
  * @returns {Promise<BlackoutDate>} 更新後の 1 件
  */
 export async function updateBlackoutDate({ id, date, reason, updatedAt }) {
@@ -134,7 +141,9 @@ export async function updateBlackoutDate({ id, date, reason, updatedAt }) {
  * 応答は削除後の 1 件（BlackoutDateResponse）だが、画面は削除前の行を使ってメッセージを出すので
  * 使い道が無い。呼び出し側が useAsync で成否を判定できるよう、削除した id を返す。
  *
- * @param {string} id 削除対象の id（= 受注不可日の 'YYYYMMDD'）
+ * パスキーは PUT と同じく ID（updateBlackoutDate の JSDoc を参照）。
+ *
+ * @param {string} id 削除対象の id（実 API の ID。受注不可日ではない）
  * @returns {Promise<string>} 削除した id
  */
 export async function deleteBlackoutDate(id) {
@@ -155,9 +164,15 @@ function toBlackoutDateRequest({ date, reason, updatedAt = '' }) {
 /** BlackoutDateItem → アプリ内モデル */
 function toBlackoutDate(raw) {
   return {
-    // 実 API に id は無く、主キーは受注不可日そのもの。
-    // 画面と URL では文字列の id として扱うので、ここで 'YYYYMMDD' に寄せる
-    id: toApiKey(toIsoDate(raw?.受注不可日)),
+    /*
+     * 実 API の主キーは integer の ID。画面と URL では文字列として扱う（src/api/ca.js と同じ）。
+     *
+     * **受注不可日へフォールバックしない。** 取り込み時点の openapi.json はまだ
+     * BlackoutDateItem に ID を持たないが、欠けていたら空文字のまま外へ出して、
+     * 行のキーが壊れていることをテストで検知させる。
+     */
+    id: String(raw?.ID ?? ''),
+    // 主キーではなくなったが、一意制約を持つ業務上の日付として残る
     date: toIsoDate(raw?.受注不可日),
     // 備考は nullable。空文字に寄せて、画面が null を出さないようにする
     reason: raw?.備考 ?? '',
@@ -177,14 +192,6 @@ function toBlackoutDate(raw) {
  */
 function toApiDate(date) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date ?? '') ? Number(date.replaceAll('-', '')) : undefined
-}
-
-/**
- * 'YYYY-MM-DD' → '20260101'（主キーとして使う文字列）。
- * 形の違うものは空文字にする。toApiDate と違い、パスや id の比較に使うので文字列で返す。
- */
-function toApiKey(date) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(date ?? '') ? date.replaceAll('-', '') : ''
 }
 
 /**

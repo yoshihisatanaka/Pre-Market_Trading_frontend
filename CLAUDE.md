@@ -146,8 +146,10 @@ bash scripts/worktree.sh remove feat/market-holiday-type --docker-clean  # Docke
   `worktree.sh remove` → `git branch -d`（`remove --delete-branch` でまとめてもよい）
 - **`git stash` を使わない。** stash はリポジトリ共通で、別 worktree から pop できてしまう。
   中断するときは WIP コミットで退避する
-- **`/api-spec-sync` は本体セッション専用。** 参照先 `../Pre-Market_Trading` は相対パスなので、
-  worktree からだと存在しない場所を見る。絶対パスは guard フックが弾く（それが正しい挙動）
+- **`/api-spec-sync` と `/progress-report` は本体セッション専用。** 参照先
+  （`../Pre-Market_Trading` / モックの `../premarket-order-202609`）は相対パスなので、
+  worktree からだと存在しない場所を見る。絶対パスは guard フックが弾く（それが正しい挙動）。
+  `/progress-report` は止まらず前回の分母で続行するが、**分母が更新されない**
 - worktree セッションから**本体リポジトリのファイルを絶対パスで書き換えない**。
   guard フックが拒否する（`main` に未コミット変更が生えるのを防ぐための意図的な非対称）
 
@@ -222,7 +224,7 @@ git 依存を入れると **worktree でだけ壊れる**。導入するとき�
 
 ## レイヤ規約（違反しやすいので再掲）
 
-```
+```text
 views / components  →  stores  →  api  →  (HTTP)
 ```
 

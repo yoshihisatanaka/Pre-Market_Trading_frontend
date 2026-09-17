@@ -1,12 +1,12 @@
 ---
 name: progress-report
-description: 画面 × 機能ごとの 実装 / UnitTest / E2E(MSW) / E2E(実API) の進捗を docs/progress.md に markdown の表として出力する。ルート定義・サイドメニュー・docs/e2e・docs/unit・check:scenarios・git log を突き合わせ、完了日は前回の表から引き継ぐ。進捗率は行ではなくセル単位（軸ごとの部分達成を数える）で出し、達成の推移と完了予想を折れ線グラフ（mermaid）で併記する。「進捗を出して」「進捗一覧を更新して」「どこまで終わってるか一覧にして」という依頼で使う。実装やテストの追加は行わない。
-allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(git log *), Bash(git status *), Bash(bash scripts/worktree.sh list), Bash(docker compose ps *), Bash(docker compose up -d frontend), Bash(docker compose run --rm frontend npm run check:scenarios), Bash(docker image inspect us-stock-order-chrome-devtools-mcp *), Bash(docker build -t us-stock-order-chrome-devtools-mcp docker/chrome-devtools-mcp), mcp__chrome-devtools
+description: 画面 × 機能ごとの 実装 / UnitTest / E2E(MSW) / E2E(実API) の進捗を docs/progress.md に markdown の表として出力する。モックリポジトリ（../premarket-order-202609）の git 差分で画面一覧（分母）を更新し、ルート定義・サイドメニュー・docs/e2e・docs/unit・check:scenarios・git log を突き合わせ、完了日は前回の表から引き継ぐ。進捗率は行ではなくセル単位（軸ごとの部分達成を数える）で出し、達成の推移と完了予想を折れ線グラフ（mermaid）で併記する。「進捗を出して」「進捗一覧を更新して」「どこまで終わってるか一覧にして」という依頼で使う。実装やテストの追加は行わない。
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git log *), Bash(git status *), Bash(git rev-parse *), Bash(git -C ../premarket-order-202609 *), Bash(bash scripts/worktree.sh list), Bash(docker compose run --rm frontend npm run check:scenarios)
 ---
 
 # 進捗一覧の出力
 
-「何がどこまで終わっているか」の材料は分散している。公開モックの画面と機能ブロック、
+「何がどこまで終わっているか」の材料は分散している。モックの画面と機能ブロック、
 `src/router/index.js` のルート、`src/components/layout/navigation.js`、`docs/e2e/` と
 `docs/unit/` のシナリオ表、`e2e/*.real-api.spec.js` の有無、`git log`。
 このスキルはそれを突き合わせて**画面 × 機能の 1 枚の表**にし、`docs/progress.md` に書く。
@@ -14,6 +14,13 @@ allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(git log *), 
 **分母の正はモック。** 作るべきものの一覧を持っているのはモックであって、`navigation.js` や
 `router/index.js` は「そのうちどこまで作ったか」でしかない。食い違ったらモックを正とする
 （詳細は手順 3）。
+
+**モックの実体はブラウザではなく git。** 別メンバが作っているモックリポジトリ
+`../premarket-order-202609` をローカルに clone してあり、**画面は FastAPI + Jinja2 の
+テンプレート**として入っている。サイドバーの区分と項目は
+`python_app/templates/base.html`、各画面の機能ブロックは `python_app/templates/*.html` に
+そのまま書かれているので、**公開モックを巡回せず git から読む**（速く、正確で、
+前回確認以降の差分まで取れる）。手順は 2。
 
 **進捗を記録するだけで、実装もテストの追加もしない。** 材料を都合よく書き換えないこと
 （判定対象のファイルを触ると、そのターンの表が自己申告になる）。
@@ -26,50 +33,106 @@ allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(git log *), 
 このファイルだけ**で、git から再計算しない（実行のたびに過去が揺れるのを防ぐ）。
 無ければ初回生成として進む。
 
-### 2. モック確認の深さをユーザに確認する
+### 2. モックの git 差分を取る
 
-**勝手に全画面を巡回しない。** 15 画面ぶんの遷移で時間がかかる。`AskUserQuestion` で 3 択を出す。
+**ユーザに深さを確認しない。** 差分の取得は数秒で終わるので、毎回すべて取る。
 
-| 選択肢 | やること |
-|---|---|
-| 全画面を巡回 | 公開モック `https://uspreorder-vmbhej3k.manus.space/` のサイドバー全項目を順に開き、snapshot から画面と機能ブロック（ボタン・タブ・フォーム）を拾う。**画面一覧も機能名の分解もモックを正とする** |
-| サイドバーだけ | base URL を 1 回開いて snapshot し、画面一覧（分母）だけ更新する |
-| 見ない（既定） | 前回の `docs/progress.md` の行と `docs/mock/` の受領済みモックを分母にする。Docker も MCP も使わない |
-
-「全画面を巡回」「サイドバーだけ」を選ばれたときだけ **Chrome DevTools MCP**
-（`mcp__chrome-devtools__*`）を使う。Docker は worktree ごとに分離されているので
-（CLAUDE.md の「Docker は worktree ごとに分離」）、他セッションに断る必要はない。
-自分の worktree の状態だけ確かめる。
+#### 2-1. 最新を取る
 
 ```bash
-bash scripts/worktree.sh list
+git -C ../premarket-order-202609 pull --ff-only
 ```
 
-- 自分の行の DOCKER 列が `stopped` なら `docker compose up -d frontend` を実行する。
-  MCP コンテナは**その worktree の compose ネットワーク**に参加するので、
-  frontend が起動していないと MCP サーバ自体が起動しない
-  （`scripts/mcp-docker.sh` が理由を stderr に出す。起動後は `/mcp` で繋ぎ直す）
-- ローカルイメージが要る。無ければ 1 回だけ焼く（**ビルドは数分かかる**）
+**必ず差分確認の前に走らせる。** 古い clone を分母にすると、モックの更新が丸ごと見えない。
 
-  ```bash
-  docker image inspect us-stock-order-chrome-devtools-mcp >/dev/null 2>&1 \
-    || docker build -t us-stock-order-chrome-devtools-mcp docker/chrome-devtools-mcp
-  ```
+- **失敗しても手を止めない**（オフライン / SSH 鍵なし / fast-forward 不可）。
+  ローカル HEAD で続行し、報告と `docs/progress.md` 冒頭の両方に
+  `pull 失敗・ローカル HEAD 時点` と書く
+- `../premarket-order-202609` 自体が無ければ **worktree からの実行**。前回の分母をそのまま
+  引き継ぎ、冒頭に `モック差分: 未確認（本体セッションで実行のこと）` と書いて続行する。
+  **絶対パスで取りに行かない**（guard フックが拒否する。それが正しい挙動）
 
-- 画面を開くのは `mcp__chrome-devtools__navigate_page`、構造を読むのは
-  `mcp__chrome-devtools__take_snapshot`。クリック対象は snapshot が返す uid で指す
-- `mcp__chrome-devtools__take_screenshot` の `filePath` は**指定しない**。MCP コンテナに
-  出力ディレクトリをマウントしていないので、ホストのパスは解決できない。
-  省略すれば画像が応答に返る
-- Playwright MCP と違い **セッションログのファイルは残らない**。何を見て判断したかの根拠は
-  snapshot / screenshot の応答そのものなので、**巡回した画面名を報告に列挙する**
-- 見に行くのは**外部の公開モック**であって `http://frontend:5173` ではない。コンテナから外へ出られない
-  場合は**手を止めて報告する**。別のツールで取りに行かない
+#### 2-2. 基準（BASE）を決める
+
+`docs/progress.md` 冒頭の `- モック差分:` 行からコミットハッシュを読む。
+
+| 状況 | BASE |
+|---|---|
+| ハッシュがある（2 回目以降） | その値 |
+| 行が無い（初回） | 空ツリー `4b825dc642cb6eb9a060e54bf8d69288fbee4904` |
+
+**空ツリーを基準にすると全ファイルが `A`（追加）で出る**＝「最初から本日まで」の差分になる。
+初回と 2 回目以降で同じコマンドが使えるので、分岐は BASE の値だけで済む。
+
+**日付ではなくハッシュを基準にする。** 同じ日に 2 回走らせたときや、モックのコミット日が
+UTC（`+0000`）で記録されていることによるずれを避けるため。
+
+#### 2-3. 差分を取る
+
+```bash
+git -C ../premarket-order-202609 diff --name-status <BASE> HEAD -- \
+  python_app/templates python_app/routers python_app/mock_data
+```
+
+コミット件名もあわせて読む。モックの件名は `Checkpoint: ` + 長文の日本語で、
+**何を足したか・何を改名したかが本文に書いてある**ので機能名の分解に効く。
+
+```bash
+git -C ../premarket-order-202609 log --date=short --format='%ad %h %s' <BASE>..HEAD
+```
+
+- **初回だけ `<BASE>..HEAD` が使えない**（空ツリーはコミットではない）。初回は
+  `git -C ../premarket-order-202609 log --date=short --format='%ad %h %s' -20 HEAD`
+  にとどめ、全履歴を並べない（初回に要るのは履歴ではなく**現況の画面一覧**）
+- `--format=` は**クオートする**。裸で書くと `%s` や `|` をシェルが解釈する
+
+#### 2-4. 無視するパス
+
+`-- python_app/templates python_app/routers python_app/mock_data` で絞っている時点で
+ほぼ落ちるが、**見えても無視する**ものを挙げておく。
+
+| 対象 | 理由 |
+|---|---|
+| `**/__pycache__/**` / `*.pyc` | コミットされているが中身は生成物。ノイズが数百件混ざる |
+| `client/` / `server/_core/` / `drizzle/` | 未使用の webdev 雛形。**画面の実体ではない**（`client/src/pages/*.tsx` を見ない） |
+| `server/*.test.ts` / `python_app/tests/*` / `e2e/*` | **モック側のテスト。このリポジトリの 4 軸とは無関係** |
+| `todo.md` / `todo-xflaznb2.md` / `test-results/` | 作業メモと実行結果 |
+
+#### 2-5. 変更ファイルを画面に読み替える
+
+| 変更ファイル | 読み取ること |
+|---|---|
+| `python_app/templates/base.html` | **サイドバーの区分と項目＝画面一覧（分母）そのもの。** 差分に出たら必ず読み直す |
+| `python_app/templates/<name>.html`（`A`） | 画面が増えた。行を足す |
+| `python_app/templates/<name>.html`（`M`） | その画面の機能ブロックが変わった。ボタン・タブ・フォームを読み直す |
+| `python_app/templates/<name>.html`（`D` / `R`） | 画面が消えた / 改名された。行を落とすか名前を直す |
+| `python_app/routers/<x>.py` | path とテンプレートの対応（`@router.get` と `_resp(request, "<template>.html", ...)`）。**サイドバー外の画面はここでしか判らない** |
+| `python_app/mock_data/*.py` | 表示項目の中身。**機能名の分解には使うが行の増減には使わない** |
+
+中身を読むのは `git -C ../premarket-order-202609 show HEAD:<パス>` か
+`git -C ../premarket-order-202609 grep -n <語> -- <パス>`。**Read / Glob / Grep ツールは使えない**
+（絶対パスしか取れず、プロジェクト外なので guard フックが拒否する）。
+
+サイドバーの読み方:
+
+```bash
+git -C ../premarket-order-202609 grep -n 'sidebar-section\|sidebar-link' -- python_app/templates/base.html
+```
+
+`sidebar-section` が区分、`sidebar-link` の `href` が path で、**直後の行のテキストが画面名**。
+`?as_user=006` が付く項目はロール権限が要る画面（権限マスタ / ハードリミットマスタ /
+運用管理の 4 項目）で、分母の扱いは変わらない。
 
 ### 3. 画面一覧（分母）を確定する
 
-**モックにある画面が分母。** モックを見た回はその一覧を、見ていない回は前回の
-`docs/progress.md` と `docs/mock/` の受領済みモックを分母にする。
+**モックにある画面が分母。** 出どころは常に同じ 2 つで、回によって変えない。
+
+- `python_app/templates/base.html` のサイドバー（区分と項目）
+- `python_app/routers/*.py` の GET でテンプレートを返す画面（**サイドバー外の画面**。
+  `/orders/new`・`/customers/{id}/summary`・`/orders/{id}/amend` など）
+
+モックを参照できなかった回（手順 2-1 の worktree 実行）だけ、前回の `docs/progress.md` を
+そのまま引き継ぐ。
 
 - **モックにあって開発環境に無いものは、行として立てる。** `navigation.js` に項目が無い、
   `router/index.js` にルートが無い、view が無い — いずれも「未着手」であって「対象外」ではない。
@@ -87,9 +150,13 @@ bash scripts/worktree.sh list
   （開発用ページ）。状態は載せるが**集計の分母には入れない**。原則はモックに無い行を
   載せないことなので、**この節を増やさない**
 
-機能名の分解も、モックを見たならモックの機能ブロック（ボタン・タブ・フォーム）を正とする。
-見ていないなら前回の表を引き継ぎ、`docs/e2e/` / `docs/unit/` のシナリオ内容と view / store の
-実装で補う（マスタ系なら `一覧・検索` / `新規追加` / `編集` / `削除` が既定の並び）。
+機能名の分解も**モックのテンプレートが正**。差分に出た画面は
+`git -C ../premarket-order-202609 show HEAD:python_app/templates/<name>.html` を読み、
+機能ブロック（ボタン・タブ・フォーム）を拾い直す。差分に出なかった画面は前回の表を
+そのまま引き継ぐ（マスタ系なら `一覧・検索` / `新規追加` / `編集` / `削除` が既定の並び）。
+
+**画面名はモックの表記をそのまま使う。** モックで改名されたら表の行名も改名する
+（例: `みずほ証券向け業務` → `みずほ注文締`）。完了日・更新日は改名しても運ぶ。
 
 ### 4. 4 軸の判定材料を集める
 
@@ -162,14 +229,44 @@ x 軸ラベルは `MM-DD`（年をまたぐなら `YYYY-MM-DD`）。y 軸は `0 
 **未来側の点は必ず営業日に落ちる**（土日祝のラベルが x 軸に並ばない）。
 
 **前提を必ず添える。** この予想は「これまでと同じ速度が続き、分母（有効セル）が増えない」場合の
-値でしかない。モックの巡回で画面が増えれば分母は増え、到達予想日は後ろへ動く。
+値でしかない。モックの差分で画面が増えれば分母は増え、到達予想日は後ろへ動く。
 **土日祝は作業しない前提で数えている**ことも 1 行で書く（読む側が暦日と取り違えないため）。
 
 ### 8. `docs/progress.md` を書く
 
 節の順は `凡例` → `顧客` → `注文` → `マスタメンテ` → `共通基盤` → `対象外の画面` → `集計` →
-`進捗の履歴` → `進捗の推移と完了予想`。
-冒頭に生成日・生成コマンド・分母・モック確認の深さを箇条書きで置く。列は固定する。
+`進捗の履歴` → `進捗の推移と完了予想`。列は固定する。
+
+冒頭の箇条書きに **`- モック差分:` 行を必ず置く。この行が次回の BASE になる**
+（手順 2-2）。完了日・更新日と同じ引き継ぎ規律で、持ち主は `docs/progress.md` だけ。
+
+```text
+- 生成: 2026-09-17 / `/progress-report`
+- 分母: **モックリポジトリ** `../premarket-order-202609`（FastAPI + Jinja2。`python_app/templates/`）
+- モック差分: 2026-09-17 まで確認済み / `f7e6f31`（モックのコミット日 2026-09-15）
+- 判定基準: [.claude/skills/progress-report/criteria.md](../.claude/skills/progress-report/criteria.md)
+```
+
+ハッシュは短縮形でよいが、`git rev-parse` で解決できる長さを保つ。`pull` が失敗した回は
+同じ行に `pull 失敗・ローカル HEAD 時点` を添える。
+
+`## モックと開発環境の食い違い（分母はモック）` の**直後**に
+`## モック差分（前回確認以降）` を置く。
+
+```text
+| 変更 | 画面 | モックでの変更内容 | いまの判定 | 対応 |
+|---|---|---|---|---|
+| 改名 | みずほ証券向け業務 → みずほ注文締 | サイドバー表記の変更 + 締め / 締め解除の操作エリア追加 | ❌ | 行名を改名し、機能名に「注文締め・締め解除」を追加 |
+| 変更 | 外株注文入力 | 項目名を「ティッカーコード」へ変更 | ❌ | 未実装のため注記のみ |
+```
+
+- **実装済み（`✅`）の行のモックが変わっていても判定は下げない。** この節と補足列に
+  `モック更新あり・追随未確認` と書くにとどめる。実装が実際に古いかはコードを読まないと
+  判らず、自動で下げると進捗率が根拠なく揺れる
+- **初回**は 1 行ずつ並べず、`初回生成（モックの全履歴を分母の確定に使用）` とだけ書く
+- 差分が無かった回は `前回確認以降の変更なし（BASE = HEAD）` の 1 行で済ませ、表を出さない
+
+以降、各区分の表の列は次で固定する。
 
 ```text
 | 画面 | 機能名 | 実装 | UnitTest | E2E(MSW) | E2E(実API) | 完了日 | 更新日 | 補足 |
@@ -247,10 +344,15 @@ xychart-beta
 |---|---|---|
 | 1 | 生成結果 | **達成セル / 有効セル と進捗率**、`✅` / `🟡` / `❌` / `—` の内訳、完了行（全軸 `✅`）の数 |
 | 1b | 完了予想 | 前回スナップショットからの増分（セル数）、平均速度（セル/週）、到達予想日。前回の予想からどれだけ動いたかも 1 行で |
+| 1c | モック差分 | `pull` の成否、`BASE → HEAD` のハッシュとコミット件数、**変更のあった画面名の列挙**、分母（行数）が増減したならその理由 |
 | 2 | 前回からの差分 | `git diff --stat docs/progress.md`。判定が上がった行・下がった行を一覧にする。初回ならその旨 |
 | 3 | 判定できなかった行 | 材料が足りず `❌` にした行と、その理由（シナリオ文書が無い / ルートが無い / `navigation.js` に項目が無い） |
 | 4 | 進行中の作業 | 他 worktree・未コミット差分で仕掛かり中の範囲 |
 | 5 | 次の手順 | 最も安く埋まる軸を 1〜3 件だけ挙げる（例: シナリオ文書はあるがテストが無い行）。**実装の提案はしない** |
+
+**`1c` にはハッシュを必ず書く。** 書いておけば
+`git -C ../premarket-order-202609 diff --name-status <BASE> HEAD` で第三者が同じ差分を
+再現できる。「モックを確認した」という口頭の報告を信用させないための規律。
 
 ## やらないこと
 
@@ -262,6 +364,12 @@ xychart-beta
 - **材料の無い軸を推測で埋めない。** `❌` か `—` にし、根拠を補足列に書く
 - `docs/api/openapi.json` を触らない
 - Docker の `down` / `down -v` / `restart` をしない（`down -v` は共有の `node_modules` ボリュームを消す）
-- Chrome DevTools MCP を、他 worktree が Docker を持っている間に起動しない
+- **モックリポジトリに書き込まない。** 使うのは `pull` / `diff` / `log` / `show` / `grep` だけ。
+  `checkout` / `switch` / `commit` をしない（別メンバの作業リポジトリ）
+- **モック側のテストファイルを 4 軸の判定に使わない。** `server/*.test.ts` や
+  `python_app/tests/*_flow_check.py` が増えても、それはモックの進捗でこのリポジトリの進捗ではない
+- **モックを絶対パスで参照しない。** guard フックが拒否する。拒否されたら迂回せず報告する
+- **モックの画面をブラウザで巡回しない。** テンプレートを読むほうが速く、
+  レンダリング結果より正確（Chrome DevTools MCP はこのスキルでは使わない）
 - **モックに無い画面・機能の行を新たに足さない。** 分母が実装側に引きずられ、
   「作るべきものの総量」が見えなくなる

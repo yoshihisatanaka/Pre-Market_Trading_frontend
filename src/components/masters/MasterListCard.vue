@@ -10,6 +10,7 @@
  *
  * 出す data-testid（testidPrefix が 'market-holidays' なら market-holidays-count など）:
  *   {prefix}-count / {prefix}-loading / {prefix}-error / {prefix}-empty / {prefix}-pagination
+ *   （{prefix}-pagination は paginated=false のとき出ない）
  *
  * @see MasterSearchCard 検索条件のカード（4 状態の外に置く）
  */
@@ -36,13 +37,30 @@ defineProps({
     type: Number,
     required: true,
   },
+  /** 1 ページの件数。ページャーを出さない画面（paginated=false）では使わない */
   limit: {
     type: Number,
-    required: true,
+    default: 50,
   },
   offset: {
     type: Number,
-    required: true,
+    default: 0,
+  },
+  /**
+   * 件数に添える単位。既定は「件」だが、数えている対象が行でない画面は言い換える
+   * （権限マスタは「4 ロール」）。
+   */
+  unit: {
+    type: String,
+    default: '件',
+  },
+  /**
+   * ページャーを出すか。件数が固定で増えない一覧（権限マスタのロールなど）は false にする。
+   * 出しても「4 件中 1–4 件」と出るだけで、送るページが無い。
+   */
+  paginated: {
+    type: Boolean,
+    default: true,
   },
   loading: {
     type: Boolean,
@@ -72,7 +90,7 @@ const emit = defineEmits(['reload', 'update:offset'])
         class="master-list-card__count"
         :data-testid="`${testidPrefix}-count`"
       >
-        {{ total }} 件
+        {{ total }} {{ unit }}
       </span>
     </template>
 
@@ -102,6 +120,7 @@ const emit = defineEmits(['reload', 'update:offset'])
       <slot />
 
       <BasePagination
+        v-if="paginated"
         :data-testid="`${testidPrefix}-pagination`"
         :total="total"
         :limit="limit"

@@ -1,0 +1,6 @@
+# Claude Code / デスクトップアプリが worktree（.claude/worktrees/<名前>）を作るときに
+# コピーする gitignore 済みファイル（.gitignore 構文。追跡ファイルは対象外）。
+# scripts/worktree.sh add は自前でコピーするので、このファイルは app 生成の worktree にだけ効く。
+# ホスト公開ポート（FRONTEND_PORT）は SessionStart フックが worktree ごとに割り当て直す。
+.env
+.claude/settings.local.json

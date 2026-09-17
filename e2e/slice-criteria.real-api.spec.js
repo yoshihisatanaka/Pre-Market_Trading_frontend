@@ -1,17 +1,17 @@
 import { expect, test } from '@playwright/test'
 
 /*
- * ハードリミットマスタを「実 API に当てて」確かめる E2E。
- * シナリオ: docs/e2e/hard-limits-real-api.md（タイトル先頭の [HR-xx] が対応 ID）
+ * スライス基準マスタを「実 API に当てて」確かめる E2E。
+ * シナリオ: docs/e2e/slice-criteria-real-api.md（タイトル先頭の [SCR-xx] が対応 ID）
  *
- * hard-limits.spec.js（HL）とは目的が違う。HL は MSW のモックに当てて画面の挙動を
+ * slice-criteria.spec.js（HL）とは目的が違う。HL は MSW のモックに当てて画面の挙動を
  * 細かく固定する。こちらはフロントとバックエンドの噛み合わせだけを見るので、
  * 期待値に**データの中身を書かない**（現在値は実行時に画面と API から読む）。
  *
  * 既定では丸ごとスキップする。実 API に当てるときだけ次の 2 つをそろえて実行する。
  *   1. 環境変数 VITE_ENABLE_MSW を false にして frontend を作り直す
  *   2. バックエンドの api を起動しておく
- *   docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test hard-limits.real-api
+ *   docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test slice-criteria.real-api
  *
  * スライス注文設定は DB に 1 行しか無い共有設定で、副作用を隔離できない。
  * beforeAll で全項目を退避し、afterAll で書き戻す。更新日時 / 更新者 / ユーザー操作フラグと
@@ -23,7 +23,7 @@ const PATH = '/masters/hard-limits'
 // 誰が触ったかを実 DB に残す（更新系は X-User-Code が要る。src/api/client.js の暫定実装と同じ扱い）
 const USER_CODE = 'e2e'
 
-// HR-04 で使う目印。備考が元から NULL だと「保持された」と「落ちた」を区別できないため
+// SCR-04 で使う目印。備考が元から NULL だと「保持された」と「落ちた」を区別できないため
 const NOTE_MARKER = '実 API 接続確認（E2E が復元する）'
 
 /** 更新系の宛先。dev サーバの /api プロキシ越しに実 API へ届く */
@@ -82,8 +82,8 @@ async function assertRealApi(page) {
  * ここを通さないと、描画前の状態を掴む。
  */
 async function settleView(page) {
-  await expect(page.getByTestId('hard-limits-current')).toBeVisible()
-  await expect(page.getByTestId('hard-limits-loading')).toHaveCount(0)
+  await expect(page.getByTestId('slice-criteria-current')).toBeVisible()
+  await expect(page.getByTestId('slice-criteria-loading')).toHaveCount(0)
 }
 
 /** 画面を開いて、実 API に当たっていることまで確認する */
@@ -102,22 +102,22 @@ function numberFrom(text) {
 async function currentOf(page) {
   await settleView(page)
   return {
-    rate: numberFrom(await page.getByTestId('hard-limits-rate').innerText()),
-    quantity: numberFrom(await page.getByTestId('hard-limits-quantity').innerText()),
-    amount: numberFrom(await page.getByTestId('hard-limits-amount').innerText()),
+    rate: numberFrom(await page.getByTestId('slice-criteria-rate').innerText()),
+    quantity: numberFrom(await page.getByTestId('slice-criteria-quantity').innerText()),
+    amount: numberFrom(await page.getByTestId('slice-criteria-amount').innerText()),
   }
 }
 
 /** 数量上限を指定の値にして保存する。3 つの入力欄のうち触るのはここだけ */
 async function saveQuantity(page, quantity) {
-  await page.getByTestId('hard-limits-quantity-input').fill(String(quantity))
-  await page.getByTestId('hard-limits-save').click()
+  await page.getByTestId('slice-criteria-quantity-input').fill(String(quantity))
+  await page.getByTestId('slice-criteria-save').click()
 }
 
 // 同じ 1 行を順に書き換えるので直列に実行する
 test.describe.configure({ mode: 'serial' })
 
-test.describe('ハードリミットマスタ（実 API 接続）', () => {
+test.describe('スライス基準マスタ（実 API 接続）', () => {
   test.skip(
     process.env.E2E_REAL_API !== '1',
     '実 API に当てるテスト。E2E_REAL_API=1 のときだけ実行する',
@@ -144,7 +144,7 @@ test.describe('ハードリミットマスタ（実 API 接続）', () => {
     await api.dispose()
   })
 
-  test('[HR-01] 実データで現在値の 3 項目が表示される', async ({ page }) => {
+  test('[SCR-01] 実データで現在値の 3 項目が表示される', async ({ page }) => {
     await openView(page)
 
     const settings = await getSettings()
@@ -156,19 +156,19 @@ test.describe('ハードリミットマスタ（実 API 接続）', () => {
     expect(shown.amount).toBeCloseTo(settings['大口金額閾値'], 2)
 
     // 4 状態のうち「データあり」に落ちている
-    await expect(page.getByTestId('hard-limits-form')).toBeVisible()
-    await expect(page.getByTestId('hard-limits-error')).toHaveCount(0)
-    await expect(page.getByTestId('hard-limits-empty')).toHaveCount(0)
+    await expect(page.getByTestId('slice-criteria-form')).toBeVisible()
+    await expect(page.getByTestId('slice-criteria-error')).toHaveCount(0)
+    await expect(page.getByTestId('slice-criteria-empty')).toHaveCount(0)
   })
 
-  test('[HR-02] 入力欄の初期値が現在値と一致する', async ({ page }) => {
+  test('[SCR-02] 入力欄の初期値が現在値と一致する', async ({ page }) => {
     await openView(page)
 
     const settings = await getSettings()
 
-    const rate = await page.getByTestId('hard-limits-rate-input').inputValue()
-    const quantity = await page.getByTestId('hard-limits-quantity-input').inputValue()
-    const amount = await page.getByTestId('hard-limits-amount-input').inputValue()
+    const rate = await page.getByTestId('slice-criteria-rate-input').inputValue()
+    const quantity = await page.getByTestId('slice-criteria-quantity-input').inputValue()
+    const amount = await page.getByTestId('slice-criteria-amount-input').inputValue()
 
     // 入力欄だけは % で扱う（比率 0.01 ↔ 入力 1）
     expect(Number(rate)).toBeCloseTo(settings['市場関与率'] * 100, 2)
@@ -176,13 +176,13 @@ test.describe('ハードリミットマスタ（実 API 接続）', () => {
     expect(Number(amount)).toBeCloseTo(settings['大口金額閾値'], 2)
   })
 
-  test('[HR-03] 数量上限を変えて保存すると実 API にも反映される', async ({ page }) => {
+  test('[SCR-03] 数量上限を変えて保存すると実 API にも反映される', async ({ page }) => {
     await openView(page)
     const before = await currentOf(page)
 
     await saveQuantity(page, before.quantity + 1)
 
-    await expect(page.getByTestId('hard-limits-notice')).toBeVisible()
+    await expect(page.getByTestId('slice-criteria-notice')).toBeVisible()
     expect((await currentOf(page)).quantity).toBe(before.quantity + 1)
 
     // 画面の状態ではなく、サーバに届いているかを見る
@@ -193,7 +193,7 @@ test.describe('ハードリミットマスタ（実 API 接続）', () => {
     expect((await currentOf(page)).quantity).toBe(before.quantity + 1)
   })
 
-  test('[HR-04] 保存しても備考が消えない', async ({ page }) => {
+  test('[SCR-04] 保存しても備考が消えない', async ({ page }) => {
     /*
      * 画面に備考の入力欄は無い。api 層が現在値を送り返しているので保持されるが、
      * 送り忘れるとサーバが NULL に落とす。モックでは追えない噛み合わせなのでここで見る。
@@ -210,14 +210,14 @@ test.describe('ハードリミットマスタ（実 API 接続）', () => {
     const before = await currentOf(page)
 
     await saveQuantity(page, before.quantity + 1)
-    await expect(page.getByTestId('hard-limits-notice')).toBeVisible()
+    await expect(page.getByTestId('slice-criteria-notice')).toBeVisible()
 
     const after = await getSettings()
     expect(after['大口数量閾値'], '保存自体が届いていない').toBe(before.quantity + 1)
     expect(after['備考']).toBe(seeded['備考'])
   })
 
-  test('[HR-05] 保存してもスライス有効フラグが変わらない', async ({ page }) => {
+  test('[SCR-05] 保存してもスライス有効フラグが変わらない', async ({ page }) => {
     /*
      * こちらも画面に出ない項目。省略するとサーバは 1 に立てるので、
      * 0 にしてから保存して「1 に戻らない」ことを見ないと確かめたことにならない。
@@ -229,25 +229,25 @@ test.describe('ハードリミットマスタ（実 API 接続）', () => {
     const before = await currentOf(page)
 
     await saveQuantity(page, before.quantity + 1)
-    await expect(page.getByTestId('hard-limits-notice')).toBeVisible()
+    await expect(page.getByTestId('slice-criteria-notice')).toBeVisible()
 
     const after = await getSettings()
     expect(after['大口数量閾値'], '保存自体が届いていない').toBe(before.quantity + 1)
     expect(after['スライス有効フラグ']).toBe(0)
   })
 
-  test('[HR-06] 範囲外の値で保存すると理由が出て現在値は変わらない', async ({ page }) => {
+  test('[SCR-06] 範囲外の値で保存すると理由が出て現在値は変わらない', async ({ page }) => {
     await openView(page)
     const before = await currentOf(page)
     const apiBefore = await getSettings()
 
     // 実 API の下限は 0.0001（= 0.01%）。0 は必ず 422 で弾かれる
-    await page.getByTestId('hard-limits-rate-input').fill('0')
-    await page.getByTestId('hard-limits-save').click()
+    await page.getByTestId('slice-criteria-rate-input').fill('0')
+    await page.getByTestId('slice-criteria-save').click()
 
     // 文言はサーバ側の資産なので固定しない。拒否が利用者に伝わることだけを見る
-    await expect(page.getByTestId('hard-limits-save-error')).toBeVisible()
-    await expect(page.getByTestId('hard-limits-notice')).toHaveCount(0)
+    await expect(page.getByTestId('slice-criteria-save-error')).toBeVisible()
+    await expect(page.getByTestId('slice-criteria-notice')).toHaveCount(0)
 
     const after = await currentOf(page)
     expect(after.rate).toBeCloseTo(before.rate, 2)
@@ -258,7 +258,7 @@ test.describe('ハードリミットマスタ（実 API 接続）', () => {
     expect(apiAfter['更新日時'], '拒否されたのに DB が更新されている').toBe(apiBefore['更新日時'])
   })
 
-  test('[HR-07] 先に更新されていると競合が出て現在値は変わらない', async ({ page }) => {
+  test('[SCR-07] 先に更新されていると競合が出て現在値は変わらない', async ({ page }) => {
     await openView(page)
     const before = await currentOf(page)
 
@@ -269,8 +269,8 @@ test.describe('ハードリミットマスタ（実 API 接続）', () => {
 
     await saveQuantity(page, before.quantity + 5)
 
-    await expect(page.getByTestId('hard-limits-save-error')).toBeVisible()
-    await expect(page.getByTestId('hard-limits-notice')).toHaveCount(0)
+    await expect(page.getByTestId('slice-criteria-save-error')).toBeVisible()
+    await expect(page.getByTestId('slice-criteria-notice')).toHaveCount(0)
 
     // 画面の現在値は掴んだときのまま（失敗した値で塗り替えない）
     expect((await currentOf(page)).quantity).toBe(before.quantity)

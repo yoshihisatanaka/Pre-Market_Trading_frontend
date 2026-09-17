@@ -49,9 +49,9 @@ const routes = [
   },
   {
     path: '/masters/hard-limits',
-    name: 'hard-limit-master',
-    component: () => import('@/views/HardLimitMasterView.vue'),
-    meta: { title: 'ハードリミットマスタ' },
+    name: 'slice-criteria-master',
+    component: () => import('@/views/SliceCriteriaMasterView.vue'),
+    meta: { title: 'スライス基準マスタ' },
   },
   {
     path: '/operations/activity-logs',

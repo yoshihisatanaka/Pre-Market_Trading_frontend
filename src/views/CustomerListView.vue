@@ -3,7 +3,6 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
-import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -92,18 +91,6 @@ function rowClass(row) {
 
 <template>
   <section class="customer-list">
-    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
-    <Teleport defer to="#topbar-actions">
-      <BaseButton
-        variant="secondary"
-        data-testid="customers-reload"
-        :disabled="loading"
-        @click="store.reload()"
-      >
-        再読み込み
-      </BaseButton>
-    </Teleport>
-
     <!-- 画面の説明。4 状態や検索結果に関わらず常時出す -->
     <BaseAlert variant="info" data-testid="customers-description">
       口座情報をもとに顧客を検索します。<strong>色の付いた行</strong>は画面や API

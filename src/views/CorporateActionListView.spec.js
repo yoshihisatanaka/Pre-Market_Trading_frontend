@@ -417,7 +417,6 @@ describe('CorporateActionListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(exists(wrapper, 'ca-reload')).toBe(true)
     expect(exists(wrapper, 'ca-add')).toBe(true)
 
     // 破壊的な操作を最後にする（モーダルのフッタの キャンセル → 危険色 と同じ並び）

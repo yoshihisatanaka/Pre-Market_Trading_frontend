@@ -89,18 +89,6 @@ store.load()
 
 <template>
   <section class="hard-limit">
-    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
-    <Teleport defer to="#topbar-actions">
-      <BaseButton
-        variant="secondary"
-        data-testid="hard-limits-reload"
-        :disabled="loading"
-        @click="reload"
-      >
-        再読み込み
-      </BaseButton>
-    </Teleport>
-
     <BaseAlert v-if="noticeMessage" variant="success" data-testid="hard-limits-notice">
       {{ noticeMessage }}
     </BaseAlert>

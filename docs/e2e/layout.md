@@ -6,8 +6,8 @@
 - モック原本: `docs/mock/layout/masters-users.html`
 - 単体側のシナリオ: [docs/unit/components-layout-app-layout.md](../unit/components-layout-app-layout.md)
 
-全画面に出る共通部分の受け入れ条件。**個々の画面固有の要素（例: 注文一覧の「再読み込み」ボタン）は
-その画面のシナリオ（[order-list.md](order-list.md)）で扱い、ここには書かない。**
+全画面に出る共通部分の受け入れ条件。**個々の画面固有の要素（例: 銘柄マスタの「新規追加」ボタン）は
+その画面のシナリオ（[symbols.md](symbols.md)）で扱い、ここには書かない。**
 メニューの遷移先はまだ大半が未実装のため、「ページが見つかりません」に落ちるのが正常。
 
 サイドメニューは押し出し式で開閉する（閉じると画面外へ出て本文が全幅になる。幕は出さない）。

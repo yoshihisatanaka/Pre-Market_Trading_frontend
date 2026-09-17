@@ -86,7 +86,7 @@ test.describe('海外休場日マスタ一覧', () => {
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '海外休場日マスタ', exact: true })).toBeVisible()
     // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている
-    await expect(page.getByTestId('market-holidays-reload')).toBeVisible()
+    await expect(page.getByTestId('market-holidays-add')).toBeVisible()
 
     await expect(page.getByTestId('market-holidays-count')).toHaveText(
       `${marketHolidays.length} 件`,

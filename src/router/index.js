@@ -54,6 +54,12 @@ const routes = [
     meta: { title: 'ハードリミットマスタ' },
   },
   {
+    path: '/operations/activity-logs',
+    name: 'activity-log-list',
+    component: () => import('@/views/ActivityLogListView.vue'),
+    meta: { title: '操作ログ' },
+  },
+  {
     path: '/operations/incidents',
     name: 'incident-management',
     component: () => import('@/views/IncidentManagementView.vue'),

@@ -42,11 +42,18 @@ export const navSections = [
     ],
   },
   {
-    // 公開モックのサイドバーでは最後の区分。ほかに お知らせ管理 / 滞留注文抽出 / 操作ログ があるが、
-    // 画面を作った順に足す（未実装の path は NotFoundView に落ちるため、先に並べても意味がない）。
-    // navIcons.js に障害向けのアイコンが無いので icon は付けない（Dream登録状況 と同じ）
+    /*
+     * 公開モックの区分「運用管理」には お知らせ管理 / 滞留注文抽出 / 操作ログ / 障害管理 の
+     * 4 項目があるが、載せるのは実装済みのものだけにする。
+     * 押して「ページが見つかりません」に落ちる項目を増やさないため
+     * （残り 2 つはその画面を作るときに足す）。並びは公開モックに合わせる。
+     * navIcons.js に運用管理向けのアイコンが無いので icon は付けない（Dream登録状況 と同じ）。
+     */
     label: '運用管理',
-    items: [{ label: '障害管理', to: '/operations/incidents' }],
+    items: [
+      { label: '操作ログ', to: '/operations/activity-logs' },
+      { label: '障害管理', to: '/operations/incidents' },
+    ],
   },
 ]
 

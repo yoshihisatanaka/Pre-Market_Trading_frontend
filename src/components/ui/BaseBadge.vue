@@ -7,7 +7,8 @@ defineProps({
   variant: {
     type: String,
     default: 'gray',
-    validator: (value) => ['gray', 'buy', 'sell', 'success', 'warning', 'info'].includes(value),
+    validator: (value) =>
+      ['gray', 'buy', 'sell', 'success', 'warning', 'info', 'error'].includes(value),
   },
 })
 </script>
@@ -58,5 +59,11 @@ defineProps({
 .badge--info {
   background-color: var(--color-info-bg);
   color: var(--color-info-text);
+}
+
+/* 失敗・エラーを表す赤。buy（売買区分の赤）とは意味が違うので分けてある */
+.badge--error {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
 }
 </style>

@@ -13,6 +13,7 @@ import { canceledSymbols, symbols } from '../fixtures/symbols'
 import { hardLimitSetting } from '../fixtures/hardLimits'
 import { codeMasters } from '../fixtures/codes'
 import { canceledCustomers, customers } from '../fixtures/customers'
+import { incidentHistories, incidentStatus } from '../fixtures/incidents'
 
 /*
  * モックハンドラの集約。
@@ -914,6 +915,26 @@ export const handlers = [
 
     return HttpResponse.json(hardLimitRow)
   }),
+
+  /*
+   * 障害管理（/operations/incidents）。
+   *
+   * ⚠ 実 API には存在しないパス。openapi.json の /operations 配下は activity-logs の 2 本だけで、
+   *   障害管理のエンドポイントは 1 本も定義されていない。形は仮置き（fixtures/incidents.js を参照）。
+   *
+   * いまは読むだけで書き換えないので fixtures をそのまま返す（resetMockState に登録しない）。
+   * 制御の実行（状態遷移）を実装する段で、書き換え可能な写しを持たせて reset にも足す。
+   */
+  http.get('*/api/operations/incidents', () => HttpResponse.json(incidentStatus)),
+
+  http.get('*/api/operations/incidents/histories', () =>
+    HttpResponse.json({
+      total: incidentHistories.length,
+      limit: incidentHistories.length,
+      offset: 0,
+      histories: incidentHistories,
+    }),
+  ),
 ]
 
 /** サーバが決める更新日時。バックエンドが返すのと同じ 'YYYY-MM-DD HH:MM:SS' 形式 */

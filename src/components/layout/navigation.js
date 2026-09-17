@@ -41,6 +41,13 @@ export const navSections = [
       { label: '残高補正', to: '/masters/balance-adjustments' },
     ],
   },
+  {
+    // 公開モックのサイドバーでは最後の区分。ほかに お知らせ管理 / 滞留注文抽出 / 操作ログ があるが、
+    // 画面を作った順に足す（未実装の path は NotFoundView に落ちるため、先に並べても意味がない）。
+    // navIcons.js に障害向けのアイコンが無いので icon は付けない（Dream登録状況 と同じ）
+    label: '運用管理',
+    items: [{ label: '障害管理', to: '/operations/incidents' }],
+  },
 ]
 
 /** セクションを畳んだ全項目。テストや検索で使う */

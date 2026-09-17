@@ -54,6 +54,12 @@ const routes = [
     meta: { title: 'ハードリミットマスタ' },
   },
   {
+    path: '/operations/stalled-orders',
+    name: 'stalled-order-list',
+    component: () => import('@/views/StalledOrderListView.vue'),
+    meta: { title: '滞留注文抽出' },
+  },
+  {
     // 最初の画面以外は遅延 import にして初期バンドルを膨らませない
     path: '/:pathMatch(.*)*',
     name: 'not-found',

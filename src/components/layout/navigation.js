@@ -41,6 +41,14 @@ export const navSections = [
       { label: '残高補正', to: '/masters/balance-adjustments' },
     ],
   },
+  {
+    /*
+     * 公開モックの「運用管理」は お知らせ管理 / 滞留注文抽出 / 操作ログ / 障害管理 の 4 項目。
+     * ここには実装済みの 滞留注文抽出 だけを置く（未実装 3 項目は着手時に足す）。
+     */
+    label: '運用管理',
+    items: [{ label: '滞留注文抽出', to: '/operations/stalled-orders' }],
+  },
 ]
 
 /** セクションを畳んだ全項目。テストや検索で使う */

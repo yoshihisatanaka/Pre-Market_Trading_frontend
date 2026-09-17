@@ -15,6 +15,10 @@ export default [
       'playwright-report/**',
       'test-results/**',
       'public/mockServiceWorker.js',
+      // 別セッションが repo 内に切った worktree（.git/info/exclude で git からは除外済み）。
+      // ESLint は git の除外を見ないため、ここで明示しないと他 worktree の作業中コードまで
+      // 本体の lint が拾ってしまう。
+      '.claude/worktrees/**',
       // 文書ツリーは lint 対象外。docs/mock/ には Manus 出力の原本を無加工で置くため
       // （docs/mock/README.md）、コード規約を当ててはいけない。
       'docs/**',

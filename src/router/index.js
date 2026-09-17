@@ -60,6 +60,12 @@ const routes = [
     meta: { title: '滞留注文抽出' },
   },
   {
+    path: '/operations/activity-logs',
+    name: 'activity-log-list',
+    component: () => import('@/views/ActivityLogListView.vue'),
+    meta: { title: '操作ログ' },
+  },
+  {
     // 最初の画面以外は遅延 import にして初期バンドルを膨らませない
     path: '/:pathMatch(.*)*',
     name: 'not-found',

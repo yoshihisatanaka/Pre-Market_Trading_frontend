@@ -236,13 +236,21 @@ const CUSTOMERS_PER_BRANCH = [
  * 口座番号は「部店コード + 4 桁の連番」の integer（'123' + '0001' → 1230001）。
  * 昇順に並べると部店ごとにまとまる。
  */
-function toAccountItem({ branch, handler, seq, profile, canceled = false }) {
+function toAccountItem({ id, branch, handler, seq, profile, canceled = false }) {
   const restriction = profile.restriction ?? '0'
   const accidentAccount = profile.accident ? '1' : '0'
   const corporateType = profile.corporate ? '1' : '0'
   const nisaContract = profile.nisaContract ?? '1'
 
   return {
+    /*
+     * 主キー。**`ID` だけは仕様より先行している。** 取り込み時点の openapi.json の CustomerItem に
+     * `ID` は無く、パスも `/masters/customers/{account_no}` のままだが、DB 全テーブルの主キーを
+     * id に統一する方針に合わせて先に置いてある（src/mocks/fixtures/symbols.js と同じ扱い）。
+     * 採番は実 API の AUTO_INCREMENT を模して単調増加させ、取消済みの行も母数に入れる。
+     */
+    ID: id,
+    // 主キーではなくなったが、行を人が識別する一意な業務コードとして残る
     口座番号: Number(`${branch.code}${String(seq).padStart(4, '0')}`),
     部店コード: branch.code,
     部店名: branch.name,
@@ -292,6 +300,7 @@ function toAccountItem({ branch, handler, seq, profile, canceled = false }) {
 export const customers = branches.flatMap((branch, branchIndex) =>
   CUSTOMERS_PER_BRANCH.map((profile, profileIndex) =>
     toAccountItem({
+      id: branchIndex * CUSTOMERS_PER_BRANCH.length + profileIndex + 1,
       branch,
       // 扱者は部店をまたいで順に割り当てる（6 人なので部店ごとに担当がずれる）
       handler:
@@ -310,6 +319,8 @@ export const customers = branches.flatMap((branch, branchIndex) =>
  */
 export const canceledCustomers = [
   toAccountItem({
+    // 有効な行（1..56）の続き。部店・ひな型が増えても一意のまま
+    id: branches.length * CUSTOMERS_PER_BRANCH.length + 1,
     branch: branches[0],
     handler: salesHandlers[0],
     seq: 99,

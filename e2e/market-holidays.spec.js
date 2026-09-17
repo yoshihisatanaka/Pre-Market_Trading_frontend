@@ -22,7 +22,8 @@ const toIsoDate = (holidayDate) => {
   const digits = String(holidayDate)
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
-const toId = (holiday) => String(holiday.休場日)
+// 主キーは休場日ではなく ID。data-testid にもこの値が入る
+const toId = (holiday) => String(holiday.ID)
 
 // フィクスチャは実 API と同じ休場日の降順。先頭が最新で、末尾が最古
 const secondPage = marketHolidays.slice(PAGE_SIZE)

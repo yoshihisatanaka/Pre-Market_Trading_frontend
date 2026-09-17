@@ -28,7 +28,8 @@ const toIsoDate = (holidayDate) => {
   const digits = String(holidayDate)
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
-const toId = (holiday) => String(holiday.休場日)
+// 主キーは休場日ではなく ID（api 層が文字列にして返す）。data-testid にもこの値が入る
+const toId = (holiday) => String(holiday.ID)
 
 // 期待値はフィクスチャと表示件数から導く（56 / 50 を直接書かない）
 const PAGE_SIZE = MARKET_HOLIDAYS_PAGE_SIZE

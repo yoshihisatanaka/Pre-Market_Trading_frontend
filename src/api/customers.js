@@ -30,6 +30,7 @@ import { apiClient } from './client'
  * 1 件のアプリ内モデル（このファイルの JSDoc で使う）
  *
  * @typedef {{
+ *   id: string,
  *   accountNumber: string,
  *   branchCode: string,
  *   branchName: string,
@@ -50,7 +51,9 @@ import { apiClient } from './client'
  *   growthQuota: number|null,
  *   userModified: boolean,
  * }} Customer
- *   accountNumber は実 API の 口座番号（integer）を文字列にしたもので、一覧の行キーになる。
+ *   id が主キー（実 API の integer な ID を文字列にしたもの。src/api/ca.js と同じ扱い）で、
+ *   一覧の行キーになる。accountNumber は実 API の 口座番号（integer）を文字列にしたもので、
+ *   主キーではなく行を人が識別する一意な業務コード。
  *   金額 3 種は数値のまま返す（桁区切りと単位の付与は画面の仕事）。null は「値が無い」。
  *   userModified は ユーザー操作フラグ=1（手動操作された行）。一覧で色を付ける印になる
  */
@@ -124,7 +127,15 @@ export async function fetchCustomers({
 /** CustomerItem → アプリ内モデル */
 function toCustomer(raw) {
   return {
-    // 実 API の 口座番号 は integer。画面と URL では文字列として扱う
+    /*
+     * 実 API の主キーは integer の ID。画面と URL では文字列として扱う（src/api/ca.js と同じ）。
+     *
+     * **口座番号へフォールバックしない。** 取り込み時点の openapi.json はまだ CustomerItem に
+     * ID を持たないが、欠けていたら空文字のまま外へ出して、行のキーが壊れていることを
+     * テストで検知させる。
+     */
+    id: String(raw?.ID ?? ''),
+    // 主キーではなくなったが、行を人が識別する一意な業務コードとして残る
     accountNumber: String(raw?.口座番号 ?? ''),
     // nullable な項目は空文字に寄せて、画面が null を出さないようにする
     branchCode: raw?.部店コード ?? '',

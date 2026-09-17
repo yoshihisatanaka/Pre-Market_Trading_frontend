@@ -21,7 +21,8 @@ const PAGE_SIZE = 50
 const toRow = (blackout) => {
   const digits = String(blackout.受注不可日)
   return {
-    id: digits,
+    // 主キーは受注不可日ではなく ID。data-testid にもこの値が入る
+    id: String(blackout.ID),
     date: `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`,
     reason: blackout.備考 ?? '',
   }
@@ -46,7 +47,8 @@ const CONFLICT_MESSAGE =
   '他のユーザーによって受注不可日データが更新されています。最新データを再取得してください。'
 
 /** 実 API（とモック）が重複を知らせる文言。対象の受注不可日が本文に入る */
-const duplicateMessage = (row) => `受注不可日(${row.id})は既に登録されています`
+// **本文に入るのは id ではなく日付**（主キーが ID になっても、人に見せるのは日付のまま）
+const duplicateMessage = (row) => `受注不可日(${row.date.replaceAll('-', '')})は既に登録されています`
 
 // 理由の maxlength。src/views/BlackoutDateListView.vue の入力欄（実 API の BlackoutDateRequest.備考）と同じ値
 const REASON_MAX_LENGTH = 45
@@ -82,7 +84,7 @@ function deleteDialogOf(page) {
   return page.getByRole('dialog', { name: '削除確認' })
 }
 
-/** 行の編集ボタン。testid は行の id を含む（日付を変えると id も作り直される点に注意） */
+/** 行の編集ボタン。testid は行の id を含む（主キーは ID なので、日付を変えても id は変わらない） */
 function editButtonOf(page, blackout) {
   return page.getByTestId(`blackout-dates-edit-${blackout.id}`)
 }

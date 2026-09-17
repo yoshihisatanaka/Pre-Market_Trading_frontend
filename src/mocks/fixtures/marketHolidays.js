@@ -29,8 +29,18 @@ const HOLIDAYS_PER_YEAR = [
 /** 休場区分名はサーバが付けて返す（フロントは表示に使わず、utils の対応表を正とする） */
 const HOLIDAY_TYPE_NAMES = { 0: '終日休場', 1: '短縮取引' }
 
-function toHolidayItem({ holidayDate, reason, holidayType, canceled = false }) {
+/*
+ * **`ID` だけは仕様より先行している。** 取り込み時点の openapi.json の HolidayItem に `ID` は無く、
+ * パスも `/masters/market-holidays/{holiday_date}` のままだが、DB 全テーブルの主キーを id に
+ * 統一する方針に合わせて先に置いてある（src/mocks/fixtures/symbols.js と同じ扱い）。
+ *
+ * 採番は実 API の AUTO_INCREMENT を模して単調増加させる。取消済みの行も母数に入れるので、
+ * marketHolidays と canceledMarketHolidays を通して一意になる。
+ */
+function toHolidayItem({ id, holidayDate, reason, holidayType, canceled = false }) {
   return {
+    ID: id,
+    // 主キーではなくなったが、一意制約を持つ業務上の日付として残る
     休場日: holidayDate,
     休場区分: holidayType,
     休場区分名: HOLIDAY_TYPE_NAMES[holidayType] ?? null,
@@ -50,9 +60,15 @@ function toHolidayItem({ holidayDate, reason, holidayType, canceled = false }) {
  * 有効な行（取消区分 0）。実 API と同じく休場日の降順。
  * YEARS もひな型も昇順なので、生成してから反転する。
  */
-export const marketHolidays = YEARS.flatMap((year) =>
-  HOLIDAYS_PER_YEAR.map(({ monthDay, reason, holidayType }) =>
-    toHolidayItem({ holidayDate: Number(`${year}${monthDay}`), reason, holidayType }),
+export const marketHolidays = YEARS.flatMap((year, yearIndex) =>
+  HOLIDAYS_PER_YEAR.map(({ monthDay, reason, holidayType }, index) =>
+    toHolidayItem({
+      // 休場日の昇順に 1..56。反転しても行に付いたまま動く
+      id: yearIndex * HOLIDAYS_PER_YEAR.length + index + 1,
+      holidayDate: Number(`${year}${monthDay}`),
+      reason,
+      holidayType,
+    }),
   ),
 ).reverse()
 
@@ -64,6 +80,8 @@ export const marketHolidays = YEARS.flatMap((year) =>
  */
 export const canceledMarketHolidays = [
   toHolidayItem({
+    // 有効な行（1..56）の続き。YEARS やひな型が増えても一意のまま
+    id: YEARS.length * HOLIDAYS_PER_YEAR.length + 1,
     holidayDate: 20261111,
     reason: 'ベテランズデー',
     holidayType: '0',

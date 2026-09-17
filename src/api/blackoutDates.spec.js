@@ -52,6 +52,8 @@ function record(method, path, body, status = 200) {
 
 /** BlackoutDateItem 1 件（openapi.json の項目をひととおり埋めたもの） */
 const blackoutDateItem = {
+  // 主キー。openapi.json にはまだ無く、DB の主キーを id に寄せる方針で先行している
+  ID: 12,
   受注不可日: 20261225,
   備考: 'クリスマス休業',
   取消区分: 0,
@@ -117,7 +119,7 @@ describe('api/blackoutDates', () => {
     expect(total).toBe(1)
     expect(items).toEqual([
       {
-        id: '20261225',
+        id: '12',
         date: '2026-12-25',
         reason: 'クリスマス休業',
         updatedAt: '2026-08-10T14:16:43',
@@ -156,28 +158,30 @@ describe('api/blackoutDates', () => {
     expect(lastRequest.params.has('is_update')).toBe(false)
   })
 
-  it('[BDA-08] 日付を変えない編集の事前検証は is_update=true を付ける', async () => {
+  it('[BDA-08] 日付を変えない編集の事前検証は is_update=true と対象の id を付ける', async () => {
     record('post', '*/api/masters/blackout-dates/validate', { valid: true, errors: [], warnings: [] })
 
-    await validateBlackoutDate({ id: '20261225', date: '2026-12-25', reason: '文言だけ直す' })
+    await validateBlackoutDate({ id: '12', date: '2026-12-25', reason: '文言だけ直す' })
 
     // 変更検証にしないと、自分自身が重複として弾かれる
     expect(lastRequest.params.get('is_update')).toBe('true')
-    // 対象を渡す口は実 API に無い（本文の受注不可日が対象を兼ねる）
-    expect(lastRequest.params.has('id')).toBe(false)
+    // 対象は本文の受注不可日ではなくクエリの id で指す（CA の ca_id と同じ形）
+    expect(lastRequest.params.get('blackout_date_id')).toBe('12')
   })
 
-  it('[BDA-09] 日付を変える編集の事前検証は is_update を付けない', async () => {
+  it('[BDA-09] 日付を変える編集の事前検証も is_update=true と対象の id を付ける', async () => {
     record('post', '*/api/masters/blackout-dates/validate', { valid: true, errors: [], warnings: [] })
 
-    await validateBlackoutDate({ id: '20261225', date: '2030-01-01', reason: 'クリスマス休業' })
+    await validateBlackoutDate({ id: '12', date: '2030-01-01', reason: 'クリスマス休業' })
 
     /*
-     * 実 API の変更検証は「本文の受注不可日が実在し取消済みでないこと」を見るので、
-     * 新しい日付を渡すと「存在しません」で弾かれる。
-     * 日付を変えるときに確かめたいのは「その日付が空いているか」なので新規検証を使う。
+     * 主キーが ID になったので、対象は日付と切り離してクエリで指せる。
+     * 日付を変えても対象を見失わず、自分自身が重複として弾かれることもない。
+     * （主キーが受注不可日だった頃は、ここで新規検証に切り替えて回避していた）
      */
-    expect(lastRequest.params.has('is_update')).toBe(false)
+    expect(lastRequest.params.get('is_update')).toBe('true')
+    expect(lastRequest.params.get('blackout_date_id')).toBe('12')
+    // 本文に載るのは変更後の日付
     expect(lastRequest.body).toEqual({ 受注不可日: 20300101, 備考: 'クリスマス休業' })
   })
 
@@ -219,48 +223,49 @@ describe('api/blackoutDates', () => {
     expect(lastRequest.url.pathname).toBe('/api/masters/blackout-dates')
     expect(lastRequest.body).toEqual({ 受注不可日: 20261225, 備考: 'クリスマス休業' })
     expect(created).toEqual({
-      id: '20261225',
+      id: '12',
       date: '2026-12-25',
       reason: 'クリスマス休業',
       updatedAt: '2026-08-10T14:16:43',
     })
   })
 
-  it('[BDA-13] 更新はパスが変更前の日付、本文が変更後の日付と合札になる', async () => {
+  it('[BDA-13] 更新はパスが対象の id、本文が変更後の日付と合札になる', async () => {
     const moved = { ...blackoutDateItem, 受注不可日: 20300101 }
-    record('put', '*/api/masters/blackout-dates/:blackoutDate', {
+    record('put', '*/api/masters/blackout-dates/:id', {
       success: true,
       blackout_date: moved,
       message: 'ok',
     })
 
     const updated = await updateBlackoutDate({
-      id: '20261225',
+      id: '12',
       date: '2030-01-01',
       reason: '年末年始休業',
       updatedAt: '2026-08-10T14:16:43',
     })
 
-    // 主キーは受注不可日そのものなので、パスは「変更前」の日付になる
-    expect(lastRequest.url.pathname).toBe('/api/masters/blackout-dates/20261225')
+    // 主キーは ID なので、日付を変えてもパスは変わらない
+    expect(lastRequest.url.pathname).toBe('/api/masters/blackout-dates/12')
     expect(lastRequest.body).toEqual({
       受注不可日: 20300101,
       備考: '年末年始休業',
       更新日時: '2026-08-10T14:16:43',
     })
-    expect(updated.id).toBe('20300101')
+    // 日付を変えても同じ行なので id は変わらない
+    expect(updated.id).toBe('12')
     expect(updated.date).toBe('2030-01-01')
   })
 
   it('[BDA-14] 合札が空のときは更新日時をキーごと送らない', async () => {
-    record('put', '*/api/masters/blackout-dates/:blackoutDate', {
+    record('put', '*/api/masters/blackout-dates/:id', {
       success: true,
       blackout_date: blackoutDateItem,
       message: 'ok',
     })
 
     await updateBlackoutDate({
-      id: '20261225',
+      id: '12',
       date: '2026-12-25',
       reason: 'クリスマス休業',
       updatedAt: '',
@@ -271,17 +276,32 @@ describe('api/blackoutDates', () => {
     expect(lastRequest.body).toEqual({ 受注不可日: 20261225, 備考: 'クリスマス休業' })
   })
 
-  it('[BDA-15] 削除は受注不可日をパスに置き、渡した id を返す', async () => {
-    record('delete', '*/api/masters/blackout-dates/:blackoutDate', {
+  it('[BDA-15] 削除は id をパスに置き、渡した id を返す', async () => {
+    record('delete', '*/api/masters/blackout-dates/:id', {
       success: true,
       blackout_date: { ...blackoutDateItem, 取消区分: 1 },
       message: 'ok',
     })
 
-    const deleted = await deleteBlackoutDate('20261225')
+    const deleted = await deleteBlackoutDate('12')
 
-    expect(lastRequest.url.pathname).toBe('/api/masters/blackout-dates/20261225')
-    expect(deleted).toBe('20261225')
+    expect(lastRequest.url.pathname).toBe('/api/masters/blackout-dates/12')
+    expect(deleted).toBe('12')
+  })
+
+  /*
+   * 実 API が ID を返し始めるまでの穴を見張るテスト。受注不可日へフォールバックすると
+   * 「動いているように見える」まま実 API で行のキーが壊れるので、空文字のまま出す。
+   */
+  it('[BDA-17] 応答に ID が無いとき id は空文字のまま（受注不可日へフォールバックしない）', async () => {
+    const { ID: _id, ...withoutId } = blackoutDateItem
+    record('get', '*/api/masters/blackout-dates', listBody([withoutId]))
+
+    const { items } = await fetchBlackoutDates()
+
+    expect(items[0].id).toBe('')
+    // 日付は主キーではなくなったが、業務上の値としてそのまま出る
+    expect(items[0].date).toBe('2026-12-25')
   })
 
   it('[BDA-16] 更新系には X-User-Code ヘッダが載る', async () => {

@@ -1,21 +1,21 @@
 import { computed } from 'vue'
 import { defineStore } from 'pinia'
-import { fetchHardLimits, updateHardLimits } from '@/api/hardLimits'
+import { fetchSliceCriteria, updateSliceCriteria } from '@/api/sliceCriteria'
 import { useAsync } from '@/composables/useAsync'
 
 /**
- * ハードリミット（市場関与率 / 1注文あたり数量 / 1注文あたり金額 の上限）。
+ * スライス基準（市場関与率 / 1注文あたり数量 / 1注文あたり金額 の上限）。
  * 単一のリソースなので一覧のようなページングは持たない。
  *
  * 取得と保存で loading / error を分ける（保存に失敗しても現在値の表示は残したいため）。
  */
-export const useHardLimitsStore = defineStore('hardLimits', () => {
-  const { data, error, loading, execute } = useAsync(fetchHardLimits)
+export const useSliceCriteriaStore = defineStore('sliceCriteria', () => {
+  const { data, error, loading, execute } = useAsync(fetchSliceCriteria)
 
   const settings = computed(() => data.value)
   const isEmpty = computed(() => !loading.value && !error.value && !data.value)
 
-  const { error: saveError, loading: saving, execute: executeSave } = useAsync(updateHardLimits)
+  const { error: saveError, loading: saving, execute: executeSave } = useAsync(updateSliceCriteria)
 
   /**
    * 3 つの上限を更新する。画面に出さない項目（有効フラグ・備考）と楽観的ロックの

@@ -17,7 +17,8 @@ const toIsoDate = (holidayDate) => {
   const digits = String(holidayDate)
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
-const toId = (holiday) => String(holiday.休場日)
+// 主キーは休場日ではなく ID（api 層が文字列にして返す）
+const toId = (holiday) => String(holiday.ID)
 
 // 期待値はフィクスチャと表示件数から導く（56 / 50 を直接書かない）
 const PAGE_SIZE = MARKET_HOLIDAYS_PAGE_SIZE
@@ -64,11 +65,11 @@ const DUPLICATE_MESSAGE = `休場日 ${marketHolidays[0].休場日} は既に登
 const CANCELED_DATE = toIsoDate(canceledMarketHolidays[0].休場日)
 const REACTIVATION_WARNING = 'この日付は以前登録され削除されています。再度有効にします'
 
-// 削除の対象と、既定ハンドラが 404 を返す「存在しない休場日」
+// 削除の対象と、既定ハンドラが 404 を返す「存在しない id」
 const DELETE_TARGET = marketHolidays[0]
 const DELETE_TARGET_ID = toId(DELETE_TARGET)
-// フィクスチャは 2023 年以降しか持たないので、この日付は必ず存在しない
-const MISSING_ID = '19000101'
+// 採番は取消済みも含めて 1..57 なので、この id は必ず存在しない
+const MISSING_ID = '999999'
 const NOT_FOUND_MESSAGE = `指定された海外休場日が存在しません: ${MISSING_ID}`
 
 const ids = (items) => items.map((item) => item.id)

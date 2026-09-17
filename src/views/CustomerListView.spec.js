@@ -443,7 +443,6 @@ describe('CustomerListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(exists(wrapper, 'customers-reload')).toBe(true)
     expect(exists(wrapper, 'customers-add')).toBe(false)
     // 行の中にボタンが無いこと（操作列そのものが無い）
     expect(rows(wrapper)[0].findAll('button')).toHaveLength(0)

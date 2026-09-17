@@ -106,7 +106,7 @@ test.describe('受注不可日マスタ一覧', () => {
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '受注不可日マスタ', exact: true })).toBeVisible()
     // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている
-    await expect(page.getByTestId('blackout-dates-reload')).toBeVisible()
+    await expect(page.getByTestId('blackout-dates-add')).toBeVisible()
 
     await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
 
@@ -247,20 +247,6 @@ test.describe('受注不可日マスタ一覧', () => {
 
     await expect(page.getByTestId('blackout-dates-empty')).toBeVisible()
     await expect(page.getByTestId('blackout-dates-description')).toBeVisible()
-  })
-
-  test('[BD-10] 「再読み込み」を押しても絞り込みが保たれる', async ({ page }) => {
-    await page.goto(`${PATH}?date_from=2025-01-01&date_to=2025-12-31`)
-    await expect(rowsOf(page)).toHaveCount(year2025.length)
-
-    await page.getByTestId('blackout-dates-reload').click()
-
-    // reload() は URL を変えない契約
-    await expect(page).toHaveURL(/date_from=2025-01-01/)
-    await expect(page).toHaveURL(/date_to=2025-12-31/)
-    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${year2025.length} 件`)
-    await expect(rowsOf(page)).toHaveCount(year2025.length)
-    await expect(page.getByTestId('blackout-dates-date-from')).toHaveValue('2025-01-01')
   })
 })
 

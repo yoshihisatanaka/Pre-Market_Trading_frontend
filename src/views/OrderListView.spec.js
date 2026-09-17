@@ -70,21 +70,4 @@ describe('OrderListView', () => {
     expect(wrapper.find('[data-testid="orders-empty"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="orders-table"]').exists()).toBe(false)
   })
-
-  it('[OLV-05] 再読み込みボタンで再取得する', async () => {
-    server.use(
-      http.get('*/api/orders', () => HttpResponse.json({ items: [], total: 0 }), { once: true }),
-    )
-    const wrapper = mountView()
-    await flushPromises()
-    expect(wrapper.find('[data-testid="orders-empty"]').exists()).toBe(true)
-
-    // 2回目は既定ハンドラ（フィクスチャ3件）に戻る
-    await wrapper.find('[data-testid="orders-reload"]').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.findAll('[data-testid="data-table-row"]')).toHaveLength(
-      orderListResponse.items.length,
-    )
-  })
 })

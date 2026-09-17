@@ -456,7 +456,6 @@ describe('SymbolListView', () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(exists(wrapper, 'symbols-reload')).toBe(true)
     expect(exists(wrapper, 'symbols-add')).toBe(true)
 
     // 破壊的な操作を最後にする既存の並び（編集が左・削除が右端）

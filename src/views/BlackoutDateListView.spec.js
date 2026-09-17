@@ -383,21 +383,6 @@ describe('BlackoutDateListView', () => {
     expect(wrapper.find('[data-testid="blackout-dates-date-to"]').element.value).toBe(DATE_TO)
   })
 
-  it('[BDL-12] 再読み込みは URL を変えずに取り直す', async () => {
-    // 2回目は既定ハンドラ（フィクスチャ全件）に戻る
-    server.use(emptyHandler({ once: true }))
-    const { wrapper, router } = await mountView()
-    await settle()
-    expect(exists(wrapper, 'blackout-dates-empty')).toBe(true)
-
-    // reload は router を経由しないのでナビゲーション待ちは要らない
-    await wrapper.find('[data-testid="blackout-dates-reload"]').trigger('click')
-    await flushPromises()
-
-    expect(rows(wrapper)).toHaveLength(firstPage.length)
-    expect(router.currentRoute.value.query).toEqual({})
-  })
-
   it('[BDL-13] 説明バナーは 4 状態のいずれでも表示される', async () => {
     // ローディング中
     const loadingView = await mountView()

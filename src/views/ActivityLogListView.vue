@@ -2,7 +2,6 @@
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
-import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -34,11 +33,10 @@ import {
  * （src/mocks/handlers/index.js のモックが応えている）。
  * モックと実 API の食い違いは src/api/activityLogs.js の冒頭に書いてある。
  *
- * 画面モックからの意図的なずれが 3 つある。
+ * 画面モックからの意図的なずれが 2 つある。
  *   - モックは全件を sticky ヘッダ付きのスクロール領域に出すが、ここは 50 件ごとのページャー
  *     （MasterListCard が持つ）。件数が増えても壊れないほうを採る
  *   - 検索カードに「クリア」が増える（MasterSearchCard が検索とセットで持つ。既存 6 画面と同じ）
- *   - ヘッダに「再読み込み」を置く（同上。エラー状態からの復帰導線にもなる）
  */
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
@@ -90,18 +88,6 @@ function actorRoleLabel(row) {
 
 <template>
   <section class="activity-log-list">
-    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
-    <Teleport defer to="#topbar-actions">
-      <BaseButton
-        variant="secondary"
-        data-testid="activity-logs-reload"
-        :disabled="loading"
-        @click="store.reload()"
-      >
-        再読み込み
-      </BaseButton>
-    </Teleport>
-
     <!-- 画面の説明。4 状態や検索結果に関わらず常時出す -->
     <BaseAlert variant="info" data-testid="activity-logs-description">
       注文やマスタ更新の操作履歴を横断して検索します。記録は参照のみで、追加・訂正・削除はできません。

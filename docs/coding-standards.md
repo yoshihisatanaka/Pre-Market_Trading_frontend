@@ -27,7 +27,7 @@ Vue 公式スタイルガイドの **優先度 A（必須）/ B（強く推奨�
   [AppHeader](../src/components/layout/AppHeader.vue) が表示する（見出しが二重になると E2E の
   `getByRole('heading')` が曖昧になる）
 - 画面固有のヘッダ操作ボタンは `<Teleport defer to="#topbar-actions">` でヘッダへ差し込む
-  （見本: [OrderListView.vue](../src/views/OrderListView.vue) の「再読み込み」）。
+  （見本: [SymbolListView.vue](../src/views/SymbolListView.vue) の「新規追加」）。
   `defer` が必要なのは、初回マウント時点でレイアウトの DOM がまだ document に入っていないため。
   その画面の単体テストには `global: { stubs: { teleport: true } }` を付ける
 

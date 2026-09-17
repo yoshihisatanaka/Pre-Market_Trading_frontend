@@ -99,7 +99,7 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 |---|---|---|---|
 | 海外休場日マスタ | `/masters/market-holidays`（一覧・事前検証・登録・論理削除） | `src/api/marketHolidays.js` | `X-User-Code` を `.env` の `VITE_USER_CODE` から付けている（`src/api/client.js` の interceptor）。SSO が入ったら差し替える |
 | 受注不可日マスタ | `/masters/blackout-dates`（一覧・事前検証・登録・変更・論理削除） | `src/api/blackoutDates.js` | `X-User-Code` は上と同じ。日付を変更する更新はバックエンド側の対応待ち（後述） |
-| ハードリミットマスタ（スライス注文設定） | `/masters/hard-limits`（照会・変更） | `src/api/hardLimits.js` | `備考` と `スライス有効フラグ` は**省略するとサーバ既定に落ちる**（備考は NULL、有効フラグは 1）ので、現在値を送り返して保持している |
+| スライス基準マスタ（スライス注文設定） | `/masters/hard-limits`（照会・変更） | `src/api/sliceCriteria.js` | `備考` と `スライス有効フラグ` は**省略するとサーバ既定に落ちる**（備考は NULL、有効フラグは 1）ので、現在値を送り返して保持している |
 
 切り替えても MSW ハンドラは**消していない**。単体テストと E2E が同じ `src/mocks/handlers/` を共用しており、
 消すとテストが実 API を叩きにいくため。代わりにハンドラとフィクスチャを**実 API と同じ形**に寄せてある。

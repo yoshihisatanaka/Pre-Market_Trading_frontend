@@ -1,5 +1,6 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -8,12 +9,21 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
-import { useHardLimitsStore } from '@/stores/hardLimits'
+import { useSliceCriteriaStore } from '@/stores/sliceCriteria'
 import { formatQuantity } from '@/utils/format'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
-const store = useHardLimitsStore()
+const store = useSliceCriteriaStore()
 const { settings, loading, error, isEmpty, saving, saveError } = storeToRefs(store)
+
+/*
+ * 更新できるのは管理責任者だけ、という出し分け。ログインユーザとロールの仕組みは
+ * このフロントにまだ無いので、画面モックが ?as_user で切り替えているのに倣い、
+ * 見た目を確かめられる逃げ道として ?as_user=viewer のときだけ閲覧のみにする。
+ * 既定（クエリなし）は編集可。仕組みが入ったらこの 1 行を差し替える。
+ */
+const route = useRoute()
+const canEdit = computed(() => route.query.as_user !== 'viewer')
 
 /*
  * 市場関与率だけは、ストア（＝バックエンド）が比率で持ち、画面は % で見せる。
@@ -74,7 +84,7 @@ async function submitSave() {
   // 失敗時は入力をそのまま残して直させる（理由は saveError に出る）
   if (!updated) return
 
-  noticeMessage.value = 'ハードリミットを保存しました。'
+  noticeMessage.value = 'スライス基準を保存しました。'
 }
 
 function reload() {
@@ -88,12 +98,12 @@ store.load()
 </script>
 
 <template>
-  <section class="hard-limit">
+  <section class="slice-criteria">
     <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
     <Teleport defer to="#topbar-actions">
       <BaseButton
         variant="secondary"
-        data-testid="hard-limits-reload"
+        data-testid="slice-criteria-reload"
         :disabled="loading"
         @click="reload"
       >
@@ -101,58 +111,66 @@ store.load()
       </BaseButton>
     </Teleport>
 
-    <BaseAlert v-if="noticeMessage" variant="success" data-testid="hard-limits-notice">
+    <BaseAlert v-if="noticeMessage" variant="success" data-testid="slice-criteria-notice">
       {{ noticeMessage }}
     </BaseAlert>
 
     <!-- ローディング / エラー / 空 / データあり の 4 状態 -->
-    <p v-if="loading" data-testid="hard-limits-loading" class="hard-limit__status is-loading">
+    <p
+      v-if="loading"
+      data-testid="slice-criteria-loading"
+      class="slice-criteria__status is-loading"
+    >
       <BaseSpinner />
     </p>
 
-    <div v-else-if="error" data-testid="hard-limits-error" class="hard-limit__status is-error">
+    <div
+      v-else-if="error"
+      data-testid="slice-criteria-error"
+      class="slice-criteria__status is-error"
+    >
       <p>{{ error.message }}</p>
       <BaseButton variant="secondary" @click="reload">再試行</BaseButton>
     </div>
 
-    <p v-else-if="isEmpty" data-testid="hard-limits-empty" class="hard-limit__status">
-      ハードリミットが設定されていません。
+    <p v-else-if="isEmpty" data-testid="slice-criteria-empty" class="slice-criteria__status">
+      スライス基準が設定されていません。
     </p>
 
     <template v-else>
-      <BaseCard title="現在のハードリミット">
+      <BaseCard title="現在のスライス基準">
         <template #header-actions>
-          <span class="hard-limit__chip">5営業日平均出来高基準</span>
+          <span class="slice-criteria__chip">5営業日平均出来高基準</span>
         </template>
 
-        <dl class="hard-limit__list" data-testid="hard-limits-current">
-          <div class="hard-limit__item">
-            <dt class="hard-limit__term">市場関与率 上限</dt>
-            <dd class="hard-limit__detail">
-              <span class="hard-limit__value" data-testid="hard-limits-rate">
+        <dl class="slice-criteria__list" data-testid="slice-criteria-current">
+          <div class="slice-criteria__item">
+            <dt class="slice-criteria__term">市場関与率 上限</dt>
+            <dd class="slice-criteria__detail">
+              <span class="slice-criteria__value" data-testid="slice-criteria-rate">
                 {{ toPercent(settings.participationRate).toFixed(2) }}%
               </span>
-              <span class="hard-limit__note">5営業日平均出来高 × 上限率</span>
+              <span class="slice-criteria__note">5営業日平均出来高 × 上限率</span>
             </dd>
           </div>
 
-          <div class="hard-limit__item">
-            <dt class="hard-limit__term">1注文あたり数量 上限</dt>
-            <dd class="hard-limit__detail">
-              <span class="hard-limit__value" data-testid="hard-limits-quantity">
+          <div class="slice-criteria__item">
+            <dt class="slice-criteria__term">1注文あたり数量 上限</dt>
+            <dd class="slice-criteria__detail">
+              <span class="slice-criteria__value" data-testid="slice-criteria-quantity">
                 {{ formatQuantity(settings.maxQuantity) }} 株
               </span>
-              <span class="hard-limit__note">注文数量で判定</span>
+              <span class="slice-criteria__note">注文数量で判定</span>
             </dd>
           </div>
 
-          <div class="hard-limit__item">
-            <dt class="hard-limit__term">1注文あたり金額 上限</dt>
-            <dd class="hard-limit__detail">
-              <span class="hard-limit__value" data-testid="hard-limits-amount">
+          <div class="slice-criteria__item">
+            <dt class="slice-criteria__term">1注文あたり金額 上限</dt>
+            <dd class="slice-criteria__detail">
+              <span class="slice-criteria__value" data-testid="slice-criteria-amount">
                 {{ formatUsdAmount(settings.maxAmount) }}
               </span>
-              <span class="hard-limit__note">価格 × 数量で判定</span>
+              <span class="slice-criteria__note">価格 × 数量で判定</span>
             </dd>
           </div>
         </dl>
@@ -160,11 +178,29 @@ store.load()
 
       <BaseCard title="設定変更">
         <template #header-actions>
-          <span class="hard-limit__chip hard-limit__chip--owner">管理責任者</span>
+          <span
+            v-if="canEdit"
+            class="slice-criteria__chip slice-criteria__chip--owner"
+            data-testid="slice-criteria-role"
+          >
+            管理責任者
+          </span>
+          <span v-else class="slice-criteria__chip" data-testid="slice-criteria-role">
+            閲覧のみ
+          </span>
         </template>
 
-        <form class="hard-limit__form" data-testid="hard-limits-form" @submit.prevent="submitSave">
-          <BaseAlert v-if="saveError" variant="error" data-testid="hard-limits-save-error">
+        <p v-if="!canEdit" class="slice-criteria__readonly" data-testid="slice-criteria-readonly">
+          更新は管理責任者だけが実行できます。
+        </p>
+
+        <form
+          v-else
+          class="slice-criteria__form"
+          data-testid="slice-criteria-form"
+          @submit.prevent="submitSave"
+        >
+          <BaseAlert v-if="saveError" variant="error" data-testid="slice-criteria-save-error">
             {{ saveError.message }}
           </BaseAlert>
 
@@ -176,7 +212,7 @@ store.load()
                 type="number"
                 step="0.01"
                 inputmode="decimal"
-                data-testid="hard-limits-rate-input"
+                data-testid="slice-criteria-rate-input"
               />
             </FormField>
 
@@ -187,7 +223,7 @@ store.load()
                 type="number"
                 step="1"
                 inputmode="numeric"
-                data-testid="hard-limits-quantity-input"
+                data-testid="slice-criteria-quantity-input"
               />
             </FormField>
 
@@ -198,15 +234,15 @@ store.load()
                 type="number"
                 step="any"
                 inputmode="decimal"
-                data-testid="hard-limits-amount-input"
+                data-testid="slice-criteria-amount-input"
               />
             </FormField>
           </FormGrid>
 
-          <div class="hard-limit__actions">
+          <div class="slice-criteria__actions">
             <BaseButton
               type="submit"
-              data-testid="hard-limits-save"
+              data-testid="slice-criteria-save"
               :disabled="saving"
               :loading="saving"
             >
@@ -220,14 +256,14 @@ store.load()
 </template>
 
 <style scoped>
-.hard-limit {
+.slice-criteria {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
 }
 
 /* カードヘッダ右のチップ。既定はグレー面＋濃い文字 */
-.hard-limit__chip {
+.slice-criteria__chip {
   display: inline-flex;
   align-items: center;
   padding: var(--space-1) var(--space-2);
@@ -241,36 +277,36 @@ store.load()
 }
 
 /* 管理責任者は淡い緑の面＋緑の枠線 */
-.hard-limit__chip--owner {
+.slice-criteria__chip--owner {
   background-color: var(--color-success-bg);
   border-color: var(--color-success-border);
 }
 
-.hard-limit__list {
+.slice-criteria__list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-4);
 }
 
 @media (max-width: 900px) {
-  .hard-limit__list {
+  .slice-criteria__list {
     grid-template-columns: 1fr;
   }
 }
 
-.hard-limit__item {
+.slice-criteria__item {
   padding: var(--space-4);
   background-color: var(--color-surface-muted);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
 
-.hard-limit__term {
+.slice-criteria__term {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }
 
-.hard-limit__detail {
+.slice-criteria__detail {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -278,32 +314,39 @@ store.load()
 }
 
 /* 3 つ並ぶので桁位置を揃える */
-.hard-limit__value {
+.slice-criteria__value {
   color: var(--color-text-heading);
   font-size: var(--font-size-xl);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-.hard-limit__note {
+.slice-criteria__note {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }
 
-.hard-limit__form {
+/* 閲覧のみのときに設定変更フォームの代わりに出す案内 */
+.slice-criteria__readonly {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.slice-criteria__form {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
 }
 
-.hard-limit__actions {
+.slice-criteria__actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
 /* カードの外に出る 4 状態の表示。面と枠線を自前で持つ */
-.hard-limit__status {
+.slice-criteria__status {
   padding: var(--space-5);
   color: var(--color-text-muted);
   background-color: var(--color-surface);
@@ -312,12 +355,12 @@ store.load()
 }
 
 /* スピナーだけを置くので中央に寄せる（文言が無いぶん左端に小さく出ると迷子になる） */
-.hard-limit__status.is-loading {
+.slice-criteria__status.is-loading {
   display: flex;
   justify-content: center;
 }
 
-.hard-limit__status.is-error {
+.slice-criteria__status.is-error {
   display: flex;
   align-items: center;
   gap: var(--space-4);

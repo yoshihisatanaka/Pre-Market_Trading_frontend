@@ -120,7 +120,7 @@ git -C ../premarket-order-202609 grep -n 'sidebar-section\|sidebar-link' -- pyth
 ```
 
 `sidebar-section` が区分、`sidebar-link` の `href` が path で、**直後の行のテキストが画面名**。
-`?as_user=006` が付く項目はロール権限が要る画面（権限マスタ / ハードリミットマスタ /
+`?as_user=006` が付く項目はロール権限が要る画面（権限マスタ / スライス基準マスタ /
 運用管理の 4 項目）で、分母の扱いは変わらない。
 
 ### 3. 画面一覧（分母）を確定する

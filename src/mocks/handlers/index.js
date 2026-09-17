@@ -10,7 +10,7 @@ import {
   formatRatio,
 } from '../fixtures/ca'
 import { canceledSymbols, symbols } from '../fixtures/symbols'
-import { hardLimitSetting } from '../fixtures/hardLimits'
+import { sliceCriteriaSetting } from '../fixtures/sliceCriteria'
 import { codeMasters } from '../fixtures/codes'
 import { canceledCustomers, customers } from '../fixtures/customers'
 import { ACTOR_GROUP_ROLES, activityLogs } from '../fixtures/activityLogs'
@@ -23,7 +23,7 @@ import { ACTOR_GROUP_ROLES, activityLogs } from '../fixtures/activityLogs'
  *  - バックエンドで実装された API は、このリストから削除する。
  *    未定義のリクエストは実 API へ素通しされるため、削除するだけで本物に切り替わる。
  *
- * 例外は海外休場日・受注不可日・ハードリミットの 3 つ。
+ * 例外は海外休場日・受注不可日・スライス基準の 3 つ。
  * 実 API は実装済みだが、単体テストと E2E がこの handlers を共用しているのでハンドラは残し、
  * **実 API と同じ形**に寄せてある。
  *   /masters/market-holidays … 日本語キー / integer の日付 / 降順 / エラーは { detail } / 論理削除
@@ -42,8 +42,8 @@ import { ACTOR_GROUP_ROLES, activityLogs } from '../fixtures/activityLogs'
 // 海外休場日と受注不可日は論理削除なので、取消済みの行も持ったままにする（一覧では取消区分で外す）
 let marketHolidayRows = [...marketHolidays, ...canceledMarketHolidays]
 let blackoutDateRows = [...blackoutDates, ...canceledBlackoutDates]
-// ハードリミットは 1 件しか無いので、行の配列ではなくオブジェクトの写しを持つ
-let hardLimitRow = { ...hardLimitSetting }
+// スライス基準は 1 件しか無いので、行の配列ではなくオブジェクトの写しを持つ
+let sliceCriteriaRow = { ...sliceCriteriaSetting }
 
 /*
  * バックエンドが受け付ける海外休場区分コード。
@@ -129,7 +129,7 @@ export function resetMockState() {
   blackoutDateRows = [...blackoutDates, ...canceledBlackoutDates]
   caRows = [...corporateActions, ...canceledCorporateActions]
   symbolRows = [...symbols, ...canceledSymbols]
-  hardLimitRow = { ...hardLimitSetting }
+  sliceCriteriaRow = { ...sliceCriteriaSetting }
 }
 
 export const handlers = [
@@ -905,11 +905,11 @@ export const handlers = [
     })
   }),
 
-  // ハードリミット（バックエンドの呼称は「スライス注文設定」）。1 件だけの設定なので一覧ではない
-  http.get('*/api/masters/hard-limits', () => HttpResponse.json(hardLimitRow)),
+  // スライス基準（バックエンドの呼称は「スライス注文設定」）。1 件だけの設定なので一覧ではない
+  http.get('*/api/masters/hard-limits', () => HttpResponse.json(sliceCriteriaRow)),
 
   /*
-   * ハードリミットの更新。拒否の形は実 API（FastAPI）に合わせる。
+   * スライス基準の更新。拒否の形は実 API（FastAPI）に合わせる。
    *
    *   422 HTTPValidationError … pydantic の制約違反。{ detail: [{ type, loc, msg, input, ctx }] }
    *   409 ErrorResponse       … 楽観的ロックの競合。{ detail: '…' }
@@ -929,12 +929,12 @@ export const handlers = [
 
     // 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば弾く
     const updatedAt = body?.['更新日時'] ?? null
-    if (updatedAt && updatedAt !== hardLimitRow['更新日時']) {
+    if (updatedAt && updatedAt !== sliceCriteriaRow['更新日時']) {
       return detailError(409, SLICE_CONFLICT_DETAIL)
     }
 
-    hardLimitRow = {
-      ...hardLimitRow,
+    sliceCriteriaRow = {
+      ...sliceCriteriaRow,
       市場関与率: body['市場関与率'],
       大口数量閾値: body['大口数量閾値'],
       大口金額閾値: body['大口金額閾値'],
@@ -950,7 +950,7 @@ export const handlers = [
       更新者: '006',
     }
 
-    return HttpResponse.json(hardLimitRow)
+    return HttpResponse.json(sliceCriteriaRow)
   }),
 
   /*
@@ -1051,7 +1051,7 @@ function isRealYmd(value) {
   return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }
 
-/* ここからハードリミット（/masters/hard-limits）のモック用ヘルパ。実 API の 422 を模すためだけのもの */
+/* ここからスライス基準（/masters/hard-limits）のモック用ヘルパ。実 API の 422 を模すためだけのもの */
 
 /**
  * SliceSettingUpdateRequest の制約（openapi.json）。

@@ -244,9 +244,8 @@ function toAccountItem({ id, branch, handler, seq, profile, canceled = false }) 
 
   return {
     /*
-     * 主キー。**`ID` だけは仕様より先行している。** 取り込み時点の openapi.json の CustomerItem に
-     * `ID` は無く、パスも `/masters/customers/{account_no}` のままだが、DB 全テーブルの主キーを
-     * id に統一する方針に合わせて先に置いてある（src/mocks/fixtures/symbols.js と同じ扱い）。
+     * 主キー。2026-09-18 の取り込みで CustomerItem の `ID` とパス `/masters/customers/{account_id}`
+     * が仕様に入り、先行実装ではなくなった（DB 全テーブルの主キーを id に統一する方針どおり）。
      * 採番は実 API の AUTO_INCREMENT を模して単調増加させ、取消済みの行も母数に入れる。
      */
     ID: id,

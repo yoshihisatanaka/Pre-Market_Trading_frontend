@@ -84,11 +84,9 @@ export const symbolHandlers = [
    * 仕様（`新規登録時の銘柄コード重複チェック / 変更時の銘柄存在チェック`）どおり、
    * `is_update` で見るものが切り替わる。
    *
-   * **変更検証では対象を本文の `銘柄コード` から引く。** CA は対象をクエリの `ca_id` で
-   * 受け取るが、`/masters/symbols/validate` のパラメータは `is_update` ただ 1 つで、
-   * id にあたるクエリが仕様に無い。銘柄コードは編集フォームで変更不可にしてあるので、
-   * ここで引けた行が更新対象そのもの。その ID を currentId として渡せば、重複検査は
-   * 自分自身を重複と見なさなくなる（→ バックエンドへの確認事項）。
+   * **変更検証の対象はクエリの `symbol_id`（主キー）で指す**（CA の `ca_id` と同じ形。
+   * 2026-09-18 の取り込みで仕様に入った）。その ID を currentId として渡すので、
+   * 重複検査は自分自身を重複と見なさない。
    *
    * 必須と文字数は pydantic（SymbolRequest）が先に見るので、ここではなく 422 になる。
    * この事前検証に残るのはコードマスタの照合と、重複または存在の確認だけ。
@@ -98,13 +96,15 @@ export const symbolHandlers = [
     const violation = symbolRequestViolation(body)
     if (violation) return violation
 
-    const isUpdate = new URL(request.url).searchParams.get('is_update') === 'true'
+    const query = new URL(request.url).searchParams
+    const isUpdate = query.get('is_update') === 'true'
+    const currentId = query.has('symbol_id') ? Number(query.get('symbol_id')) : null
     const symbol = toSymbolInput(body)
 
-    const target = isUpdate ? findSymbolRow(symbol.symbolCode) : null
+    const target = isUpdate ? findSymbolRowById(currentId) : null
     const errors = symbolServiceErrors(symbol, { currentId: target?.ID ?? null })
     if (isUpdate && (!target || target.取消区分 === 1)) {
-      errors.push(`指定された銘柄(${symbol.symbolCode})は存在しません`)
+      errors.push(`指定された銘柄(ID=${currentId})は存在しません`)
     }
 
     return HttpResponse.json({
@@ -391,6 +391,11 @@ export function findSymbolRow(symbolCode) {
   const needle = String(symbolCode ?? '').toUpperCase()
 
   return symbolRows.find((row) => row.銘柄コード.toUpperCase() === needle) ?? null
+}
+
+/** 主キー（ID）で 1 行引く。変更検証の対象を指すのに使う（取消済みの行も返す） */
+function findSymbolRowById(id) {
+  return symbolRows.find((row) => row.ID === id) ?? null
 }
 
 /** ID の採番。実 API の AUTO_INCREMENT と同じく単調増加（取消済みの行も母数に入れる） */

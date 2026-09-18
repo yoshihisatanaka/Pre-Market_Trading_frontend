@@ -152,14 +152,10 @@ const KNOWN_GAPS = [
     reason: '画面モックにある検索条件。実 API は無視するので絞り込みが黙って効かない',
     request: '#8',
   },
-  {
-    kind: 'query',
-    method: 'POST',
-    template: '/masters/blackout-dates/validate',
-    names: ['blackout_date_id'],
-    reason: '変更検証の対象を ID で渡す先行実装（CA の ca_id に倣った）。仕様にはまだ無い',
-    request: '#7',
-  },
+  /*
+   * 変更検証の対象を渡すクエリ（blackout_date_id / symbol_id / account_id …）は
+   * 2026-09-18 の取り込みで全マスタに入った。先行実装の食い違いは解消したので行を外した。
+   */
   {
     kind: 'query',
     method: 'GET',

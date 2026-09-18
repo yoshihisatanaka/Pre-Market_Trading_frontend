@@ -17,9 +17,7 @@
 | 2 | **約定照会の API**（`/executions` 系: 検索・CSV 出力）と **注文訂正**（`/orders/{order_id}/amend` 相当。`dream-correct` は Dream 用） | 約定照会 / 注文照会（訂正）/ みずほ注文締 | 24.0 | 同上 | 依頼中 | 2026-09-17 |
 | 3 | **レスポンスの中身が未定義**: `/codes` / `/mizuho/*` / `GET /orders/{order_id}` / `/branches` / `/handlers` / `/customers`（注文画面用）/ `/batch/*` | 新規注文 / 顧客詳細 / みずほ注文締 / 滞留注文抽出 | 16.0 | `src/mocks/` の仮フィクスチャで進める | 依頼中 | 2026-09-16 |
 | 4 | **権限マスタをフロント側で仕様の形に合わせ直す**（依頼ではなく**フロントの作業**）。`/masters/permissions` は 2026-09-18 の取り込みで GET / PUT / history が入ったが、**形が違う**: 仕様は `RolePermissionItem`（日本語キー・`発注権限` / `マスタ更新権限` / `運用管理権限` の 3 権限）、フロントは画面モック由来（英語キー・`can_order` / `can_master_update` / `can_order_stop` / `can_activity_log_view` / `can_admin_function` の 5 権限）。**どちらを正とするかは要確認**（画面モックの 5 権限が要件なら、仕様側に 2 つ足してもらう） | 権限マスタ / アクセス制御 | 12.0 | 仮ハンドラのまま（`src/mocks/handlers/permissions.js`）。契約テストの `KNOWN_GAPS` に fixture の食い違いとして記録済み | **要確認** | 2026-09-18 |
-| 5 | **PUT / DELETE のパスキーの統一**: 一覧は全マスタが `ID: integer` を返すが、更新系のキーが ID なのは CA / 残高調整 / 手数料パターン / 手数料優遇の 4 種だけ。顧客（`account_no`）/ 銘柄（`symbol`）/ 為替（`base_date` + `currency_code`）/ 受注不可日（`blackout_date`）/ 休場日（`holiday_date`）/ ロール権限（`role_code`）/ ユーザ（`operator_code`）は業務キーのまま。**ID に寄せるのか、業務キーで確定なのか** | 銘柄 / 受注不可日 / 海外休場日（実 API E2E の書き込み系 11 本） | 4.5 | パスキーは `openapi.json` に従い `src/api/` で変換する（画面は `id` のまま）。回答で ID 化されたら api 層のパス 1 行を戻す | **問合せ中** | 2026-09-17 |
-| 6 | **`/masters/symbols/validate` に変更対象を渡す手段**: パラメータが `is_update` だけで、CA の `ca_id` にあたるものが無い。対象は本文の `銘柄コード` から引く読みで進めている | 銘柄マスタ（編集） | 1.0 | 銘柄コードを編集不可にして本文から引けるようにしている | 依頼中 | 2026-09-15 |
-| 7 | **`/masters/blackout-dates/validate` の変更対象**: `blackout_date_id`（ID）を先行実装で送っている。仕様に無いので確定させたい | 受注不可日マスタ（編集） | 1.0 | 送っている（実 API は無視する）。契約テストの `KNOWN_GAPS` に載せてある | 依頼中 | 2026-09-11 |
+| 5 | **PUT / DELETE のパスキーの統一**: 一覧は全マスタが `ID: integer` を返すが、更新系のキーが ID なのは CA / 残高調整 / 手数料パターン / 手数料優遇 / **顧客（2026-09-18 に `account_no` → `account_id`）** の 5 種。銘柄（`symbol`）/ 為替（`base_date` + `currency_code`）/ 受注不可日（`blackout_date`）/ 休場日（`holiday_date`）/ ロール権限（`role_code`）/ ユーザ（`operator_code`）は業務キーのまま。**ID に寄せるのか、業務キーで確定なのか** | 銘柄 / 受注不可日 / 海外休場日（実 API E2E の書き込み系 11 本） | 4.5 | パスキーは `openapi.json` に従い `src/api/` で変換する（画面は `id` のまま）。回答で ID 化されたら api 層のパス 1 行を戻す | **問合せ中** | 2026-09-17 |
 | 8 | **`/masters/customers` の検索クエリ追加**: `handler_code` / `restriction` / `account_type` / `corporate_type`。画面モックにある検索条件で、いまは実 API が無視する（絞り込みが黙って効かない） | 顧客マスタ（一覧・検索） | 1.0 | 送っている（実 API は無視する）。契約テストの `KNOWN_GAPS` に載せてある | 依頼中 | 2026-09-14 |
 | 9 | **銘柄更新で未送信項目（`市場名` / `前日出来高` / `Pre区分`）を保つか**: `SymbolUpdateRequest`（部分更新）が入ったので解消している可能性があるが未確認 | 銘柄マスタ（編集） | 1.0 | 画面は 3 項目を送らない。モックは「消える」挙動を保って未解決を隠さない | 確認待ち | 2026-09-16 |
 | 10 | **再有効化の ID**: 取消済みの休場日 / 受注不可日を登録し直したとき、元の行の ID を引き継ぐのか新しく採番するのか | 海外休場日 / 受注不可日（新規追加） | 0.5 | モックは元の ID を引き継ぐ | 依頼中 | 2026-09-17 |
@@ -31,6 +29,8 @@
 |---|---|---|---|
 | — | 一覧レスポンスに `ID` を返す（`BlackoutDateItem` / `MarketHolidayItem` ほか全 `*Item`） | 2026-09-18 | 取り込み済み。行の特定（`data-testid`）が全マスタで可能になった。**更新系の入口（#5）は未追随** |
 | — | 権限マスタのパス（`GET` / `PUT` / `history`） | 2026-09-18 | パスは入ったが形が違う。フロント側の追随が #4 に残っている |
+| 6 | `/masters/symbols/validate` に変更対象を渡す手段 | 2026-09-18 | `symbol_id` が入った。`src/api/symbols.js` が送るようにし、モックも ID で対象を引く形に合わせた。銘柄コードを変える編集も作れる |
+| 7 | `/masters/blackout-dates/validate` の変更対象 | 2026-09-18 | `blackout_date_id` が仕様に入り、先行実装のまま一致。`KNOWN_GAPS` の行を外した。他マスタも `<x>_id` で揃った（`account_id` / `fx_id` / `holiday_id` / `balance_id` / `fee_pattern_id` / `fee_preference_id`） |
 
 **2026-09-18 の取り込みで黙って壊れかけた箇所**（契約テスト `CON-05` が検出し、同日追随済み）:
 操作ログの期間クエリが `date_from` / `date_to` から `start_date` / `end_date` へ、操作区分が

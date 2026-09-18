@@ -19,6 +19,7 @@
     "test:e2e": "playwright test",
     "test:e2e:trace": "playwright test --trace on",
     "check:scenarios": "node scripts/check-scenarios.mjs",
+    "verify": "eslint . && vitest run && node scripts/check-scenarios.mjs",
     "msw:init": "msw init public/ --save"
   },
   "dependencies": {

@@ -15,7 +15,7 @@
  * /app/docs として見える（docker-compose.yml）。
  */
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
+import { basename, join, relative, resolve } from 'node:path'
 
 const KINDS = [
   {
@@ -52,7 +52,11 @@ function readScenarios(kind, errors) {
     console.error('リポジトリルートで実行しているか、*_SCENARIO_DIR を確認してください。')
     process.exit(2)
   }
-  const files = walk(kind.scenarioDir, (p) => p.endsWith('.md') && !p.endsWith('README.md'))
+  // `_` 始まりはシナリオの雛形（docs/e2e/_template-*.md など）。ID は差し替え前の仮のものなので検査しない
+  const files = walk(
+    kind.scenarioDir,
+    (p) => p.endsWith('.md') && !p.endsWith('README.md') && !basename(p).startsWith('_'),
+  )
   const scenarios = new Map()
   for (const file of files) {
     const rel = relative(kind.scenarioDir, file)

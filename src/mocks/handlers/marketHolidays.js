@@ -58,25 +58,44 @@ export const marketHolidayHandlers = [
   }),
 
   /*
-   * 登録前の事前検証。実 API と同じく、不合格も「200 + valid: false」で返す
+   * 登録・変更前の事前検証。実 API と同じく、不合格も「200 + valid: false」で返す
    * （通信エラーと区別できるようにするため）。
    * 取消済みの日付は登録できるが、再有効化になることを warnings で伝える。
+   *
+   * is_update で見るものが変わる。新規検証は「その日付が空いているか」、
+   * 変更検証は「対象の行が実在し取消済みでないか」。**対象は本文の休場日ではなく
+   * クエリの holiday_id で指す**ので、重複検査の根拠は主キーではなく休場日の一意制約になる
+   * （受注不可日の blackout_date_id と同じ形）。
+   * MarketHolidayUpdateRequest は 休場日 を持たないため、変更検証で日付は動かない。
+   * 再有効化の警告は新規検証のときだけ出す。
    */
   http.post('*/api/masters/market-holidays/validate', async ({ request }) => {
     const { holidayDate, holidayType, reason } = await readHolidayRequest(request)
+
+    const query = new URL(request.url).searchParams
+    const isUpdate = query.get('is_update') === 'true'
+    const currentId = query.has('holiday_id') ? Number(query.get('holiday_id')) : null
 
     const errors = []
     if (!isHolidayDate(holidayDate)) errors.push('休場日は YYYYMMDD 形式で入力してください')
     if (!HOLIDAY_TYPE_CODES.includes(holidayType)) errors.push('休場区分を選択してください')
     if (!reason) errors.push('休場理由を入力してください')
 
+    if (isUpdate) {
+      const target = marketHolidayRows.find((holiday) => holiday.ID === currentId)
+      if (!target || target.取消区分 === 1) {
+        errors.push(`指定された海外休場日(ID=${currentId})は存在しません`)
+      }
+    }
+
+    // 同じ日付の行。変更検証では自分自身を重複に数えない
     const existing = marketHolidayRows.find((holiday) => holiday.休場日 === holidayDate)
-    if (existing && existing.取消区分 === 0) {
+    if (existing && existing.取消区分 === 0 && existing.ID !== currentId) {
       errors.push(`休場日 ${holidayDate} は既に登録されています`)
     }
 
     const warnings =
-      existing && existing.取消区分 === 1
+      !isUpdate && existing && existing.取消区分 === 1
         ? ['この日付は以前登録され削除されています。再度有効にします']
         : []
 
@@ -132,10 +151,8 @@ export const marketHolidayHandlers = [
   /*
    * 海外休場日の論理削除。行は残したまま取消区分を 1 にする。
    *
-   * **パスキーは ID。** 取り込み時点の openapi.json はまだ
-   * `/masters/market-holidays/{holiday_date}`（休場日・integer）だが、DB の主キーを id に
-   * 寄せる方針に合わせて先に置いている（src/mocks/handlers の銘柄と同じ）。
-   * 実 API が {holiday_date} のままなら、直すのはここと api 層の 1 行ずつ。
+   * パスキーは ID。仕様の `/masters/market-holidays/{holiday_id}`（integer の行ID）と一致する
+   * （2026-09-18 の取り込みで確定。それまではフロントが先回りして置いていた）。
    */
   http.delete('*/api/masters/market-holidays/:id', ({ params }) => {
     const targetId = Number(params.id)
@@ -190,7 +207,7 @@ function nextMarketHolidayId() {
  *
  * **再有効化では取消済みの行の ID をそのまま渡す**（行も id も増やさない）。
  * 実 API がどちらの仕様になるかは未確定で、新しい id を採番する仕様ならここを直す
- * （→ バックエンドへの確認事項）。
+ * （→ docs/api/requests.md の依頼 #10。主キーの id 化とは別に残っている問い）。
  */
 function toMockHolidayItem({ id, holidayDate, holidayType, reason }) {
   return {

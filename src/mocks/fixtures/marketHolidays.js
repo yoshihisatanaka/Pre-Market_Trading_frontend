@@ -30,9 +30,9 @@ const HOLIDAYS_PER_YEAR = [
 const HOLIDAY_TYPE_NAMES = { 0: '終日休場', 1: '短縮取引' }
 
 /*
- * **`ID` だけは仕様より先行している。** 取り込み時点の openapi.json の HolidayItem に `ID` は無く、
- * パスも `/masters/market-holidays/{holiday_date}` のままだが、DB 全テーブルの主キーを id に
- * 統一する方針に合わせて先に置いてある（src/mocks/fixtures/symbols.js と同じ扱い）。
+ * `ID` は MarketHolidayItem の required な主キー（サロゲートキー）。2026-09-18 の取り込みで
+ * 仕様に入り、パスも `/masters/market-holidays/{holiday_id}` になった
+ * （それまではフロントが先回りして置いていた）。
  *
  * 採番は実 API の AUTO_INCREMENT を模して単調増加させる。取消済みの行も母数に入れるので、
  * marketHolidays と canceledMarketHolidays を通して一意になる。

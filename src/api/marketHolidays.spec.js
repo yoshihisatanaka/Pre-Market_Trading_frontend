@@ -51,7 +51,7 @@ function record(method, path, body, status = 200) {
 
 /** HolidayItem 1 件（openapi.json の必須項目をひととおり埋めたもの） */
 const holidayItem = {
-  // 主キー。openapi.json にはまだ無く、DB の主キーを id に寄せる方針で先行している
+  // 主キー（MarketHolidayItem の required なサロゲートキー）。休場日ではない
   ID: 12,
   休場日: 20261225,
   休場区分: '0',
@@ -138,6 +138,29 @@ describe('api/marketHolidays', () => {
       休場区分: '0',
       休場理由: 'Christmas Day',
     })
+    // 既定が新規検証なので、クエリは付けない
+    expect([...lastRequest.params.keys()]).toEqual([])
+  })
+
+  it('[MHA-13] 変更検証では holiday_id と is_update をクエリに載せる', async () => {
+    record('post', '*/api/masters/market-holidays/validate', { valid: true, errors: [], warnings: [] })
+
+    await validateMarketHoliday({
+      date: '2026-12-25',
+      reason: 'Christmas Day',
+      holidayType: '0',
+      id: '12',
+    })
+
+    // 対象は本文の休場日ではなくクエリの id で指す（自分自身が重複として弾かれない）
+    expect(lastRequest.params.get('holiday_id')).toBe('12')
+    expect(lastRequest.params.get('is_update')).toBe('true')
+    // 本文の形は新規検証と同じ
+    expect(lastRequest.body).toEqual({
+      休場日: 20261225,
+      休場区分: '0',
+      休場理由: 'Christmas Day',
+    })
   })
 
   it('[MHA-07] 事前検証の valid / errors / warnings をそのまま返す', async () => {
@@ -211,8 +234,9 @@ describe('api/marketHolidays', () => {
   })
 
   /*
-   * 実 API が ID を返し始めるまでの穴を見張るテスト。休場日へフォールバックすると
-   * 「動いているように見える」まま実 API で行のキーが壊れるので、空文字のまま出す。
+   * ID は MarketHolidayItem の required なので通常は必ず届くが、落ちたときに気づける形にする。
+   * 休場日へフォールバックすると「動いているように見える」まま行のキーだけが静かに壊れるので、
+   * 空文字のまま出す。
    */
   it('[MHA-12] 応答に ID が無いとき id は空文字のまま（休場日へフォールバックしない）', async () => {
     const { ID: _id, ...withoutId } = holidayItem

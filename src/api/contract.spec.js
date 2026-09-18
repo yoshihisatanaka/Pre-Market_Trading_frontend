@@ -375,7 +375,8 @@ const PROBES = [
   },
   {
     name: 'validateMarketHoliday',
-    run: () => validateMarketHoliday({ date: '2031-01-01', reason: 'x', holidayType: '0' }),
+    run: () =>
+      validateMarketHoliday({ date: '2031-01-01', reason: 'x', holidayType: '0', id: '1' }),
   },
   {
     name: 'createMarketHoliday',

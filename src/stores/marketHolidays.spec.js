@@ -336,7 +336,7 @@ describe('useMarketHolidaysStore', () => {
 
   it('[MHS-17] 削除中は deleting だけが true になり一覧の loading は false のまま', async () => {
     server.use(
-      http.delete('*/api/masters/market-holidays/:holidayDate', async () => {
+      http.delete('*/api/masters/market-holidays/:id', async () => {
         await delay(50)
         return HttpResponse.json({
           success: true,

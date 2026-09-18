@@ -60,6 +60,12 @@ const routes = [
     meta: { title: 'スライス基準マスタ' },
   },
   {
+    path: '/masters/balance-adjustments',
+    name: 'balance-adjustment-list',
+    component: () => import('@/views/BalanceAdjustmentListView.vue'),
+    meta: { title: '残高マスタ' },
+  },
+  {
     path: '/operations/activity-logs',
     name: 'activity-log-list',
     component: () => import('@/views/ActivityLogListView.vue'),

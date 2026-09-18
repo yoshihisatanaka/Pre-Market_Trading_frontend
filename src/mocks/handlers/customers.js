@@ -10,6 +10,16 @@ import { toNonNegativeInt } from './_shared'
 const customerRows = [...customers, ...canceledCustomers]
 
 /**
+ * 口座番号で有効な 1 件を引く。
+ *
+ * 残高マスタのモックが、実 API の「m_口座情報 と結合して扱者・顧客名を返す」を模すために使う。
+ * 行の配列そのものは export しない（他のファイルから書き換えられないようにするため）。
+ */
+export function findCustomerByAccountNo(accountNo) {
+  return customerRows.find((row) => row.口座番号 === accountNo && row.取消区分 === 0) ?? null
+}
+
+/**
  * 顧客マスタの一覧が 1 ページで返す件数の既定値。
  * `/masters/customers` は limit（1〜200・既定 50）を受け取るので、
  * これはクエリが無いときに使う値。

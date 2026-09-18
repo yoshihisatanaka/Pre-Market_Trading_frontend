@@ -8,7 +8,8 @@ export const activityLogHandlers = [
    *
    * **実 API とは形が違う。** openapi.json の ActivityLogItem には 操作区分（業務操作 等）・
    * 操作者名・実行者区分・対象機能・操作内容・内容・結果 が無く、クエリも
-   * date_from / date_to / operator / target_types / target_key / sort しか無い。
+   * start_date / end_date / operator / operation / target_types / target_key / sort しか無い
+   * （期間と操作区分のクエリ名は 2026-09-18 の取り込みで変わった。src/api/activityLogs.js を参照）。
    * ここは画面モックの見た目を出すための暫定で、実 API が繋がったらこのハンドラを消し、
    * src/api/activityLogs.js の変換と画面の列を仕様側と決め直す。
    *
@@ -16,10 +17,10 @@ export const activityLogHandlers = [
    */
   http.get('*/api/operations/activity-logs', ({ request }) => {
     const params = new URL(request.url).searchParams
-    const dateFrom = params.get('date_from') ?? ''
-    const dateTo = params.get('date_to') ?? ''
+    const dateFrom = params.get('start_date') ?? ''
+    const dateTo = params.get('end_date') ?? ''
     const operator = params.get('operator') ?? ''
-    const category = params.get('category') ?? ''
+    const category = params.get('operation') ?? ''
     const feature = params.get('feature') ?? ''
     const action = params.get('action') ?? ''
     const actorGroup = params.get('actor_group') ?? ''

@@ -25,7 +25,7 @@ test.describe('共通レイアウト', () => {
 
     await expect(nav.getByRole('link')).toHaveCount(navItems.length)
     await expect(nav.getByRole('link', { name: '顧客検索', exact: true })).toBeVisible()
-    await expect(nav.getByRole('link', { name: '残高補正', exact: true })).toBeVisible()
+    await expect(nav.getByRole('link', { name: '残高マスタ', exact: true })).toBeVisible()
   })
 
   test('[LAY-02] ヘッダに画面タイトルと市場ステータスが表示される', async ({ page }) => {

@@ -8,6 +8,7 @@ import { blackoutDates, canceledBlackoutDates } from '../mocks/fixtures/blackout
 import { canceledMarketHolidays, marketHolidays } from '../mocks/fixtures/marketHolidays'
 import { sliceCriteriaSetting } from '../mocks/fixtures/sliceCriteria'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
+import { rolePermissions } from '../mocks/fixtures/permissions'
 import { fetchOrders } from './orders'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
@@ -123,44 +124,24 @@ const KNOWN_GAPS = [
     request: '#1',
   },
   /*
-   * 一覧の *Item が ID を返すようになった（2026-09-18 ユーザ確認）が、取り込み済みの
-   * openapi.json（09-17）にはまだ入っていない。フロントは主キーを id に寄せてあるので
-   * フィクスチャが先に ID を持つ。/api-spec-sync で取り込み直すと CON-07 が落ちるので、そこで外す。
-   * CAItem は取り込み済みの時点で ID を持つため、ここには載せない。
+   * 一覧の *Item が ID を返すようになった（2026-09-18 の取り込み）。フロントが先行して
+   * 主キーを id に寄せていた間はここに keys: ['ID'] の行を置いていたが、仕様に入ったので外した。
+   * 残っているのは更新系のパスキーで、そちらは型で検出できない（CON-06 のコメント）。
+   */
+  /*
+   * パスは 2026-09-18 の取り込みで入った（GET / PUT / history）。ただし**形が全く違う**。
+   * 仕様の RolePermissionItem は ID / ロールコード / ロール名 / 説明 / 発注権限 / マスタ更新権限 /
+   * 運用管理権限 …（日本語キー・3 権限）で、フロントの実装は role / role_label / can_order /
+   * can_master_update / can_order_stop / can_activity_log_view / can_admin_function（英語キー・5 権限）。
+   * 画面モックを正として先に作った形なので、src/api/permissions.js と fixture と画面の列を
+   * 仕様に合わせ直す作業が要る（docs/api/requests.md #4）。それまでここで食い違いを記録しておく。
    */
   {
     kind: 'fixture',
-    fixture: 'symbols',
-    keys: ['ID'],
-    reason: '取り込み待ち（一覧の ID）',
-    request: '解消済み',
-  },
-  {
-    kind: 'fixture',
-    fixture: 'customers',
-    keys: ['ID'],
-    reason: '取り込み待ち（一覧の ID）',
-    request: '解消済み',
-  },
-  {
-    kind: 'fixture',
-    fixture: 'blackoutDates',
-    keys: ['ID'],
-    reason: '取り込み待ち（一覧の ID）',
-    request: '解消済み',
-  },
-  {
-    kind: 'fixture',
-    fixture: 'marketHolidays',
-    keys: ['ID'],
-    reason: '取り込み待ち（一覧の ID）',
-    request: '解消済み',
-  },
-  {
-    kind: 'path',
-    method: 'GET',
-    path: '/masters/permissions',
-    reason: '権限・ロールのパスが openapi.json に無い。画面は仮ハンドラで描画している',
+    fixture: 'permissions',
+    reason:
+      '権限マスタのパスは仕様に入ったが、フロントは画面モックの形（英語キー・5 権限）のまま。' +
+      '仕様は日本語キー・3 権限（発注 / マスタ更新 / 運用管理）',
     request: '#4',
   },
   {
@@ -183,9 +164,10 @@ const KNOWN_GAPS = [
     kind: 'query',
     method: 'GET',
     template: '/operations/activity-logs',
-    names: ['category', 'feature', 'action', 'actor_group', 'result'],
+    names: ['feature', 'action', 'actor_group', 'result'],
     reason:
-      '画面モックの絞り込み条件。仕様のクエリは date_from / date_to / operator / target_key など',
+      '画面モックの絞り込み条件（対象機能 / 操作内容 / 実行者区分 / 結果）。仕様にあるのは ' +
+      'start_date / end_date / operator / operation / target_types / target_key / sort だけ',
     request: '#1',
   },
 ]
@@ -242,6 +224,7 @@ const FIXTURES = [
   },
   { name: 'sliceCriteria', schema: 'SliceSettingResponse', rows: [sliceCriteriaSetting] },
   { name: 'activityLogs', schema: 'ActivityLogItem', rows: activityLogs },
+  { name: 'permissions', schema: 'RolePermissionItem', rows: rolePermissions },
 ]
 
 function describeSchema(schema) {

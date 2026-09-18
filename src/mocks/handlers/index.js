@@ -4,6 +4,7 @@ import { codeHandlers } from './codes'
 import { customerHandlers } from './customers'
 import { caHandlers, resetCaRows } from './ca'
 import { symbolHandlers, resetSymbolRows } from './symbols'
+import { balanceAdjustmentHandlers, resetBalanceAdjustmentRows } from './balanceAdjustments'
 import { marketHolidayHandlers, resetMarketHolidayRows } from './marketHolidays'
 import { blackoutDateHandlers, resetBlackoutDateRows } from './blackoutDates'
 import { sliceCriteriaHandlers, resetSliceCriteriaRow } from './sliceCriteria'
@@ -61,6 +62,7 @@ export function resetMockState() {
   resetBlackoutDateRows()
   resetCaRows()
   resetSymbolRows()
+  resetBalanceAdjustmentRows()
   resetSliceCriteriaRow()
 }
 
@@ -79,6 +81,7 @@ export const handlers = [
   ...customerHandlers,
   ...caHandlers,
   ...symbolHandlers,
+  ...balanceAdjustmentHandlers,
   ...marketHolidayHandlers,
   ...blackoutDateHandlers,
   ...sliceCriteriaHandlers,

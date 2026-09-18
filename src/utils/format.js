@@ -20,6 +20,14 @@ const dateTime = new Intl.DateTimeFormat('ja-JP', {
   minute: '2-digit',
 })
 
+// 年を落とした短い日時（`08/27 09:10`）。列幅の狭い一覧の「最終更新」向け
+const monthDayTime = new Intl.DateTimeFormat('ja-JP', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 /**
  * 米ドル建ての価格を表示用に整形する（`$1,234.56`）。
  * 通貨記号を前置する注文系の画面向け。単位を後置する画面は formatUsdUnit を使う。
@@ -61,4 +69,31 @@ export function formatDateTime(isoString) {
   const date = new Date(isoString)
   if (Number.isNaN(date.getTime())) return '—'
   return dateTime.format(date)
+}
+
+/**
+ * ISO8601 文字列を「08/27 09:10」の形に整形する。
+ *
+ * 年を落とす短い表記で、列幅の狭い一覧の「最終更新」向け（画面モックの残高マスタがこの形）。
+ * 年まで要る画面は formatDateTime を使う。違いは見た目だけで、どちらを使うかは画面の指定で決まる。
+ */
+export function formatMonthDayTime(isoString) {
+  if (!isoString) return '—'
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return '—'
+  return monthDayTime.format(date)
+}
+
+/*
+ * 全角空白。画面モックがコードと名称のあいだに置いている区切り。
+ * ソースに直接書くと ESLint の no-irregular-whitespace に当たるので、コードポイントから作る。
+ */
+const WIDE_SPACE = String.fromCharCode(0x3000)
+
+/**
+ * 2 つの値を全角空白でつなぐ。ティッカーと銘柄名、口座番号と顧客名のように
+ * 「コードと名称」を 1 セルに収める画面モックの体裁に合わせるためのもの。
+ */
+export function joinWide(left, right) {
+  return `${left}${WIDE_SPACE}${right}`
 }

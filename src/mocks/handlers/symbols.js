@@ -381,8 +381,13 @@ function symbolServiceErrors({ symbolCode, orderRoute, vwapTarget }, { currentId
   return errors
 }
 
-/** 銘柄コードで 1 行引く（DB 照合は大文字小文字を区別しないのでモックも寄せる） */
-function findSymbolRow(symbolCode) {
+/**
+ * 銘柄コードで 1 行引く（DB 照合は大文字小文字を区別しないのでモックも寄せる）。
+ *
+ * export しているのは、残高マスタのモックが実 API の「m_銘柄情報 と結合して Ticker・銘柄名を
+ * 返す」を模すため。行の配列そのものは export しない（他のファイルから書き換えられないように）。
+ */
+export function findSymbolRow(symbolCode) {
   const needle = String(symbolCode ?? '').toUpperCase()
 
   return symbolRows.find((row) => row.銘柄コード.toUpperCase() === needle) ?? null

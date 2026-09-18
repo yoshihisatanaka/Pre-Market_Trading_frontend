@@ -38,7 +38,7 @@ export const navSections = [
       { label: 'CAマスタ', to: '/masters/ca' },
       { label: '受注不可日マスタ', to: '/masters/blackout-dates' },
       { label: '海外休場日マスタ', to: '/masters/market-holidays' },
-      { label: '残高補正', to: '/masters/balance-adjustments' },
+      { label: '残高マスタ', to: '/masters/balance-adjustments' },
     ],
   },
   {

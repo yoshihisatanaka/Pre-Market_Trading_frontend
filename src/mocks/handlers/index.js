@@ -10,6 +10,7 @@ import { blackoutDateHandlers, resetBlackoutDateRows } from './blackoutDates'
 import { sliceCriteriaHandlers, resetSliceCriteriaRow } from './sliceCriteria'
 import { activityLogHandlers } from './activityLogs'
 import { permissionHandlers } from './permissions'
+import { marketStatusHandlers } from './marketStatus'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -31,6 +32,7 @@ import { permissionHandlers } from './permissions'
  *   /masters/market-holidays … 日本語キー / integer の日付 / 降順 / エラーは { detail } / 論理削除
  *   /masters/blackout-dates  … 同上
  *   /masters/hard-limits     … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
+ *   /market-status           … 日本語キー / 空白入りキー / 日付を「今日」へずらして返す
  * マスタ系のパスは 2026-09-15 の OpenAPI 取り込みで /masters/ 配下へ移った。
  * 実 API に当てて動かすときは環境変数 VITE_ENABLE_MSW を false にする（README「バックエンドとの連携」）。
  */
@@ -87,4 +89,5 @@ export const handlers = [
   ...sliceCriteriaHandlers,
   ...activityLogHandlers,
   ...permissionHandlers,
+  ...marketStatusHandlers,
 ]

@@ -9,6 +9,11 @@ import { canceledMarketHolidays, marketHolidays } from '../mocks/fixtures/market
 import { sliceCriteriaSetting } from '../mocks/fixtures/sliceCriteria'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
 import { rolePermissions } from '../mocks/fixtures/permissions'
+import {
+  closedMarketStatusResponse,
+  marketStatusResponse,
+  shortenedMarketStatusResponse,
+} from '../mocks/fixtures/marketStatus'
 import { fetchOrders } from './orders'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
@@ -36,6 +41,7 @@ import {
 import { fetchSliceCriteria, updateSliceCriteria } from './sliceCriteria'
 import { fetchActivityLogs } from './activityLogs'
 import { fetchPermissions } from './permissions'
+import { fetchMarketStatus } from './marketStatus'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -221,6 +227,15 @@ const FIXTURES = [
   { name: 'sliceCriteria', schema: 'SliceSettingResponse', rows: [sliceCriteriaSetting] },
   { name: 'activityLogs', schema: 'ActivityLogItem', rows: activityLogs },
   { name: 'permissions', schema: 'RolePermissionItem', rows: rolePermissions },
+  /*
+   * 一覧の *Item ではなくレスポンス全体が対象。sessions[] は items.$ref 経由で
+   * MarketSessionItem として型検査される（typeProblems の array → items）。
+   */
+  {
+    name: 'marketStatus',
+    schema: 'MarketStatusResponse',
+    rows: [marketStatusResponse, closedMarketStatusResponse, shortenedMarketStatusResponse],
+  },
 ]
 
 function describeSchema(schema) {
@@ -428,6 +443,7 @@ const PROBES = [
       }),
   },
   { name: 'fetchPermissions', run: () => fetchPermissions() },
+  { name: 'fetchMarketStatus', run: () => fetchMarketStatus() },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

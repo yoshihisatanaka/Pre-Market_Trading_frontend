@@ -424,10 +424,11 @@ describe('api/symbols', () => {
 
     expect(lastRequest.params.get('is_update')).toBe('true')
     /*
-     * 対象は本文の 銘柄コード から引かれる前提。CA の ca_id にあたるクエリは
-     * /masters/symbols/validate の宣言（openapi.json）に存在しないので送らない。
+     * 変更検証の対象はクエリの symbol_id（主キー）で指す。2026-09-18 の取り込みで
+     * 仕様に入った（docs/api/requests.md #6）。本文の 銘柄コード から引かせていた頃と違い、
+     * 銘柄コードを変える編集でも対象を見失わない。
      */
-    expect(lastRequest.params.has('symbol_id')).toBe(false)
+    expect(lastRequest.params.get('symbol_id')).toBe('42')
     // id は呼び出し側の都合。本文（SymbolRequest）には出さない
     expect(lastRequest.body).not.toHaveProperty('id')
     expect(lastRequest.body).not.toHaveProperty('ID')

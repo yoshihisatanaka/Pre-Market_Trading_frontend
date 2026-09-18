@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { navItems, navSections } from '../src/components/layout/navigation'
+import { closedMarketStatusResponse } from '../src/mocks/fixtures/marketStatus'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/layout.md（タイトル先頭の [LAY-xx] が対応 ID）
@@ -190,5 +191,59 @@ test.describe('共通レイアウト', () => {
 
     await expect(page).toHaveURL(/\/$/)
     await expect(page.getByTestId('app-loading-error')).toBeVisible()
+  })
+
+  /*
+   * ヘッダの取引時間帯（GET /market-status）。
+   * モックは固定日のフィクスチャを「今日（JST）」へずらして返すので、実行日によって
+   * どのセッションが現在になるかが変わる。ここでは枠組みだけを見て、具体的な時刻や
+   * 強調位置は単体側（MKS / AHD）に任せる。
+   */
+  test('[LAY-13] ヘッダに 3 セッションの取引時間帯が JST と ET で表示される', async ({ page }) => {
+    await page.goto('/')
+
+    const hours = page.getByTestId('market-hours')
+    await expect(hours).toBeVisible()
+
+    for (const name of ['プレ', 'レギュラー', 'アフター']) {
+      await expect(hours.getByText(name, { exact: true })).toBeVisible()
+    }
+
+    // JST 行 3 列 + ET 行 3 列。日跨ぎの列には (翌) が付くので前方一致で見る
+    const times = hours.locator('[data-session] .market-hours__time')
+    await expect(times).toHaveCount(6)
+    for (const time of await times.allTextContents()) {
+      expect(time).toMatch(/^\d{2}:\d{2} - \d{2}:\d{2}(\(翌\))?$/)
+    }
+  })
+
+  test('[LAY-14] 休場の日は理由が出て、取引時間帯は表示されない', async ({ page }) => {
+    await mockApi(page, [{ path: '*/api/market-status', body: closedMarketStatusResponse }])
+    await page.goto('/')
+
+    await expect(page.getByTestId('market-status')).toHaveText('○ Closed')
+    await expect(page.getByTestId('market-note')).toHaveText('休場（感謝祭）')
+    await expect(page.getByTestId('market-hours')).toHaveCount(0)
+  })
+
+  test('[LAY-15] 市場状況が取れなくてもヘッダは壊れず画面を操作できる', async ({ page }) => {
+    await mockApi(page, [
+      {
+        path: '*/api/market-status',
+        status: 500,
+        body: { detail: 'サーバーでエラーが発生しました。' },
+      },
+    ])
+    await page.goto('/')
+
+    // 推定を出さない。覆いは codes の取得だけで外れる（市場状況は起動の条件ではない）
+    await expect(page.getByTestId('market-status')).toHaveText('—')
+    await expect(page.getByTestId('market-note')).toHaveText('市場状況を取得できません')
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    await nav.getByRole('link', { name: '顧客検索', exact: true }).click()
+
+    await expect(page).toHaveURL(/\/customers\/search$/)
   })
 })

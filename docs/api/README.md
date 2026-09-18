@@ -100,6 +100,7 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 | 海外休場日マスタ | `/masters/market-holidays`（一覧・事前検証・登録・論理削除） | `src/api/marketHolidays.js` | `X-User-Code` を `.env` の `VITE_USER_CODE` から付けている（`src/api/client.js` の interceptor）。SSO が入ったら差し替える |
 | 受注不可日マスタ | `/masters/blackout-dates`（一覧・事前検証・登録・変更・論理削除） | `src/api/blackoutDates.js` | `X-User-Code` は上と同じ。日付を変更する更新はバックエンド側の対応待ち（後述） |
 | スライス基準マスタ（スライス注文設定） | `/masters/hard-limits`（照会・変更） | `src/api/sliceCriteria.js` | `備考` と `スライス有効フラグ` は**省略するとサーバ既定に落ちる**（備考は NULL、有効フラグは 1）ので、現在値を送り返して保持している |
+| 市場状況（ヘッダの取引セッション・時間帯） | `/market-status`（照会のみ） | `src/api/marketStatus.js` | `現在のセッション` と `MarketSessionItem.code` に enum 宣言が無い（`docs/api/requests.md` #12）。表示の主判定は `JPN開始` / `JPN終了` の時刻比較に寄せてある |
 
 切り替えても MSW ハンドラは**消していない**。単体テストと E2E が同じ `src/mocks/handlers/` を共用しており、
 消すとテストが実 API を叩きにいくため。代わりにハンドラとフィクスチャを**実 API と同じ形**に寄せてある。
@@ -108,6 +109,9 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
   エラーは `{ detail }` / 論理削除
 - `/masters/hard-limits` … 日本語キー / 拒否は 422 の `HTTPValidationError`（不合格の項目を全部まとめて返す）と
   409 の `ErrorResponse`
+- `/market-status` … 日本語キー / `US ET` は空白を含むキー / `基準日` は integer の YYYYMMDD /
+  `休場: true` のとき `sessions` は空。**ハンドラだけは固定日のフィクスチャを「今日（JST）」へずらして返す**
+  （固定日のままだと画面でも E2E でも常に「終了後」になり、現在セッションの強調が一度も描画されない）
 
 実 API に当てて動かすときは `.env` の `VITE_ENABLE_MSW=false`。
 

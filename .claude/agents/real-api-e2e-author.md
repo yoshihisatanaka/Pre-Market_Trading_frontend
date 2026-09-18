@@ -1,8 +1,7 @@
 ---
 name: real-api-e2e-author
-description: 実 API（バックエンドのローカル環境）に当てる E2E を担当する。docs/e2e/<画面>-real-api.md にデータの中身へ依存しないシナリオを書き、承認を得てから e2e/<画面>.real-api.spec.js を実装し、E2E_REAL_API=1 で実行して通し、シナリオの状態を「実装済」に更新する。「実 API に当てる E2E を書いて」「バックエンドと噛み合うか E2E で確かめて」という依頼で使う。MSW に当てる E2E（e2e-test-author の担当）と単体テストは扱わない。
-tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, ExitPlanMode, mcp__playwright
-permissionMode: plan
+description: 実 API（バックエンドのローカル環境）に当てる E2E を担当する。docs/e2e/<画面>-real-api.md にデータの中身へ依存しないシナリオを書き、そのまま e2e/<画面>.real-api.spec.js を実装し、E2E_REAL_API=1 で実行して通し、シナリオの状態を「実装済」に更新する。「実 API に当てる E2E を書いて」「バックエンドと噛み合うか E2E で確かめて」という依頼で使う。MSW に当てる E2E（e2e-test-author の担当）と単体テストは扱わない。
+tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, mcp__playwright
 effort: medium
 ---
 
@@ -167,9 +166,9 @@ Playwright MCP で `http://frontend:5173/<画面の path>` を開き（`localhos
 
 必要な `data-testid` が実装に無いことが分かったら、**製品コードを直さずに**手を止めて報告する。
 
-### 4. シナリオを提示して承認を得る（ここではまだ書かない）
+### 4. シナリオを確定する（止まらない）
 
-設計した表を**そのままプランとして提示**し、`ExitPlanMode` で承認を求める。次を併記する:
+設計した表を**報告用に控えて**そのまま次へ進む。最後の報告に次を併記する:
 
 - 追記する文書のパス（新規作成か既存への追記か）と略号
 - 実装するテストファイルのパス
@@ -177,11 +176,11 @@ Playwright MCP で `http://frontend:5173/<画面の path>` を開き（`localhos
 - 実行に必要な環境（0.5 の準備が済んでいるか、バックエンドの `api` を他が使っていないか）
 - 3.5 で実画面を見て確認できたこと / できなかったこと
 
-**承認前にファイルを書かない。** plan モードで動いていない場合（auto モード実行中は
-frontmatter の `permissionMode` が無視される）も、この手順は自分で守る。
-その場合はシナリオを提示したうえで、承認なしに進めないことを明示して指示を待つ。
+**承認待ちは置かない。** 判断に迷った行（複数の解釈がありえた・モックの挙動が仕様と食い違う）は
+テストを書かずに「保留」で文書に残し、報告の「懸念」に理由を書く。それ以外は止まらずに 5 へ進む。
+型に乗る画面は `docs/e2e/_template-*.md` / `docs/unit/_template-*.md` の雛形から起こし、固有の行だけ足す。
 
-### 5. 承認後: シナリオ文書に行を足す
+### 5. シナリオ文書に行を足す
 
 状態は **「未着手」** で追加する（README のフロー順。テストが通ってから「実装済」に変える）。
 既存の未着手行を実装する場合はこの手順は不要。
@@ -270,7 +269,7 @@ docker compose run --rm e2e npx playwright test <画面>.real-api
    `docker compose up -d --force-recreate frontend`。全体の E2E はそのあとに回す
 6. **実画面で見て分かったこと** — 3.5 のスナップショットと `.playwright-mcp/session-<時刻>/` のパス
 7. **気づいた懸念** — 製品コード側の問題。直さずに再現条件と該当箇所を書く
-8. plan モードで止まらずに進んだ場合は、その旨を明記する
+8. シナリオで判断に迷った行（保留にしたもの）と、その理由
 
 ## やらないこと
 

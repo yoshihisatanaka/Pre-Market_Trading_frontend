@@ -72,11 +72,18 @@ export async function fetchMarketHolidays({
  *   warnings … 登録は通るが伝えるべきこと（例: 取消済みの日付を再有効化する）
  * どちらも例外にはしない。通信・サーバ障害だけが throw される。
  *
- * @param {{ date: string, reason: string, holidayType: string }} params date は 'YYYY-MM-DD'
+ * `is_update` は **変更検証かどうか（= id を持つか）だけで決まる**（src/api/blackoutDates.js と同じ）。
+ * 対象は本文の休場日ではなくクエリの id で指すので、自分自身が重複として弾かれることはない。
+ *
+ * **いまこの id を渡す画面は無い**（海外休場日には行ごとの編集が無く、`PUT {holiday_id}` を
+ * 使っていないため）。仕様に入ったクエリ名を契約テスト（CON-05）の監視下に置き、編集を足すときの
+ * 入口をそろえておくために先に受け付ける。
+ *
+ * @param {{ date: string, reason: string, holidayType: string, id?: string }} params
+ *   date は 'YYYY-MM-DD'。id は変更検証のときだけ渡す（対象の id。休場日ではない）
  * @returns {Promise<{ valid: boolean, errors: string[], warnings: string[] }>}
  */
-export async function validateMarketHoliday({ date, reason, holidayType }) {
-  // 新規登録の検証なので holiday_date / is_update は送らない（既定が新規検証）
+export async function validateMarketHoliday({ date, reason, holidayType, id = '' }) {
   const { data } = await apiClient.post(
     '/masters/market-holidays/validate',
     toHolidayRequest({
@@ -84,6 +91,8 @@ export async function validateMarketHoliday({ date, reason, holidayType }) {
       reason,
       holidayType,
     }),
+    // 既定が新規検証なので、変更検証のときだけクエリを付ける
+    id ? { params: { holiday_id: Number(id), is_update: true } } : undefined,
   )
 
   return {
@@ -117,9 +126,8 @@ export async function createMarketHoliday({ date, reason, holidayType }) {
  * 応答は削除後の 1 件（HolidayResponse）だが、画面は削除前の行を使ってメッセージを出すので
  * 使い道が無い。呼び出し側が useAsync で成否を判定できるよう、削除した id を返す。
  *
- * **パスキーを ID にしているのは決め打ち。** 取り込み時点の openapi.json は
- * `/masters/market-holidays/{holiday_date}`（休場日・integer）で、HolidayItem も ID を持たない。
- * DB の主キーを id に寄せる方針に合わせて先に置いている（src/api/symbols.js と同じ）。
+ * パスキーは ID。仕様の `/masters/market-holidays/{holiday_id}`（integer の行ID）と一致する
+ * （2026-09-18 の取り込みで確定。それまではフロントが先回りして置いていた）。
  *
  * @param {string} id 削除対象の id（実 API の ID。休場日ではない）
  * @returns {Promise<string>} 削除した id
@@ -143,10 +151,11 @@ function toMarketHoliday(raw) {
   return {
     /*
      * 実 API の主キーは integer の ID。画面と URL では文字列として扱う（src/api/ca.js と同じ）。
+     * MarketHolidayItem の required なので、通常は必ず埋まる。
      *
-     * **休場日へフォールバックしない。** 取り込み時点の openapi.json はまだ HolidayItem に
-     * ID を持たないが、欠けていたら空文字のまま外へ出して、行のキーが壊れていることを
-     * テストで検知させる（値で取り繕うと、実 API が ID を返し始めるまで気づけない）。
+     * **それでも休場日へフォールバックしない。** 欠けていたら空文字のまま外へ出して、
+     * 行のキーが壊れていることをテストで検知させる（値で取り繕うと、応答から ID が
+     * 落ちても「動いているように見える」まま、行の特定だけが静かに壊れる）。
      */
     id: String(raw?.ID ?? ''),
     // 主キーではなくなったが、一意制約を持つ業務上の日付として残る

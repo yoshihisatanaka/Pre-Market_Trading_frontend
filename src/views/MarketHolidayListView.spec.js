@@ -192,7 +192,7 @@ function gateListResponse() {
 }
 
 const deleteNotFoundHandler = () =>
-  http.delete('*/api/masters/market-holidays/:holidayDate', () =>
+  http.delete('*/api/masters/market-holidays/:id', () =>
     HttpResponse.json({ detail: NOT_FOUND_MESSAGE }, { status: 404 }),
   )
 

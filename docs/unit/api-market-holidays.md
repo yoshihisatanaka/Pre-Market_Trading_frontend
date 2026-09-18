@@ -21,23 +21,33 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 | MHA-03 | 既定モック | `fetchMarketHolidays({ holidayType: '1' })` を呼ぶ | `holiday_type=1` が載る。空文字を渡した場合はキーごと送らない | 実装済 |
 | MHA-04 | API が `HolidayItem` を 1 件返す | `fetchMarketHolidays()` を呼ぶ | `{ id, date: '2026-12-25', reason, holidayType }` に変換される。`id` は実 API の `ID`（integer）を文字列にしたもので、休場日ではない。`date` は `'YYYY-MM-DD'` | 実装済 |
 | MHA-05 | API が `休場理由: null` の行を返す | `fetchMarketHolidays()` を呼ぶ | `reason` が空文字になる（`null` を画面へ流さない） | 実装済 |
-| MHA-06 | 既定モック | `validateMarketHoliday({ date, reason, holidayType })` を呼ぶ | `POST /api/masters/market-holidays/validate` の本文が日本語キー `{ 休場日, 休場区分, 休場理由 }` で、休場日は integer になる | 実装済 |
+| MHA-06 | 既定モック | `validateMarketHoliday({ date, reason, holidayType })` を呼ぶ | `POST /api/masters/market-holidays/validate` の本文が日本語キー `{ 休場日, 休場区分, 休場理由 }` で、休場日は integer になる。既定は新規検証なのでクエリは付かない | 実装済 |
+| MHA-13 | 既定モック | `validateMarketHoliday({ ..., id: '12' })` を呼ぶ | クエリに `holiday_id=12` / `is_update=true` が載る（対象は本文の休場日ではなく id で指す）。本文の形は新規検証と同じ | 実装済 |
 | MHA-07 | 事前検証が `{ valid: false, errors, warnings }` を返す | `validateMarketHoliday()` を呼ぶ | `valid` / `errors` / `warnings` がそのまま返る。例外にはしない | 実装済 |
 | MHA-08 | 事前検証が `errors` / `warnings` を持たない応答を返す | `validateMarketHoliday()` を呼ぶ | `errors` / `warnings` が空配列になる（どちらも required ではないため） | 実装済 |
 | MHA-09 | 既定モック | `createMarketHoliday({ date, reason, holidayType })` を呼ぶ | `POST /api/masters/market-holidays` の本文が日本語キーで、応答の `holiday` を変換した 1 件が返る | 実装済 |
 | MHA-10 | 既定モック | `deleteMarketHoliday('12')` を呼ぶ | `DELETE /api/masters/market-holidays/12` を呼び、戻り値が渡した id になる。パスに載るのは id で、休場日ではない | 実装済 |
 | MHA-11 | `VITE_USER_CODE` が設定されている | 更新系（`createMarketHoliday`）を呼ぶ | リクエストに `X-User-Code` ヘッダが載る（実 API が必須にしているため） | 実装済 |
-| MHA-12 | API が `ID` を持たない `HolidayItem` を返す | `fetchMarketHolidays()` を呼ぶ | `id` が空文字のままになる（休場日へフォールバックしない）。`date` は従来どおり出る | 実装済 |
+| MHA-12 | API が `ID` を持たない `MarketHolidayItem` を返す | `fetchMarketHolidays()` を呼ぶ | `id` が空文字のままになる（休場日へフォールバックしない）。`date` は従来どおり出る | 実装済 |
 
 ## 主キーは `id`（休場日ではない）
 
-DB 全テーブルの主キーを `id` に統一する方針に合わせて、アプリ内モデルの主キーを
-実 API の integer な `ID` にしてある。**休場日は主キーではなく、一意制約を持つ業務上の日付**。
+DB 全テーブルの主キーが `id`（integer のサロゲートキー）に統一され、アプリ内モデルの主キーも
+実 API の `ID` にしてある。**休場日は主キーではなく、一意制約を持つ業務上の日付**。
 
-**この層はフロントが先行している。** 取り込み時点の `docs/api/openapi.json` の `HolidayItem` に
-`ID` は無く、パスも `/masters/market-holidays/{holiday_date}` のまま。実 API が `ID` を返し始めるまで、
-実 API に当てると `id` は空文字になる。
+この層は一時期フロントが先行していたが、**2026-09-18 の取り込みで仕様が追いついた**。
 
-`MHA-12` はその穴を見張るためのシナリオ。**値で取り繕わない**（休場日へフォールバックすると
-「動いているように見える」まま実 API で行のキーが壊れ、気づけなくなる）。
-同じ扱いを銘柄マスタが先にしている（[api-symbols.md](api-symbols.md) の `STA-24`）。
+```text
+/masters/market-holidays/{holiday_id}   holiday_id: integer（行ID）  GET / PUT / DELETE
+MarketHolidayItem.ID: integer           required・「サロゲートキー・主キー」
+/masters/market-holidays/validate       クエリ holiday_id: integer | null, is_update: boolean
+```
+
+`MHA-12` は**仕様が追いついた後も見張りとして残す**。`ID` は required なので通常は必ず届くが、
+落ちたときに休場日へフォールバックすると「動いているように見える」まま行のキーだけが
+静かに壊れ、気づけなくなる。同じ扱いを銘柄マスタがしている
+（[api-symbols.md](api-symbols.md) の `STA-24`）。
+
+`MHA-13` の変更検証（`holiday_id` / `is_update`）を**呼ぶ画面はまだ無い**。海外休場日には
+行ごとの編集が無く、仕様に入った `PUT /masters/market-holidays/{holiday_id}` を使っていないため。
+クエリ名を契約テスト（`CON-05`）の監視下に置き、編集を足すときの入口をそろえる目的で先に置いている。

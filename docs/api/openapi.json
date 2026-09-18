@@ -2600,6 +2600,24 @@
         "operationId": "validate_customer_endpoint_masters_customers_validate_post",
         "parameters": [
           {
+            "name": "account_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "変更検証時の口座情報ID（行ID）。指定時は変更検証として扱う",
+              "title": "Account Id"
+            },
+            "description": "変更検証時の口座情報ID（行ID）。指定時は変更検証として扱う"
+          },
+          {
             "name": "is_update",
             "in": "query",
             "required": false,
@@ -2983,22 +3001,22 @@
         }
       }
     },
-    "/masters/customers/{account_no}": {
+    "/masters/customers/{account_id}": {
       "get": {
         "tags": [
           "MasterCustomers"
         ],
         "summary": "Get Customer Endpoint",
-        "description": "口座情報詳細取得API。",
-        "operationId": "get_customer_endpoint_masters_customers__account_no__get",
+        "description": "口座情報詳細取得API（行IDで指定）。",
+        "operationId": "get_customer_endpoint_masters_customers__account_id__get",
         "parameters": [
           {
-            "name": "account_no",
+            "name": "account_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Account No"
+              "title": "Account Id"
             }
           },
           {
@@ -3106,16 +3124,16 @@
           "MasterCustomers"
         ],
         "summary": "Update Customer Endpoint",
-        "description": "口座情報変更API（部分更新）。URLの口座番号を更新対象とする。\n\nリクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持する。\n項目を明示的に null で送信した場合のみクリアされる。",
-        "operationId": "update_customer_endpoint_masters_customers__account_no__put",
+        "description": "口座情報変更API（部分更新）。URLの行IDが指す口座を更新対象とする。\n\nリクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持する。\n項目を明示的に null で送信した場合のみクリアされる。",
+        "operationId": "update_customer_endpoint_masters_customers__account_id__put",
         "parameters": [
           {
-            "name": "account_no",
+            "name": "account_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Account No"
+              "title": "Account Id"
             }
           },
           {
@@ -3243,16 +3261,16 @@
           "MasterCustomers"
         ],
         "summary": "Delete Customer Endpoint",
-        "description": "口座情報論理削除API。指定された口座の取消区分を1に更新し、履歴を保存する。",
-        "operationId": "delete_customer_endpoint_masters_customers__account_no__delete",
+        "description": "口座情報論理削除API（行IDで指定）。取消区分を1に更新し、履歴を保存する。",
+        "operationId": "delete_customer_endpoint_masters_customers__account_id__delete",
         "parameters": [
           {
-            "name": "account_no",
+            "name": "account_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Account No"
+              "title": "Account Id"
             }
           },
           {
@@ -3356,22 +3374,22 @@
         }
       }
     },
-    "/masters/customers/{account_no}/history": {
+    "/masters/customers/{account_id}/history": {
       "get": {
         "tags": [
           "MasterCustomers"
         ],
         "summary": "Get Customer History Endpoint",
-        "description": "口座情報の登録・変更履歴取得API（1ページ最大50件）。",
-        "operationId": "get_customer_history_endpoint_masters_customers__account_no__history_get",
+        "description": "口座情報の登録・変更履歴取得API（1ページ最大50件・行IDで指定）。",
+        "operationId": "get_customer_history_endpoint_masters_customers__account_id__history_get",
         "parameters": [
           {
-            "name": "account_no",
+            "name": "account_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Account No"
+              "title": "Account Id"
             }
           },
           {
@@ -4134,6 +4152,24 @@
         "operationId": "validate_symbol_endpoint_masters_symbols_validate_post",
         "parameters": [
           {
+            "name": "symbol_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "変更検証時の銘柄情報ID（行ID）。指定時は変更検証として扱う",
+              "title": "Symbol Id"
+            },
+            "description": "変更検証時の銘柄情報ID（行ID）。指定時は変更検証として扱う"
+          },
+          {
             "name": "is_update",
             "in": "query",
             "required": false,
@@ -4226,22 +4262,22 @@
         }
       }
     },
-    "/masters/symbols/{symbol}": {
+    "/masters/symbols/{symbol_id}": {
       "get": {
         "tags": [
           "MasterSymbols"
         ],
         "summary": "Get Symbol Detail Endpoint",
-        "description": "銘柄詳細照会API。",
-        "operationId": "get_symbol_detail_endpoint_masters_symbols__symbol__get",
+        "description": "銘柄詳細照会API（行IDで指定）。",
+        "operationId": "get_symbol_detail_endpoint_masters_symbols__symbol_id__get",
         "parameters": [
           {
-            "name": "symbol",
+            "name": "symbol_id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Symbol"
+              "type": "integer",
+              "title": "Symbol Id"
             }
           },
           {
@@ -4329,16 +4365,16 @@
           "MasterSymbols"
         ],
         "summary": "Update Symbol Endpoint",
-        "description": "銘柄情報変更API（部分更新・楽観的ロック・差分履歴記録対応）。\n\nリクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持する。\n項目を明示的に null で送信した場合のみクリアされる。",
-        "operationId": "update_symbol_endpoint_masters_symbols__symbol__put",
+        "description": "銘柄情報変更API（部分更新・楽観的ロック・差分履歴記録対応・行IDで指定）。\n\nリクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持する。\n項目を明示的に null で送信した場合のみクリアされる。",
+        "operationId": "update_symbol_endpoint_masters_symbols__symbol_id__put",
         "parameters": [
           {
-            "name": "symbol",
+            "name": "symbol_id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Symbol"
+              "type": "integer",
+              "title": "Symbol Id"
             }
           },
           {
@@ -4466,16 +4502,16 @@
           "MasterSymbols"
         ],
         "summary": "Delete Symbol Endpoint",
-        "description": "銘柄情報論理削除API（ユーザー操作フラグ=1、差分履歴記録）。",
-        "operationId": "delete_symbol_endpoint_masters_symbols__symbol__delete",
+        "description": "銘柄情報論理削除API（ユーザー操作フラグ=1、差分履歴記録・行IDで指定）。",
+        "operationId": "delete_symbol_endpoint_masters_symbols__symbol_id__delete",
         "parameters": [
           {
-            "name": "symbol",
+            "name": "symbol_id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Symbol"
+              "type": "integer",
+              "title": "Symbol Id"
             }
           },
           {
@@ -4569,22 +4605,22 @@
         }
       }
     },
-    "/masters/symbols/{symbol}/history": {
+    "/masters/symbols/{symbol_id}/history": {
       "get": {
         "tags": [
           "MasterSymbols"
         ],
         "summary": "Get Symbol History Endpoint",
-        "description": "銘柄情報の変更履歴一覧照会API。",
-        "operationId": "get_symbol_history_endpoint_masters_symbols__symbol__history_get",
+        "description": "銘柄情報の変更履歴一覧照会API（行IDで指定）。",
+        "operationId": "get_symbol_history_endpoint_masters_symbols__symbol_id__history_get",
         "parameters": [
           {
-            "name": "symbol",
+            "name": "symbol_id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Symbol"
+              "type": "integer",
+              "title": "Symbol Id"
             }
           },
           {
@@ -4988,6 +5024,24 @@
         "description": "為替マスタ事前検証API（確認画面用・DB登録なし）\n\n- 入力値形式・範囲チェック（基準日フォーマット・為替レート正値等）\n- 新規登録時の重複チェック / 変更時の存在チェック\n- レート値の異常値警告チェック（一般的な範囲50〜300円から外れる場合の警告）",
         "operationId": "validate_fx_endpoint_masters_fx_validate_post",
         "parameters": [
+          {
+            "name": "fx_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "変更検証時の為替ID（行ID）。指定時は変更検証として扱う",
+              "title": "Fx Id"
+            },
+            "description": "変更検証時の為替ID（行ID）。指定時は変更検証として扱う"
+          },
           {
             "name": "is_update",
             "in": "query",
@@ -5541,35 +5595,23 @@
         }
       }
     },
-    "/masters/fx/{base_date}": {
+    "/masters/fx/{fx_id}": {
       "get": {
         "tags": [
           "MasterFx"
         ],
         "summary": "Get Fx Endpoint",
-        "description": "為替レート詳細取得API\n\n- 基準日・通貨コードを指定して為替レート情報を1件取得",
-        "operationId": "get_fx_endpoint_masters_fx__base_date__get",
+        "description": "為替レート詳細取得API\n\n- 行IDを指定して為替レート情報を1件取得（基準日＋通貨コードは ID から解決）",
+        "operationId": "get_fx_endpoint_masters_fx__fx_id__get",
         "parameters": [
           {
-            "name": "base_date",
+            "name": "fx_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Base Date"
+              "title": "Fx Id"
             }
-          },
-          {
-            "name": "currency_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "description": "通貨コード (初期値: USD)",
-              "default": "USD",
-              "title": "Currency Code"
-            },
-            "description": "通貨コード (初期値: USD)"
           },
           {
             "name": "X-User-Code",
@@ -5666,29 +5708,17 @@
           "MasterFx"
         ],
         "summary": "Update Fx Endpoint",
-        "description": "為替レート変更API\n\n- 楽観的ロック（更新日時チェック）対応\n- ユーザー操作フラグ=1、変更履歴(d_為替履歴)への差分記録",
-        "operationId": "update_fx_endpoint_masters_fx__base_date__put",
+        "description": "為替レート変更API（行IDで指定）\n\n- 楽観的ロック（更新日時チェック）対応\n- ユーザー操作フラグ=1、変更履歴(d_為替履歴)への差分記録",
+        "operationId": "update_fx_endpoint_masters_fx__fx_id__put",
         "parameters": [
           {
-            "name": "base_date",
+            "name": "fx_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Base Date"
+              "title": "Fx Id"
             }
-          },
-          {
-            "name": "currency_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "description": "通貨コード (初期値: USD)",
-              "default": "USD",
-              "title": "Currency Code"
-            },
-            "description": "通貨コード (初期値: USD)"
           },
           {
             "name": "X-User-Code",
@@ -5815,29 +5845,17 @@
           "MasterFx"
         ],
         "summary": "Delete Fx Endpoint",
-        "description": "為替レート論理削除API\n\n- 取消区分=1、ユーザー操作フラグ=1\n- 削除履歴(d_為替履歴)への自動記録",
-        "operationId": "delete_fx_endpoint_masters_fx__base_date__delete",
+        "description": "為替レート論理削除API（行IDで指定）\n\n- 取消区分=1、ユーザー操作フラグ=1\n- 削除履歴(d_為替履歴)への自動記録",
+        "operationId": "delete_fx_endpoint_masters_fx__fx_id__delete",
         "parameters": [
           {
-            "name": "base_date",
+            "name": "fx_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Base Date"
+              "title": "Fx Id"
             }
-          },
-          {
-            "name": "currency_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "description": "通貨コード (初期値: USD)",
-              "default": "USD",
-              "title": "Currency Code"
-            },
-            "description": "通貨コード (初期値: USD)"
           },
           {
             "name": "X-User-Code",
@@ -5930,35 +5948,23 @@
         }
       }
     },
-    "/masters/fx/{base_date}/history": {
+    "/masters/fx/{fx_id}/history": {
       "get": {
         "tags": [
           "MasterFx"
         ],
         "summary": "Get Fx History Endpoint",
-        "description": "為替レート変更履歴取得API\n\n- 変更前後のデータスナップショットおよび項目別差分（diff）付きで履歴一覧を返却",
-        "operationId": "get_fx_history_endpoint_masters_fx__base_date__history_get",
+        "description": "為替レート変更履歴取得API（行IDで指定）\n\n- 変更前後のデータスナップショットおよび項目別差分（diff）付きで履歴一覧を返却",
+        "operationId": "get_fx_history_endpoint_masters_fx__fx_id__history_get",
         "parameters": [
           {
-            "name": "base_date",
+            "name": "fx_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Base Date"
+              "title": "Fx Id"
             }
-          },
-          {
-            "name": "currency_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "description": "通貨コード (初期値: USD)",
-              "default": "USD",
-              "title": "Currency Code"
-            },
-            "description": "通貨コード (初期値: USD)"
           },
           {
             "name": "limit",
@@ -8104,6 +8110,24 @@
         "operationId": "validate_blackout_date_endpoint_masters_blackout_dates_validate_post",
         "parameters": [
           {
+            "name": "blackout_date_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "変更検証時の受注不可日ID（行ID）。指定時は変更検証として扱う",
+              "title": "Blackout Date Id"
+            },
+            "description": "変更検証時の受注不可日ID（行ID）。指定時は変更検証として扱う"
+          },
+          {
             "name": "is_update",
             "in": "query",
             "required": false,
@@ -8196,22 +8220,22 @@
         }
       }
     },
-    "/masters/blackout-dates/{blackout_date}": {
+    "/masters/blackout-dates/{blackout_date_id}": {
       "get": {
         "tags": [
           "MasterBlackoutDates"
         ],
         "summary": "Get Blackout Date Endpoint",
-        "description": "受注不可日マスタ詳細照会API。",
-        "operationId": "get_blackout_date_endpoint_masters_blackout_dates__blackout_date__get",
+        "description": "受注不可日マスタ詳細照会API（行IDで指定）。",
+        "operationId": "get_blackout_date_endpoint_masters_blackout_dates__blackout_date_id__get",
         "parameters": [
           {
-            "name": "blackout_date",
+            "name": "blackout_date_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Blackout Date"
+              "title": "Blackout Date Id"
             }
           },
           {
@@ -8309,16 +8333,16 @@
           "MasterBlackoutDates"
         ],
         "summary": "Update Blackout Date Endpoint",
-        "description": "受注不可日マスタ変更API（楽観的ロック対応）。",
-        "operationId": "update_blackout_date_endpoint_masters_blackout_dates__blackout_date__put",
+        "description": "受注不可日マスタ変更API（楽観的ロック対応・行IDで指定）。",
+        "operationId": "update_blackout_date_endpoint_masters_blackout_dates__blackout_date_id__put",
         "parameters": [
           {
-            "name": "blackout_date",
+            "name": "blackout_date_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Blackout Date"
+              "title": "Blackout Date Id"
             }
           },
           {
@@ -8446,16 +8470,16 @@
           "MasterBlackoutDates"
         ],
         "summary": "Delete Blackout Date Endpoint",
-        "description": "受注不可日マスタ論理削除API。",
-        "operationId": "delete_blackout_date_endpoint_masters_blackout_dates__blackout_date__delete",
+        "description": "受注不可日マスタ論理削除API（行IDで指定）。",
+        "operationId": "delete_blackout_date_endpoint_masters_blackout_dates__blackout_date_id__delete",
         "parameters": [
           {
-            "name": "blackout_date",
+            "name": "blackout_date_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Blackout Date"
+              "title": "Blackout Date Id"
             }
           },
           {
@@ -8549,22 +8573,22 @@
         }
       }
     },
-    "/masters/blackout-dates/{blackout_date}/history": {
+    "/masters/blackout-dates/{blackout_date_id}/history": {
       "get": {
         "tags": [
           "MasterBlackoutDates"
         ],
         "summary": "Get Blackout Date History Endpoint",
-        "description": "受注不可日マスタ変更履歴照会API（変更差分diff付き）",
-        "operationId": "get_blackout_date_history_endpoint_masters_blackout_dates__blackout_date__history_get",
+        "description": "受注不可日マスタ変更履歴照会API（変更差分diff付き・行IDで指定）",
+        "operationId": "get_blackout_date_history_endpoint_masters_blackout_dates__blackout_date_id__history_get",
         "parameters": [
           {
-            "name": "blackout_date",
+            "name": "blackout_date_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Blackout Date"
+              "title": "Blackout Date Id"
             }
           },
           {
@@ -8935,6 +8959,24 @@
         "description": "海外休場日事前検証API（確認画面用・DB登録なし）\n\n- 入力項目検証（日付形式、海外休場区分コード妥当性、理由文字数）\n- 新規登録時の重複チェック / 変更時の存在チェック\n- 自動算出項目（海外休場区分名）の付与",
         "operationId": "validate_market_holiday_endpoint_masters_market_holidays_validate_post",
         "parameters": [
+          {
+            "name": "holiday_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "変更検証時の海外休場日ID（行ID）。指定時は変更検証として扱う",
+              "title": "Holiday Id"
+            },
+            "description": "変更検証時の海外休場日ID（行ID）。指定時は変更検証として扱う"
+          },
           {
             "name": "is_update",
             "in": "query",
@@ -9349,22 +9391,22 @@
         }
       }
     },
-    "/masters/market-holidays/{holiday_date}": {
+    "/masters/market-holidays/{holiday_id}": {
       "get": {
         "tags": [
           "MasterMarketHolidays"
         ],
         "summary": "Get Market Holiday Endpoint",
-        "description": "海外休場日詳細取得API\n\n- 休場日（YYYYMMDD）を指定して単一レコードを取得",
-        "operationId": "get_market_holiday_endpoint_masters_market_holidays__holiday_date__get",
+        "description": "海外休場日詳細取得API\n\n- 行IDを指定して単一レコードを取得",
+        "operationId": "get_market_holiday_endpoint_masters_market_holidays__holiday_id__get",
         "parameters": [
           {
-            "name": "holiday_date",
+            "name": "holiday_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Holiday Date"
+              "title": "Holiday Id"
             }
           },
           {
@@ -9472,16 +9514,16 @@
           "MasterMarketHolidays"
         ],
         "summary": "Update Market Holiday Endpoint",
-        "description": "海外休場日変更API（部分更新）\n\n- リクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持\n- 楽観的ロック（更新日時チェック）対応\n- ユーザー操作フラグ=1、更新者・更新日時を設定\n- 履歴テーブル（d_海外休場日履歴）への差分記録",
-        "operationId": "update_market_holiday_endpoint_masters_market_holidays__holiday_date__put",
+        "description": "海外休場日変更API（部分更新・行IDで指定）\n\n- リクエストボディに含めた項目のみ更新し、含めなかった項目は既存値を維持\n- 楽観的ロック（更新日時チェック）対応\n- ユーザー操作フラグ=1、更新者・更新日時を設定\n- 履歴テーブル（d_海外休場日履歴）への差分記録",
+        "operationId": "update_market_holiday_endpoint_masters_market_holidays__holiday_id__put",
         "parameters": [
           {
-            "name": "holiday_date",
+            "name": "holiday_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Holiday Date"
+              "title": "Holiday Id"
             }
           },
           {
@@ -9609,16 +9651,16 @@
           "MasterMarketHolidays"
         ],
         "summary": "Delete Market Holiday Endpoint",
-        "description": "海外休場日論理削除API\n\n- 取消区分=1、取消者、取消日時を設定\n- ユーザー操作フラグ=1\n- 履歴テーブル（d_海外休場日履歴）への削除記録",
-        "operationId": "delete_market_holiday_endpoint_masters_market_holidays__holiday_date__delete",
+        "description": "海外休場日論理削除API（行IDで指定）\n\n- 取消区分=1、取消者、取消日時を設定\n- ユーザー操作フラグ=1\n- 履歴テーブル（d_海外休場日履歴）への削除記録",
+        "operationId": "delete_market_holiday_endpoint_masters_market_holidays__holiday_id__delete",
         "parameters": [
           {
-            "name": "holiday_date",
+            "name": "holiday_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Holiday Date"
+              "title": "Holiday Id"
             }
           },
           {
@@ -9722,22 +9764,22 @@
         }
       }
     },
-    "/masters/market-holidays/{holiday_date}/history": {
+    "/masters/market-holidays/{holiday_id}/history": {
       "get": {
         "tags": [
           "MasterMarketHolidays"
         ],
         "summary": "Get Market Holiday History Endpoint",
-        "description": "海外休場日変更履歴取得API\n\n- 該当休場日の変更履歴（d_海外休場日履歴）一覧および項目別差分を取得",
-        "operationId": "get_market_holiday_history_endpoint_masters_market_holidays__holiday_date__history_get",
+        "description": "海外休場日変更履歴取得API（行IDで指定）\n\n- 該当休場日の変更履歴（d_海外休場日履歴）一覧および項目別差分を取得",
+        "operationId": "get_market_holiday_history_endpoint_masters_market_holidays__holiday_id__history_get",
         "parameters": [
           {
-            "name": "holiday_date",
+            "name": "holiday_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Holiday Date"
+              "title": "Holiday Id"
             }
           },
           {
@@ -10160,6 +10202,24 @@
         "description": "残高補正事前検証API（確認画面用・DB登録なし）\n\n- 入力項目検証（口座存在、銘柄存在、特定預り区分コード、数量整合性）\n- 新規登録時の重複チェック / 変更時の存在チェック\n- 自動補完（顧客名、銘柄名、Ticker、特定預り区分名等）の付与",
         "operationId": "validate_balance_adjustment_endpoint_masters_balance_adjustments_validate_post",
         "parameters": [
+          {
+            "name": "balance_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "変更検証時の残高ID（行ID）。指定時は変更検証として扱う",
+              "title": "Balance Id"
+            },
+            "description": "変更検証時の残高ID（行ID）。指定時は変更検証として扱う"
+          },
           {
             "name": "is_update",
             "in": "query",

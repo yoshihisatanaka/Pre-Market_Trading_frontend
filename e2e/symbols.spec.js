@@ -139,7 +139,7 @@ test.describe('銘柄マスタ一覧', () => {
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '銘柄マスタ', exact: true })).toBeVisible()
     // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている
-    await expect(page.getByTestId('symbols-reload')).toBeVisible()
+    await expect(page.getByTestId('symbols-add')).toBeVisible()
 
     await expect(page.getByTestId('symbols-count')).toHaveText(`${TOTAL} 件`)
 

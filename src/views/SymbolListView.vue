@@ -391,14 +391,6 @@ function symbolLabel(symbol) {
   <section class="symbol-list">
     <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
     <Teleport defer to="#topbar-actions">
-      <BaseButton
-        variant="secondary"
-        data-testid="symbols-reload"
-        :disabled="loading"
-        @click="store.reload()"
-      >
-        再読み込み
-      </BaseButton>
       <BaseButton data-testid="symbols-add" @click="openAdd">新規追加</BaseButton>
     </Teleport>
 

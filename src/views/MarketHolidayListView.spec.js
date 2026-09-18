@@ -28,7 +28,8 @@ const toIsoDate = (holidayDate) => {
   const digits = String(holidayDate)
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
-const toId = (holiday) => String(holiday.休場日)
+// 主キーは休場日ではなく ID（api 層が文字列にして返す）。data-testid にもこの値が入る
+const toId = (holiday) => String(holiday.ID)
 
 // 期待値はフィクスチャと表示件数から導く（56 / 50 を直接書かない）
 const PAGE_SIZE = MARKET_HOLIDAYS_PAGE_SIZE
@@ -325,21 +326,6 @@ describe('MarketHolidayListView', () => {
 
     expect(wrapper.find('[data-testid="market-holidays-date-from"]').element.value).toBe(DATE_FROM)
     expect(wrapper.find('[data-testid="market-holidays-date-to"]').element.value).toBe(DATE_TO)
-  })
-
-  it('[MHL-12] 再読み込みは URL を変えずに取り直す', async () => {
-    // 2回目は既定ハンドラ（フィクスチャ全件）に戻る
-    server.use(emptyHandler({ once: true }))
-    const { wrapper, router } = await mountView()
-    await settle()
-    expect(exists(wrapper, 'market-holidays-empty')).toBe(true)
-
-    // reload は router を経由しないのでナビゲーション待ちは要らない
-    await wrapper.find('[data-testid="market-holidays-reload"]').trigger('click')
-    await flushPromises()
-
-    expect(rows(wrapper)).toHaveLength(firstPage.length)
-    expect(router.currentRoute.value.query).toEqual({})
   })
 
   it('[MHL-13] 「新規追加」で空の追加モーダルが開く', async () => {

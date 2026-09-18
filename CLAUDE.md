@@ -153,6 +153,25 @@ bash scripts/worktree.sh remove feat/market-holiday-type --docker-clean  # Docke
 - worktree セッションから**本体リポジトリのファイルを絶対パスで書き換えない**。
   guard フックが拒否する（`main` に未コミット変更が生えるのを防ぐための意図的な非対称）
 
+### デスクトップアプリ / `--worktree` が作る worktree（`.claude/worktrees/`）
+
+デスクトップアプリの並行セッションや `claude --worktree` は `scripts/worktree.sh add` を通らず、
+`<本体>/.claude/worktrees/<名前>/` に worktree を作る（ブランチ名は `claude/<名前>`）。
+運用ルール（1 worktree = 1 目的、`git stash` 禁止、マージは本体で）は同じで、次の点だけ補っている。
+
+- gitignore 済みの `.env` と `.claude/settings.local.json` は **`.worktreeinclude`** の指定でコピーされる
+  （Windows では worktree の `.claude/` の設定がその worktree で使われる。承認設定は本体と同じ内容になる）
+- dev サーバのホスト公開ポート（`FRONTEND_PORT`）は **SessionStart フックが割り当てる**
+  （`scripts/worktree.sh ensure-port`。`.env` が無ければ本体からコピーしてから割り当てる。冪等）。
+  値はセッション冒頭の注入文と `bash scripts/worktree.sh list` の URL 列で確認する
+- **コマンドに `cd "<絶対パス>" &&` や `FRONTEND_PORT=... ` を前置しない。** cwd はその worktree 自身で、
+  前置すると許可ルールに一致せず承認待ちになる（2026-09-17 に 7 セッションで多発した原因）。
+  許可ルールは `&&` / `;` / `|` で分けた**サブコマンドごと**に照合され、既知でない環境変数の前置は
+  allow ルールに一致しない
+- `${CLAUDE_PROJECT_DIR}` はその worktree を指す（`.claude/.sessions/` が worktree 側に作られる）。
+  フックと設定は worktree の `.claude/` から読まれる。この節の仕組みが効くのは、その worktree の
+  ブランチにこの変更（`ensure-port` と `.worktreeinclude`）が入ってから
+
 ### 並行セッションの事故を止めるフック
 
 2026-09-08、4 つのセッションが本体リポジトリを共有したまま `git switch -c` でブランチを

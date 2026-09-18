@@ -51,6 +51,8 @@ function record(method, path, body, status = 200) {
 
 /** HolidayItem 1 件（openapi.json の必須項目をひととおり埋めたもの） */
 const holidayItem = {
+  // 主キー。openapi.json にはまだ無く、DB の主キーを id に寄せる方針で先行している
+  ID: 12,
   休場日: 20261225,
   休場区分: '0',
   休場区分名: '終日休場',
@@ -113,7 +115,7 @@ describe('api/marketHolidays', () => {
 
     expect(total).toBe(1)
     expect(items).toEqual([
-      { id: '20261225', date: '2026-12-25', reason: 'Christmas Day', holidayType: '0' },
+      { id: '12', date: '2026-12-25', reason: 'Christmas Day', holidayType: '0' },
     ])
   })
 
@@ -188,24 +190,39 @@ describe('api/marketHolidays', () => {
       休場理由: 'Christmas Day',
     })
     expect(created).toEqual({
-      id: '20261225',
+      id: '12',
       date: '2026-12-25',
       reason: 'Christmas Day',
       holidayType: '0',
     })
   })
 
-  it('[MHA-10] 削除は休場日をパスに置き、渡した id を返す', async () => {
-    record('delete', '*/api/masters/market-holidays/:holidayDate', {
+  it('[MHA-10] 削除は id をパスに置き、渡した id を返す', async () => {
+    record('delete', '*/api/masters/market-holidays/:id', {
       success: true,
       holiday: { ...holidayItem, 取消区分: 1 },
       message: 'ok',
     })
 
-    const deleted = await deleteMarketHoliday('20261225')
+    const deleted = await deleteMarketHoliday('12')
 
-    expect(lastRequest.url.pathname).toBe('/api/masters/market-holidays/20261225')
-    expect(deleted).toBe('20261225')
+    expect(lastRequest.url.pathname).toBe('/api/masters/market-holidays/12')
+    expect(deleted).toBe('12')
+  })
+
+  /*
+   * 実 API が ID を返し始めるまでの穴を見張るテスト。休場日へフォールバックすると
+   * 「動いているように見える」まま実 API で行のキーが壊れるので、空文字のまま出す。
+   */
+  it('[MHA-12] 応答に ID が無いとき id は空文字のまま（休場日へフォールバックしない）', async () => {
+    const { ID: _id, ...withoutId } = holidayItem
+    record('get', '*/api/masters/market-holidays', listBody([withoutId]))
+
+    const { items } = await fetchMarketHolidays()
+
+    expect(items[0].id).toBe('')
+    // 日付は主キーではなくなったが、業務上の値としてそのまま出る
+    expect(items[0].date).toBe('2026-12-25')
   })
 
   it('[MHA-11] 更新系には X-User-Code ヘッダが載る', async () => {

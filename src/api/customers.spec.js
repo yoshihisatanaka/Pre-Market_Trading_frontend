@@ -138,7 +138,9 @@ describe('api/customers', () => {
     expect(total).toBe(1)
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({
-      // integer の口座番号は文字列にして運ぶ（行キーと URL で使う）
+      // 主キー。integer の ID を文字列にして運ぶ（行キーと URL で使う）
+      id: String(customerItem.ID),
+      // 口座番号は主キーではないが、一意な業務コードとして文字列で運ぶ
       accountNumber: String(customerItem.口座番号),
       branchCode: customerItem.部店コード,
       branchName: customerItem.部店名,
@@ -253,5 +255,20 @@ describe('api/customers', () => {
     record({ detail: 'サーバーでエラーが発生しました。' }, 500)
 
     await expect(fetchCustomers()).rejects.toBeTruthy()
+  })
+
+  /*
+   * 実 API が ID を返し始めるまでの穴を見張るテスト。口座番号へフォールバックすると
+   * 「動いているように見える」まま実 API で行のキーが壊れるので、空文字のまま出す。
+   */
+  it('[CUA-15] 応答に ID が無いとき id は空文字のまま（口座番号へフォールバックしない）', async () => {
+    const { ID: _id, ...withoutId } = customerItem
+    record(listBody([withoutId]))
+
+    const { items } = await fetchCustomers()
+
+    expect(items[0].id).toBe('')
+    // 口座番号は主キーではなくなったが、業務上の値としてそのまま出る
+    expect(items[0].accountNumber).toBe(String(customerItem.口座番号))
   })
 })

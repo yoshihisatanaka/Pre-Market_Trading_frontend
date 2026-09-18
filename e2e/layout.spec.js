@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { navItems, navSections } from '../src/components/layout/navigation'
+import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/layout.md（タイトル先頭の [LAY-xx] が対応 ID）
 // 画面固有の要素はここでは検証しない（各画面のシナリオで扱う）。
@@ -55,12 +56,12 @@ test.describe('共通レイアウト', () => {
   })
 
   test('[LAY-04] 未実装の画面を直接開いてもレイアウトは表示される', async ({ page }) => {
-    await page.goto('/masters/users')
+    await page.goto('/masters/fx')
 
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
     await expect(nav).toBeVisible()
     await expect(page.getByRole('heading', { name: 'ページが見つかりません' })).toBeVisible()
-    await expect(nav.getByRole('link', { name: 'ユーザマスタ', exact: true })).toHaveAttribute(
+    await expect(nav.getByRole('link', { name: '為替マスタ', exact: true })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -136,5 +137,58 @@ test.describe('共通レイアウト', () => {
       )
       expect(inSidebar).toBe(false)
     }
+  })
+
+  /*
+   * 起動時の読み込みオーバーレイ（AppLoadingOverlay）。覆いの中身の出し分けは単体側（ALO）が持つので、
+   * ここでは「起動時に実際に覆われるか」「覆いが操作を遮るか」だけを見る。
+   *
+   * 既定のモックは即座に応答するのでローディングが一瞬すぎて掴めない。
+   * ?mockDelay=<ミリ秒> を付けた URL だけ /api/* の応答が遅れる（src/mocks/handlers/index.js）。
+   */
+  test('[LAY-10] 起動時はコードマスタを読み終えるまで画面全体が覆われる', async ({ page }) => {
+    await page.goto('/?mockDelay=2000')
+
+    const loading = page.getByTestId('app-loading')
+    await expect(loading).toBeVisible()
+    await expect(loading).toContainText('読み込んでいます')
+
+    // 読み終えれば覆いが外れ、下に組み上がっていた画面が現れる
+    await expect(loading).toBeHidden()
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+  })
+
+  test('[LAY-11] コードマスタの取得に失敗すると理由と再試行が覆いの中に出る', async ({ page }) => {
+    await mockApi(page, [
+      { path: '*/api/codes', status: 500, body: { detail: 'サーバーでエラーが発生しました。' } },
+    ])
+    await page.goto('/')
+
+    const error = page.getByTestId('app-loading-error')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText('サーバーでエラーが発生しました。')
+    await expect(page.getByTestId('app-loading-retry')).toBeVisible()
+    // 読み直し中ではないので回転マーク側は出ない
+    await expect(page.getByTestId('app-loading')).toHaveCount(0)
+  })
+
+  test('[LAY-12] 取得に失敗して覆われている間は画面を操作できない', async ({ page }) => {
+    await mockApi(page, [
+      { path: '*/api/codes', status: 500, body: { detail: 'サーバーでエラーが発生しました。' } },
+    ])
+    await page.goto('/')
+    await expect(page.getByTestId('app-loading-error')).toBeVisible()
+
+    /*
+     * 覆いの下にはレイアウトが組み上がっている（App.vue は AppLayout を v-if で隠さない）。
+     * リンクそのものを click すると Playwright の可触判定で止まってしまうので、
+     * 座標を取って実際にその位置を押す。覆いが受け止めるので遷移は起きない。
+     */
+    const link = page.getByRole('link', { name: '顧客検索', exact: true })
+    const box = await link.boundingBox()
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByTestId('app-loading-error')).toBeVisible()
   })
 })

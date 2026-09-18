@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 
 /*
- * ハードリミット（注文の自動分割を決める 3 つの上限）。
+ * スライス基準（注文の自動分割を決める 3 つの上限）。
  *
  * エンドポイントは /masters/hard-limits。レスポンスのキーは日本語のまま返る（docs/api/openapi.json）。
  * その差はこの層だけで吸収し、外へは camelCase のアプリ内モデルで返す。
@@ -16,19 +16,19 @@ import { apiClient } from './client'
  */
 
 /**
- * 現在のハードリミットを取得する。
+ * 現在のスライス基準を取得する。
  *
  * 実 API は必ず 200 + SliceSettingResponse を返す（ID 以下 6 項目が required）ので
  * 空にはならないが、本文なしで来ても落ちないよう null を返す防御は残す。
  * 画面はこれを「未設定」として 4 状態のひとつに出す。
  */
-export async function fetchHardLimits() {
+export async function fetchSliceCriteria() {
   const { data } = await apiClient.get('/masters/hard-limits')
-  return data ? toHardLimits(data) : null
+  return data ? toSliceCriteria(data) : null
 }
 
-/** ハードリミットを更新する。応答は更新後の設定 */
-export async function updateHardLimits({
+/** スライス基準を更新する。応答は更新後の設定 */
+export async function updateSliceCriteria({
   participationRate,
   maxQuantity,
   maxAmount,
@@ -50,11 +50,11 @@ export async function updateHardLimits({
     // 楽観的ロック用。他の担当者が先に更新していれば 409 で弾かれる
     更新日時: updatedAt,
   })
-  return toHardLimits(data)
+  return toSliceCriteria(data)
 }
 
 // バックエンドのキーは日本語。ここでだけ生の形を知る
-function toHardLimits(raw) {
+function toSliceCriteria(raw) {
   return {
     id: raw['ID'],
     participationRate: raw['市場関与率'],

@@ -34,18 +34,7 @@ onMounted(() => store.load())
 
 <template>
   <section class="order-list">
-    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む。
-         defer が要る: 初回マウント時点ではレイアウトの DOM がまだ document に入っていない -->
-    <Teleport defer to="#topbar-actions">
-      <BaseButton
-        variant="secondary"
-        data-testid="orders-reload"
-        :disabled="loading"
-        @click="store.load()"
-      >
-        再読み込み
-      </BaseButton>
-    </Teleport>
+    <!-- 見出しはヘッダが meta.title から出す。この画面はヘッダへ差し込む操作を持たない -->
 
     <!-- 以降の画面もこの4状態の出し分けを踏襲する -->
     <p v-if="loading" data-testid="orders-loading" class="order-list__status is-loading">

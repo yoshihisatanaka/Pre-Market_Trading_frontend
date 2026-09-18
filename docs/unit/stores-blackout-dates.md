@@ -45,10 +45,20 @@
 | BDS-30 | 事前検証が不合格になる入力 | `update()` を呼ぶ | 更新の API（`PUT /masters/blackout-dates/{受注不可日}`）は 1 度も呼ばれない | 実装済 |
 | BDS-31 | 更新の API が 500（`detail` 付き）を返す（事前検証は通る） | `update()` を呼ぶ | 戻り値が null、`updateError` に status 500 とその message が入る。`updateValidationErrors` は空のまま。`items` / `total` は変わらない | 実装済 |
 | BDS-32 | 既定モック、`load()` 済み | 行の現在値と違う（古い）`updatedAt` を渡して `update()` を呼ぶ | 戻り値が null、`updateError` に status 409 と競合を知らせる message が入る。`items` は変わらない（他の利用者の変更を上書きしない） | 実装済 |
-| BDS-33 | 既定モック | 存在しない受注不可日を id にして `update()` を呼ぶ（事前検証を通すため日付は変える） | 戻り値が null、`updateError` に status 404 と detail が入る | 実装済 |
+| BDS-33 | 事前検証を必ず通す応答に差し替え | 存在しない id で `update()` を呼ぶ | 戻り値が null、`updateError` に status 404 と detail が入る（事前検証を通ったあとに対象が消えていた場合の経路） | 実装済 |
 | BDS-34 | `load({ offset: 表示件数, dateFrom, dateTo })` 済み | `update()` が成功する | 同じページ位置・同じ絞り込みのまま読み直される（1 ページ目・全件に戻らない） | 実装済 |
 | BDS-35 | 直前の `update()` が通信エラーで失敗した状態 / 事前検証で弾かれた状態 | それぞれで `clearUpdateError()` を呼ぶ | `updateError` が null になり、`updateValidationErrors` も空になる（どちらの失敗も残らない） | 実装済 |
 | BDS-36 | 事前検証の応答が返る前 | `update()` を await せずに状態を見る | `updating` が true で、一覧側の `loading` は false のまま。検証と更新の 2 往復が終わるまで true が続き、完了後に false に戻る | 実装済 |
 | BDS-37 | 既定モック、`update()` が 1 回成功した直後 | 読み直した一覧から取った `updatedAt` で同じ行をもう一度 `update()` する | 2 回目も成功する（更新のたびにサーバが新しい更新日時を返し、一覧経由で合札が入れ替わる） | 実装済 |
 | BDS-38 | 既定モック、`load()` 済み | 編集で事前検証に弾かれたあと、登録側の `validationErrors` を見る | 編集の理由は `updateValidationErrors` にだけ入り、`validationErrors` は空のまま。逆に登録で弾かれても `updateValidationErrors` は空のまま | 実装済 |
 | BDS-39 | 既定モック（取消済みの行を 1 件持つ）、`load()` 済み | 取消済みの日付で `create()` を呼ぶ | 警告を挟まず 1 回で登録できる（実 API がその行を再有効化する）。`validationWarnings` / `validationErrors` は空。行は増えないが、取消済みが有効になるので `total` は 1 増え、その日付が `items` に現れる | 実装済 |
+| BDS-40 | 既定モック | 存在しない id で `update()` を呼ぶ | 事前検証が先に弾き、更新の API を呼ばない。`updateValidationErrors` に「指定された受注不可日(ID=…)は存在しません」が入り、`updateError` は null のまま | 実装済 |
+
+## 主キーが `id` になったことで変わった点
+
+対象を日付ではなく `id` で指すようになったので、**存在しない対象は事前検証の時点で分かる**
+（`BDS-40`）。更新の 404 は「事前検証を通ったあとに対象が消えていた」ときだけ起きるため、
+`BDS-33` はその状況を応答の差し替えで作っている。
+
+再有効化（`BDS-39`）は **元の行の `id` を引き継ぐ**前提でモックを書いている。
+実 API が新しい id を採番する仕様ならここが変わる（→ バックエンドへの確認事項）。

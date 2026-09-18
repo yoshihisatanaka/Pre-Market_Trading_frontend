@@ -190,8 +190,9 @@ snapshot_row_for_dir() {
 # .env は機密扱いで Claude から読めない。ファイル名は ENV_FILE 定数に閉じ込め、
 # 読み出しはこの関数だけで行う（コマンド引数に名前を出すと guard フックが拒否する）。
 env_port_of_dir() {
+  # ファイルが無いと sed が失敗し、pipefail + errexit で呼び出し元ごと落ちるので || true で受ける。
   p=$(sed -n 's/^[[:space:]]*FRONTEND_PORT[[:space:]]*=[[:space:]]*\([0-9]\{1,5\}\).*/\1/p' \
-    "$1/$ENV_FILE" 2>/dev/null | tail -n1)
+    "$1/$ENV_FILE" 2>/dev/null | tail -n1 || true)
   [ -n "$p" ] || p=5173
   printf '%s' "$p"
 }
@@ -290,11 +291,10 @@ print_main_head() {
 # シンボリックリンクにはしない。docker-compose.yml が `.:/app` をバインドマウントするため、
 # リンク先のホスト絶対パスはコンテナ内に存在せず壊れたリンクになる。しかも vite.config.js の
 # loadEnv は失敗しても throw せず既定値に落ちて警告するだけなので、壊れても気づけない。
-deploy_configs() {
+# 環境変数ファイルの配備。add と ensure-port（add を通らない worktree の後追い）の両方から呼ぶ。
+deploy_env_file() {
   dir="$1"
   overwrite="$2"
-
-  # 1. 環境変数ファイル
   if [ -e "$dir/$ENV_FILE" ] && [ "$overwrite" -eq 0 ]; then
     info "既存を維持: $ENV_FILE"
   elif [ -f "$main_repo/$ENV_FILE" ]; then
@@ -306,6 +306,14 @@ deploy_configs() {
   else
     warn "$ENV_FILE を配備できなかった（本体にも例ファイルにも無い）"
   fi
+}
+
+deploy_configs() {
+  dir="$1"
+  overwrite="$2"
+
+  # 1. 環境変数ファイル
+  deploy_env_file "$dir" "$overwrite"
 
   # 2. Claude Code の個人設定（承認モード等を引き継ぐ）
   mkdir -p "$dir/.claude"
@@ -731,6 +739,22 @@ cmd_doctor() {
   print_main_head
 }
 
+# --- ensure-port ------------------------------------------------------------
+# デスクトップアプリや `claude --worktree` が作る worktree（<repo>/.claude/worktrees/<名前>）は
+# `add` を通らないのでホスト公開ポートが未割当になり、Claude が `FRONTEND_PORT=... docker compose`
+# と環境変数を前置して回避しようとする。前置は許可ルールに一致せず承認待ちになるため、
+# SessionStart フック（.claude/hooks/session-worktree-notice.sh）からこれを呼んで先に割り当てる。
+# stdout はポート番号 1 行だけ（フックが $(...) で受ける）。経過メッセージは stderr。
+cmd_ensure_port() {
+  dir="${1:-$PWD}"
+  [ -d "$dir" ] || die "ディレクトリが無い: $dir" 4
+  # .worktreeinclude が無かった頃に作られた worktree には環境変数ファイル自体が無い。
+  # 無ければ本体からコピーしてから割り当てる（既存は温存）。
+  deploy_env_file "$dir" 0 >&2
+  ensure_frontend_port "$dir" >&2
+  env_port_of_dir "$dir"
+}
+
 # --- help -------------------------------------------------------------------
 usage() {
   cat <<EOF
@@ -740,6 +764,7 @@ usage() {
   bash scripts/worktree.sh remove <type>/<kebab> [--force] [--delete-branch]
   bash scripts/worktree.sh list
   bash scripts/worktree.sh doctor
+  bash scripts/worktree.sh ensure-port [<dir>]
   bash scripts/worktree.sh help
 
 置き場所: $(win_path "$wt_root")\\$repo_name-<ブランチ名>
@@ -754,6 +779,8 @@ usage() {
           （共有の node_modules は external なので消えない）
   list    一覧＋worktree ごとの Docker の状態と dev サーバ URL を表示する
   doctor  配備漏れ・gitignore・worktree ごとの Docker 環境・孤児リソースを点検する
+  ensure-port  <dir>（省略時は cwd）にホスト公開ポートが無ければ割り当て、番号だけを stdout に出す。
+          add を通らない worktree（.claude/worktrees/ 配下）向けで、SessionStart フックが呼ぶ。冪等
 
 Docker は worktree ごとに分離される（compose プロジェクト＝ディレクトリ名）。
 up -d / E2E / Playwright MCP は並行可。共有は node_modules だけで、npm install は排他。
@@ -770,6 +797,7 @@ add) cmd_add "$@" ;;
 remove | rm) cmd_remove "$@" ;;
 list | ls) cmd_list "$@" ;;
 doctor) cmd_doctor "$@" ;;
+ensure-port) cmd_ensure_port "$@" ;;
 help | -h | --help) usage ;;
 *)
   printf 'error: 不明なサブコマンド: %s\n\n' "$sub" >&2

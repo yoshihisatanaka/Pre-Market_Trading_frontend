@@ -36,9 +36,9 @@ import { OPERATOR_CODE } from '@/utils/operator'
  *     （MasterListCard が持つ）。残高は 顧客 × 銘柄 × 口座区分 の直積なので、
  *     出さないと 51 件目以降が黙って消える
  *   - モックは「新規保有を追加」を一覧カードの見出し横に置くが、ここはヘッダ
- *     （#topbar-actions）に差す。画面固有の操作の置き場所は既存 8 画面と揃える
- *   - 検索カードに「クリア」、ヘッダに「再読み込み」が増える（MasterSearchCard と
- *     既存画面の標準装備。エラー状態からの復帰導線にもなる）
+ *     （#topbar-actions）に差す。画面固有の操作の置き場所は既存の画面と揃える
+ *   - 検索カードに「クリア」が増える（MasterSearchCard が検索とセットで持つ）。
+ *     読み直しの導線はヘッダではなく、エラー状態の「再試行」だけにする
  *
  * **列見出しの「口座区分」の中身は 特定預り区分。** 顧客マスタに出ている 口座区分
  * （一般 / 自己 / 同業者）とは別物で、同じ語が 2 つの意味で使われている。
@@ -442,14 +442,6 @@ const addSummary = computed(() => {
   <section class="balance-adjustment-list">
     <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
     <Teleport defer to="#topbar-actions">
-      <BaseButton
-        variant="secondary"
-        data-testid="balance-adjustments-reload"
-        :disabled="loading"
-        @click="store.reload()"
-      >
-        再読み込み
-      </BaseButton>
       <BaseButton data-testid="balance-adjustments-add" @click="openAdd">
         新規保有を追加
       </BaseButton>

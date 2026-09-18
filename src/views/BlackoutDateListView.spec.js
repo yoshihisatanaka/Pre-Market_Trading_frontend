@@ -25,7 +25,8 @@ const toIsoDate = (blackoutDate) => {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
 const toRow = (blackout) => ({
-  id: String(blackout.受注不可日),
+  // 主キーは受注不可日ではなく ID。data-testid にもこの値が入る
+  id: String(blackout.ID),
   date: toIsoDate(blackout.受注不可日),
   reason: blackout.備考 ?? '',
 })
@@ -63,8 +64,11 @@ const NEW_REASON = 'テスト受注不可日'
 
 // 既定ハンドラの事前検証は既存の日付を重複として弾くので、先頭の行の日付をそのまま使う
 const DUPLICATE_DATE = allRows[0].date
-/** 実 API（とモック）が重複を知らせる文言。対象の日付が本文に入る */
-const duplicateMessage = (row) => `受注不可日(${row.id})は既に登録されています`
+/**
+ * 実 API（とモック）が重複を知らせる文言。**本文に入るのは id ではなく日付**
+ * （主キーが ID になっても、人に見せるのは日付のまま）。
+ */
+const duplicateMessage = (row) => `受注不可日(${row.date.replaceAll('-', '')})は既に登録されています`
 
 /*
  * 複数の理由が並ぶ表示を確かめるための応答。
@@ -377,21 +381,6 @@ describe('BlackoutDateListView', () => {
 
     expect(wrapper.find('[data-testid="blackout-dates-date-from"]').element.value).toBe(DATE_FROM)
     expect(wrapper.find('[data-testid="blackout-dates-date-to"]').element.value).toBe(DATE_TO)
-  })
-
-  it('[BDL-12] 再読み込みは URL を変えずに取り直す', async () => {
-    // 2回目は既定ハンドラ（フィクスチャ全件）に戻る
-    server.use(emptyHandler({ once: true }))
-    const { wrapper, router } = await mountView()
-    await settle()
-    expect(exists(wrapper, 'blackout-dates-empty')).toBe(true)
-
-    // reload は router を経由しないのでナビゲーション待ちは要らない
-    await wrapper.find('[data-testid="blackout-dates-reload"]').trigger('click')
-    await flushPromises()
-
-    expect(rows(wrapper)).toHaveLength(firstPage.length)
-    expect(router.currentRoute.value.query).toEqual({})
   })
 
   it('[BDL-13] 説明バナーは 4 状態のいずれでも表示される', async () => {

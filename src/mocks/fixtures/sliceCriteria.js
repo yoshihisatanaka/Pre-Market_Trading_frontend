@@ -1,5 +1,5 @@
 /*
- * ハードリミット（バックエンドの呼称は「スライス注文設定」）。
+ * スライス基準（バックエンドの呼称は「スライス注文設定」）。
  * GET /masters/hard-limits が返す生の形。キーは openapi.json の SliceSettingResponse のまま日本語。
  * 値は画面モック（/masters/hard-limits）の 5.00% / 10,000 株 / USD 1,000,000 に合わせる
  * （実 API のローカル DB の値ではない。あちらはいつでも変わるので追いかけない）。
@@ -8,7 +8,7 @@
  * JS は整数と実数を区別しないため、この形では書き分けられない（表示側の formatQuantity は
  * 小数が乗っても通る）。
  */
-export const hardLimitSetting = {
+export const sliceCriteriaSetting = {
   ID: 1,
   // 比率で持つ（0.05 = 5%）
   市場関与率: 0.05,

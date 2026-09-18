@@ -2,18 +2,18 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { hardLimitSetting } from '@/mocks/fixtures/hardLimits'
-import { useHardLimitsStore } from './hardLimits'
+import { sliceCriteriaSetting } from '@/mocks/fixtures/sliceCriteria'
+import { useSliceCriteriaStore } from './sliceCriteria'
 
 /*
  * 期待値はフィクスチャから導く（0.05 / 10000 / 1000000 を直接書かない）。
  * バックエンドのキーは日本語なので、生の形を読むのはこの定義部分だけにする。
  */
-const RATE = hardLimitSetting['市場関与率']
-const QUANTITY = hardLimitSetting['大口数量閾値']
-const AMOUNT = hardLimitSetting['大口金額閾値']
+const RATE = sliceCriteriaSetting['市場関与率']
+const QUANTITY = sliceCriteriaSetting['大口数量閾値']
+const AMOUNT = sliceCriteriaSetting['大口金額閾値']
 // 画面に出さない項目。保存で消えていないことの確認に使う
-const NOTE = hardLimitSetting['備考']
+const NOTE = sliceCriteriaSetting['備考']
 
 // 保存に使う「現在値とは違う、有効な範囲の値」もフィクスチャから導く
 const NEW_RATE = RATE / 2
@@ -36,17 +36,17 @@ const emptyHandler = () =>
 // スライス有効フラグだけを 0 にした設定（画面に無い項目が保存で書き換わらないことの確認用）
 const sliceDisabledHandler = () =>
   http.get('*/api/masters/hard-limits', () =>
-    HttpResponse.json({ ...hardLimitSetting, スライス有効フラグ: 0 }),
+    HttpResponse.json({ ...sliceCriteriaSetting, スライス有効フラグ: 0 }),
   )
 
-// シナリオ: docs/unit/stores-hard-limits.md
-describe('useHardLimitsStore', () => {
+// シナリオ: docs/unit/stores-slice-criteria.md
+describe('useSliceCriteriaStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
   })
 
-  it('[HLS-01] load で現在のハードリミットを読み込む', async () => {
-    const store = useHardLimitsStore()
+  it('[SCS-01] load で現在のスライス基準を読み込む', async () => {
+    const store = useSliceCriteriaStore()
 
     await store.load()
 
@@ -59,9 +59,9 @@ describe('useHardLimitsStore', () => {
     })
   })
 
-  it('[HLS-02] 取得が失敗したとき error に入り settings は null のままになる', async () => {
+  it('[SCS-02] 取得が失敗したとき error に入り settings は null のままになる', async () => {
     server.use(errorHandler())
-    const store = useHardLimitsStore()
+    const store = useSliceCriteriaStore()
 
     await store.load()
 
@@ -72,9 +72,9 @@ describe('useHardLimitsStore', () => {
     expect(store.error.message).toBe(ERROR_MESSAGE)
   })
 
-  it('[HLS-03] 本文が返らないとき isEmpty が true になる', async () => {
+  it('[SCS-03] 本文が返らないとき isEmpty が true になる', async () => {
     server.use(emptyHandler())
-    const store = useHardLimitsStore()
+    const store = useSliceCriteriaStore()
 
     await store.load()
 
@@ -82,8 +82,8 @@ describe('useHardLimitsStore', () => {
     expect(store.settings).toBeNull()
   })
 
-  it('[HLS-04] save が成功すると更新後の設定が返り現在値も入れ替わる', async () => {
-    const store = useHardLimitsStore()
+  it('[SCS-04] save が成功すると更新後の設定が返り現在値も入れ替わる', async () => {
+    const store = useSliceCriteriaStore()
     await store.load()
 
     const updated = await store.save({
@@ -105,8 +105,8 @@ describe('useHardLimitsStore', () => {
     })
   })
 
-  it('[HLS-05] 範囲外の市場関与率で save すると saveError に入り現在値は変わらない', async () => {
-    const store = useHardLimitsStore()
+  it('[SCS-05] 範囲外の市場関与率で save すると saveError に入り現在値は変わらない', async () => {
+    const store = useSliceCriteriaStore()
     await store.load()
 
     const updated = await store.save({
@@ -124,9 +124,9 @@ describe('useHardLimitsStore', () => {
     expect(store.settings.maxQuantity).toBe(QUANTITY)
   })
 
-  it('[HLS-06] 画面に無いスライス有効フラグは save で書き換わらない', async () => {
+  it('[SCS-06] 画面に無いスライス有効フラグは save で書き換わらない', async () => {
     server.use(sliceDisabledHandler())
-    const store = useHardLimitsStore()
+    const store = useSliceCriteriaStore()
     await store.load()
     expect(store.settings.sliceEnabled).toBe(false)
 
@@ -140,8 +140,8 @@ describe('useHardLimitsStore', () => {
     expect(store.settings.sliceEnabled).toBe(false)
   })
 
-  it('[HLS-07] clearSaveError で保存エラーが消える', async () => {
-    const store = useHardLimitsStore()
+  it('[SCS-07] clearSaveError で保存エラーが消える', async () => {
+    const store = useSliceCriteriaStore()
     await store.load()
     await store.save({
       participationRate: INVALID_RATE,
@@ -155,8 +155,8 @@ describe('useHardLimitsStore', () => {
     expect(store.saveError).toBeNull()
   })
 
-  it('[HLS-08] 画面に無い備考は save で書き換わらない', async () => {
-    const store = useHardLimitsStore()
+  it('[SCS-08] 画面に無い備考は save で書き換わらない', async () => {
+    const store = useSliceCriteriaStore()
     await store.load()
     expect(store.settings.note).toBe(NOTE)
 

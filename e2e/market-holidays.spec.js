@@ -22,7 +22,8 @@ const toIsoDate = (holidayDate) => {
   const digits = String(holidayDate)
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
-const toId = (holiday) => String(holiday.休場日)
+// 主キーは休場日ではなく ID。data-testid にもこの値が入る
+const toId = (holiday) => String(holiday.ID)
 
 // フィクスチャは実 API と同じ休場日の降順。先頭が最新で、末尾が最古
 const secondPage = marketHolidays.slice(PAGE_SIZE)
@@ -86,7 +87,7 @@ test.describe('海外休場日マスタ一覧', () => {
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '海外休場日マスタ', exact: true })).toBeVisible()
     // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている
-    await expect(page.getByTestId('market-holidays-reload')).toBeVisible()
+    await expect(page.getByTestId('market-holidays-add')).toBeVisible()
 
     await expect(page.getByTestId('market-holidays-count')).toHaveText(
       `${marketHolidays.length} 件`,

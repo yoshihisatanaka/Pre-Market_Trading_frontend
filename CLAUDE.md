@@ -14,18 +14,51 @@
    [docs/coding-standards.md](docs/coding-standards.md) の「8. Markdown の書きかた」。
 4. **実装前に [docs/coding-standards.md](docs/coding-standards.md) を読む。**
    別メンバによるコードレビューが無いため、規約違反はそのまま残る。
-5. コードを書き終えたら **必ず** 次を実行して通す:
+5. コードを書き終えたら **必ず** 次を実行して通す（lint / test:unit / check:scenarios を **1 コンテナ**でまとめて流す）:
    ```powershell
-   docker compose run --rm frontend npm run lint
-   docker compose run --rm frontend npm run test:unit
-   docker compose run --rm frontend npm run check:scenarios
+   docker compose run --rm frontend npm run verify
    ```
+   **実行は実装が一通り終わってから 1 回。** 途中で lint や test:unit を単独で繰り返さない
+   （Docker の起動だけで毎回 30 秒かかる。3 コマンドに分けると起動が 3 回になる）。
    lint はターン終了時の Stop フック（`.claude/hooks/lint-on-stop.sh`）でも自動実行され、失敗すると差し戻される。
-   ただし **unit / E2E は自動では走らない**。画面を追加・変更したら E2E（`docker compose run --rm e2e npx playwright test`）も手動で回す。
+   フックは **未コミットの `.js` / `.mjs` / `.vue` だけ**を対象にし、変更が無いターンでは Docker を起こさない。
+   **unit / E2E は自動では走らない**。画面を追加・変更したら E2E も回す。
+   **その画面の略号で絞る**のが既定で、全件は main へマージする前の 1 回だけ:
+   ```powershell
+   docker compose run --rm e2e npx playwright test --grep "\[SM-"
+   ```
 
 作業に入る前に effort を選ぶ。既定は `high` で、`src/` を触る回の下限も `high`。
 テストや定型作業は `medium` / `low` に下げる。基準は
 [docs/coding-standards.md](docs/coding-standards.md) の「9. Effort レベルの選びかた」。
+
+## リリースまでの進め方（リリース 2026-11-13 / 画面の実装完了は 10 月中旬）
+
+残作業の 45% はバックエンド待ちで、フロントの手を速くしても消化できない。**待たずに進める形**と
+**手戻りを 1 日で止める形**を優先する。根拠と数字は `docs/release-efficiency.md`。
+
+- **10/15 までの合格線は 実装 / UnitTest / E2E(MSW) の 3 軸 + 実 API スモーク 2 本**（一覧 1 本・書き込み 1 本）。
+  実 API シナリオの網羅（残りの行）は 10/15 以降のステージング期間に回す。
+  スモークは `docs/e2e/<画面>-real-api.md` の**最初の 2 行**として書き、その画面の 3 軸が揃った日に本体セッションで通す
+- **実 API を見ない期間は作らない。** 本体セッションで毎朝 1 回 `/morning-check`
+  （`/api-spec-sync` → `npm run verify` → 実 API E2E 全件）を回し、仕様差分と実 API の退行を当日に拾う
+- **契約テスト**（`src/api/contract.spec.js`）が `openapi.json` と `src/api/` / `src/mocks/fixtures/` の食い違いを落とす。
+  クエリ名の改名・レスポンス項目の増減・パスキーの型は取り込み当日にここで判る。
+  既知の食い違いは同ファイルの `KNOWN_GAPS` に理由付きで載せ、解消したら外す（載せたまま放置しない）
+- **パスキーは `openapi.json` に従い、変換は `src/api/` の中だけで行う。** 一覧は全マスタが `ID` を返すが、
+  PUT / DELETE のパスキーが ID なのは **CA / 残高調整 / 手数料パターン / 手数料優遇の 4 種だけ**。
+  顧客・銘柄・為替・受注不可日・休場日・ロール権限・ユーザは業務キー（バックエンドに問合せ中）。
+  画面・store は `id` で行を指し、api 層がパスに載せるキーを選ぶ。`*UpdateRequest` は業務キー項目を落としているので
+  **業務キーは編集で変更不可**（フォームで読み取り専用にする）
+- **API のパスが無い画面（成熟度 D）は fixture を契約提案として先に書き、3 軸を埋める。**
+  お知らせ管理・障害管理・滞留注文抽出はこの形。バックエンドへの依頼は `docs/api/requests.md` に集約し、
+  解消で戻るセル数の順に並べる
+- **実装コミットができた日に main へマージする。** E2E が `未着手` でも `check:scenarios` は warning で通す。
+  未マージのまま置くと進捗表に載らず、`router` / `navigation.js` / `handlers/` の衝突も溜まる
+- **型に乗る画面（検索一覧 / CRUD マスタ）は `/new-screen` で雛形を出してから固有部分だけ書く。**
+  シナリオは `docs/e2e/_template-*.md` / `docs/unit/_template-*.md` から起こす
+- テスト系サブエージェントは**シナリオの承認で止まらない**。シナリオ → テスト → 検証 → 状態更新まで通し、
+  人はコミット前の差分レビューでシナリオ表も一緒に見る（人の介在は 1 画面 1 回）
 
 ## 読ませないファイル
 
@@ -60,7 +93,8 @@ bash .claude/hooks/tests/guard-secret-paths.test.sh
 ## サブエージェント
 
 定型のテスト作成は `.claude/agents/` のサブエージェントに委譲する（Task ツール / `/agents`）。
-いずれも**シナリオ文書が先**の規約に従い、シナリオ提示 → 承認 → 実装 → 検証 → 状態更新まで通す。
+いずれも**シナリオ文書が先**の規約に従い、シナリオ → 実装 → 検証 → 状態更新まで**止まらずに**通す
+（シナリオの承認待ちは置かない。人はコミット前の差分でシナリオ表とテストを一緒に見る）。
 **コミットはしない**（差分を見てから呼び出し側が行う）。
 
 | エージェント | 担当 | 触る範囲 |

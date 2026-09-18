@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { h } from 'vue'
 import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import AppLayout from './AppLayout.vue'
 
 /*
- * AppHeader（useRoute / setInterval）と AppSidebar（RouterLink）を実描画するので、
- * AppSidebar.spec.js と同じメモリ履歴の実ルータを差す。Pinia は要らない。
+ * AppHeader（useRoute / setInterval / 市場状況ストア）と AppSidebar（RouterLink）を
+ * 実描画するので、AppSidebar.spec.js と同じメモリ履歴の実ルータを差し、Pinia も用意する。
+ * ストアは空のまま（ヘッダは取りに行かないので通信は起きず、市場ステータスは「—」になる）。
  *
  * jsdom は scoped CSS を評価しないため「見えない」ことは検証できない。
  * 開閉の判定はメニューボタンの aria-expanded で行う（見え方は E2E の LAY-06 が見る）。
@@ -37,6 +39,7 @@ const toggleButton = (wrapper) => wrapper.find('[data-testid="sidebar-toggle"]')
 const isOpen = (wrapper) => toggleButton(wrapper).attributes('aria-expanded') === 'true'
 
 beforeEach(() => {
+  setActivePinia(createPinia())
   localStorage.clear()
   vi.stubGlobal('innerWidth', 1280)
 })

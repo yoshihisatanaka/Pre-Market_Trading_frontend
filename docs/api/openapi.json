@@ -96,24 +96,6 @@
         "operationId": "search_dream_orders_endpoint_orders_dream_status_get",
         "parameters": [
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード（完全一致）",
-              "title": "Branch Code"
-            },
-            "description": "部店コード（完全一致）"
-          },
-          {
             "name": "account_no",
             "in": "query",
             "required": false,
@@ -260,6 +242,24 @@
               "title": "Offset"
             },
             "description": "取得開始位置"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
           },
           {
             "name": "X-User-Code",
@@ -545,24 +545,6 @@
             "description": "処理状況コード"
           },
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード",
-              "title": "Branch Code"
-            },
-            "description": "部店コード"
-          },
-          {
             "name": "side",
             "in": "query",
             "required": false,
@@ -690,6 +672,24 @@
               "title": "Offset"
             },
             "description": "取得開始位置"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
           },
           {
             "name": "X-User-Code",
@@ -894,24 +894,6 @@
             "description": "処理状況コード"
           },
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード",
-              "title": "Branch Code"
-            },
-            "description": "部店コード"
-          },
-          {
             "name": "side",
             "in": "query",
             "required": false,
@@ -1000,6 +982,24 @@
               "title": "End Date"
             },
             "description": "受注日 終了（YYYYMMDD または YYYY-MM-DD）"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
           },
           {
             "name": "X-User-Code",
@@ -1567,10 +1567,10 @@
                   "type": "null"
                 }
               ],
-              "description": "部店で絞り込む（未指定時は全部店）",
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
               "title": "Branch Code"
             },
-            "description": "部店で絞り込む（未指定時は全部店）"
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
           },
           {
             "name": "X-User-Code",
@@ -1639,7 +1639,7 @@
           "Orders"
         ],
         "summary": "Get Order Detail Endpoint",
-        "description": "単一注文詳細照会API\n- 注文基本情報\n- 約定実績一覧 (d_約定)\n- 状態遷移・イベント履歴一覧 (d_注文イベント)",
+        "description": "単一注文詳細照会API\n- 注文基本情報\n- 約定実績一覧 (d_約定)\n- 状態遷移・イベント履歴一覧 (d_注文イベント)\n\n全店参照権限が無い操作者は、自部店の注文のみ参照できる（他店の注文は403）。",
         "operationId": "get_order_detail_endpoint_orders__order_id__get",
         "parameters": [
           {
@@ -2024,24 +2024,6 @@
         "operationId": "list_customers_endpoint_customers_get",
         "parameters": [
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード",
-              "title": "Branch Code"
-            },
-            "description": "部店コード"
-          },
-          {
             "name": "handler_code",
             "in": "query",
             "required": false,
@@ -2119,6 +2101,60 @@
               "title": "Offset"
             },
             "description": "取得開始位置"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -2151,7 +2187,7 @@
           "Balances"
         ],
         "summary": "Get Account Balance Endpoint",
-        "description": "口座残高・買付余力照会API\n- 円貨・外貨預り金と有効買付余力\n- 保有銘柄一覧と売却可能株数（当日売注文控除済）",
+        "description": "口座残高・買付余力照会API\n- 円貨・外貨預り金と有効買付余力\n- 保有銘柄一覧と売却可能株数（当日売注文控除済）\n\n全店参照権限が無い操作者は、自部店の口座のみ参照できる（他店の口座は403）。",
         "operationId": "get_account_balance_endpoint_balances__account_no__get",
         "parameters": [
           {
@@ -2162,6 +2198,42 @@
               "type": "integer",
               "title": "Account No"
             }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -2454,24 +2526,6 @@
         "operationId": "export_customers_csv_endpoint_masters_customers_export_csv_get",
         "parameters": [
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード絞り込み",
-              "title": "Branch Code"
-            },
-            "description": "部店コード絞り込み"
-          },
-          {
             "name": "account_no",
             "in": "query",
             "required": false,
@@ -2518,6 +2572,24 @@
               "title": "Include Deleted"
             },
             "description": "削除済みデータを含めるか（デフォルト: False）"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
           },
           {
             "name": "X-User-Code",
@@ -2859,24 +2931,6 @@
         "operationId": "list_customers_endpoint_masters_customers_get",
         "parameters": [
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード絞り込み",
-              "title": "Branch Code"
-            },
-            "description": "部店コード絞り込み"
-          },
-          {
             "name": "account_no",
             "in": "query",
             "required": false,
@@ -2950,6 +3004,24 @@
               "title": "Offset"
             },
             "description": "取得開始位置"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
           },
           {
             "name": "X-User-Code",
@@ -3126,7 +3198,7 @@
           "MasterCustomers"
         ],
         "summary": "Get Customer Endpoint",
-        "description": "口座情報詳細取得API（行IDで指定）。",
+        "description": "口座情報詳細取得API（行IDで指定）。\n\n全店参照権限が無い操作者は、自部店の口座のみ参照できる（他店の口座は403）。",
         "operationId": "get_customer_endpoint_masters_customers__account_id__get",
         "parameters": [
           {
@@ -3499,7 +3571,7 @@
           "MasterCustomers"
         ],
         "summary": "Get Customer History Endpoint",
-        "description": "口座情報の登録・変更履歴取得API（1ページ最大50件・行IDで指定）。",
+        "description": "口座情報の登録・変更履歴取得API（1ページ最大50件・行IDで指定）。\n\n全店参照権限が無い操作者は、自部店の口座のみ参照できる（他店の口座は403）。",
         "operationId": "get_customer_history_endpoint_masters_customers__account_id__history_get",
         "parameters": [
           {
@@ -10039,24 +10111,6 @@
         "operationId": "export_balance_adjustments_csv_endpoint_masters_balance_adjustments_export_csv_get",
         "parameters": [
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード完全一致フィルタ",
-              "title": "Branch Code"
-            },
-            "description": "部店コード完全一致フィルタ"
-          },
-          {
             "name": "account_no",
             "in": "query",
             "required": false,
@@ -10121,6 +10175,24 @@
               "title": "Include Deleted"
             },
             "description": "削除済みレコードを含めるか（デフォルト: False）"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
           },
           {
             "name": "X-User-Code",
@@ -10462,24 +10534,6 @@
         "operationId": "list_balance_adjustments_endpoint_masters_balance_adjustments_get",
         "parameters": [
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード完全一致フィルタ",
-              "title": "Branch Code"
-            },
-            "description": "部店コード完全一致フィルタ"
-          },
-          {
             "name": "account_no",
             "in": "query",
             "required": false,
@@ -10571,6 +10625,24 @@
               "title": "Offset"
             },
             "description": "取得開始位置 (デフォルト: 0)"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
           },
           {
             "name": "X-User-Code",
@@ -11209,6 +11281,135 @@
           },
           "404": {
             "description": "指定された残高情報が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/balance-adjustments/{balance_id}/sell-prohibited": {
+      "put": {
+        "tags": [
+          "MasterBalanceAdjustments"
+        ],
+        "summary": "Update Sell Prohibited Endpoint",
+        "description": "売却不可区分 更新API\n\n- 保有明細（口座 × 銘柄 × 特定預り区分）単位で売却の可否を切り替える\n- `1` の明細は**売注文を受け付けない**（単票発注・事前検証・CSV一括発注の全経路）\n- 残高そのものは変更しない。楽観的ロック（更新日時チェック）対応\n- ユーザー操作フラグ=1、`d_残高情報履歴` へ `UPDATE` として差分記録\n- 値に変更が無ければ履歴を残さず現在値を返す",
+        "operationId": "update_sell_prohibited_endpoint_masters_balance_adjustments__balance_id__sell_prohibited_put",
+        "parameters": [
+          {
+            "name": "balance_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Balance Id"
+            }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellProhibitedUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceAdjustmentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された残高情報が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "排他制御競合（楽観的ロック）",
             "content": {
               "application/json": {
                 "schema": {
@@ -12359,6 +12560,18 @@
             "description": "手数料パターン絞り込み（空文字: デフォルトパターン）"
           },
           {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "削除済みデータを含めるか（デフォルト: False）",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "削除済みデータを含めるか（デフォルト: False）"
+          },
+          {
             "name": "branch_code",
             "in": "query",
             "required": false,
@@ -12371,22 +12584,10 @@
                   "type": "null"
                 }
               ],
-              "description": "部店コード絞り込み",
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
               "title": "Branch Code"
             },
-            "description": "部店コード絞り込み"
-          },
-          {
-            "name": "include_deleted",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "description": "削除済みデータを含めるか（デフォルト: False）",
-              "default": false,
-              "title": "Include Deleted"
-            },
-            "description": "削除済みデータを含めるか（デフォルト: False）"
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
           },
           {
             "name": "X-User-Code",
@@ -12624,24 +12825,6 @@
             "description": "手数料パターン絞り込み（空文字: デフォルトパターン）"
           },
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード絞り込み",
-              "title": "Branch Code"
-            },
-            "description": "部店コード絞り込み"
-          },
-          {
             "name": "include_deleted",
             "in": "query",
             "required": false,
@@ -12679,6 +12862,24 @@
               "title": "Offset"
             },
             "description": "取得開始位置"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
           },
           {
             "name": "X-User-Code",
@@ -14599,24 +14800,6 @@
         "operationId": "list_executions_endpoint_executions_get",
         "parameters": [
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード",
-              "title": "Branch Code"
-            },
-            "description": "部店コード"
-          },
-          {
             "name": "account_no",
             "in": "query",
             "required": false,
@@ -14780,6 +14963,60 @@
               "title": "Offset"
             },
             "description": "取得開始位置"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -14835,24 +15072,6 @@
         "description": "約定一覧CSV出力API\n\n一覧と同じ検索条件を反映した全件（上限10,000件・約定日時昇順）を\nUTF-8 BOM付きCSVでダウンロードする（Excel対応）。",
         "operationId": "export_executions_csv_endpoint_executions_export_csv_get",
         "parameters": [
-          {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード",
-              "title": "Branch Code"
-            },
-            "description": "部店コード"
-          },
           {
             "name": "account_no",
             "in": "query",
@@ -14978,6 +15197,60 @@
               "title": "End Date"
             },
             "description": "約定日 終了（YYYYMMDD または YYYY-MM-DD）"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -15196,7 +15469,7 @@
           "MasterPermissions"
         ],
         "summary": "Update Role Permission Endpoint",
-        "description": "権限マスタ更新（**管理責任者（supervisor）のみ**。モックと同じルール）\n\n変更が無ければ履歴を残さず現在値を返す。`更新日時` 指定で楽観ロック。",
+        "description": "権限マスタ更新（**管理責任者（supervisor）のみ**。モックと同じルール）\n\n変更が無ければ履歴を残さず現在値を返す。`更新日時` 指定で楽観ロック。\n`全店参照権限` は未指定なら現在値を維持する。",
         "operationId": "update_role_permission_endpoint_masters_permissions__role_code__put",
         "parameters": [
           {
@@ -15523,24 +15796,6 @@
         "operationId": "search_holdings_endpoint_holdings_get",
         "parameters": [
           {
-            "name": "branch_code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "部店コード完全一致フィルタ",
-              "title": "Branch Code"
-            },
-            "description": "部店コード完全一致フィルタ"
-          },
-          {
             "name": "account_no",
             "in": "query",
             "required": false,
@@ -15674,6 +15929,60 @@
               "title": "Offset"
             },
             "description": "取得開始位置"
+          },
+          {
+            "name": "branch_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
+              "title": "Branch Code"
+            },
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -15811,7 +16120,7 @@
           "MizuhoIntegration"
         ],
         "summary": "Export Mizuho Order Sheet Endpoint",
-        "description": "みずほオーダーシート (Excel .xlsx) ダウンロード API\n\n- BUY用ブック または SELL用ブック を単体Excelファイルとして出力\n- ヘッダー: A1=本日日付(yyyy/mm/dd(ddd)書式), C2=\"BUY\"または\"SELL\"\n- 明細: A=B-1/S-1連番, B=Ticker, C=銘柄名, D=数量, E=指値単価, F=\"当日中\", G=銘柄コード, H=部店_受注番号\n- 書式: A5:H5 のセルスタイルを各データ行にコピー適用\n- ファイル名: オーダーシート_[yyyymmdd]_[BUY/SELL]_US.xlsx",
+        "description": "みずほオーダーシート (Excel .xlsx) ダウンロード API\n\n- **みずほ注文締めが完了している基準日のみ出力可能**（未締め・締め解除中は 400）。\n  締め前に出力すると、その後に受け付けた注文がシートに載らないため\n- **副作用**: シートに載せた未出力（`000`）のみずほ注文を `003`（発注済）へ進め、\n  `d_注文イベント` に `MIZUHO_EXPORTED` を記録する。以降その注文は取消・訂正できない。\n  再ダウンロードは `003` も含めて同じ内容を返す（状態は変えない）\n- Dream 未登録（受注番号なし）の注文はシートに載せられないため除外し、件数を\n  `X-Skipped-Unregistered` ヘッダで返す（`X-Exported-Count`: 載せた件数、\n  `X-Newly-Exported-Count`: 今回 `003` へ進めた件数）\n- BUY用ブック または SELL用ブック を単体Excelファイルとして出力\n- ヘッダー: A1=本日日付(yyyy/mm/dd(ddd)書式), C2=\"BUY\"または\"SELL\"\n- 明細: A=B-1/S-1連番, B=Ticker, C=銘柄名, D=数量, E=指値単価, F=\"当日中\", G=銘柄コード, H=部店_受注番号\n- 書式: A5:H5 のセルスタイルを各データ行にコピー適用\n- ファイル名: オーダーシート_[yyyymmdd]_[BUY/SELL]_US.xlsx",
         "operationId": "export_mizuho_order_sheet_endpoint_mizuho_export_orders_get",
         "parameters": [
           {
@@ -17105,10 +17414,46 @@
                   "type": "null"
                 }
               ],
-              "description": "部店コード",
+              "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）",
               "title": "Branch Code"
             },
-            "description": "部店コード"
+            "description": "部店コード（完全一致）。全店参照権限が無いロールは自部店のみ指定可能で、未指定時は自部店へ自動的に限定される（他店を指定すると403）"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
           }
         ],
         "responses": {
@@ -18053,6 +18398,12 @@
             "type": "integer",
             "title": "残高",
             "description": "現在数量（保有残高）"
+          },
+          "売却不可区分": {
+            "type": "integer",
+            "title": "売却不可区分",
+            "description": "1=この明細は売却不可（売注文を受け付けない） / 0=売却可",
+            "default": 0
           },
           "扱者コード": {
             "anyOf": [
@@ -25618,6 +25969,12 @@
             "title": "評価損益率",
             "description": "評価損益率 = (取得金額 / 評価額_JPY) - 1 (%表記)"
           },
+          "売却不可区分": {
+            "type": "integer",
+            "title": "売却不可区分",
+            "description": "1=この明細は売却不可（画面の売ボタンを無効化する） / 0=売却可",
+            "default": 0
+          },
           "CA": {
             "anyOf": [
               {
@@ -27522,6 +27879,18 @@
             ],
             "title": "出来有無"
           },
+          "集計対象": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "集計対象",
+            "description": "件数カードの件数・注文数量合計に数える行か。取消済（032/034）・発注失敗（101/103）・訂正待ち（040/141）は false。取消された脚の数量は 約定分（PARTIAL_FILL）と訂正後の注文に引き継がれるため、除いても欠落しない"
+          },
           "約定代金": {
             "anyOf": [
               {
@@ -27643,7 +28012,8 @@
         "properties": {
           "件数": {
             "type": "integer",
-            "title": "件数"
+            "title": "件数",
+            "description": "集計対象（取消済・発注失敗・訂正待ちを除く）の件数"
           },
           "売件数": {
             "type": "integer",
@@ -27655,11 +28025,19 @@
           },
           "注文数量合計": {
             "type": "integer",
-            "title": "注文数量合計"
+            "title": "注文数量合計",
+            "description": "集計対象の注文数量合計。取消された脚は約定分と訂正後の注文に引き継がれているため二重にならない"
+          },
+          "集計対象外件数": {
+            "type": "integer",
+            "title": "集計対象外件数",
+            "description": "検索結果のうち集計に数えなかった行数（取消済・発注失敗・訂正待ち）",
+            "default": 0
           },
           "出来数量合計": {
             "type": "integer",
-            "title": "出来数量合計"
+            "title": "出来数量合計",
+            "description": "全行の出来数量合計（d_約定 起点）"
           },
           "約定代金合計_USD": {
             "type": "number",
@@ -27920,13 +28298,19 @@
             "type": "boolean",
             "title": "Operation",
             "description": "運用管理権限（発注停止・お知らせ・締め・バッチ実行）"
+          },
+          "branch_all": {
+            "type": "boolean",
+            "title": "Branch All",
+            "description": "全店参照権限（false の場合、照会は自部店のデータのみに限定される）"
           }
         },
         "type": "object",
         "required": [
           "order",
           "master",
-          "operation"
+          "operation",
+          "branch_all"
         ],
         "title": "PermissionFlags",
         "description": "権限フラグ（英語キー。API の権限指定・/auth/me の出し分けに使う）"
@@ -28099,6 +28483,11 @@
             "type": "integer",
             "title": "運用管理権限"
           },
+          "全店参照権限": {
+            "type": "integer",
+            "title": "全店参照権限",
+            "default": 0
+          },
           "権限": {
             "$ref": "#/components/schemas/PermissionFlags"
           },
@@ -28180,6 +28569,20 @@
             "minimum": 0.0,
             "title": "運用管理権限"
           },
+          "全店参照権限": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "全店参照権限",
+            "description": "未指定時は現在値を維持（既存クライアントとの互換のため任意）"
+          },
           "説明": {
             "anyOf": [
               {
@@ -28254,6 +28657,35 @@
           "500"
         ],
         "title": "SecuritiesDeliveryEnum"
+      },
+      "SellProhibitedUpdateRequest": {
+        "properties": {
+          "売却不可区分": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "売却不可区分",
+            "description": "1=売却不可（売注文を受け付けない） / 0=売却可"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "変更前の更新日時（楽観的ロック用）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "売却不可区分"
+        ],
+        "title": "SellProhibitedUpdateRequest",
+        "description": "売却不可区分の更新リクエスト（残高は変更しない）"
       },
       "SettlementCurrencyEnum": {
         "type": "string",

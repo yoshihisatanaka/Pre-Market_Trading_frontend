@@ -1808,6 +1808,125 @@
         }
       }
     },
+    "/orders/{order_id}/amend": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Amend Order Endpoint",
+        "description": "注文訂正API（訂正＝原注文の取消＋訂正内容での新規発注）\n\n- 変更できるのは **数量・指値単価・指成区分・発注範囲** の4項目。数量は総数量で指定\n- `000` かつ Dream 未登録の注文は **その場で更新**（`IN_PLACE`）\n- それ以外（`000` Dream先行登録済・`003`・`010`）は **訂正注文（`040` 訂正待ち）を作成し原注文を取消依頼**（`CANCEL_REPLACE`）。\n  原注文の取消完了（IB確認・Dream登録済なら Dream取消完了）で訂正注文が `000` へ昇格し、通常のバッチが発注する\n- 一部出来分は既存の取消パイプラインが `PARTIAL_FILL` 子注文として Dream に付ける。訂正注文の発注数量は `総数量 − 出来数量`\n- 取消失敗・数量不一致では訂正注文が `141`（訂正中断）で止まり、取消再依頼が通れば自動再開。取り下げは `POST /orders/{訂正注文ID}/cancel`\n- 全部出来 `011`・不出来 `020`・取消済・処理中・失敗注文・訂正注文自身は訂正不可（400）",
+        "operationId": "amend_order_endpoint_orders__order_id__amend_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmendOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmendOrderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "訂正不可の状態・変更項目なし・検証エラー・発注停止中",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "注文が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/orders/{order_id}/dream-correct": {
       "put": {
         "tags": [
@@ -17311,6 +17430,134 @@
         "title": "ActivityLogTargetListResponse",
         "description": "操作ログ対象種別一覧レスポンス（画面のプルダウン用）"
       },
+      "AmendOrderRequest": {
+        "properties": {
+          "数量": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "数量",
+            "description": "訂正後の総数量（一部出来分を含む総数。IBへは 総数量−出来数量 で発注）"
+          },
+          "指値単価": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "指値単価",
+            "description": "訂正後の指値単価 (USD)。成行(MO)へ変更する場合は不要"
+          },
+          "指成区分": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(LO|MO)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "指成区分",
+            "description": "LO: 指値, MO: 成行"
+          },
+          "発注範囲": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^0[1-6]$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "発注範囲",
+            "description": "01〜06"
+          },
+          "理由": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "理由",
+            "description": "訂正理由（イベント履歴に記録）"
+          }
+        },
+        "type": "object",
+        "title": "AmendOrderRequest",
+        "description": "注文訂正リクエスト（変更できるのは数量・指値単価・指成区分・発注範囲の4項目）"
+      },
+      "AmendOrderResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "description": "IN_PLACE: 未発注注文をその場で更新 / CANCEL_REPLACE: 取消＋新規（訂正注文を作成）"
+          },
+          "original_order_id": {
+            "type": "integer",
+            "title": "Original Order Id"
+          },
+          "amendment_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amendment Order Id",
+            "description": "訂正注文ID（CANCEL_REPLACE 時）"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "IN_PLACE: 原注文の処理状況 / CANCEL_REPLACE: 訂正注文の処理状況（040 訂正待ち）"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "mode",
+          "original_order_id",
+          "status",
+          "message"
+        ],
+        "title": "AmendOrderResponse",
+        "description": "注文訂正レスポンス"
+      },
       "AnnouncementActionResponse": {
         "properties": {
           "success": {
@@ -26660,10 +26907,21 @@
             "$ref": "#/components/schemas/ErrorCountCategory",
             "description": "Dream連携のエラー件数（処理状況 101 / 133、Dream登録状況 9、Dream取消状況 9）"
           },
+          "訂正": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorCountCategory"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "注文訂正の中断（処理状況 141）"
+          },
           "合計件数": {
             "type": "integer",
             "title": "合計件数",
-            "description": "IB・Dreamいずれかでエラーとなっている注文の実数"
+            "description": "IB・Dream・訂正のいずれかでエラーとなっている注文の実数"
           },
           "対象注文件数": {
             "type": "integer",

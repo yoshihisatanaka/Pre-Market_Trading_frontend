@@ -160,7 +160,11 @@
       "mcp__playwright__browser_select_option",
       "mcp__playwright__browser_drag",
       "mcp__playwright__browser_drop",
-      "mcp__playwright__browser_evaluate"
+      "mcp__playwright__browser_evaluate",
+      "Bash(bash scripts/worktree.sh add fix/market-holidays-id-key)",
+      "Read(//c/Users/0036/worktrees/Pre-Market_Trading_frontend-fix-market-holidays-id-key/**)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ],
     "deny": [
       "Read(**/.env)",
@@ -218,7 +222,8 @@
       "PowerShell(docker compose down --volumes*)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\0036\\worktrees"
+      "C:\\Users\\0036\\worktrees",
+      "C:\\Users\\0036\\worktrees\\Pre-Market_Trading_frontend-fix-market-holidays-id-key"
     ]
   },
   "hooks": {

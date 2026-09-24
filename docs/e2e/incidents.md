@@ -6,6 +6,7 @@
 - 公開モック: `https://uspreorder-vmbhej3k.manus.space/operations/incidents`
 - 単体側のシナリオ: [views-incident-management-view.md](../unit/views-incident-management-view.md) /
   [components-incidents-incident-control-dialog.md](../unit/components-incidents-incident-control-dialog.md)
+- 実 API 側のシナリオ: [incidents-real-api.md](incidents-real-api.md)（`IR`・スモーク 2 本）
 
 障害発生時に、全体（`ALL`）または注文ルート別に発注を停止・再開する画面。
 API は `/operations/order-suspensions` 配下の 4 本（照会・履歴・停止・再開。`docs/api/openapi.json`）。

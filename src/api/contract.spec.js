@@ -29,6 +29,7 @@ import {
   noneBannerResponse,
   noticeBannerResponse,
 } from '../mocks/fixtures/banner'
+import { suspensionHistories, suspensionTargets } from '../mocks/fixtures/incidents'
 import { fetchOrders } from './orders'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
@@ -69,6 +70,12 @@ import {
   updateAnnouncement,
 } from './announcements'
 import { fetchBanner } from './banner'
+import {
+  fetchSuspensionHistories,
+  fetchSuspensionStatus,
+  resumeOrders,
+  suspendOrders,
+} from './incidents'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -306,6 +313,8 @@ const FIXTURES = [
     schema: 'BannerResponse',
     rows: [incidentBannerResponse, noticeBannerResponse, noneBannerResponse],
   },
+  { name: 'suspensionTargets', schema: 'SuspensionTargetItem', rows: suspensionTargets },
+  { name: 'suspensionHistories', schema: 'SuspensionHistoryItem', rows: suspensionHistories },
 ]
 
 function describeSchema(schema) {
@@ -551,6 +560,13 @@ const PROBES = [
   },
   { name: 'fetchAnnouncementHistory', run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }) },
   { name: 'fetchBanner', run: () => fetchBanner() },
+  { name: 'fetchSuspensionStatus', run: () => fetchSuspensionStatus() },
+  { name: 'fetchSuspensionHistories', run: () => fetchSuspensionHistories() },
+  {
+    name: 'suspendOrders',
+    run: () => suspendOrders({ target: '1', reason: 'x', updatedAt: null }),
+  },
+  { name: 'resumeOrders', run: () => resumeOrders({ target: '1', updatedAt: null }) },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

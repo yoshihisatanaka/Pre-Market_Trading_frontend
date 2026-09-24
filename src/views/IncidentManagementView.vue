@@ -76,10 +76,19 @@ function targetRowClass(row) {
 const dialog = ref(null)
 const noticeMessage = ref('')
 
+/*
+ * 全体停止中はルート行の操作を塞ぐ（誤操作防止）。全体停止はルート単位の停止に優先するので、
+ * その間にルートを止めても再開しても発注の実態は変わらない。塞ぐかどうかの仕様は
+ * バックエンドに問い合わせ中（docs/api/requests.md）で、サーバが受け付けるかは見ていない。
+ */
+function isActionLocked(row) {
+  return Boolean(status.value?.allSuspended) && row.target !== 'ALL'
+}
+
 function openDialog(row) {
   noticeMessage.value = ''
   store.clearSaveError()
-  dialog.value = { mode: 'suspend', target: row }
+  dialog.value = { mode: row.suspended ? 'resume' : 'suspend', target: row }
 }
 
 function closeDialog() {
@@ -90,8 +99,11 @@ function closeDialog() {
 }
 
 async function confirmControl({ reason }) {
-  const { target } = dialog.value
-  const result = await store.suspend({ target: target.target, reason })
+  const { mode, target } = dialog.value
+  const result =
+    mode === 'resume'
+      ? await store.resume({ target: target.target })
+      : await store.suspend({ target: target.target, reason })
   // 失敗時はダイアログを開いたまま、理由を saveError で出す（入力した理由は残る）
   if (!result) return
 
@@ -161,6 +173,15 @@ store.load()
 
         <p class="incident__intro">{{ INTRO_TEXT }}</p>
 
+        <BaseAlert
+          v-if="status.allSuspended"
+          variant="warning"
+          class="incident__locked"
+          data-testid="incidents-locked"
+        >
+          全体停止中はルート別に停止・再開できません。全体を再開してから操作してください。
+        </BaseAlert>
+
         <DataTable
           flat
           data-testid="incidents-targets"
@@ -190,13 +211,13 @@ store.load()
           </template>
           <template #cell-action="{ row }">
             <BaseButton
-              v-if="!row.suspended"
-              variant="danger"
+              :variant="row.suspended ? 'primary' : 'danger'"
               size="sm"
               :data-testid="`incidents-target-${row.target}-action`"
+              :disabled="isActionLocked(row)"
               @click="openDialog(row)"
             >
-              停止する
+              {{ row.suspended ? '再開する' : '停止する' }}
             </BaseButton>
           </template>
         </DataTable>
@@ -312,6 +333,11 @@ store.load()
   border-bottom: 1px solid var(--color-border);
   font-size: var(--font-size-sm);
   line-height: 1.65;
+}
+
+/* 表の上の注意。カードは flush なので本文余白を自前で持つ */
+.incident__locked {
+  margin: var(--space-3) var(--space-4) 0;
 }
 
 /* 全体の行は表の先頭で太字にする。全体停止はルート単位の停止に優先するため */

@@ -1,6 +1,9 @@
 <script setup>
 /**
- * 発注停止の確認ダイアログ。停止対象 1 件について、停止理由を入力させて確定を emit する。
+ * 発注停止・再開の確認ダイアログ。停止対象 1 件について確定を emit する。
+ *   suspend … 停止理由を入力させる（必須・200 字）
+ *   resume  … 入力欄を出さず、停止時の理由・日時・停止者を読み取り専用で見せる
+ *             （ResumeRequest に理由は無い。停止理由は再開後も保持されるので必ず値がある）
  *
  * 開閉は呼び出し側が open で持つ（ConfirmDeleteDialog と同じ作法）。
  * この部品が持つ状態は**入力中の停止理由と、その未入力エラーだけ**。開くたびに空へ戻す。
@@ -15,7 +18,7 @@
  * 失敗してもダイアログは開いたまま（入力した理由を失わない）。
  *
  * 出す data-testid:
- *   incidents-control-dialog / -control-reason / -control-reason-field
+ *   incidents-control-dialog / -control-reason / -control-reason-field / -control-summary
  *   / -control-warning / -control-error / -control-cancel / -control-submit
  */
 import { computed, ref, watch } from 'vue'
@@ -24,6 +27,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import FormField from '@/components/ui/FormField.vue'
+import { formatDateTime } from '@/utils/format'
 
 const props = defineProps({
   open: {
@@ -34,7 +38,7 @@ const props = defineProps({
   mode: {
     type: String,
     default: null,
-    validator: (value) => value === null || ['suspend'].includes(value),
+    validator: (value) => value === null || ['suspend', 'resume'].includes(value),
   },
   /** 操作する停止対象（store の targets の 1 行）。閉じているあいだは null になりうる */
   target: {
@@ -58,6 +62,12 @@ const emit = defineEmits(['close', 'confirm'])
 /** SuspendRequest.停止理由 の maxLength */
 const REASON_MAX_LENGTH = 200
 
+/*
+ * 再開の説明。テンプレートに直接書くと、日本語の途中で改行した位置が半角スペースとして描画される
+ * （prettier の折り返しでも同じ）。1 つの文字列にしておけば表示は変わらない
+ */
+const RESUME_NOTE = '停止中に保留された発注待ちの注文は、通常のバッチ周期で順次発注されます。'
+
 const reason = ref('')
 const reasonError = ref('')
 
@@ -73,9 +83,21 @@ watch(
 
 const targetName = computed(() => props.target?.targetName ?? '')
 const isAll = computed(() => props.target?.target === 'ALL')
+const isResume = computed(() => props.mode === 'resume')
 
-const title = computed(() => '発注停止の確認')
-const submitLabel = computed(() => (props.pending ? '停止中…' : '停止する'))
+const title = computed(() => (isResume.value ? '発注再開の確認' : '発注停止の確認'))
+
+const submitLabel = computed(() => {
+  if (isResume.value) return props.pending ? '再開中…' : '再開する'
+  return props.pending ? '停止中…' : '停止する'
+})
+
+// 再開のときに見せる、停止時の記録
+const suspendedSummary = computed(() => [
+  { label: '停止理由', value: props.target?.reason ?? '—' },
+  { label: '停止日時', value: formatDateTime(props.target?.suspendedAt) },
+  { label: '停止者', value: props.target?.suspendedBy ?? '—' },
+])
 
 function onClose() {
   if (props.pending) return
@@ -84,6 +106,12 @@ function onClose() {
 
 function onSubmit() {
   if (props.pending) return
+
+  // 再開は理由を取らない
+  if (isResume.value) {
+    emit('confirm', { reason: null })
+    return
+  }
 
   // 押す前に止められるものは画面で止める（サーバも 422 で弾く）
   reasonError.value = reason.value.trim() ? '' : '停止理由を入力してください。'
@@ -100,13 +128,27 @@ function onSubmit() {
         {{ error.message }}
       </BaseAlert>
 
-      <p>「{{ targetName }}」の発注を停止します。停止理由を入力してください。</p>
+      <template v-if="isResume">
+        <p>「{{ targetName }}」の発注を再開します。{{ RESUME_NOTE }}</p>
 
-      <BaseAlert v-if="isAll" variant="warning" data-testid="incidents-control-warning">
-        全ルートの発注が止まり、注文の新規受付・取消も停止します。
-      </BaseAlert>
+        <dl class="incident-control-dialog__summary" data-testid="incidents-control-summary">
+          <template v-for="item in suspendedSummary" :key="item.label">
+            <dt>{{ item.label }}</dt>
+            <dd>{{ item.value }}</dd>
+          </template>
+        </dl>
+      </template>
+
+      <template v-else>
+        <p>「{{ targetName }}」の発注を停止します。停止理由を入力してください。</p>
+
+        <BaseAlert v-if="isAll" variant="warning" data-testid="incidents-control-warning">
+          全ルートの発注が止まり、注文の新規受付・取消も停止します。
+        </BaseAlert>
+      </template>
 
       <FormField
+        v-if="!isResume"
         v-slot="{ field }"
         label="停止理由"
         required
@@ -135,7 +177,7 @@ function onSubmit() {
         キャンセル
       </BaseButton>
       <BaseButton
-        variant="danger"
+        :variant="isResume ? 'primary' : 'danger'"
         data-testid="incidents-control-submit"
         :disabled="pending"
         :loading="pending"
@@ -152,5 +194,34 @@ function onSubmit() {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+/* 停止時の記録。左にラベル、右に値の 2 列の表として読ませる（BalanceAdjustDialog の確認と同じ形） */
+.incident-control-dialog__summary {
+  display: grid;
+  grid-template-columns: 6em 1fr;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.incident-control-dialog__summary dt,
+.incident-control-dialog__summary dd {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+/* 1 行目だけは上の枠線と重ならないようにする */
+.incident-control-dialog__summary dt:first-of-type,
+.incident-control-dialog__summary dt:first-of-type + dd {
+  border-top: none;
+}
+
+.incident-control-dialog__summary dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  background-color: var(--color-surface-muted);
 }
 </style>

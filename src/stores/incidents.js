@@ -1,6 +1,11 @@
 import { computed } from 'vue'
 import { defineStore } from 'pinia'
-import { fetchSuspensionHistories, fetchSuspensionStatus, suspendOrders } from '@/api/incidents'
+import {
+  fetchSuspensionHistories,
+  fetchSuspensionStatus,
+  resumeOrders,
+  suspendOrders,
+} from '@/api/incidents'
 import { useAsync } from '@/composables/useAsync'
 
 /**
@@ -59,6 +64,14 @@ export const useIncidentsStore = defineStore('incidents', () => {
     return executeControl(suspendOrders, { target, reason, updatedAt: updatedAtOf(target) })
   }
 
+  /**
+   * 発注を再開する。戻り値は suspend と同じ。
+   * @param {{ target: string }} params
+   */
+  function resume({ target }) {
+    return executeControl(resumeOrders, { target, updatedAt: updatedAtOf(target) })
+  }
+
   function clearSaveError() {
     saveError.value = null
   }
@@ -79,6 +92,7 @@ export const useIncidentsStore = defineStore('incidents', () => {
     saveError,
     load,
     suspend,
+    resume,
     clearSaveError,
   }
 })

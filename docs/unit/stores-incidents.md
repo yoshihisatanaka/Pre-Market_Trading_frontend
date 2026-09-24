@@ -28,3 +28,5 @@
 | INS-12 | 停止の実行中 | `suspend()` の解決前に参照する | `saving` が true、`loading` は false のまま（表を消さない） | 未着手 |
 | INS-13 | INS-11 の状態 | `clearSaveError()` を呼ぶ | `saveError` が null に戻る | 未着手 |
 | INS-14 | `load()` 前（`targets` が空） | `suspend({ target: '1', … })` を呼ぶ | 送信本文の `更新日時` が null になる（合札が無ければ照合させない） | 未着手 |
+| INS-15 | IB を停止した後 | `resume({ target: '1' })` を呼ぶ | 操作の応答が返る。取り直しにより IB 行が通常に戻り、`histories` が 1 件増える | 未着手 |
+| INS-16 | 再開 API が 400 を返す | `resume()` を呼ぶ | `null` が返り、`saveError` が立つ。`status` は元のまま残る | 未着手 |

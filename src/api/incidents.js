@@ -61,6 +61,20 @@ export async function suspendOrders({ target, reason, updatedAt }) {
   return toSuspensionAction(data)
 }
 
+/**
+ * 発注を再開する。ResumeRequest に停止理由は無い（直前の停止理由はサーバが保持する）。
+ * 実行者 を送らない理由と応答の中身は suspendOrders と同じ。
+ *
+ * @param {{ target: string, updatedAt: string|null }} params
+ */
+export async function resumeOrders({ target, updatedAt }) {
+  const { data } = await apiClient.post(`${SUSPENSIONS_PATH}/resume`, {
+    停止対象: target,
+    更新日時: updatedAt ?? null,
+  })
+  return toSuspensionAction(data)
+}
+
 // バックエンドのキーは日本語。ここでだけ生の形を知る
 function toSuspensionAction(raw) {
   return {

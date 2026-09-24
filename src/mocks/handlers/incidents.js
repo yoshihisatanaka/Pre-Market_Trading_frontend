@@ -122,6 +122,40 @@ export const incidentHandlers = [
       message: `${row['停止対象名']}の発注を停止しました。`,
     })
   }),
+
+  /*
+   * 発注再開。ResumeRequest に 停止理由 は無い（停止理由は再開後も直前の値を保持する）。
+   *   400 … 停止対象が不正 / 停止中でない
+   *   409 … 楽観的ロックの競合
+   */
+  http.post('*/api/operations/order-suspensions/resume', async ({ request }) => {
+    const body = await request.json().catch(() => null)
+
+    const row = findTarget(body?.['停止対象'])
+    if (!row) return detailError(400, INVALID_TARGET_DETAIL)
+    if (!row['発注停止中']) return detailError(400, `${row['停止対象名']}は停止中ではありません。`)
+    if (!isSameTimestamp(body?.['更新日時'] ?? null, row['更新日時'])) {
+      return detailError(409, CONFLICT_DETAIL)
+    }
+
+    const before = snapshot(row)
+    const now = nowIsoTimestamp()
+    Object.assign(row, {
+      発注停止フラグ: 0,
+      発注停止中: false,
+      再開日時: now,
+      再開者: MOCK_OPERATOR,
+      更新日時: now,
+      更新者: MOCK_OPERATOR,
+    })
+    recordHistory(row, 'RESUME', before, now)
+
+    return HttpResponse.json({
+      success: true,
+      target: row,
+      message: `${row['停止対象名']}の発注を再開しました。`,
+    })
+  }),
 ]
 
 /* ここから停止・再開のモック用ヘルパ */

@@ -25,3 +25,5 @@
 | INA-11 | 既定モック | `suspendOrders()` を呼ぶ | `success` / `target`（camelCase の停止対象 1 件）/ `message` が返る | 未着手 |
 | INA-12 | 停止 API が 409 を返す | `suspendOrders()` を呼ぶ | `ApiError` が投げられ、`status` が 409、`message` がサーバの `detail` になる | 未着手 |
 | INA-13 | `updatedAt` を省略 | `suspendOrders()` を呼ぶ | 本文の `更新日時` が null になる | 未着手 |
+| INA-14 | IB が停止中 | `resumeOrders({ target: '1', updatedAt: '…' })` を呼ぶ | `/operations/order-suspensions/resume` に POST が飛び、本文が `{ 停止対象, 更新日時 }` になる。`停止理由` と `実行者` は送らない | 未着手 |
+| INA-15 | 再開 API が 400 を返す | `resumeOrders()` を呼ぶ | `ApiError` が投げられ、`message` がサーバの `detail` になる | 未着手 |

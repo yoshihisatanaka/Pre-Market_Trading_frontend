@@ -10,6 +10,10 @@ import { sliceCriteriaSetting } from '../mocks/fixtures/sliceCriteria'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
 import { rolePermissions } from '../mocks/fixtures/permissions'
 import {
+  balanceAdjustments,
+  canceledBalanceAdjustments,
+} from '../mocks/fixtures/balanceAdjustments'
+import {
   closedMarketStatusResponse,
   marketStatusResponse,
   shortenedMarketStatusResponse,
@@ -42,6 +46,11 @@ import { fetchSliceCriteria, updateSliceCriteria } from './sliceCriteria'
 import { fetchActivityLogs } from './activityLogs'
 import { fetchPermissions } from './permissions'
 import { fetchMarketStatus } from './marketStatus'
+import {
+  createBalanceAdjustment,
+  fetchBalanceAdjustments,
+  updateBalanceAdjustment,
+} from './balanceAdjustments'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -172,6 +181,27 @@ const KNOWN_GAPS = [
       'start_date / end_date / operator / operation / target_types / target_key / sort だけ',
     request: '#1',
   },
+  /*
+   * 残高マスタの 2 つは画面モックにだけある項目で、src/api/balanceAdjustments.js の冒頭コメントの
+   * 1 番（銘柄名の検索）と 4 番（売却不可区分）。MSW だけが解釈し、実 API は黙って無視する。
+   */
+  {
+    kind: 'fixture',
+    fixture: 'balanceAdjustments',
+    keys: ['売却不可区分'],
+    reason:
+      '一覧の売却不可バッジと「売却を停止 / 売却停止を解除」の元になる項目が BalanceAdjustmentItem に無い。' +
+      '更新側も BalanceAdjustmentUpdateRequest に無く、残高 が required なので売却可否だけの更新は 422 になる見込み',
+    request: '#13',
+  },
+  {
+    kind: 'query',
+    method: 'GET',
+    template: '/masters/balance-adjustments',
+    names: ['symbol_name'],
+    reason: '画面モックの「銘柄名」検索。実 API は無視するので絞り込みが黙って効かない',
+    request: '#13',
+  },
 ]
 
 function knownQueryGap(op, name) {
@@ -227,6 +257,11 @@ const FIXTURES = [
   { name: 'sliceCriteria', schema: 'SliceSettingResponse', rows: [sliceCriteriaSetting] },
   { name: 'activityLogs', schema: 'ActivityLogItem', rows: activityLogs },
   { name: 'permissions', schema: 'RolePermissionItem', rows: rolePermissions },
+  {
+    name: 'balanceAdjustments',
+    schema: 'BalanceAdjustmentItem',
+    rows: [...balanceAdjustments, ...canceledBalanceAdjustments],
+  },
   /*
    * 一覧の *Item ではなくレスポンス全体が対象。sessions[] は items.$ref 経由で
    * MarketSessionItem として型検査される（typeProblems の array → items）。
@@ -445,6 +480,32 @@ const PROBES = [
   },
   { name: 'fetchPermissions', run: () => fetchPermissions() },
   { name: 'fetchMarketStatus', run: () => fetchMarketStatus() },
+  {
+    name: 'fetchBalanceAdjustments',
+    run: () =>
+      fetchBalanceAdjustments({
+        branchCode: '123',
+        accountNumber: '1230001',
+        customerName: 'x',
+        ticker: 'AAPL',
+        symbolName: 'x',
+      }),
+  },
+  {
+    name: 'createBalanceAdjustment',
+    run: () =>
+      createBalanceAdjustment({
+        branchCode: '123',
+        accountNumber: '1230001',
+        symbolCode: 'AAPL',
+        specificDeposit: '1',
+        balance: 1,
+      }),
+  },
+  {
+    name: 'updateBalanceAdjustment',
+    run: () => updateBalanceAdjustment({ id: '1', balance: 1, updatedAt: '' }),
+  },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

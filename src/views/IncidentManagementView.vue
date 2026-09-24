@@ -1,55 +1,59 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import DataTable from '@/components/ui/DataTable.vue'
-import IncidentControlDialog from '@/components/incidents/IncidentControlDialog.vue'
 import { useIncidentsStore } from '@/stores/incidents'
 import { formatDateTime } from '@/utils/format'
+import { summarizeSuspension } from '@/utils/suspensionState'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useIncidentsStore()
-const { status, histories, loading, error, isEmpty, hasHistories } = storeToRefs(store)
+const { status, targets, histories, loading, error, isEmpty, hasHistories } = storeToRefs(store)
 
-/* 列はモックの見出しどおり（変更日時 / 変更前 / 変更後 / 障害対応の内容 / 更新者） */
-const historyColumns = [
-  { key: 'changedAt', label: '変更日時' },
-  { key: 'stateBeforeName', label: '変更前' },
-  { key: 'stateAfterName', label: '変更後' },
-  { key: 'description', label: '障害対応の内容' },
-  { key: 'updatedBy', label: '更新者' },
+/*
+ * 停止対象の表。行は サーバの targets の並び（ALL が先頭）のまま出す。
+ * 公開モックの「IB送信制御 / 注文入力制御」の 2 区画は採らない（仕様の停止対象と軸が違い、
+ * みずほ / VWAP / 自己取引 / OTC の停止が画面に出なくなるため）。
+ */
+const TARGET_COLUMNS = [
+  { key: 'targetName', label: '停止対象' },
+  { key: 'suspended', label: '状態' },
+  { key: 'reason', label: '停止理由' },
+  { key: 'suspendedAt', label: '停止日時・停止者' },
+  { key: 'resumedAt', label: '再開日時・再開者' },
+]
+
+const HISTORY_COLUMNS = [
+  { key: 'operatedAt', label: '操作日時' },
+  { key: 'targetName', label: '停止対象' },
+  { key: 'operationName', label: '操作区分' },
+  { key: 'reason', label: '停止理由' },
+  { key: 'operator', label: '操作者' },
 ]
 
 /*
- * 説明バナーの本文。テンプレートに直接書くと、日本語の途中で改行した位置が
+ * 操作区分の色分け。文言はサーバの 操作区分名 をそのまま出し、ここは色だけを決める
+ * （操作区分は description だけで enum 宣言が無いので、src/utils/apiEnums.js には載せられない）。
+ */
+const OPERATION_BADGE_VARIANTS = { SUSPEND: 'error', RESUME: 'success' }
+
+/*
+ * 説明文。テンプレートに直接書くと、日本語の途中で改行した位置が
  * そのまま半角スペースとして描画される（prettier の折り返しでも同じことが起きる）。
  * 1 つの文字列にしておけば、どこで折り返されても表示は変わらない。
  */
 const INTRO_TEXT =
-  'IB送信制御は注文入力を記録したままIBへの送信を止めるため、注文入力制御は新規の注文入力そのものを受け付けないための操作です。詳細な状態遷移は次段で実装します。'
+  '停止中は注文の新規受付と取消、IB発注・Dream連携のバッチが止まります。受付済みの発注待ち注文は保留され、再開後に通常のバッチ周期で順次発注されます。'
 
-/*
- * 運用状態の見た目。文言はサーバの 運用状態名 をそのまま出し、ここが決めるのは色だけ。
- * 判定にコード（運用状態）を使うのは、呼称が変わっても色が崩れないようにするため。
- * 通常運用（'0'）以外はすべて強調する。'1'（一部制御中）と '2'（停止中）で色を分けるかは
- * コード一覧がバックエンドで確定してから決める（src/api/incidents.js の確認事項 5）。
- */
-const isStopped = computed(() => Boolean(status.value) && status.value.operationState !== '0')
+const summary = computed(() => summarizeSuspension(status.value))
 
-/*
- * 確認ダイアログ。「開いているか」と「どちらの制御か」を 1 つの ref で持つ
- * （null なら閉じている）。制御の実行は未実装なので、閉じる以外に状態は動かない。
- */
-const dialogIntent = ref(null)
-
-function openDialog(intent) {
-  dialogIntent.value = intent
-}
-
-function closeDialog() {
-  dialogIntent.value = null
+// 全体の行だけを強調する（全体停止はルート単位の停止に優先するため）
+function targetRowClass(row) {
+  return { 'is-all': row.target === 'ALL', 'is-suspended': row.suspended }
 }
 
 // 初回読み込み。onMounted に置くと最初の描画で一瞬「取得できませんでした」が出る
@@ -71,11 +75,11 @@ store.load()
     </Teleport>
 
     <!-- 画面の説明。取得結果に依存しないので 4 状態のチェーンの外に置く -->
-    <p class="incident__lead">障害発生時のIB送信制御と注文入力制御を分けて管理します。</p>
+    <p class="incident__lead">障害発生時に、全体または注文ルート別に発注を停止・再開します。</p>
 
     <!--
       ローディング / エラー / 空 / データあり の 4 状態。
-      運用状態と履歴はストアが 1 回の取得にまとめているので、チェーンは 1 本で足りる。
+      停止状態と履歴はストアが 1 回の取得にまとめているので、チェーンは 1 本で足りる。
       履歴 0 件はこの「空」ではない（データあり側の内訳。下の hasHistories で出し分ける）。
     -->
     <p v-if="loading" data-testid="incidents-loading" class="incident__status is-loading">
@@ -88,63 +92,54 @@ store.load()
     </div>
 
     <p v-else-if="isEmpty" data-testid="incidents-empty" class="incident__status">
-      現在の運用状態を取得できませんでした。
+      現在の発注停止状態を取得できませんでした。
     </p>
 
     <template v-else>
-      <BaseCard title="障害時の運用制御">
+      <BaseCard title="発注停止の状態" flush>
         <template #header-actions>
-          <div class="incident__head-meta">
-            <span class="incident__head-note">障害時のみ使用します。</span>
-            <span :class="['incident__state', { 'is-stopped': isStopped }]">
-              <span class="incident__state-label">現在の運用状態</span>
-              <strong class="incident__state-value" data-testid="incidents-state">
-                {{ status.operationStateName }}
-              </strong>
-            </span>
-          </div>
+          <span :class="['incident__state', `is-${summary.tone}`]">
+            <span class="incident__state-label">現在の運用状態</span>
+            <strong class="incident__state-value" data-testid="incidents-state">
+              {{ summary.label }}
+            </strong>
+          </span>
         </template>
 
-        <p class="incident__intro">
-          <strong>制御対象を分けて判断します。</strong><br />
-          {{ INTRO_TEXT }}
-        </p>
+        <p class="incident__intro">{{ INTRO_TEXT }}</p>
 
-        <div class="incident__controls">
-          <section class="incident__control">
-            <h2 class="incident__control-title">IB送信制御</h2>
-            <p class="incident__control-note">
-              注文情報の入力・記録は継続し、IBへの送信だけを制御します。
-            </p>
-            <BaseButton
-              variant="secondary"
-              block
-              data-testid="incidents-control-ib-send"
-              @click="openDialog('ib-send')"
-            >
-              IB送信を制御
-            </BaseButton>
-          </section>
-
-          <section class="incident__control">
-            <h2 class="incident__control-title">注文入力制御</h2>
-            <p class="incident__control-note">
-              新規の注文入力を受け付けない状態へ切り替えるための制御です。
-            </p>
-            <BaseButton
-              variant="secondary"
-              block
-              data-testid="incidents-control-order-entry"
-              @click="openDialog('order-entry')"
-            >
-              注文入力を制御
-            </BaseButton>
-          </section>
-        </div>
+        <DataTable
+          flat
+          data-testid="incidents-targets"
+          :columns="TARGET_COLUMNS"
+          :rows="targets"
+          :row-class="targetRowClass"
+        >
+          <template #cell-suspended="{ value }">
+            <BaseBadge :variant="value ? 'error' : 'success'">
+              {{ value ? '停止中' : '通常' }}
+            </BaseBadge>
+          </template>
+          <template #cell-reason="{ value }">{{ value ?? '—' }}</template>
+          <template #cell-suspendedAt="{ row }">
+            <template v-if="row.suspendedAt">
+              {{ formatDateTime(row.suspendedAt) }}
+              <span class="incident__operator">{{ row.suspendedBy }}</span>
+            </template>
+            <template v-else>—</template>
+          </template>
+          <template #cell-resumedAt="{ row }">
+            <template v-if="row.resumedAt">
+              {{ formatDateTime(row.resumedAt) }}
+              <span class="incident__operator">{{ row.resumedBy }}</span>
+            </template>
+            <template v-else>—</template>
+          </template>
+        </DataTable>
       </BaseCard>
 
       <!-- 表を全幅で載せるときだけ flush。0 件の一行は本文余白の中に置きたいので付けない -->
-      <BaseCard title="障害対応履歴" :flush="hasHistories">
+      <BaseCard title="停止・再開の操作履歴" :flush="hasHistories">
         <template #header-actions>
           <span class="incident__head-note">新しい順</span>
         </template>
@@ -153,27 +148,23 @@ store.load()
           v-if="hasHistories"
           flat
           data-testid="incidents-history"
-          :columns="historyColumns"
+          :columns="HISTORY_COLUMNS"
           :rows="histories"
         >
-          <template #cell-changedAt="{ value }">{{ formatDateTime(value) }}</template>
+          <template #cell-operatedAt="{ value }">{{ formatDateTime(value) }}</template>
+          <template #cell-operationName="{ row }">
+            <BaseBadge :variant="OPERATION_BADGE_VARIANTS[row.operation] ?? 'gray'">
+              {{ row.operationName }}
+            </BaseBadge>
+          </template>
+          <template #cell-reason="{ value }">{{ value ?? '—' }}</template>
         </DataTable>
 
         <p v-else data-testid="incidents-history-empty" class="incident__history-empty">
-          現段階では制御ボタンの表示のみです。障害対応履歴は詳細な状態遷移の実装後に記録します。
+          発注停止・再開の操作履歴はありません。
         </p>
       </BaseCard>
     </template>
-
-    <!--
-      ダイアログはチェーンの外。BaseModal 自身が v-if="open" を持つので、
-      ここは open だけで制御する。
-    -->
-    <IncidentControlDialog
-      :open="dialogIntent !== null"
-      :intent="dialogIntent"
-      @close="closeDialog"
-    />
   </section>
 </template>
 
@@ -187,13 +178,6 @@ store.load()
 .incident__lead {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
-}
-
-/* カードヘッダ右。注意書きと現在の運用状態を並べる */
-.incident__head-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
 }
 
 .incident__head-note {
@@ -224,67 +208,43 @@ store.load()
   font-weight: 600;
 }
 
-/* 通常運用以外は危険色で強調する（モックの .operation-state-summary strong.stop 相当） */
-.incident__state.is-stopped {
+/* 一部停止中は注意色、全体停止中は危険色で強調する（モックの .operation-state-summary strong.stop 相当） */
+.incident__state.is-warning {
+  background-color: var(--color-warning-bg);
+}
+
+.incident__state.is-warning .incident__state-value {
+  color: var(--color-warning);
+}
+
+.incident__state.is-danger {
   background-color: var(--color-danger-bg);
   border-color: var(--color-danger-border);
 }
 
-.incident__state.is-stopped .incident__state-value {
+.incident__state.is-danger .incident__state-value {
   color: var(--color-danger-text);
 }
 
-/* モックの .incident-intro 相当。淡い面の説明バナー */
+/* モックの .incident-intro 相当。表の上に敷く淡い面の説明 */
 .incident__intro {
   padding: var(--space-3) var(--space-4);
   color: var(--color-text-muted);
   background-color: var(--color-surface-muted);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-bottom: 1px solid var(--color-border);
   font-size: var(--font-size-sm);
   line-height: 1.65;
 }
 
-.incident__intro strong {
-  color: var(--color-text-heading);
+/* 全体の行は表の先頭で太字にする。全体停止はルート単位の停止に優先するため */
+.incident :deep(tr.is-all td:first-child) {
   font-weight: 600;
 }
 
-.incident__controls {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-  margin-top: var(--space-4);
-}
-
-@media (max-width: 900px) {
-  .incident__controls {
-    grid-template-columns: 1fr;
-  }
-}
-
-.incident__control {
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-4);
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-}
-
-.incident__control-title {
-  color: var(--color-text-heading);
-  font-size: var(--font-size-md);
-  font-weight: 600;
-}
-
-/* ボタンを下端でそろえたいので、説明文で残りの高さを埋める */
-.incident__control-note {
-  flex: 1;
-  margin: var(--space-1) 0 var(--space-3);
+.incident__operator {
+  margin-left: var(--space-2);
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
+  font-size: var(--font-size-xs);
 }
 
 .incident__history-empty {

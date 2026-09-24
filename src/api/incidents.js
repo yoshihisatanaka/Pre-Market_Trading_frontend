@@ -1,87 +1,94 @@
 import { apiClient } from './client'
 
 /*
- * 障害管理（IB送信制御 / 注文入力制御）。
+ * 障害管理（発注停止 / 再開）。
  *
- * ⚠ このファイルの API 仕様はすべて仮置き。docs/api/openapi.json（2026-09-16 取り込み）の
- *   /operations 配下は activity-logs と activity-logs/targets の 2 本だけで、
- *   障害管理・発注停止のエンドポイントは **1 本も定義されていない**。
- *   形は既存の運用系 1 本（ActivityLogListResponse）の作法を借りた暫定で、
- *   エンベロープは英語 snake_case・明細の項目キーは日本語・区分は「コード + 〜名」の対にしてある。
- *   確定したらこのファイルと src/mocks/ の該当ハンドラだけを直す（stores / views は変えなくてよい）。
+ * エンドポイントは /operations/order-suspensions 配下（docs/api/openapi.json のタグ OrderSuspensions）。
+ * ファイル名が incidents なのは画面の呼称に合わせたため（sliceCriteria.js → /masters/hard-limits と同じ）。
+ * キーは日本語のまま返るので、その差はこの層だけで吸収し、外へは camelCase のアプリ内モデルで返す。
  *
- * バックエンドへの確認事項（未回答）:
- *   1. パスは /operations/incidents でよいか。運用状態と履歴を分けるか、1 本にまとめるか
- *   2. 「運用状態」（IB送信制御と注文入力制御を束ねた総合状態）はサーバが返すか、フロントが合成するか
- *      → いまはサーバが返す前提。「IB送信だけ制御中を何と呼ぶか」は業務判断なので、
- *        フロントで合成すると推測が src/utils/ に焼き付く
- *   3. 障害対応履歴は専用テーブルか、/operations/activity-logs への相乗りか
- *      （相乗りなら対象種別コードは何か。/operations/activity-logs/targets に現状は無い）
- *   4. 状態遷移（制御の実行・解除）の POST / PUT のパスと本文、および権限（誰が押せるか）
- *   5. 区分値は文字列コード + 「〜名」の対でよいか（マスタ系の 休場区分 と同じ作法を仮定した）
+ * 停止の単位は「停止対象」。ALL:全体 / 注文ルートコード（0:みずほ 1:IB 2:VWAP 3:自己取引 4:OTC）。
+ * 全体停止はルート単位の停止に優先する。
  */
 
-/** 仮置きのパス。確定時の差分をここ 1 行に閉じ込める */
-const INCIDENTS_PATH = '/operations/incidents'
+const SUSPENSIONS_PATH = '/operations/order-suspensions'
 
 /**
- * 現在の運用状態を取得する。
- *
- * 本文なしで来たら null を返す。画面はこれを「空」として 4 状態のひとつに出す
- * （fetchHardLimits と同じ防御。仮置きの相手はモックだけなので、防御はこの 1 点に絞る）。
- *
- * @returns {Promise<{ operationState: string, operationStateName: string,
- *   ibSendControl: string, ibSendControlName: string,
- *   orderEntryControl: string, orderEntryControlName: string,
- *   updatedAt: string|null, updatedBy: string|null } | null>}
+ * 履歴の取得件数。画面はページングしないので、実 API の既定（50）を明示して送る
+ * （既定が変わっても画面に出る件数が黙って変わらないように）。
  */
-export async function fetchIncidentStatus() {
-  const { data } = await apiClient.get(INCIDENTS_PATH)
-  return data ? toIncidentStatus(data) : null
+const HISTORY_LIMIT = 50
+
+/**
+ * 停止対象ごとの停止状態を取得する。
+ *
+ * 実 API は必ず 200 + SuspensionStatusResponse を返すが、本文なしで来ても落ちないよう
+ * null を返す防御は残す（fetchSliceCriteria と同じ）。画面はこれを「空」として出す。
+ */
+export async function fetchSuspensionStatus() {
+  const { data } = await apiClient.get(SUSPENSIONS_PATH)
+  return data ? toSuspensionStatus(data) : null
 }
 
 /**
- * 障害対応履歴を取得する。新しい順はサーバが並べて返す前提。
+ * 停止・再開の操作履歴を取得する（最新順はサーバが並べて返す）。
  *
  * この画面はページングしないので、エンベロープの total / limit / offset は捨てて配列だけ返す
  * （使わない値を運ぶと、使っていないものをテストで守る羽目になる）。
- *
- * @returns {Promise<Array<{ id: number, changedAt: string,
- *   stateBefore: string, stateBeforeName: string,
- *   stateAfter: string, stateAfterName: string,
- *   description: string, updatedBy: string|null }>>}
  */
-export async function fetchIncidentHistories() {
-  const { data } = await apiClient.get(`${INCIDENTS_PATH}/histories`)
-  return (data?.histories ?? []).map(toIncidentHistory)
+export async function fetchSuspensionHistories() {
+  const { data } = await apiClient.get(`${SUSPENSIONS_PATH}/history`, {
+    params: { limit: HISTORY_LIMIT },
+  })
+  return (data?.histories ?? []).map(toSuspensionHistory)
 }
 
 // バックエンドのキーは日本語。ここでだけ生の形を知る
-function toIncidentStatus(raw) {
+function toSuspensionStatus(raw) {
   return {
-    // 0: 通常運用 / 1: 一部制御中 / 2: 停止中。見た目（色）の判定はコードで行う
-    operationState: raw['運用状態'] ?? '',
-    // 画面に出す文言はサーバの値をそのまま使う（呼称を frontend で決めない）
-    operationStateName: raw['運用状態名'] ?? '',
-    // 各制御は 0: 通常 / 1: 制御中
-    ibSendControl: raw['IB送信制御'] ?? '',
-    ibSendControlName: raw['IB送信制御名'] ?? '',
-    orderEntryControl: raw['注文入力制御'] ?? '',
-    orderEntryControlName: raw['注文入力制御名'] ?? '',
+    // いずれかの対象が停止中
+    suspended: raw['発注停止中'] === true,
+    // 全体（ALL）が停止中
+    allSuspended: raw['全体停止中'] === true,
+    suspendedTargets: raw['停止中の対象'] ?? [],
+    // ALL が先頭（サーバが保証する並び）。並べ替えない
+    targets: (raw.targets ?? []).map(toSuspensionTarget),
+  }
+}
+
+function toSuspensionTarget(raw) {
+  return {
+    id: raw['ID'],
+    target: raw['停止対象'],
+    targetName: raw['停止対象名'] ?? '',
+    // 発注停止フラグ（1 / 0）は同じことの別表現なので運ばない
+    suspended: raw['発注停止中'] === true,
+    // 再開後も直前の理由を保持する（通常運用の行にも残っている）
+    reason: raw['停止理由'] ?? null,
+    suspendedAt: raw['停止日時'] ?? null,
+    suspendedBy: raw['停止者'] ?? null,
+    resumedAt: raw['再開日時'] ?? null,
+    resumedBy: raw['再開者'] ?? null,
+    // 楽観的ロックの合札。停止・再開のときにそのまま送り返す
     updatedAt: raw['更新日時'] ?? null,
     updatedBy: raw['更新者'] ?? null,
   }
 }
 
-function toIncidentHistory(raw) {
+function toSuspensionHistory(raw) {
   return {
     id: raw['ID'],
-    changedAt: raw['変更日時'] ?? '',
-    stateBefore: raw['変更前状態'] ?? '',
-    stateBeforeName: raw['変更前状態名'] ?? '',
-    stateAfter: raw['変更後状態'] ?? '',
-    stateAfterName: raw['変更後状態名'] ?? '',
-    description: raw['対応内容'] ?? '',
-    updatedBy: raw['更新者'] ?? null,
+    target: raw['停止対象'],
+    targetName: raw['停止対象名'] ?? '',
+    // SUSPEND:発注停止 / RESUME:発注再開
+    operation: raw['操作区分'],
+    operationName: raw['操作区分名'] ?? '',
+    operator: raw['操作者'] ?? '',
+    /*
+     * 停止理由は履歴の独立した項目に無く、変更後データ（型が any）の中にしかない。
+     * 形はバックエンドに問い合わせ中なので、読めなければ null に落とす
+     */
+    reason: raw['変更後データ']?.['停止理由'] ?? null,
+    operatedAt: raw['操作日時'] ?? '',
   }
 }

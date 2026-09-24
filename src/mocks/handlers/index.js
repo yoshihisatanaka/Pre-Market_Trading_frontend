@@ -14,7 +14,7 @@ import { marketStatusHandlers } from './marketStatus'
 import { announcementHandlers, resetAnnouncementState } from './announcements'
 import { bannerHandlers } from './banner'
 import { stalledOrderHandlers } from './stalledOrders'
-import { incidentHandlers } from './incidents'
+import { incidentHandlers, resetIncidentState } from './incidents'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -71,6 +71,7 @@ export function resetMockState() {
   resetBalanceAdjustmentRows()
   resetSliceCriteriaRow()
   resetAnnouncementState()
+  resetIncidentState()
 }
 
 export const handlers = [

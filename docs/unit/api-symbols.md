@@ -81,7 +81,7 @@ STA-06 以降のアプリ内モデルには現れない。
 | STA-17 | 既定モック | `createSymbol()` に `nameEn` / `regulation` / `note` を空文字で渡す | 本文の `銘柄名_英字` / `規制情報` / `備考` が `null` で載る（空文字を送らない） | 実装済 |
 | STA-18 | 既定モック | `createSymbol()` に `orderRoute` / `vwapTarget` を空文字で渡す | 本文の `注文ルート` / `VWAP対象区分` が `'0'` で載る（この 2 つだけは `null` を送らない） | 実装済 |
 | STA-19 | 既定モック | `validateSymbol({ symbolCode: 'S900', ticker: 'ZZZZ', name: 'テスト銘柄' })` を `id` なしで呼ぶ | `POST /api/masters/symbols/validate` にクエリが付かない（新規検証が既定）。本文は `createSymbol()` と同じ `SymbolRequest` の形 | 実装済 |
-| STA-20 | 既定モック | `validateSymbol({ id: '42', … })` を呼ぶ | クエリに `is_update=true` が載る（**`isUpdate` フラグではなく `id` の有無で決まる**）。CA の `ca_id` に当たるクエリは仕様に無いので送らない。本文に `id` / `ID` は載らない | 実装済 |
+| STA-20 | 既定モック | `validateSymbol({ id: '42', … })` を呼ぶ | クエリに `is_update=true` と `symbol_id=42` が載る（**`isUpdate` フラグではなく `id` の有無で決まる**）。本文に `id` / `ID` は載らない | 実装済 |
 | STA-21 | 事前検証が `{ valid: false, errors: ['…'] }` を返す | `validateSymbol()` を呼ぶ | 例外にならず `{ valid: false, errors }` が返る（不合格は通信エラーと区別する） | 実装済 |
 | STA-22 | 事前検証が `warnings` を含む応答を返す | `validateSymbol()` を呼ぶ | 戻り値は `{ valid, errors }` だけで `warnings` を含まない（銘柄マスタでは警告を扱わない） | 実装済 |
 | STA-23 | `POST /api/masters/symbols` が 400 を返す | `createSymbol()` を呼ぶ | 例外が投げられ、`message` にサーバの `detail` が入る | 実装済 |

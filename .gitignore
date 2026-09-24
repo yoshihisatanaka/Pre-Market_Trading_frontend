@@ -35,6 +35,9 @@ CLAUDE.local.md
 # 稼働中セッションのロック（session-worktree-notice.sh が同居検知に使う。共有しない）
 .claude/.sessions/
 
+# デスクトップアプリ / claude --worktree が作る worktree の置き場所（中身は別ブランチのチェックアウト）
+.claude/worktrees/
+
 # editor / OS
 .vscode/*
 !.vscode/extensions.json

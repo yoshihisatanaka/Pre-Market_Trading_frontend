@@ -47,6 +47,18 @@ else
   add "現在地: worktree $(basename "$root")（ブランチ $branch）"
   add "この worktree の CLAUDE.local.md に書かれた「目的」の範囲で作業すること。"
   add "main へのマージとブランチ削除、/api-spec-sync は本体セッションの担当。"
+
+  # dev サーバのホスト公開ポート。scripts/worktree.sh add を通らない worktree
+  # （デスクトップアプリ / claude --worktree が作る .claude/worktrees/ 配下）は未割当なので、
+  # ここで割り当てる（冪等）。割当済みなら既存値が返る。
+  port=$(bash "$root/scripts/worktree.sh" ensure-port "$root" 2>/dev/null || true)
+  if [ -n "$port" ]; then
+    add "dev サーバ: docker compose up -d frontend → http://localhost:$port（ポートは設定済み）"
+  fi
+  # 2026-09-17: worktree セッションが全コマンドに cd と環境変数を前置し、許可ルールに
+  # 一致せず承認待ちが多発した。cwd はこの worktree 自身なので前置は不要。
+  add "! cwd はこの worktree。コマンドに cd \"<絶対パス>\" && や FRONTEND_PORT=... を前置しない"
+  add "  （許可ルールに一致せず承認待ちになる。ポートは上のとおり設定済み）。"
 fi
 
 # --- 同居セッションの検知 ---------------------------------------------------

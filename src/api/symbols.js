@@ -127,11 +127,9 @@ export async function fetchSymbols({
  * useCrudList は validateItem と updateItem に同じ payload を渡すので、`isUpdate` のような
  * 真偽値で受けると、画面が「api 層が本文を組むためだけのフラグ」を知って付けることになる。
  *
- * **CA と 1 点だけ違い、対象の id はクエリに載せない。** `/masters/symbols/validate` の
- * パラメータは `is_update` ただ 1 つで、CA の `ca_id` に当たるものが仕様に無い。
- * 対象は本文の `銘柄コード` から引かれるものとする（説明文の「変更時の銘柄存在チェック」）。
- * **この読みが成り立つのは編集で銘柄コードを変更させないからで**、変更できるようにするなら
- * 対象を渡す手段が必ず要る（バックエンドへの確認事項）。
+ * **変更検証の対象はクエリの `symbol_id`（主キー）で指す**（CA の `ca_id` と同じ形）。
+ * 2026-09-18 の取り込みで仕様に入った。それまでは本文の `銘柄コード` から引かせていたが、
+ * 銘柄コードを変える編集でも対象を見失わなくなった。
  *
  * @param {Symbol & { id?: string, updatedAt?: string }} params
  *   id は編集からの呼び出しのときだけ渡す（自分自身を重複と見なさせないため）。
@@ -145,7 +143,7 @@ export async function validateSymbol({ id = '', updatedAt: _updatedAt = '', ...s
     // 更新日時 は本文から落とす（事前検証は楽観的ロックの照合をしない）
     toSymbolRequest(symbol),
     // 既定が新規検証なので、変更検証のときだけクエリを付ける
-    id ? { params: { is_update: true } } : undefined,
+    id ? { params: { symbol_id: Number(id), is_update: true } } : undefined,
   )
 
   return {

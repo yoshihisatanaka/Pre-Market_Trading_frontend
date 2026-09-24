@@ -61,6 +61,28 @@ async function usedDatesIn(api, year) {
   }
 }
 
+/**
+ * 休場日（YYYYMMDD）から、その行の MarketHolidayItem を引く。
+ *
+ * 主キーは `ID` で、休場日は一意制約を持つ業務上の日付。削除のパスには `ID` を載せるので、
+ * 日付しか手元に無い後始末では一覧を引いて `ID` に変換する。無ければ null。
+ */
+async function findHolidayByDate(api, holidayDate) {
+  const res = await api.get('/api/masters/market-holidays', {
+    params: {
+      start_date: holidayDate,
+      end_date: holidayDate,
+      include_deleted: true,
+      limit: 200,
+      offset: 0,
+    },
+  })
+  if (!res.ok()) return null
+
+  const { holidays } = await res.json()
+  return holidays.find((holiday) => holiday.休場日 === holidayDate) ?? null
+}
+
 /*
  * 1 度でも登録した日付は論理削除で残り、次に登録すると「再有効化」の警告が出る。
  * MR-04 は素の新規登録を見たいので、まだ一度も使われていない日付を選ぶ。
@@ -134,6 +156,13 @@ async function submitAdd(page, isoDate) {
   await page.getByTestId('market-holidays-add-submit').click()
 }
 
+/** 行の削除ボタン。行を日付で絞ってから引く（testid に入る id は実行時にしか判らない） */
+function deleteButtonOf(page, isoDate) {
+  return rowsOf(page)
+    .filter({ hasText: isoDate })
+    .getByRole('button', { name: '削除' })
+}
+
 // 登録 → 重複 → 削除 → 警告 → 再有効化 は 1 本の流れなので順に実行する
 test.describe.configure({ mode: 'serial' })
 
@@ -158,7 +187,11 @@ test.describe('海外休場日マスタ（実 API 接続）', () => {
       baseURL: process.env.E2E_BASE_URL || 'http://frontend:5173',
       extraHTTPHeaders: { 'X-User-Code': USER_CODE },
     })
-    await api.delete(`/api/masters/market-holidays/${testDate}`)
+    // 削除のパスキーは ID。日付では引けないので一覧から ID を取り直す
+    const holiday = await findHolidayByDate(api, testDate)
+    if (holiday && holiday.取消区分 === 0) {
+      await api.delete(`/api/masters/market-holidays/${holiday.ID}`)
+    }
     await api.dispose()
   })
 
@@ -257,7 +290,16 @@ test.describe('海外休場日マスタ（実 API 接続）', () => {
     const before = await countOf(page)
     const isoDate = toIsoDate(testDate)
 
-    await page.getByTestId(`market-holidays-delete-${testDate}`).click()
+    /*
+     * 行の指定は id（実 API の `ID`）。値は実行時にしか判らないので日付で行を絞って引くが、
+     * testid が数字で終わっていることだけは確かめる。ここが
+     * `market-holidays-delete-`（id が空文字）になるのは、実 API が `ID` を返していない徴候で、
+     * そのまま進めても対象を特定できずに落ちるため、原因の判る形で先に止める。
+     */
+    const deleteButton = deleteButtonOf(page, isoDate)
+    await expect(deleteButton).toHaveAttribute('data-testid', /^market-holidays-delete-\d+$/)
+
+    await deleteButton.click()
     await page.getByTestId('market-holidays-delete-submit').click()
 
     await expect(page.getByRole('dialog', { name: '削除確認' })).toBeHidden()
@@ -300,5 +342,16 @@ test.describe('海外休場日マスタ（実 API 接続）', () => {
     )
     await expect(page.getByTestId('market-holidays-count')).toHaveText(`${before + 1} 件`)
     await expect(rowsOf(page).filter({ hasText: isoDate })).toHaveCount(1)
+
+    /*
+     * 再有効化された行も id で指せる。実 API は**元の行の ID を引き継ぐ**ことが判っている
+     * （2026-09-18 に実測。docs/api/requests.md の依頼 #10）が、**それは期待値にしない**。
+     * 採番の仕様はこの画面の受け入れ条件ではなく、変わっても落とす意味が無いため。
+     * ここで見るのは「どちらであれ id が付いている」ことだけ。
+     */
+    await expect(deleteButtonOf(page, isoDate)).toHaveAttribute(
+      'data-testid',
+      /^market-holidays-delete-\d+$/,
+    )
   })
 })

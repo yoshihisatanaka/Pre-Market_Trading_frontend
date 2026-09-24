@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { navItems, navSections } from '../src/components/layout/navigation'
+import { closedMarketStatusResponse } from '../src/mocks/fixtures/marketStatus'
+import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/layout.md（タイトル先頭の [LAY-xx] が対応 ID）
 // 画面固有の要素はここでは検証しない（各画面のシナリオで扱う）。
@@ -24,7 +26,7 @@ test.describe('共通レイアウト', () => {
 
     await expect(nav.getByRole('link')).toHaveCount(navItems.length)
     await expect(nav.getByRole('link', { name: '顧客検索', exact: true })).toBeVisible()
-    await expect(nav.getByRole('link', { name: '残高補正', exact: true })).toBeVisible()
+    await expect(nav.getByRole('link', { name: '残高マスタ', exact: true })).toBeVisible()
   })
 
   test('[LAY-02] ヘッダに画面タイトルと市場ステータスが表示される', async ({ page }) => {
@@ -55,12 +57,12 @@ test.describe('共通レイアウト', () => {
   })
 
   test('[LAY-04] 未実装の画面を直接開いてもレイアウトは表示される', async ({ page }) => {
-    await page.goto('/masters/users')
+    await page.goto('/masters/fx')
 
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
     await expect(nav).toBeVisible()
     await expect(page.getByRole('heading', { name: 'ページが見つかりません' })).toBeVisible()
-    await expect(nav.getByRole('link', { name: 'ユーザマスタ', exact: true })).toHaveAttribute(
+    await expect(nav.getByRole('link', { name: '為替マスタ', exact: true })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -136,5 +138,112 @@ test.describe('共通レイアウト', () => {
       )
       expect(inSidebar).toBe(false)
     }
+  })
+
+  /*
+   * 起動時の読み込みオーバーレイ（AppLoadingOverlay）。覆いの中身の出し分けは単体側（ALO）が持つので、
+   * ここでは「起動時に実際に覆われるか」「覆いが操作を遮るか」だけを見る。
+   *
+   * 既定のモックは即座に応答するのでローディングが一瞬すぎて掴めない。
+   * ?mockDelay=<ミリ秒> を付けた URL だけ /api/* の応答が遅れる（src/mocks/handlers/index.js）。
+   */
+  test('[LAY-10] 起動時はコードマスタを読み終えるまで画面全体が覆われる', async ({ page }) => {
+    await page.goto('/?mockDelay=2000')
+
+    const loading = page.getByTestId('app-loading')
+    await expect(loading).toBeVisible()
+    await expect(loading).toContainText('読み込んでいます')
+
+    // 読み終えれば覆いが外れ、下に組み上がっていた画面が現れる
+    await expect(loading).toBeHidden()
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+  })
+
+  test('[LAY-11] コードマスタの取得に失敗すると理由と再試行が覆いの中に出る', async ({ page }) => {
+    await mockApi(page, [
+      { path: '*/api/codes', status: 500, body: { detail: 'サーバーでエラーが発生しました。' } },
+    ])
+    await page.goto('/')
+
+    const error = page.getByTestId('app-loading-error')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText('サーバーでエラーが発生しました。')
+    await expect(page.getByTestId('app-loading-retry')).toBeVisible()
+    // 読み直し中ではないので回転マーク側は出ない
+    await expect(page.getByTestId('app-loading')).toHaveCount(0)
+  })
+
+  test('[LAY-12] 取得に失敗して覆われている間は画面を操作できない', async ({ page }) => {
+    await mockApi(page, [
+      { path: '*/api/codes', status: 500, body: { detail: 'サーバーでエラーが発生しました。' } },
+    ])
+    await page.goto('/')
+    await expect(page.getByTestId('app-loading-error')).toBeVisible()
+
+    /*
+     * 覆いの下にはレイアウトが組み上がっている（App.vue は AppLayout を v-if で隠さない）。
+     * リンクそのものを click すると Playwright の可触判定で止まってしまうので、
+     * 座標を取って実際にその位置を押す。覆いが受け止めるので遷移は起きない。
+     */
+    const link = page.getByRole('link', { name: '顧客検索', exact: true })
+    const box = await link.boundingBox()
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByTestId('app-loading-error')).toBeVisible()
+  })
+
+  /*
+   * ヘッダの取引時間帯（GET /market-status）。
+   * モックは固定日のフィクスチャを「今日（JST）」へずらして返すので、実行日によって
+   * どのセッションが現在になるかが変わる。ここでは枠組みだけを見て、具体的な時刻や
+   * 強調位置は単体側（MKS / AHD）に任せる。
+   */
+  test('[LAY-13] ヘッダに 3 セッションの取引時間帯が JST と ET で表示される', async ({ page }) => {
+    await page.goto('/')
+
+    const hours = page.getByTestId('market-hours')
+    await expect(hours).toBeVisible()
+
+    for (const name of ['プレ', 'レギュラー', 'アフター']) {
+      await expect(hours.getByText(name, { exact: true })).toBeVisible()
+    }
+
+    // JST 行 3 列 + ET 行 3 列。日跨ぎの列には (翌) が付くので前方一致で見る
+    const times = hours.locator('[data-session] .market-hours__time')
+    await expect(times).toHaveCount(6)
+    for (const time of await times.allTextContents()) {
+      expect(time).toMatch(/^\d{2}:\d{2} - \d{2}:\d{2}(\(翌\))?$/)
+    }
+  })
+
+  test('[LAY-14] 休場の日は理由が出て、取引時間帯は表示されない', async ({ page }) => {
+    await mockApi(page, [{ path: '*/api/market-status', body: closedMarketStatusResponse }])
+    await page.goto('/')
+
+    await expect(page.getByTestId('market-status')).toHaveText('○ Closed')
+    await expect(page.getByTestId('market-note')).toHaveText('休場（感謝祭）')
+    await expect(page.getByTestId('market-hours')).toHaveCount(0)
+  })
+
+  test('[LAY-15] 市場状況が取れなくてもヘッダは壊れず画面を操作できる', async ({ page }) => {
+    await mockApi(page, [
+      {
+        path: '*/api/market-status',
+        status: 500,
+        body: { detail: 'サーバーでエラーが発生しました。' },
+      },
+    ])
+    await page.goto('/')
+
+    // 推定を出さない。覆いは codes の取得だけで外れる（市場状況は起動の条件ではない）
+    await expect(page.getByTestId('market-status')).toHaveText('—')
+    await expect(page.getByTestId('market-note')).toHaveText('市場状況を取得できません')
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    await nav.getByRole('link', { name: '顧客検索', exact: true }).click()
+
+    await expect(page).toHaveURL(/\/customers\/search$/)
   })
 })

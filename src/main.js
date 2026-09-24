@@ -4,6 +4,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { useCodesStore } from './stores/codes'
+import { useMarketStatusStore } from './stores/marketStatus'
 import './assets/styles/main.css'
 
 async function enableMocking() {
@@ -38,6 +39,16 @@ enableMocking()
      * （理由は AppLoadingOverlay が全画面で出し、「再試行」で読み直せる）。
      */
     useCodesStore(pinia).load()
+
+    /*
+     * 市場状況（ヘッダの取引セッションと時間帯）も起動時に一度だけ読み込む。
+     * 以後の更新は composables/useMarketStatus が 5 分ごとに行う。
+     *
+     * **オーバーレイの判定には足さない。** ヘッダの飾りのために、/market-status の 500 で
+     * システム全体を起動不能にしてはいけない。取れなければヘッダが「—」を出すだけで、
+     * 業務は続けられる。
+     */
+    useMarketStatusStore(pinia).load()
 
     app.mount('#app')
   })

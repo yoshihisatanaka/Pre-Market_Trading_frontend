@@ -40,10 +40,24 @@
 | CUA-05 | 既定モック | 数字以外を含む口座番号（`'123-0001'` / `'abc'` / `' '`）で呼ぶ | `account_no` を送らない（422 で弾かれて理由が画面に出ない事態を避ける） | 実装済 |
 | CUA-06 | 既定モック | `fetchCustomers({ limit: 20, offset: 50 })` を呼ぶ | `limit=20` と `offset=50` がそのまま載る | 実装済 |
 | CUA-07 | 既定モック | `fetchCustomers({ restriction, accountType, corporateType })` を呼ぶ | クエリ名が `restriction` / `account_type` / `corporate_type` になる（openapi に無くモックだけが解釈する条件） | 実装済 |
-| CUA-08 | API が `CustomerItem` を 1 件返す | `fetchCustomers()` を呼ぶ | 口座番号・部店・扱者・顧客名・カナ・年齢・各区分名がアプリ内モデルの名前に変換される。`accountNumber` は integer ではなく文字列 | 実装済 |
+| CUA-08 | API が `CustomerItem` を 1 件返す | `fetchCustomers()` を呼ぶ | 主キーの `id`（実 API の `ID` を文字列にしたもの）に加え、口座番号・部店・扱者・顧客名・カナ・年齢・各区分名がアプリ内モデルの名前に変換される。`accountNumber` は integer ではなく文字列 | 実装済 |
 | CUA-09 | API が `取引停止区分_全取引` / `ユーザー操作フラグ` を 1 / 0 で返す | `fetchCustomers()` を呼ぶ | `tradingSuspended` / `userModified` が `true` / `false` の boolean になる | 実装済 |
 | CUA-10 | API が `事故処理口座区分` を `'1'` / `'0'` / integer の `1` で返す | `fetchCustomers()` を呼ぶ | 文字列 `'1'` のときだけ `accidentAccount` が `true`（integer の 1 では立たない。キーごとに型が違うことを固定する） | 実装済 |
 | CUA-11 | API が金額を `3500000` / `0` / `null` で返す | `fetchCustomers()` を呼ぶ | `cashJpy` / `cashUsd` / `growthQuota` が数値のまま（整形しない）。`0` は `0` のままで、`null` だけが `null`（0 を「値が無い」に潰さない） | 実装済 |
 | CUA-12 | API が文字列項目を `null` で返す | `fetchCustomers()` を呼ぶ | 部店名・扱者名・カナ・年齢・各区分名が空文字になる（`null` を画面へ流さない） | 実装済 |
 | CUA-13 | API が `customers` を持たない応答を返す | `fetchCustomers()` を呼ぶ | `items` が空配列、`total` が 0 になる（キーが欠けても落ちない） | 実装済 |
 | CUA-14 | API が 500 を返す | `fetchCustomers()` を呼ぶ | 例外が投げられる（呼び出し側の `useAsync` が `error` に入れる） | 実装済 |
+| CUA-15 | API が `ID` を持たない `CustomerItem` を返す | `fetchCustomers()` を呼ぶ | `id` が空文字のままになる（口座番号へフォールバックしない）。`accountNumber` は従来どおり出る | 実装済 |
+
+## 主キーは `id`（口座番号ではない）
+
+DB 全テーブルの主キーを `id` に統一する方針に合わせて、アプリ内モデルの主キーを
+実 API の integer な `ID` にしてある。**口座番号は主キーではなく、行を人が識別する一意な業務コード**。
+一覧の行キーも `id` になった（`CustomerListView` の `row-key` は `DataTable` の既定に任せる）。
+
+**この層はフロントが先行している。** 取り込み時点の `docs/api/openapi.json` の `CustomerItem` に
+`ID` は無く、パスも `/masters/customers/{account_no}` のまま。実 API が `ID` を返し始めるまで、
+実 API に当てると `id` は空文字になる（この画面はいま読むだけなので、影響は行キーの重複だけ）。
+
+`CUA-15` はその穴を見張るためのシナリオ。**値で取り繕わない**
+（銘柄マスタの [api-symbols.md](api-symbols.md) の `STA-24` と同じ扱い）。

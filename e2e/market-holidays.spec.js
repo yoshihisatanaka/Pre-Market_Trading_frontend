@@ -22,7 +22,8 @@ const toIsoDate = (holidayDate) => {
   const digits = String(holidayDate)
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
-const toId = (holiday) => String(holiday.休場日)
+// 主キーは休場日ではなく ID。data-testid にもこの値が入る
+const toId = (holiday) => String(holiday.ID)
 
 // フィクスチャは実 API と同じ休場日の降順。先頭が最新で、末尾が最古
 const secondPage = marketHolidays.slice(PAGE_SIZE)
@@ -69,7 +70,7 @@ function deleteDialogOf(page) {
   return page.getByRole('dialog', { name: '削除確認' })
 }
 
-/** 行の削除ボタン。testid は行の id（= 休場日の 'YYYYMMDD'）を含む */
+/** 行の削除ボタン。testid は行の id（= 実 API の `ID`。休場日ではない）を含む */
 function deleteButtonOf(page, holiday) {
   return page.getByTestId(`market-holidays-delete-${toId(holiday)}`)
 }
@@ -86,7 +87,7 @@ test.describe('海外休場日マスタ一覧', () => {
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '海外休場日マスタ', exact: true })).toBeVisible()
     // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている
-    await expect(page.getByTestId('market-holidays-reload')).toBeVisible()
+    await expect(page.getByTestId('market-holidays-add')).toBeVisible()
 
     await expect(page.getByTestId('market-holidays-count')).toHaveText(
       `${marketHolidays.length} 件`,
@@ -414,7 +415,7 @@ test.describe('海外休場日マスタ 削除', () => {
     await mockApi(page, [
       {
         method: 'delete',
-        path: '*/api/masters/market-holidays/:holidayDate',
+        path: '*/api/masters/market-holidays/:id',
         status: 500,
         body: { detail: 'サーバーでエラーが発生しました。' },
       },

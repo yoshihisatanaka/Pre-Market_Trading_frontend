@@ -16,8 +16,13 @@ import { apiClient } from './client'
  * 内容・結果 に当たる項目は無い。いまは src/mocks/handlers/index.js のモックが応えている。
  *
  * **実 API と繋ぎ込むときは、列とクエリの対応を仕様側と決め直すこと。**
- * 送るクエリのうち実 API と対応が付くのは date_from / date_to / operator / target_key の 4 つだけで、
- * 残りの 5 つ（category / feature / action / actor_group / result）はモック専用。
+ * 送るクエリのうち実 API と対応が付くのは start_date / end_date / operator / operation /
+ * target_key の 5 つで、残りの 4 つ（feature / action / actor_group / result）はモック専用。
+ *
+ * **期間のクエリ名は 2026-09-18 の取り込みで date_from / date_to から start_date / end_date へ、
+ * 操作区分は category から operation（仕様の値は CREATE / UPDATE / DELETE / BATCH）へ変わった。**
+ * 旧名は実 API に無視されるだけで絞り込みが黙って効かなくなるため、契約テスト
+ * （src/api/contract.spec.js の CON-05）が検出した。アプリ内の名前（dateFrom / category）は変えていない。
  */
 
 /**
@@ -74,13 +79,18 @@ export async function fetchActivityLogs({
     params: {
       limit,
       offset,
-      // 実 API（openapi.json）と対応が付くのはここまでの 4 つ
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
+      // 実 API（openapi.json）と対応が付くのはここまでの 5 つ
+      start_date: dateFrom || undefined,
+      end_date: dateTo || undefined,
       operator: actorCode || undefined,
+      /*
+       * 実 API の 操作区分 は CREATE / UPDATE / DELETE / BATCH。画面が持つ
+       * 「業務操作 / マスタ更新 / 運用管理」とは値の体系が違うので、**名前だけ合わせて値は
+       * そのまま送っている**。繋ぎ込みのときに値の対応を仕様側と決める（docs/api/requests.md #1）。
+       */
+      operation: category || undefined,
       target_key: keyword || undefined,
       // 以下はモック専用。実 API には対応するクエリが無い
-      category: category || undefined,
       feature: feature || undefined,
       action: action || undefined,
       actor_group: actorGroup || undefined,

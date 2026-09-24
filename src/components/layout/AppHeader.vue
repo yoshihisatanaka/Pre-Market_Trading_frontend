@@ -6,6 +6,11 @@
  *
  * 左端のメニューボタンはサイドメニューの開閉操作。押し出し式で畳むとサイドメニューは
  * 画面外に出るので、トグルは常時見えているこちら側に置く。状態は持たず通知するだけ。
+ *
+ * 市場ステータスと取引時間帯は `GET /market-status` の応答が出どころで、**ここでは
+ * 時刻から推定しない**（祝日・短縮取引を知らない推定を実データと同じ見た目で出さない）。
+ * 取れていなければ「—」を出す。組み立ては composable → store → api の順に通す
+ * （component から api 層は import できない）。
  */
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -60,13 +65,65 @@ const market = useMarketStatus()
     </div>
 
     <div class="topbar__right">
-      <span
-        data-testid="market-status"
-        :data-status="market.key"
-        :class="['market-status', `market-status--${market.key}`]"
-      >
-        {{ market.label }}
-      </span>
+      <!--
+        ラベル・目印・時間帯グリッドをまとめた塊。
+        market-status は**ラベルだけを包む**（E2E の LAY-02 が完全一致で見ている）。
+      -->
+      <div data-testid="market" class="market" :title="market.title || undefined">
+        <span
+          data-testid="market-status"
+          :data-status="market.key"
+          :class="['market-status', `market-status--${market.key}`]"
+        >
+          {{ market.label }}
+        </span>
+
+        <span v-if="market.shortened" data-testid="market-shortened" class="market-flag">
+          短縮取引
+        </span>
+
+        <!-- 休場理由、または取得できなかった旨 -->
+        <span v-if="market.note" data-testid="market-note" class="market-note">
+          {{ market.note }}
+        </span>
+
+        <!--
+          3 セッション × JST / ET の 2 行グリッド。休場と未取得では出さない。
+          時刻は列の右端で揃える（JST 側は名前 + 時刻、ET 側は時刻だけのため）。
+        -->
+        <div v-if="market.sessions.length" data-testid="market-hours" class="market-hours">
+          <span class="market-hours__zone">JST</span>
+          <span
+            v-for="session in market.sessions"
+            :key="`jst-${session.code}`"
+            :data-session="session.code"
+            :data-current="session.current || null"
+            :class="[
+              'market-hours__cell',
+              `market-hours__cell--${session.key}`,
+              { 'market-hours__cell--current': session.current },
+            ]"
+          >
+            <span class="market-hours__name">{{ session.name }}</span>
+            <span class="market-hours__time">{{ session.hoursJst }}</span>
+          </span>
+
+          <span class="market-hours__zone">ET</span>
+          <span
+            v-for="session in market.sessions"
+            :key="`et-${session.code}`"
+            :data-session="session.code"
+            :data-current="session.current || null"
+            :class="[
+              'market-hours__cell',
+              `market-hours__cell--${session.key}`,
+              { 'market-hours__cell--current': session.current },
+            ]"
+          >
+            <span class="market-hours__time">{{ session.hoursEt }}</span>
+          </span>
+        </div>
+      </div>
 
       <!-- 画面固有のボタンの差し込み先。中身は各 view が Teleport で入れる -->
       <div id="topbar-actions" data-testid="topbar-actions" class="topbar__actions"></div>
@@ -87,6 +144,7 @@ const market = useMarketStatus()
 
 .topbar__left {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: var(--space-3);
 }
@@ -125,11 +183,19 @@ const market = useMarketStatus()
   height: 20px;
 }
 
+/*
+ * 時間帯グリッドで右側が幅を取るようになったので、狭い画面ではタイトルを詰める。
+ * 折り返させるとヘッダの高さが変わってしまうため、省略記号で切る。
+ */
 .topbar__title {
+  overflow: hidden;
+  min-width: 0;
   color: var(--color-text-heading);
   font-size: var(--font-size-xl);
   font-weight: 500;
   letter-spacing: 0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .topbar__right,
@@ -159,5 +225,79 @@ const market = useMarketStatus()
 
 .market-status--closed {
   color: var(--color-market-closed);
+}
+
+/* まだ取れていない・取れなかった。推定を出さないので色も付けない */
+.market-status--unknown {
+  color: var(--color-text-muted);
+}
+
+.market {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* 短縮取引の目印と、休場理由・取得失敗の断り書き */
+.market-flag,
+.market-note {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.market-flag {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+/*
+ * 3 セッション × JST / ET の 2 行グリッド。
+ * 列幅は内容任せで、セルの中身は右端で揃える（JST 行は「名前 + 時刻」、ET 行は時刻だけなので、
+ * 右揃えにしないと時刻の位置が 2 行でずれる）。
+ */
+.market-hours {
+  display: grid;
+  grid-template-columns: auto repeat(3, auto);
+  align-items: center;
+  gap: 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.market-hours__zone {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.market-hours__cell {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+/* 桁が揃うと 2 行の時刻が読み比べやすい */
+.market-hours__time {
+  font-family: var(--font-family-numeric);
+}
+
+.market-hours__cell--current {
+  font-weight: 600;
+}
+
+/* 色が付くのは現在のセッションの列だけ。残りは muted のまま背景に退く */
+.market-hours__cell--current.market-hours__cell--premarket {
+  color: var(--color-market-premarket);
+}
+
+.market-hours__cell--current.market-hours__cell--regular {
+  color: var(--color-market-regular);
+}
+
+.market-hours__cell--current.market-hours__cell--afterhours {
+  color: var(--color-market-afterhours);
 }
 </style>

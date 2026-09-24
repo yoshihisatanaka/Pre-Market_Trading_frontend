@@ -47,6 +47,26 @@ export const accountTypeCodes = [
   { code: '2', label: '同業者' },
 ]
 
+/**
+ * 特定預り区分。値と意味は BalanceAdjustmentRequest.特定預り区分 の description
+ * 「0: 非特定, 1: 特定, 4: NISA, 6: 成長投資枠, 8: 継続管理勘定」が正。
+ * 残高マスタのフィクスチャが 特定預り区分名 として使い回す。
+ *
+ * **口座区分（accountTypeCodes。一般 / 自己 / 同業者）とは別物。**
+ */
+export const specificDepositCodes = [
+  { code: '0', label: '非特定' },
+  { code: '1', label: '特定' },
+  { code: '4', label: 'NISA' },
+  { code: '6', label: '成長投資枠' },
+  { code: '8', label: '継続管理勘定' },
+]
+
+/** 特定預り区分のコード → 名前。行を組み立てるときに引く */
+export const SPECIFIC_DEPOSIT_NAMES = Object.fromEntries(
+  specificDepositCodes.map(({ code, label }) => [code, label]),
+)
+
 /** 法人区分 */
 export const corporateTypeCodes = [
   { code: '0', label: '個人' },
@@ -88,6 +108,7 @@ export const codeMasters = {
   扱者: salesHandlers.map(({ code, name }) => ({ code, label: `${code} ${name}` })),
   取引停止区分_全取引: restrictionCodes,
   口座区分: accountTypeCodes,
+  特定預り区分: specificDepositCodes,
   法人区分: corporateTypeCodes,
   コンプラランク: complianceRankCodes,
   投資方針: investmentPolicyCodes,

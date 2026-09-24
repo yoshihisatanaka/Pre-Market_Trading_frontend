@@ -8,6 +8,7 @@ import { blackoutDates, canceledBlackoutDates } from '../mocks/fixtures/blackout
 import { canceledMarketHolidays, marketHolidays } from '../mocks/fixtures/marketHolidays'
 import { sliceCriteriaSetting } from '../mocks/fixtures/sliceCriteria'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
+import { activityLogTargets } from '../mocks/fixtures/activityLogTargets'
 import { rolePermissions } from '../mocks/fixtures/permissions'
 import {
   balanceAdjustments,
@@ -53,7 +54,7 @@ import {
   validateBlackoutDate,
 } from './blackoutDates'
 import { fetchSliceCriteria, updateSliceCriteria } from './sliceCriteria'
-import { fetchActivityLogs } from './activityLogs'
+import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
 import { fetchStalledOrders } from './stalledOrders'
 import { fetchPermissions } from './permissions'
 import { fetchMarketStatus } from './marketStatus'
@@ -147,12 +148,16 @@ function findOperationByTemplate(method, template) {
  *   kind: 'query'   … src/api/ が送るクエリ名が仕様の parameters に無い（仕様のテンプレートで指す）
  */
 const KNOWN_GAPS = [
+  /*
+   * 操作ログは 2026-09-24 に ActivityLogItem の形へ張り替えた。残る 5 項目は画面モックにあった項目で、
+   * フィクスチャに契約提案として載せている（src/api/activityLogs.js は読まない）。
+   */
   {
     kind: 'fixture',
     fixture: 'activityLogs',
+    keys: ['操作者名', '実行者区分', '対象機能', '操作内容', '結果'],
     reason:
-      '操作ログの ActivityLogItem に 操作区分 / 操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果 が無い。' +
-      'フィクスチャは画面モックの見た目を出すための暫定',
+      '画面モックにあった項目。ActivityLogItem に無いので画面には出さず、フィクスチャに契約提案として残している',
     request: '#1',
   },
   /*
@@ -188,16 +193,6 @@ const KNOWN_GAPS = [
    * 変更検証の対象を渡すクエリ（blackout_date_id / symbol_id / account_id …）は
    * 2026-09-18 の取り込みで全マスタに入った。先行実装の食い違いは解消したので行を外した。
    */
-  {
-    kind: 'query',
-    method: 'GET',
-    template: '/operations/activity-logs',
-    names: ['feature', 'action', 'actor_group', 'result'],
-    reason:
-      '画面モックの絞り込み条件（対象機能 / 操作内容 / 実行者区分 / 結果）。仕様にあるのは ' +
-      'start_date / end_date / operator / operation / target_types / target_key / sort だけ',
-    request: '#1',
-  },
   /*
    * 滞留注文抽出は API が 1 本も無い（成熟度 D）。形は src/mocks/fixtures/stalledOrders.js が
    * 契約提案で、MSW だけが応答する。一覧のパス自体が仕様に無いので kind: 'path' で載せる。
@@ -284,6 +279,7 @@ const FIXTURES = [
   },
   { name: 'sliceCriteria', schema: 'SliceSettingResponse', rows: [sliceCriteriaSetting] },
   { name: 'activityLogs', schema: 'ActivityLogItem', rows: activityLogs },
+  { name: 'activityLogTargets', schema: 'ActivityLogTargetItem', rows: activityLogTargets },
   { name: 'permissions', schema: 'RolePermissionItem', rows: rolePermissions },
   {
     name: 'balanceAdjustments',
@@ -508,15 +504,14 @@ const PROBES = [
       fetchActivityLogs({
         dateFrom: '2026-01-01',
         dateTo: '2026-12-31',
-        actorCode: '001',
-        category: 'x',
-        feature: 'x',
-        action: 'x',
-        actorGroup: 'sales',
-        result: 'x',
-        keyword: 'x',
+        operator: '001',
+        operation: 'UPDATE',
+        targetType: 'customers',
+        targetKey: 'x',
+        sort: 'asc',
       }),
   },
+  { name: 'fetchActivityLogTargets', run: () => fetchActivityLogTargets() },
   {
     name: 'fetchStalledOrders',
     run: () => fetchStalledOrders({ branchCode: '123', accountNumber: '1234567', symbol: 'AAPL' }),

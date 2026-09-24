@@ -12,8 +12,8 @@
 
 | # | 依頼 | 影響する画面 | 戻るセル（目安） | フロント側の暫定 | 状態 | 起票日 |
 |---|---|---|---|---|---|---|
-| 1 | **運用管理 3 画面の API を定義する**: 障害管理（IB送信制御・注文入力制御・対応履歴）/ 滞留注文抽出（検索・CSV 出力・サンプル 2 種）/ 操作ログの**項目**（操作者名・実行者区分・対象機能・操作内容・結果）と、それに対応する**絞り込みクエリ 4 つ**（`feature` / `action` / `actor_group` / `result`）。お知らせ管理は 2026-09-24 に解消（下の「解消済み」） | 障害管理 / 滞留注文抽出 / 操作ログ | 32.0 | **fixture を契約提案として先に書き**、3 軸を埋める（`src/mocks/fixtures/` の生の形がそのまま提案書） | 依頼中 | 2026-09-17 |
-| 1-b | **操作ログの `操作区分` の値の体系**: 仕様の `operation` は CREATE / UPDATE / DELETE / BATCH、画面は「業務操作 / マスタ更新 / 運用管理」。いまは**名前だけ合わせて値はそのまま**送っている | 操作ログ | （#1 に含む） | `src/api/activityLogs.js` が `category` を `operation` に載せる。値の対応は繋ぎ込み時に決める | 依頼中 | 2026-09-18 |
+| 1 | **運用管理 3 画面の API を定義する**: 障害管理（IB送信制御・注文入力制御・対応履歴）/ 滞留注文抽出（検索・CSV 出力・サンプル 2 種）/ 操作ログの**項目**（操作者名・実行者区分・対象機能・操作内容・結果。2026-09-24 に画面を `ActivityLogItem` の形へ張り替え、この 5 項目は画面から外して fixture にだけ提案として残した。絞り込みクエリ `feature` / `action` / `actor_group` / `result` は送るのをやめた）。お知らせ管理は 2026-09-24 に解消（下の「解消済み」） | 障害管理 / 滞留注文抽出 / 操作ログ | 32.0 | **fixture を契約提案として先に書き**、3 軸を埋める（`src/mocks/fixtures/` の生の形がそのまま提案書） | 依頼中 | 2026-09-17 |
+| 1-b | **操作ログの `操作区分` の値の体系**: 仕様の `operation` は CREATE / UPDATE / DELETE / BATCH、画面は「業務操作 / マスタ更新 / 運用管理」。いまは**名前だけ合わせて値はそのまま**送っている | 操作ログ | （#1 に含む） | 画面を仕様の値（CREATE / UPDATE / DELETE / BATCH）に合わせた | **解消（2026-09-24・フロントが追随）** | 2026-09-18 |
 | 2 | **約定照会の API**（`/executions` 系: 検索・CSV 出力）と **注文訂正**（`/orders/{order_id}/amend` 相当。`dream-correct` は Dream 用） | 約定照会 / 注文照会（訂正）/ みずほ注文締 | 24.0 | 同上 | 依頼中 | 2026-09-17 |
 | 3 | **レスポンスの中身が未定義**: `/codes` / `/mizuho/*` / `GET /orders/{order_id}` / `/branches` / `/handlers` / `/customers`（注文画面用）/ `/batch/*` | 新規注文 / 顧客詳細 / みずほ注文締 / 滞留注文抽出 | 16.0 | `src/mocks/` の仮フィクスチャで進める | 依頼中 | 2026-09-16 |
 | 4 | **権限マスタをフロント側で仕様の形に合わせ直す**（依頼ではなく**フロントの作業**）。`/masters/permissions` は 2026-09-18 の取り込みで GET / PUT / history が入ったが、**形が違う**: 仕様は `RolePermissionItem`（日本語キー・`発注権限` / `マスタ更新権限` / `運用管理権限` の 3 権限）、フロントは画面モック由来（英語キー・`can_order` / `can_master_update` / `can_order_stop` / `can_activity_log_view` / `can_admin_function` の 5 権限）。**どちらを正とするかは要確認**（画面モックの 5 権限が要件なら、仕様側に 2 つ足してもらう） | 権限マスタ / アクセス制御 | 12.0 | 仮ハンドラのまま（`src/mocks/handlers/permissions.js`）。契約テストの `KNOWN_GAPS` に fixture の食い違いとして記録済み | **要確認** | 2026-09-18 |
@@ -35,6 +35,7 @@
 | 5 | **PUT / DELETE のパスキーを ID に統一する** | 2026-09-18 | 顧客 `account_id` / 銘柄 `symbol_id` / 為替 `fx_id` / CA `ca_id` / 受注不可日 `blackout_date_id` / 海外休場日 `holiday_id` / 残高調整 `balance_id` / 手数料パターン `fee_pattern_id` / 手数料優遇 `fee_preference_id` の 9 種すべてが **integer の行 ID** になった。海外休場日は `fix/market-holidays-id-key` で追随済み（実 API E2E `MR-04〜08` の保留を解除）。ロール権限 `role_code` / ユーザ `operator_code` の 2 つだけ業務コードのまま残り、削除の表現が #5 に残っている |
 | — | 権限マスタのパス（`GET` / `PUT` / `history`） | 2026-09-18 | パスは入ったが形が違う。フロント側の追随が #4 に残っている |
 | 6 | `/masters/symbols/validate` に変更対象を渡す手段 | 2026-09-18 | `symbol_id` が入った。`src/api/symbols.js` が送るようにし、モックも ID で対象を引く形に合わせた。銘柄コードを変える編集も作れる |
+| 1-b | 操作ログの `操作区分` の値の体系 | 2026-09-24 | 依頼ではなく**フロントが仕様に合わせた**。画面の操作区分を CREATE / UPDATE / DELETE / BATCH（表示は 登録 / 更新 / 削除 / 一括処理）にし、検索条件・列も `ActivityLogItem` と `GET /operations/activity-logs` のクエリだけで組み直した。契約テストの `KNOWN_GAPS` は fixture の提案 5 項目（#1）だけが残る |
 | 7 | `/masters/blackout-dates/validate` の変更対象 | 2026-09-18 | `blackout_date_id` が仕様に入り、先行実装のまま一致。`KNOWN_GAPS` の行を外した。他マスタも `<x>_id` で揃った（`account_id` / `fx_id` / `holiday_id` / `balance_id` / `fee_pattern_id` / `fee_preference_id`） |
 
 **2026-09-18 の取り込みで黙って壊れかけた箇所**（契約テスト `CON-05` が検出し、同日追随済み）:

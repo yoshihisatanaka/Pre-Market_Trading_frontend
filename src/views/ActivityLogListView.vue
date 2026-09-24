@@ -1,88 +1,94 @@
 <script setup>
+import { onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import ActivityLogDetailDialog from '@/components/activityLog/ActivityLogDetailDialog.vue'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSegmentedControl from '@/components/ui/BaseSegmentedControl.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
+import { useActivityLogTargetsStore } from '@/stores/activityLogTargets'
 import { useActivityLogsStore } from '@/stores/activityLogs'
 import {
-  ACTIVITY_ACTION_OPTIONS,
-  ACTIVITY_ACTOR_GROUP_OPTIONS,
-  ACTIVITY_ACTOR_OPTIONS,
-  ACTIVITY_CATEGORY_OPTIONS,
-  ACTIVITY_FEATURE_OPTIONS,
-  ACTIVITY_RESULT_OPTIONS,
-  categoryBadgeVariant,
+  ACTIVITY_OPERATION_OPTIONS,
+  ACTIVITY_SORT_OPTIONS,
   formatActivityAt,
-  isActivityAction,
-  isActivityActor,
-  isActivityActorGroup,
-  isActivityCategory,
-  isActivityFeature,
-  isActivityResult,
-  resultBadgeVariant,
+  isActivityOperation,
+  isActivitySort,
+  operationBadgeVariant,
+  operationLabel,
 } from '@/utils/activityLogTypes'
 
 /*
- * 操作ログ（監査ログ）の一覧。いまは見た目だけで、実 API とは繋がっていない
- * （src/mocks/handlers/index.js のモックが応えている）。
- * モックと実 API の食い違いは src/api/activityLogs.js の冒頭に書いてある。
+ * 操作ログ（監査ログ）の一覧。各マスタの変更履歴を横断して検索する。
+ * 列・検索条件は実 API（openapi.json の ActivityLogItem と GET /operations/activity-logs の
+ * クエリ）にあるものだけで組んでいる。
  *
- * 画面モックからの意図的なずれが 2 つある。
+ * 画面モック（https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）からの意図的なずれ:
+ *   - モックにある 操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果 は実 API に無いので出さない
+ *     （追加を依頼中。docs/api/requests.md #1。提案する形は src/mocks/fixtures/activityLogs.js）
+ *   - 変更前／変更後の 1 行表示の代わりに、変更項目を一覧に出し、差分は「詳細」のダイアログで見せる
+ *     （実 API の変更前後はレコード全体の JSON なので、1 セルには収まらない）
  *   - モックは全件を sticky ヘッダ付きのスクロール領域に出すが、ここは 50 件ごとのページャー
- *     （MasterListCard が持つ）。件数が増えても壊れないほうを採る
- *   - 検索カードに「クリア」が増える（MasterSearchCard が検索とセットで持つ。既存 6 画面と同じ）
+ *   - 検索カードに「クリア」が増える（MasterSearchCard が検索とセットで持つ。既存画面と同じ）
  */
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useActivityLogsStore()
 const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(store)
 
-/* 列は画面モック（https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）の並びどおり */
+const targetsStore = useActivityLogTargetsStore()
+const { options: targetOptions, error: targetsError } = storeToRefs(targetsStore)
+
+// 対象種別の選択肢は一度取れたら使い回す（ストア側で未取得のときだけ読む）
+onMounted(() => targetsStore.ensureLoaded())
+
 const columns = [
   { key: 'at', label: '操作日時' },
-  { key: 'category', label: '操作区分' },
-  { key: 'actor', label: '操作者' },
-  { key: 'action', label: '対象機能・操作' },
-  { key: 'target', label: '対象' },
-  { key: 'change', label: '変更前／変更後' },
-  { key: 'note', label: '内容・理由' },
-  { key: 'result', label: '結果' },
+  { key: 'targetTypeName', label: '対象種別' },
+  { key: 'operation', label: '操作区分' },
+  { key: 'operator', label: '操作者' },
+  { key: 'targetKey', label: '対象キー' },
+  { key: 'changedFields', label: '変更項目' },
+  { key: 'actions', label: '' },
 ]
 
 /*
  * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
- * URL 上のクエリ名は画面モックの form と同じ契約で、この filters 定義にだけ現れる
- * （実 API 側の operator / target_key への読み替えは api 層が行う）。
+ * URL 上のクエリ名は実 API のクエリ名にそろえてある（ブックマークした URL と API の対応が読みやすい）。
  *
  * 選択肢が決まっている条件には parse を付け、手で書き換えられた URL クエリを空に落とす。
+ * 対象種別は選択肢が API から来る（URL を読む時点ではまだ無いことがある）ので検査しない。
+ * 知らない値はサーバが絞り込みに使うだけで、画面のセレクトは「全て」の表示になる。
  */
 const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
   filters: [
-    { key: 'dateFrom', query: 'date_from' },
-    { key: 'dateTo', query: 'date_to' },
-    { key: 'actorCode', query: 'actor_code', parse: (v) => (isActivityActor(v) ? v : '') },
-    { key: 'category', query: 'category', parse: (v) => (isActivityCategory(v) ? v : '') },
-    { key: 'feature', query: 'feature', parse: (v) => (isActivityFeature(v) ? v : '') },
-    { key: 'action', query: 'action', parse: (v) => (isActivityAction(v) ? v : '') },
-    { key: 'actorGroup', query: 'actor_group', parse: (v) => (isActivityActorGroup(v) ? v : '') },
-    { key: 'result', query: 'result', parse: (v) => (isActivityResult(v) ? v : '') },
-    { key: 'keyword', query: 'keyword' },
+    { key: 'dateFrom', query: 'start_date' },
+    { key: 'dateTo', query: 'end_date' },
+    { key: 'operator', query: 'operator' },
+    { key: 'operation', query: 'operation', parse: (v) => (isActivityOperation(v) ? v : '') },
+    { key: 'targetType', query: 'target_types' },
+    { key: 'targetKey', query: 'target_key' },
+    { key: 'sort', query: 'sort', parse: (v) => (isActivitySort(v) ? v : '') },
   ],
   load: (params) => store.load(params),
 })
 
-/**
- * 操作者セルの副行。`営業員・003` の形。
- * 取込バッチのように操作者コードを持たない行では、実行者区分だけを出す。
- */
-function actorRoleLabel(row) {
-  return row.actorCode ? `${row.actorRole}・${row.actorCode}` : row.actorRole
+/** 詳細ダイアログに出している行。閉じている間は null */
+const detailLog = ref(null)
+
+function openDetail(row) {
+  detailLog.value = row
+}
+
+function closeDetail() {
+  detailLog.value = null
 }
 </script>
 
@@ -90,7 +96,7 @@ function actorRoleLabel(row) {
   <section class="activity-log-list">
     <!-- 画面の説明。4 状態や検索結果に関わらず常時出す -->
     <BaseAlert variant="info" data-testid="activity-logs-description">
-      注文やマスタ更新の操作履歴を横断して検索します。記録は参照のみで、追加・訂正・削除はできません。
+      各マスタの登録・更新・削除の履歴を横断して検索します。記録は参照のみで、追加・訂正・削除はできません。
     </BaseAlert>
 
     <!-- 画面モックの検索フォームが 3 列なので columns も 3 にする（既定は 4） -->
@@ -117,66 +123,52 @@ function actorRoleLabel(row) {
           data-testid="activity-logs-date-to"
         />
       </FormField>
-      <FormField v-slot="{ field }" label="操作者">
-        <BaseSelect
+      <FormField v-slot="{ field }" label="操作者コード">
+        <BaseInput
           v-bind="field"
-          v-model="inputs.actorCode"
-          :options="ACTIVITY_ACTOR_OPTIONS"
-          placeholder="-- 全て --"
-          data-testid="activity-logs-actor-code"
+          v-model="inputs.operator"
+          placeholder="完全一致"
+          data-testid="activity-logs-operator"
         />
       </FormField>
       <FormField v-slot="{ field }" label="操作区分">
         <BaseSelect
           v-bind="field"
-          v-model="inputs.category"
-          :options="ACTIVITY_CATEGORY_OPTIONS"
+          v-model="inputs.operation"
+          :options="ACTIVITY_OPERATION_OPTIONS"
           placeholder="-- 全て --"
-          data-testid="activity-logs-category"
+          data-testid="activity-logs-operation"
         />
       </FormField>
-      <FormField v-slot="{ field }" label="対象機能">
+      <!-- 取得に失敗しても検索自体はできる（対象種別なしで全マスタを横断する）ので、欄の下に出すだけ -->
+      <FormField
+        v-slot="{ field }"
+        label="対象種別"
+        :error="targetsError ? `対象種別を取得できませんでした（${targetsError.message}）` : ''"
+      >
         <BaseSelect
           v-bind="field"
-          v-model="inputs.feature"
-          :options="ACTIVITY_FEATURE_OPTIONS"
+          v-model="inputs.targetType"
+          :options="targetOptions"
           placeholder="-- 全て --"
-          data-testid="activity-logs-feature"
+          data-testid="activity-logs-target-type"
         />
       </FormField>
-      <FormField v-slot="{ field }" label="操作内容">
-        <BaseSelect
-          v-bind="field"
-          v-model="inputs.action"
-          :options="ACTIVITY_ACTION_OPTIONS"
-          placeholder="-- 全て --"
-          data-testid="activity-logs-action"
-        />
-      </FormField>
-      <FormField v-slot="{ field }" label="実行者区分">
-        <BaseSelect
-          v-bind="field"
-          v-model="inputs.actorGroup"
-          :options="ACTIVITY_ACTOR_GROUP_OPTIONS"
-          placeholder="-- 全て --"
-          data-testid="activity-logs-actor-group"
-        />
-      </FormField>
-      <FormField v-slot="{ field }" label="結果">
-        <BaseSelect
-          v-bind="field"
-          v-model="inputs.result"
-          :options="ACTIVITY_RESULT_OPTIONS"
-          placeholder="-- 全て --"
-          data-testid="activity-logs-result"
-        />
-      </FormField>
-      <FormField v-slot="{ field }" label="対象ID・名称">
+      <FormField v-slot="{ field }" label="対象キー">
         <BaseInput
           v-bind="field"
-          v-model="inputs.keyword"
-          placeholder="注文ID・銘柄・顧客名など"
-          data-testid="activity-logs-keyword"
+          v-model="inputs.targetKey"
+          placeholder="口座番号・銘柄コードなど（部分一致）"
+          data-testid="activity-logs-target-key"
+        />
+      </FormField>
+      <!-- ボタンの並びなので label 要素と結び付けられない。名前は aria-label で持たせる -->
+      <FormField label="並び順（操作日時）">
+        <BaseSegmentedControl
+          v-model="inputs.sort"
+          :options="ACTIVITY_SORT_OPTIONS"
+          aria-label="並び順（操作日時）"
+          data-testid="activity-logs-sort"
         />
       </FormField>
     </MasterSearchCard>
@@ -199,56 +191,43 @@ function actorRoleLabel(row) {
           <span class="activity-log-list__at">{{ formatActivityAt(row.at) }}</span>
         </template>
 
-        <template #cell-category="{ row }">
+        <template #cell-operation="{ row }">
           <div class="activity-log-list__center">
-            <BaseBadge :variant="categoryBadgeVariant(row.category)">{{ row.category }}</BaseBadge>
+            <BaseBadge :variant="operationBadgeVariant(row.operation)">
+              {{ operationLabel(row.operation) }}
+            </BaseBadge>
           </div>
         </template>
 
-        <template #cell-actor="{ row }">
-          {{ row.actorName }}
-          <span class="activity-log-list__sub">{{ actorRoleLabel(row) }}</span>
+        <!-- 一括処理の行は操作者を持たない -->
+        <template #cell-operator="{ row }">
+          {{ row.operator || '—' }}
         </template>
 
-        <!-- 対象機能を小さく上段に、操作内容を下段に置く（モックの activity-feature 相当） -->
-        <template #cell-action="{ row }">
-          <span class="activity-log-list__feature">{{ row.feature }}</span>
-          {{ row.action }}
+        <template #cell-targetKey="{ row }">
+          {{ row.targetKey || '—' }}
         </template>
 
-        <template #cell-target="{ row }">
-          <span class="activity-log-list__target">{{ row.targetLabel }}</span>
-          <span class="activity-log-list__sub">{{ row.targetKey }}</span>
+        <template #cell-changedFields="{ row }">
+          <span class="activity-log-list__fields">
+            {{ row.changedFields.length > 0 ? row.changedFields.join('、') : '—' }}
+          </span>
         </template>
 
-        <!-- 変更前と変更後を 2 行で。無い側は他の列の空値表現と同じ '—' を出す -->
-        <template #cell-change="{ row }">
-          <div class="activity-log-list__change">
-            <div>
-              <span class="activity-log-list__change-label">変更前</span>{{ row.before || '—' }}
-            </div>
-            <div>
-              <span class="activity-log-list__change-label">変更後</span>{{ row.after || '—' }}
-            </div>
-          </div>
-        </template>
-
-        <template #cell-note="{ row }">
-          <div class="activity-log-list__change">
-            {{ row.note || '—' }}
-            <span v-if="row.targetCount !== null" class="activity-log-list__count">
-              対象 {{ row.targetCount }} 件
-            </span>
-          </div>
-        </template>
-
-        <template #cell-result="{ row }">
-          <div class="activity-log-list__center">
-            <BaseBadge :variant="resultBadgeVariant(row.result)">{{ row.result }}</BaseBadge>
-          </div>
+        <template #cell-actions="{ row }">
+          <BaseButton
+            variant="secondary"
+            size="sm"
+            :data-testid="`activity-logs-detail-${row.id}`"
+            @click="openDetail(row)"
+          >
+            詳細
+          </BaseButton>
         </template>
       </DataTable>
     </MasterListCard>
+
+    <ActivityLogDetailDialog :open="detailLog !== null" :log="detailLog" @close="closeDetail" />
   </section>
 </template>
 
@@ -269,43 +248,8 @@ function actorRoleLabel(row) {
   text-align: center;
 }
 
-/* 主内容の下に添える小さい灰色の行（操作者の役割・対象のキー） */
-.activity-log-list__sub {
-  display: block;
-  margin-top: var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-/* 主内容の上に添える小さい灰色の行（対象機能） */
-.activity-log-list__feature {
-  display: block;
-  margin-bottom: var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-.activity-log-list__target {
-  font-weight: 500;
-}
-
-.activity-log-list__change {
+.activity-log-list__fields {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
-  line-height: 1.55;
-}
-
-/* 「変更前」「変更後」のラベル。値の開始位置をそろえたいので幅を固定する */
-.activity-log-list__change-label {
-  display: inline-block;
-  width: 3.5em;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-.activity-log-list__count {
-  display: block;
-  margin-top: var(--space-1);
-  font-size: var(--font-size-xs);
 }
 </style>

@@ -1,128 +1,151 @@
 import { apiClient } from './client'
 
 /**
- * 操作ログ（GET /operations/activity-logs）。
+ * 操作ログ（GET /operations/activity-logs）と、その対象種別（GET /operations/activity-logs/targets）。
  *
  * **バックエンドのレスポンス形（日本語キー）を知ってよいのはこの層だけ。**
  * ここで camelCase のアプリ内モデルに変換してから外へ返す。
  *
- * この画面は画面モック
- * （https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）の見た目を正として
- * 実装しており、**いま変換している形は実 API の形ではない**。
- * docs/api/openapi.json の ActivityLogItem が持つのは
- * 対象種別 / 対象種別名 / 履歴ID / 対象ID / 対象キー / 操作区分(CREATE,UPDATE,DELETE,BATCH) /
- * 操作者(コードのみ) / 操作日時 / 変更前データ / 変更後データ / 差分 / 変更項目 だけで、
- * モックが出している 操作区分（業務操作 等）・操作者名・実行者区分・対象機能・操作内容・
- * 内容・結果 に当たる項目は無い。いまは src/mocks/handlers/index.js のモックが応えている。
+ * 形は docs/api/openapi.json の ActivityLogItem / ActivityLogTargetItem を正とする。
+ * 実 API の操作ログは「各マスタの履歴テーブルを UNION ALL で横断したもの」で、1 行が 1 回の
+ * 登録・更新・削除・一括処理にあたる。変更前後のレコード JSON と項目別の差分を持つ。
  *
- * **実 API と繋ぎ込むときは、列とクエリの対応を仕様側と決め直すこと。**
- * 送るクエリのうち実 API と対応が付くのは start_date / end_date / operator / operation /
- * target_key の 5 つで、残りの 4 つ（feature / action / actor_group / result）はモック専用。
- *
- * **期間のクエリ名は 2026-09-18 の取り込みで date_from / date_to から start_date / end_date へ、
- * 操作区分は category から operation（仕様の値は CREATE / UPDATE / DELETE / BATCH）へ変わった。**
- * 旧名は実 API に無視されるだけで絞り込みが黙って効かなくなるため、契約テスト
- * （src/api/contract.spec.js の CON-05）が検出した。アプリ内の名前（dateFrom / category）は変えていない。
+ * 画面モック（https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）にある
+ * 操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果 は仕様に無いので、ここでは扱わない。
+ * 項目の追加はバックエンドに依頼中で（docs/api/requests.md #1）、提案する形は
+ * src/mocks/fixtures/activityLogs.js に書いてある。仕様に入ったらここの変換に足す。
+ */
+
+/**
+ * @typedef {object} ActivityLogTarget 操作ログの対象種別 1 件（アプリ内モデル）
+ * @property {string} code 対象種別コード（customers / symbols …）。target_types に載せる値
+ * @property {string} name 対象種別名（顧客マスタ …）。画面の表示用
+ * @property {string} keyLabel 対象キーの項目名（口座番号 / 銘柄コード …）
+ * @property {string} historyTable 参照元の履歴テーブル名
+ */
+
+/**
+ * @typedef {object} ActivityLogDiff 項目別の差分 1 件
+ * @property {string} field 項目名
+ * @property {*} before 変更前の値。登録の行では null
+ * @property {*} after 変更後の値。削除の行では null
  */
 
 /**
  * @typedef {object} ActivityLog 操作ログ 1 件（アプリ内モデル）
- * @property {number} id 履歴ID。一覧の行キー
+ * @property {string} id 一覧の行キー。`対象種別:履歴ID`
+ *   （履歴ID は履歴テーブルごとの連番なので、横断した一覧では単独で一意にならない）
+ * @property {number} historyId 履歴ID（履歴テーブル内の ID）
+ * @property {string} targetType 対象種別コード
+ * @property {string} targetTypeName 対象種別名
+ * @property {string} targetId 各マスタの個別履歴 API に渡すキー。無い行は空文字
+ * @property {string} targetKey 対象レコードの識別キー（画面表示用）。無い行は空文字
+ * @property {string} operation 操作区分（CREATE / UPDATE / DELETE / BATCH）
+ * @property {string} operator 操作者コード。一括処理など、持たない行は空文字
  * @property {string} at 操作日時（ISO8601）。整形は utils/activityLogTypes.js の formatActivityAt
- * @property {string} category 操作区分（業務操作 / マスタ更新 / 運用管理）
- * @property {string} actorCode 操作者コード。取込バッチなど、持たない行は空文字
- * @property {string} actorName 操作者名
- * @property {string} actorRole 実行者区分（営業員 / IFA / 管理者 / 管理責任者 / システム）
- * @property {string} feature 対象機能（注文 / 残高マスタ / 為替マスタ）
- * @property {string} action 操作内容（注文受付 / 注文訂正 / 為替レートを更新 …）
- * @property {string} targetLabel 対象の表示名（注文 #28：TSLA／300002）
- * @property {string} targetKey 対象のキー（注文#28）
- * @property {string} before 変更前。無い場合は空文字（画面は '—' を出す）
- * @property {string} after 変更後。無い場合は空文字
- * @property {string} note 内容・理由
- * @property {number|null} targetCount 対象件数。無い行は null のまま
- * @property {string} result 結果（成功 / 失敗）
+ * @property {Record<string, *>|null} before 変更前のレコード。登録の行では null
+ * @property {Record<string, *>|null} after 変更後のレコード。削除の行では null
+ * @property {ActivityLogDiff[]} diff 項目別の差分。仕様の順（変更項目の順）のまま
+ * @property {string[]} changedFields 変更された項目名
  */
+
+/**
+ * 操作ログの対象種別を取得する（検索の「対象種別」プルダウン用）。
+ *
+ * @returns {Promise<ActivityLogTarget[]>} 仕様の並びのまま
+ */
+export async function fetchActivityLogTargets() {
+  const { data } = await apiClient.get('/operations/activity-logs/targets')
+  return (data?.targets ?? []).map(toActivityLogTarget)
+}
+
+/** ActivityLogTargetItem → ActivityLogTarget */
+function toActivityLogTarget(raw) {
+  return {
+    code: raw?.対象種別 ?? '',
+    name: raw?.対象種別名 ?? '',
+    keyLabel: raw?.対象キー項目 ?? '',
+    historyTable: raw?.履歴テーブル ?? '',
+  }
+}
 
 /**
  * 操作ログを検索する。
  *
  * @param {object} [params]
- * @param {number} [params.limit] 取得件数
+ * @param {number} [params.limit] 取得件数（仕様は 1〜200）
  * @param {number} [params.offset] 取得開始位置
  * @param {string} [params.dateFrom] 期間（From）。YYYY-MM-DD
  * @param {string} [params.dateTo] 期間（To）。YYYY-MM-DD
- * @param {string} [params.actorCode] 操作者コード
- * @param {string} [params.category] 操作区分
- * @param {string} [params.feature] 対象機能
- * @param {string} [params.action] 操作内容
- * @param {string} [params.actorGroup] 実行者区分（sales / management）
- * @param {string} [params.result] 結果
- * @param {string} [params.keyword] 対象ID・名称（部分一致）
- * @returns {Promise<{ items: ActivityLog[], total: number }>} 操作日時の降順
+ * @param {string} [params.operator] 操作者コード（完全一致）
+ * @param {string} [params.operation] 操作区分（CREATE / UPDATE / DELETE / BATCH）
+ * @param {string} [params.targetType] 対象種別コード。画面は 1 つだけ選ぶ
+ * @param {string} [params.targetKey] 対象キー（部分一致）
+ * @param {string} [params.sort] 操作日時の並び順（asc / desc）。空なら送らず、実 API の既定（desc）に任せる
+ * @returns {Promise<{ items: ActivityLog[], total: number }>}
  */
 export async function fetchActivityLogs({
   limit = 50,
   offset = 0,
   dateFrom = '',
   dateTo = '',
-  actorCode = '',
-  category = '',
-  feature = '',
-  action = '',
-  actorGroup = '',
-  result = '',
-  keyword = '',
+  operator = '',
+  operation = '',
+  targetType = '',
+  targetKey = '',
+  sort = '',
 } = {}) {
   const { data } = await apiClient.get('/operations/activity-logs', {
     // クエリ名を知ってよいのはこの層だけ。値が undefined のパラメータは axios が送らない
     params: {
       limit,
       offset,
-      // 実 API（openapi.json）と対応が付くのはここまでの 5 つ
       start_date: dateFrom || undefined,
       end_date: dateTo || undefined,
-      operator: actorCode || undefined,
-      /*
-       * 実 API の 操作区分 は CREATE / UPDATE / DELETE / BATCH。画面が持つ
-       * 「業務操作 / マスタ更新 / 運用管理」とは値の体系が違うので、**名前だけ合わせて値は
-       * そのまま送っている**。繋ぎ込みのときに値の対応を仕様側と決める（docs/api/requests.md #1）。
-       */
-      operation: category || undefined,
-      target_key: keyword || undefined,
-      // 以下はモック専用。実 API には対応するクエリが無い
-      feature: feature || undefined,
-      action: action || undefined,
-      actor_group: actorGroup || undefined,
-      result: result || undefined,
+      operator: operator || undefined,
+      operation: operation || undefined,
+      // 仕様はカンマ区切りで複数を受けるが、画面の選択は 1 つなのでそのまま載せる
+      target_types: targetType || undefined,
+      target_key: targetKey || undefined,
+      sort: sort || undefined,
     },
   })
 
   return {
-    items: (data.activity_logs ?? []).map(toActivityLog),
-    total: data.total ?? 0,
+    items: (data?.activity_logs ?? []).map(toActivityLog),
+    total: data?.total ?? 0,
   }
 }
 
-/** レスポンスの 1 件 → ActivityLog */
+/** ActivityLogItem → ActivityLog */
 function toActivityLog(raw) {
+  const targetType = raw?.対象種別 ?? ''
+  const historyId = raw?.履歴ID ?? 0
+
   return {
-    id: raw?.履歴ID ?? 0,
-    at: raw?.操作日時 ?? '',
-    category: raw?.操作区分 ?? '',
-    actorCode: raw?.操作者コード ?? '',
-    actorName: raw?.操作者名 ?? '',
-    actorRole: raw?.実行者区分 ?? '',
-    feature: raw?.対象機能 ?? '',
-    action: raw?.操作内容 ?? '',
-    targetLabel: raw?.対象表示名 ?? '',
-    targetKey: raw?.対象キー ?? '',
+    id: `${targetType}:${historyId}`,
+    historyId,
+    targetType,
+    targetTypeName: raw?.対象種別名 ?? '',
     // nullable な文字列は空文字に寄せる（画面が null と '' を区別しなくてよいように）
-    before: raw?.変更前 ?? '',
-    after: raw?.変更後 ?? '',
-    note: raw?.内容 ?? '',
-    // 件数は「無い」と「0 件」が別物なので null を潰さない
-    targetCount: raw?.対象件数 ?? null,
-    result: raw?.結果 ?? '',
+    targetId: raw?.対象ID ?? '',
+    targetKey: raw?.対象キー ?? '',
+    operation: raw?.操作区分 ?? '',
+    operator: raw?.操作者 ?? '',
+    at: raw?.操作日時 ?? '',
+    // レコードは「無い」（登録前・削除後）と「空」が別物なので null を潰さない
+    before: raw?.変更前データ ?? null,
+    after: raw?.変更後データ ?? null,
+    diff: toDiff(raw?.差分),
+    changedFields: Array.isArray(raw?.変更項目) ? raw.変更項目 : [],
   }
+}
+
+/** 差分 `{ 項目名: { before, after } }` → ActivityLogDiff[] */
+function toDiff(raw) {
+  return Object.entries(raw ?? {}).map(([field, change]) => ({
+    field,
+    before: change?.before ?? null,
+    after: change?.after ?? null,
+  }))
 }

@@ -54,6 +54,7 @@ import {
 } from './blackoutDates'
 import { fetchSliceCriteria, updateSliceCriteria } from './sliceCriteria'
 import { fetchActivityLogs } from './activityLogs'
+import { fetchStalledOrders } from './stalledOrders'
 import { fetchPermissions } from './permissions'
 import { fetchMarketStatus } from './marketStatus'
 import {
@@ -195,6 +196,17 @@ const KNOWN_GAPS = [
     reason:
       '画面モックの絞り込み条件（対象機能 / 操作内容 / 実行者区分 / 結果）。仕様にあるのは ' +
       'start_date / end_date / operator / operation / target_types / target_key / sort だけ',
+    request: '#1',
+  },
+  /*
+   * 滞留注文抽出は API が 1 本も無い（成熟度 D）。形は src/mocks/fixtures/stalledOrders.js が
+   * 契約提案で、MSW だけが応答する。一覧のパス自体が仕様に無いので kind: 'path' で載せる。
+   */
+  {
+    kind: 'path',
+    method: 'GET',
+    path: '/operations/stalled-orders',
+    reason: '滞留注文抽出の検索 API が仕様に無い。fixture を契約提案として先に置いている',
     request: '#1',
   },
   /*
@@ -504,6 +516,10 @@ const PROBES = [
         result: 'x',
         keyword: 'x',
       }),
+  },
+  {
+    name: 'fetchStalledOrders',
+    run: () => fetchStalledOrders({ branchCode: '123', accountNumber: '1234567', symbol: 'AAPL' }),
   },
   { name: 'fetchPermissions', run: () => fetchPermissions() },
   { name: 'fetchMarketStatus', run: () => fetchMarketStatus() },

@@ -13,6 +13,7 @@ import { permissionHandlers } from './permissions'
 import { marketStatusHandlers } from './marketStatus'
 import { announcementHandlers, resetAnnouncementState } from './announcements'
 import { bannerHandlers } from './banner'
+import { stalledOrderHandlers } from './stalledOrders'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -95,4 +96,5 @@ export const handlers = [
   ...marketStatusHandlers,
   ...announcementHandlers,
   ...bannerHandlers,
+  ...stalledOrderHandlers,
 ]

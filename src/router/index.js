@@ -72,6 +72,12 @@ const routes = [
     meta: { title: 'お知らせ管理' },
   },
   {
+    path: '/operations/stalled-orders',
+    name: 'stalled-order-list',
+    component: () => import('@/views/StalledOrderListView.vue'),
+    meta: { title: '滞留注文抽出' },
+  },
+  {
     path: '/operations/activity-logs',
     name: 'activity-log-list',
     component: () => import('@/views/ActivityLogListView.vue'),

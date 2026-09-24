@@ -66,6 +66,12 @@ const routes = [
     meta: { title: '残高マスタ' },
   },
   {
+    path: '/operations/announcements',
+    name: 'announcement-management',
+    component: () => import('@/views/AnnouncementsView.vue'),
+    meta: { title: 'お知らせ管理' },
+  },
+  {
     path: '/operations/activity-logs',
     name: 'activity-log-list',
     component: () => import('@/views/ActivityLogListView.vue'),

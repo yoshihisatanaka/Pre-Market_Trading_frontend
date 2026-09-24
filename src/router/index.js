@@ -84,6 +84,12 @@ const routes = [
     meta: { title: '操作ログ' },
   },
   {
+    path: '/operations/incidents',
+    name: 'incident-management',
+    component: () => import('@/views/IncidentManagementView.vue'),
+    meta: { title: '障害管理' },
+  },
+  {
     // 最初の画面以外は遅延 import にして初期バンドルを膨らませない
     path: '/:pathMatch(.*)*',
     name: 'not-found',

@@ -44,15 +44,15 @@ export const navSections = [
   {
     /*
      * 公開モックの区分「運用管理」には お知らせ管理 / 滞留注文抽出 / 操作ログ / 障害管理 の
-     * 4 項目があるが、載せるのは実装済みの お知らせ管理 / 滞留注文抽出 / 操作ログ だけにする。
-     * 押して「ページが見つかりません」に落ちる項目を増やさないため
-     * （残る障害管理はその画面を作るときに、公開モックの並びの位置へ足す）。
+     * 4 項目がある。並びは公開モックに合わせる。
+     * navIcons.js に運用管理向けのアイコンが無いので icon は付けない（Dream登録状況 と同じ）。
      */
     label: '運用管理',
     items: [
       { label: 'お知らせ管理', to: '/operations/announcements' },
       { label: '滞留注文抽出', to: '/operations/stalled-orders' },
       { label: '操作ログ', to: '/operations/activity-logs' },
+      { label: '障害管理', to: '/operations/incidents' },
     ],
   },
 ]

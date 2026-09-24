@@ -1,6 +1,8 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import IncidentControlDialog from '@/components/incidents/IncidentControlDialog.vue'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -12,7 +14,17 @@ import { summarizeSuspension } from '@/utils/suspensionState'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useIncidentsStore()
-const { status, targets, histories, loading, error, isEmpty, hasHistories } = storeToRefs(store)
+const {
+  status,
+  targets,
+  histories,
+  loading,
+  error,
+  isEmpty,
+  hasHistories,
+  saving,
+  saveError,
+} = storeToRefs(store)
 
 /*
  * 停止対象の表。行は サーバの targets の並び（ALL が先頭）のまま出す。
@@ -25,6 +37,7 @@ const TARGET_COLUMNS = [
   { key: 'reason', label: '停止理由' },
   { key: 'suspendedAt', label: '停止日時・停止者' },
   { key: 'resumedAt', label: '再開日時・再開者' },
+  { key: 'action', label: '操作' },
 ]
 
 const HISTORY_COLUMNS = [
@@ -56,6 +69,42 @@ function targetRowClass(row) {
   return { 'is-all': row.target === 'ALL', 'is-suspended': row.suspended }
 }
 
+/*
+ * 確認ダイアログ。「開いているか」と「何を・どの対象に」を 1 つの ref で持つ（null なら閉じている）。
+ * 対象は開いた時点の行の写し。操作後の取り直しで表の行が差し替わっても、ダイアログの文言はぶれない。
+ */
+const dialog = ref(null)
+const noticeMessage = ref('')
+
+function openDialog(row) {
+  noticeMessage.value = ''
+  store.clearSaveError()
+  dialog.value = { mode: 'suspend', target: row }
+}
+
+function closeDialog() {
+  // 実行中に閉じると、結果（成功の文言・失敗の理由）の行き先が無くなる
+  if (saving.value) return
+  dialog.value = null
+  store.clearSaveError()
+}
+
+async function confirmControl({ reason }) {
+  const { target } = dialog.value
+  const result = await store.suspend({ target: target.target, reason })
+  // 失敗時はダイアログを開いたまま、理由を saveError で出す（入力した理由は残る）
+  if (!result) return
+
+  dialog.value = null
+  // 成功の文言はサーバが返す。自前で組み立てない
+  noticeMessage.value = result.message
+}
+
+function reload() {
+  noticeMessage.value = ''
+  store.load()
+}
+
 // 初回読み込み。onMounted に置くと最初の描画で一瞬「取得できませんでした」が出る
 store.load()
 </script>
@@ -68,11 +117,15 @@ store.load()
         variant="secondary"
         data-testid="incidents-reload"
         :disabled="loading"
-        @click="store.load()"
+        @click="reload"
       >
         再読み込み
       </BaseButton>
     </Teleport>
+
+    <BaseAlert v-if="noticeMessage" variant="success" data-testid="incidents-notice">
+      {{ noticeMessage }}
+    </BaseAlert>
 
     <!-- 画面の説明。取得結果に依存しないので 4 状態のチェーンの外に置く -->
     <p class="incident__lead">障害発生時に、全体または注文ルート別に発注を停止・再開します。</p>
@@ -88,7 +141,7 @@ store.load()
 
     <div v-else-if="error" data-testid="incidents-error" class="incident__status is-error">
       <p>{{ error.message }}</p>
-      <BaseButton variant="secondary" @click="store.load()">再試行</BaseButton>
+      <BaseButton variant="secondary" @click="reload">再試行</BaseButton>
     </div>
 
     <p v-else-if="isEmpty" data-testid="incidents-empty" class="incident__status">
@@ -135,6 +188,17 @@ store.load()
             </template>
             <template v-else>—</template>
           </template>
+          <template #cell-action="{ row }">
+            <BaseButton
+              v-if="!row.suspended"
+              variant="danger"
+              size="sm"
+              :data-testid="`incidents-target-${row.target}-action`"
+              @click="openDialog(row)"
+            >
+              停止する
+            </BaseButton>
+          </template>
         </DataTable>
       </BaseCard>
 
@@ -165,6 +229,20 @@ store.load()
         </p>
       </BaseCard>
     </template>
+
+    <!--
+      ダイアログはチェーンの外。BaseModal 自身が v-if="open" を持つので、
+      ここは open だけで制御する。
+    -->
+    <IncidentControlDialog
+      :open="dialog !== null"
+      :mode="dialog?.mode ?? null"
+      :target="dialog?.target ?? null"
+      :pending="saving"
+      :error="saveError"
+      @close="closeDialog"
+      @confirm="confirmControl"
+    />
   </section>
 </template>
 

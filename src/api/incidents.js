@@ -43,7 +43,34 @@ export async function fetchSuspensionHistories() {
   return (data?.histories ?? []).map(toSuspensionHistory)
 }
 
+/**
+ * 発注を停止する。
+ *
+ * 実行者 は送らない（未指定時は認証情報から解決される。apiClient が X-User-Code を載せている）。
+ * 応答の target は**操作した 1 対象の操作後の状態**だけで、総合フラグも履歴も含まない。
+ *
+ * @param {{ target: string, reason: string, updatedAt: string|null }} params
+ *   updatedAt は楽観的ロックの合札（取得時の 更新日時）。null なら照合されない
+ */
+export async function suspendOrders({ target, reason, updatedAt }) {
+  const { data } = await apiClient.post(`${SUSPENSIONS_PATH}/suspend`, {
+    停止対象: target,
+    停止理由: reason,
+    更新日時: updatedAt ?? null,
+  })
+  return toSuspensionAction(data)
+}
+
 // バックエンドのキーは日本語。ここでだけ生の形を知る
+function toSuspensionAction(raw) {
+  return {
+    success: raw?.success === true,
+    target: raw?.target ? toSuspensionTarget(raw.target) : null,
+    // 成功時の文言はサーバが決める（画面で組み立てない）
+    message: raw?.message ?? '',
+  }
+}
+
 function toSuspensionStatus(raw) {
   return {
     // いずれかの対象が停止中

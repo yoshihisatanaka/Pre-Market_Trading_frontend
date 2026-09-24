@@ -21,3 +21,7 @@
 | INA-07 | 既定モック | `fetchSuspensionStatus()` を呼ぶ | `/operations/order-suspensions` に GET が飛ぶ | 未着手 |
 | INA-08 | 既定モック | `fetchSuspensionHistories()` を呼ぶ | `/operations/order-suspensions/history` に `limit=50` 付きで GET が飛ぶ | 未着手 |
 | INA-09 | `変更後データ` が null の履歴 | `fetchSuspensionHistories()` を呼ぶ | その要素の `reason` が `null` になる（落ちない） | 未着手 |
+| INA-10 | 既定モック | `suspendOrders({ target: '1', reason: 'IB回線障害', updatedAt: '…' })` を呼ぶ | `/operations/order-suspensions/suspend` に POST が飛び、本文が `{ 停止対象, 停止理由, 更新日時 }` になる。`実行者` は送らない | 未着手 |
+| INA-11 | 既定モック | `suspendOrders()` を呼ぶ | `success` / `target`（camelCase の停止対象 1 件）/ `message` が返る | 未着手 |
+| INA-12 | 停止 API が 409 を返す | `suspendOrders()` を呼ぶ | `ApiError` が投げられ、`status` が 409、`message` がサーバの `detail` になる | 未着手 |
+| INA-13 | `updatedAt` を省略 | `suspendOrders()` を呼ぶ | 本文の `更新日時` が null になる | 未着手 |

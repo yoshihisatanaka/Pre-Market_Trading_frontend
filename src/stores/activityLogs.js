@@ -19,23 +19,12 @@ export const ACTIVITY_LOGS_PAGE_SIZE = 50
  *
  * **操作ログは読むだけ**なので createItem / updateItem / deleteItem は渡さない
  * （監査の記録なので、そもそも画面から書き換えられてはいけない）。
- *
- * 並べ替え（操作日時の降順）はサーバの責務で、ここでは触らない。
  */
 export const useActivityLogsStore = defineStore('activityLogs', () =>
   useCrudList({
     pageSize: ACTIVITY_LOGS_PAGE_SIZE,
-    filterKeys: [
-      'dateFrom',
-      'dateTo',
-      'actorCode',
-      'category',
-      'feature',
-      'action',
-      'actorGroup',
-      'result',
-      'keyword',
-    ],
+    // sort も検索条件と同じく URL クエリが正（並び替えはサーバの責務で、ここでは触らない）
+    filterKeys: ['dateFrom', 'dateTo', 'operator', 'operation', 'targetType', 'targetKey', 'sort'],
     fetchPage: fetchActivityLogs,
   }),
 )

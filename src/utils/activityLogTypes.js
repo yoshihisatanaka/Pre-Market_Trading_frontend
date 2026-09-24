@@ -1,75 +1,28 @@
 /**
  * 操作ログの区分と表示整形（純関数と定数）。
- * 検索セレクトの選択肢・一覧セルのバッジ・日時の整形で共用する。
+ * 検索セレクトの選択肢・一覧セルのバッジ・日時と値の整形で共用する。
  *
- * **ここに並ぶ区分は実 API には存在しない。** docs/api/openapi.json の
- * `GET /operations/activity-logs` が返す ActivityLogItem が持つのは
- * 対象種別 / 履歴ID / 対象ID / 対象キー / 操作区分(CREATE,UPDATE,DELETE,BATCH) /
- * 操作者(コードのみ) / 操作日時 / 変更前後データ / 差分 / 変更項目 だけで、
- * 画面モックが出している「操作区分（業務操作・マスタ更新・運用管理）」「実行者区分」
- * 「対象機能」「操作内容」「結果」に当たる項目が無い。
- *
- * 今回は画面モック
- * （https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）の見た目を正として
- * 実装しているので、これらはモックのセレクトの写し。**API と繋ぎ込むときに、
- * 列とクエリの対応を仕様側と決め直す必要がある。**
- * 値と表示名が同じものは、そのままモックの option の value を写している。
+ * 操作区分の値は docs/api/openapi.json の `GET /operations/activity-logs` の `operation` クエリと
+ * ActivityLogItem の `操作区分` の説明にある CREATE / UPDATE / DELETE / BATCH。
+ * 仕様では enum になっていない（ただの string）ので、src/utils/apiEnums.js ではなくここに置く。
+ * 対象種別の選択肢は API（`/operations/activity-logs/targets`）から引くので、ここには持たない。
  */
 
-/** 操作区分。一覧 2 列目のバッジと検索セレクトで使う */
-export const ACTIVITY_CATEGORY_OPTIONS = [
-  { value: '業務操作', label: '業務操作' },
-  { value: 'マスタ更新', label: 'マスタ更新' },
-  { value: '運用管理', label: '運用管理' },
-]
-
-/** 対象機能。一覧 4 列目の上段と検索セレクトで使う */
-export const ACTIVITY_FEATURE_OPTIONS = [
-  { value: '残高マスタ', label: '残高マスタ' },
-  { value: '注文', label: '注文' },
-  { value: '為替マスタ', label: '為替マスタ' },
-]
-
-/** 操作内容。一覧 4 列目の下段と検索セレクトで使う */
-export const ACTIVITY_ACTION_OPTIONS = [
-  { value: '残高マスタ', label: '残高マスタ' },
-  { value: '注文受付', label: '注文受付' },
-  { value: '注文訂正', label: '注文訂正' },
-  { value: '為替レートを更新', label: '為替レートを更新' },
+/** 操作区分。一覧のバッジと検索セレクトで使う。表示名は画面の言葉に訳したもの */
+export const ACTIVITY_OPERATION_OPTIONS = [
+  { value: 'CREATE', label: '登録' },
+  { value: 'UPDATE', label: '更新' },
+  { value: 'DELETE', label: '削除' },
+  { value: 'BATCH', label: '一括処理' },
 ]
 
 /**
- * 実行者区分。value（sales / management）だけ英字なのはモックの option に合わせたもの。
- * 1 つの value が複数の役割（営業員 と IFA）をまとめるので、表示名と 1 対 1 にならない。
- * どの役割がどちらに属するかはモックのサーバ側の都合なので、絞り込みはモック
- * （src/mocks/handlers/index.js）が ACTOR_GROUP_ROLES で判定する。
+ * 並び順（操作日時）。実 API の `sort` の既定は desc なので、既定（新しい順）は空文字で表し
+ * URL クエリにも出さない。
  */
-export const ACTIVITY_ACTOR_GROUP_OPTIONS = [
-  { value: 'sales', label: '営業員・IFA' },
-  { value: 'management', label: '管理者・管理責任者' },
-]
-
-/** 結果 */
-export const ACTIVITY_RESULT_OPTIONS = [
-  { value: '成功', label: '成功' },
-  { value: '失敗', label: '失敗' },
-]
-
-/**
- * 操作者。モックのセレクトのハードコードをそのまま写している。
- *
- * 本来はユーザマスタ（もしくはコードマスタ）から引くもので、フロントに固定で持つ値ではない。
- * 操作ログの画面が先に出来ただけなので、選択肢の出所が決まったら
- * CustomerListView の部店・扱者と同じく useCodesStore 経由に差し替える。
- */
-export const ACTIVITY_ACTOR_OPTIONS = [
-  { value: '001', label: '001 山田 太郎' },
-  { value: '002', label: '002 鈴木 花子' },
-  { value: '003', label: '003 佐藤 一郎' },
-  { value: '005', label: '005 高橋 管理' },
-  { value: '006', label: '006 伊藤 責任者' },
-  { value: '111', label: '111 システム' },
-  { value: '222', label: '222 システム' },
+export const ACTIVITY_SORT_OPTIONS = [
+  { value: '', label: '新しい順' },
+  { value: 'asc', label: '古い順' },
 ]
 
 /**
@@ -81,38 +34,36 @@ function memberOf(options) {
   return (value) => options.some((option) => option.value === value)
 }
 
-export const isActivityActor = memberOf(ACTIVITY_ACTOR_OPTIONS)
-export const isActivityCategory = memberOf(ACTIVITY_CATEGORY_OPTIONS)
-export const isActivityFeature = memberOf(ACTIVITY_FEATURE_OPTIONS)
-export const isActivityAction = memberOf(ACTIVITY_ACTION_OPTIONS)
-export const isActivityActorGroup = memberOf(ACTIVITY_ACTOR_GROUP_OPTIONS)
-export const isActivityResult = memberOf(ACTIVITY_RESULT_OPTIONS)
+export const isActivityOperation = memberOf(ACTIVITY_OPERATION_OPTIONS)
+export const isActivitySort = memberOf(ACTIVITY_SORT_OPTIONS)
+
+/**
+ * 操作区分の表示名。
+ *
+ * @param {string} operation 操作区分（CREATE など）
+ * @returns {string} 表示名。未知の値はそのまま返す（バックエンドが区分を増やしても行は読めるように）
+ */
+export function operationLabel(operation) {
+  return ACTIVITY_OPERATION_OPTIONS.find((option) => option.value === operation)?.label ?? operation
+}
 
 /**
  * 操作区分に対応する BaseBadge の variant。
- * 色はモックの `.activity-kind.business`（青） / `.master`（緑） / `.operation`（灰）に対応する。
+ * 登録は緑、更新は青、削除は黄、一括処理と未知の値は灰。
+ * 削除は赤（error）にしない。失敗を表す色ではなく、正常に記録された操作なので。
  *
- * @param {string} category 操作区分
+ * @param {string} operation 操作区分
  * @returns {string} BaseBadge の variant
  */
-export function categoryBadgeVariant(category) {
-  if (category === '業務操作') return 'info'
-  if (category === 'マスタ更新') return 'success'
+export function operationBadgeVariant(operation) {
+  if (operation === 'CREATE') return 'success'
+  if (operation === 'UPDATE') return 'info'
+  if (operation === 'DELETE') return 'warning'
   return 'gray'
 }
 
-/**
- * 結果に対応する BaseBadge の variant。
- * 成功は緑、失敗は赤。赤は売買区分の `buy` ではなく `error` を使う（意味が違う）。
- *
- * @param {string} result 結果
- * @returns {string} BaseBadge の variant
- */
-export function resultBadgeVariant(result) {
-  return result === '失敗' ? 'error' : 'success'
-}
-
 const activityAt = new Intl.DateTimeFormat('ja-JP', {
+  year: 'numeric',
   month: '2-digit',
   day: '2-digit',
   hour: '2-digit',
@@ -121,10 +72,9 @@ const activityAt = new Intl.DateTimeFormat('ja-JP', {
 })
 
 /**
- * 操作日時を一覧の表示形（`09/16 10:35:00`）に整形する。
+ * 操作日時を一覧の表示形（`2026/09/16 10:35:00`）に整形する。
  *
- * モックは行によって秒の有無が揺れている（注文の行は `09/16 10:35:00`、マスタ更新の行は
- * `08/27 09:10`）が、同じ列で桁数が変わると読みにくいので常に秒まで出す。
+ * 監査記録は年をまたいで検索するので年まで出す。同じ列で桁数が変わると読みにくいので常に秒まで出す。
  *
  * @param {string} isoString ISO8601 の日時文字列
  * @returns {string} 整形後の日時。空値・不正値は '—'（他の列の空値表現とそろえる）
@@ -134,4 +84,19 @@ export function formatActivityAt(isoString) {
   const date = new Date(isoString)
   if (Number.isNaN(date.getTime())) return '—'
   return activityAt.format(date)
+}
+
+/**
+ * 変更前後データ・差分の値を 1 行の文字列にする。
+ *
+ * レコード JSON の値は型が決まっていない（仕様は additionalProperties: true）ので、
+ * 文字列・数値・真偽値はそのまま、入れ子の object / 配列は JSON にして出す。
+ *
+ * @param {*} value 値
+ * @returns {string} 表示用の文字列。null / undefined / 空文字は '—'
+ */
+export function formatActivityValue(value) {
+  if (value === null || value === undefined || value === '') return '—'
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
 }

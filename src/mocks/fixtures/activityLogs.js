@@ -1,299 +1,275 @@
+import { activityLogTargets } from './activityLogTargets'
+
 /*
- * モックのレスポンス実体。
- * ここに書くのは「バックエンドが返す生の形」であり、アプリ内モデルではない。
+ * モックのレスポンス実体（GET /operations/activity-logs）。
+ * ここに書くのは「バックエンドが返す生の形」（openapi.json の ActivityLogItem）であり、
+ * アプリ内モデルではない。
  *
- * ただし他のフィクスチャと違い、**これは実 API の形ではない**。
- * docs/api/openapi.json の `GET /operations/activity-logs` が返す ActivityLogItem が持つのは
- * 対象種別 / 対象種別名 / 履歴ID / 対象ID / 対象キー / 操作区分(CREATE,UPDATE,DELETE,BATCH) /
- * 操作者(コードのみ) / 操作日時 / 変更前データ / 変更後データ / 差分 / 変更項目 だけで、
- * 画面モックが出している 操作区分（業務操作 等）・操作者名・実行者区分・対象機能・操作内容・
- * 内容・結果 に当たる項目が無い。
- *
- * 今回は画面モック
- * （https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）の見た目を正として
- * 実装しているので、ここはそのモックが描いている内容から起こした**暫定の契約**。
- * 実 API と繋ぎ込むときは、この形と src/api/activityLogs.js の変換を仕様側と決め直す。
+ * **各行の末尾 5 項目（操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果）は仕様に無い。**
+ * 画面モックが出していた項目で、バックエンドに追加を依頼している（docs/api/requests.md #1）。
+ * この 5 項目は**契約提案**としてここに書いてあり、src/api/activityLogs.js は読まない
+ * （画面にも出さない）。契約テスト（src/api/contract.spec.js）は KNOWN_GAPS でこの 5 項目だけを
+ * 許しているので、仕様に入った日に CON-07 が落ちて気づける。
  *
  * ページャーの動作確認には 1 ページ（50 件）を超えるデータが要るので、
- * モックから採った 19 件に古い日付の注文受付を 37 件足して 56 件にしてある。
+ * 対象種別・操作区分を一通り含む 16 件に、古い日付の顧客マスタ更新を 40 件足して 56 件にしてある。
  *
  * ブラウザ(MSW worker)・単体テスト・E2E で共用する。
  */
 
-/**
- * 実行者区分（実体）と検索条件の実行者区分（sales / management）の対応。
- *
- * 検索セレクトの value は 2 つだが、行が持つ役割は 5 つあるので 1 対 1 にならない。
- * 「システム」はどちらにも属さない（sales でも management でも絞り込まれない）。
- * モックのサーバ側の都合なので、この対応表はフロントの utils ではなくモック側に置く。
- */
-export const ACTOR_GROUP_ROLES = {
-  sales: ['営業員', 'IFA'],
-  management: ['管理者', '管理責任者'],
+/** 契約提案の操作者名・実行者区分。操作者コード → 表示名。一括処理（操作者 null）は「システム」 */
+const OPERATORS = {
+  '001': { name: '山田 太郎', role: 'IFA' },
+  '002': { name: '鈴木 花子', role: 'IFA' },
+  '003': { name: '佐藤 一郎', role: '営業員' },
+  '005': { name: '高橋 管理', role: '管理者' },
+  '006': { name: '伊藤 責任者', role: '管理責任者' },
 }
+const SYSTEM_OPERATOR = { name: 'システム', role: 'システム' }
+
+/** 契約提案の操作内容の動詞 */
+const OPERATION_VERBS = { CREATE: '登録', UPDATE: '更新', DELETE: '削除', BATCH: '一括取込' }
 
 /**
- * 画面モックの 18 行そのまま ＋ 結果=失敗 の 1 行。操作日時の降順。
- * 失敗の行はモックに 1 件も無いが、赤いバッジを実物で確認できないと出し分けを検証できないので
- * 先頭に 1 件だけ足してある（モック由来ではない唯一の行）。
+ * 対象種別・操作区分を一通り含む 16 件。操作日時の降順。
+ * before / after は変更前後のレコード（登録は before が、削除は after が無い）。
  */
-const MOCK_ROWS = [
+const BASE_ROWS = [
   {
+    type: 'symbols',
+    targetId: 'AAPL',
+    targetKey: 'AAPL',
+    operation: 'UPDATE',
+    operator: '005',
     at: '2026-09-16T10:40:00',
-    category: '業務操作',
-    actorName: '佐藤 一郎',
-    actorRole: '営業員',
-    actorCode: '003',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #29：AMZN／300002',
-    targetKey: '注文#29',
-    after: '買 500株／成行',
-    note: '買付余力が不足しています',
-    result: '失敗',
+    before: { 銘柄コード: 'AAPL', 銘柄名: 'アップル', 規制区分: '0', 発注経路: '1' },
+    after: { 銘柄コード: 'AAPL', 銘柄名: 'アップル', 規制区分: '1', 発注経路: '1' },
   },
   {
-    at: '2026-09-16T10:35:00',
-    category: '業務操作',
-    actorName: '佐藤 一郎',
-    actorRole: '営業員',
-    actorCode: '003',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #28：TSLA／300002',
-    targetKey: '注文#28',
-    after: '売 12株／指値',
-    note: '売 12株／指値',
-  },
-  {
+    type: 'customers',
+    targetId: '1230001',
+    targetKey: '1230001',
+    operation: 'UPDATE',
+    operator: '003',
     at: '2026-09-16T10:22:00',
-    category: '業務操作',
-    actorName: '鈴木 花子',
-    actorRole: 'IFA',
-    actorCode: '002',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #27：MSFT／200001',
-    targetKey: '注文#27',
-    after: '買 35株／成行',
-    note: '買 35株／成行',
+    before: { 口座番号: '1230001', 顧客名: '山本 健一', 取引制限区分: '0' },
+    after: { 口座番号: '1230001', 顧客名: '山本 健一', 取引制限区分: '1' },
   },
   {
-    at: '2026-09-16T10:10:00',
-    category: '業務操作',
-    actorName: '山田 太郎',
-    actorRole: 'IFA',
-    actorCode: '001',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #26：AAPL／300001',
-    targetKey: '注文#26',
-    after: '売 20株／指値',
-    note: '売 20株／指値',
+    type: 'fx',
+    targetId: '2026-09-16',
+    targetKey: '2026-09-16',
+    operation: 'BATCH',
+    operator: null,
+    at: '2026-09-16T09:05:00',
+    before: { 適用日: '2026-09-16', 為替レート: 147.85 },
+    after: { 適用日: '2026-09-16', 為替レート: 148.2 },
   },
   {
-    at: '2026-09-16T09:45:00',
-    category: '業務操作',
-    actorName: '佐藤 一郎',
-    actorRole: '営業員',
-    actorCode: '003',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #25：GOOGL／300002',
-    targetKey: '注文#25',
-    after: '買 15株／指値',
-    note: '買 15株／指値',
+    type: 'balance_adjustments',
+    targetId: '41',
+    targetKey: '1230002',
+    operation: 'CREATE',
+    operator: '002',
+    at: '2026-09-15T17:30:00',
+    before: null,
+    after: { 部店コード: '123', 口座番号: '1230002', 銘柄コード: 'MSFT', 残高: 35 },
   },
   {
-    at: '2026-09-16T09:35:00',
-    category: '業務操作',
-    actorName: '鈴木 花子',
-    actorRole: 'IFA',
-    actorCode: '002',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #24：NVDA／200001',
-    targetKey: '注文#24',
-    after: '売 30株／指値',
-    note: '売 30株／指値',
+    type: 'ca',
+    targetId: '17',
+    targetKey: 'NVDA',
+    operation: 'UPDATE',
+    operator: '005',
+    at: '2026-09-15T16:10:00',
+    before: { 銘柄コード: 'NVDA', CA区分: '110', 権利落日: '2026-10-01', 分割比率: '1:4' },
+    after: { 銘柄コード: 'NVDA', CA区分: '110', 権利落日: '2026-10-08', 分割比率: '1:4' },
   },
   {
-    at: '2026-09-08T10:10:00',
-    category: '業務操作',
-    actorName: '伊藤 責任者',
-    actorRole: '管理責任者',
-    actorCode: '006',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #1001：AAPL／123456',
-    targetKey: '注文#1001',
-    after: '買 10,000株／成行／自動分割 3件',
-    note: '買 10,000株／成行／自動分割 3件',
+    type: 'symbols',
+    targetId: 'PLTR',
+    targetKey: 'PLTR',
+    operation: 'CREATE',
+    operator: '005',
+    at: '2026-09-15T11:00:00',
+    before: null,
+    after: { 銘柄コード: 'PLTR', 銘柄名: 'パランティア', 規制区分: '0', 発注経路: '1' },
   },
   {
-    at: '2026-09-04T09:45:00',
-    category: '業務操作',
-    actorName: '佐藤 一郎',
-    actorRole: '営業員',
-    actorCode: '003',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #6：AMZN／300003',
-    targetKey: '注文#6',
-    after: '買 40株／指値',
-    note: '買 40株／指値',
+    type: 'customers',
+    targetId: '1230009',
+    targetKey: '1230009',
+    operation: 'DELETE',
+    operator: '006',
+    at: '2026-09-14T15:45:00',
+    before: { 口座番号: '1230009', 顧客名: '中村 美咲', 取引制限区分: '0' },
+    after: null,
   },
   {
-    at: '2026-08-27T09:10:00',
-    category: 'マスタ更新',
-    actorName: '高橋 管理',
-    actorRole: '管理者',
-    actorCode: '005',
-    feature: '残高マスタ',
-    action: '残高マスタ',
-    targetLabel: '中村 凪／MSFT',
-    targetKey: '123-123456／MSFT',
-    // 変更前がある唯一の行。ここだけ「変更前 → 変更後」の両方が埋まる
-    before: '保有数量：80株',
-    after: '保有数量：100株',
-    note: '既存銘柄に加算：加算 20株',
-    targetCount: 1,
-  },
-  ...[
-    { date: '2026-07-31', time: '09:00:00', rate: '150.25' },
-    { date: '2026-07-30', time: '09:05:00', rate: '149.90' },
-    { date: '2026-07-29', time: '09:02:00', rate: '151.10' },
-    { date: '2026-07-28', time: '09:00:00', rate: '148.75' },
-    { date: '2026-07-25', time: '09:01:00', rate: '149.30' },
-  ].map(({ date, time, rate }) => ({
-    at: `${date}T${time}`,
-    category: 'マスタ更新',
-    // 取込バッチなので操作者コードを持たない（副行は「システム」だけになる）
-    actorName: 'システム取込',
-    actorRole: 'システム',
-    actorCode: '',
-    feature: '為替マスタ',
-    action: '為替レートを更新',
-    targetLabel: '為替マスタ：USD/JPY',
-    targetKey: 'USD/JPY',
-    after: rate,
-    note: `適用日 ${date}／${rate}`,
-  })),
-  {
-    at: '2026-07-14T09:15:00',
-    category: '業務操作',
-    actorName: 'システム',
-    actorRole: 'システム',
-    actorCode: '222',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #5：NVDA／300001',
-    targetKey: '注文#5',
-    after: '買 25株／指値',
-    note: '買 25株／指値',
+    type: 'market_holidays',
+    targetId: '2026-11-26',
+    targetKey: '2026-11-26',
+    operation: 'CREATE',
+    operator: '005',
+    at: '2026-09-14T10:20:00',
+    before: null,
+    after: { 休場日: '2026-11-26', 休場理由: 'Thanksgiving Day', 休場区分: '0' },
   },
   {
-    at: '2026-07-13T13:00:00',
-    category: '業務操作',
-    actorName: 'システム',
-    actorRole: 'システム',
-    actorCode: '222',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #3：META／300001',
-    targetKey: '注文#3',
-    after: '売 100株／成行',
-    note: '売 100株／成行',
+    // 年次の一括登録。1 件のレコードに紐づかないので対象ID / 対象キーを持たない（'—' の表示確認用）
+    type: 'market_holidays',
+    targetId: null,
+    targetKey: null,
+    operation: 'BATCH',
+    operator: null,
+    at: '2026-09-12T09:00:00',
+    before: null,
+    after: { 休場日: '2027-01-01', 休場理由: "New Year's Day", 休場区分: '0' },
   },
   {
-    at: '2026-07-13T11:45:00',
-    category: '業務操作',
-    actorName: 'システム',
-    actorRole: 'システム',
-    actorCode: '111',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #2：MSFT／123456',
-    targetKey: '注文#2',
-    after: '買 50株／指値',
-    note: '買 50株／指値',
+    type: 'balance_adjustments',
+    targetId: '41',
+    targetKey: '1230002',
+    operation: 'UPDATE',
+    operator: '002',
+    at: '2026-09-11T14:30:00',
+    before: { 部店コード: '123', 口座番号: '1230002', 銘柄コード: 'MSFT', 残高: 35 },
+    after: { 部店コード: '123', 口座番号: '1230002', 銘柄コード: 'MSFT', 残高: 50 },
   },
   {
-    at: '2026-07-13T10:42:00',
-    category: '業務操作',
-    actorName: 'システム',
-    actorRole: 'システム',
-    actorCode: '111',
-    feature: '注文',
-    // 操作内容の絞り込みを検証できるよう、注文訂正はモックと同じく 1 件だけ
-    action: '注文訂正',
-    targetLabel: '注文 #4：AAPL／123456',
-    targetKey: '注文#4',
-    after: '売 90株／指値',
-    note: '売 90株／指値',
+    type: 'symbols',
+    targetId: 'TWTR',
+    targetKey: 'TWTR',
+    operation: 'DELETE',
+    operator: '005',
+    at: '2026-09-11T13:00:00',
+    before: { 銘柄コード: 'TWTR', 銘柄名: 'ツイッター', 規制区分: '1', 発注経路: '1' },
+    after: null,
   },
   {
-    at: '2026-07-13T10:30:00',
-    category: '業務操作',
-    actorName: 'システム',
-    actorRole: 'システム',
-    actorCode: '111',
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: '注文 #1：AAPL／123456',
-    targetKey: '注文#1',
-    after: '売 100株／指値',
-    note: '売 100株／指値',
+    type: 'fx',
+    targetId: '2026-09-10',
+    targetKey: '2026-09-10',
+    operation: 'BATCH',
+    operator: null,
+    at: '2026-09-10T09:05:00',
+    before: { 適用日: '2026-09-10', 為替レート: 146.9 },
+    after: { 適用日: '2026-09-10', 為替レート: 147.35 },
+  },
+  {
+    type: 'customers',
+    targetId: '1230010',
+    targetKey: '1230010',
+    operation: 'CREATE',
+    operator: '001',
+    at: '2026-09-09T18:00:00',
+    before: null,
+    after: { 口座番号: '1230010', 顧客名: '小林 直人', 取引制限区分: '0' },
+  },
+  {
+    type: 'ca',
+    targetId: '16',
+    targetKey: 'AAPL',
+    operation: 'CREATE',
+    operator: '005',
+    at: '2026-09-08T10:15:00',
+    before: null,
+    after: { 銘柄コード: 'AAPL', CA区分: '120', 権利落日: '2026-11-10', 分割比率: null },
+  },
+  {
+    // 複数項目が同時に変わった行（差分の表が 2 行になることの確認用）
+    type: 'customers',
+    targetId: '1230003',
+    targetKey: '1230003',
+    operation: 'UPDATE',
+    operator: '001',
+    at: '2026-09-05T12:00:00',
+    before: { 口座番号: '1230003', 顧客名: '加藤 陽子', 電話番号: '03-1111-2222', 住所: '東京都港区' },
+    after: { 口座番号: '1230003', 顧客名: '加藤 陽子', 電話番号: '03-3333-4444', 住所: '東京都品川区' },
+  },
+  {
+    type: 'fx',
+    targetId: '2026-09-01',
+    targetKey: '2026-09-01',
+    operation: 'BATCH',
+    operator: null,
+    at: '2026-09-01T09:05:00',
+    before: { 適用日: '2026-09-01', 為替レート: 145.5 },
+    after: { 適用日: '2026-09-01', 為替レート: 146.1 },
   },
 ]
 
-/* ページャーを動かすための水増し。2026-07-10 から 1 日ずつ遡って 37 件 */
-const FILLER_SYMBOLS = ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'META', 'GOOGL']
-const FILLER_ACTORS = [
-  { actorName: '山田 太郎', actorRole: 'IFA', actorCode: '001' },
-  { actorName: '鈴木 花子', actorRole: 'IFA', actorCode: '002' },
-  { actorName: '佐藤 一郎', actorRole: '営業員', actorCode: '003' },
-]
+/* ページャーを動かすための水増し。2026-08-31 から 1 日ずつ遡って 40 件の顧客マスタ更新 */
+const FILLER_OPERATORS = ['001', '002', '003']
 
-const FILLER_ROWS = Array.from({ length: 37 }, (_, index) => {
-  const symbol = FILLER_SYMBOLS[index % FILLER_SYMBOLS.length]
-  const actor = FILLER_ACTORS[index % FILLER_ACTORS.length]
-  const orderNumber = 900 - index
-  const date = new Date(Date.UTC(2026, 6, 10) - index * 24 * 60 * 60 * 1000)
+const FILLER_ROWS = Array.from({ length: 40 }, (_, index) => {
+  const accountNumber = String(1230100 + index)
+  const date = new Date(Date.UTC(2026, 7, 31) - index * 24 * 60 * 60 * 1000)
+  const record = { 口座番号: accountNumber, 顧客名: `顧客 ${index + 1}`, 取引制限区分: '0' }
 
   return {
+    type: 'customers',
+    targetId: accountNumber,
+    targetKey: accountNumber,
+    operation: 'UPDATE',
+    operator: FILLER_OPERATORS[index % FILLER_OPERATORS.length],
     at: `${date.toISOString().slice(0, 10)}T09:30:00`,
-    category: '業務操作',
-    ...actor,
-    feature: '注文',
-    action: '注文受付',
-    targetLabel: `注文 #${orderNumber}：${symbol}／30000${(index % 3) + 1}`,
-    targetKey: `注文#${orderNumber}`,
-    after: `買 ${(index % 9) + 1}0株／指値`,
-    note: `買 ${(index % 9) + 1}0株／指値`,
+    before: record,
+    after: { ...record, 取引制限区分: '1' },
   }
 })
 
-const ALL_ROWS = [...MOCK_ROWS, ...FILLER_ROWS]
+const ALL_ROWS = [...BASE_ROWS, ...FILLER_ROWS]
+
+/**
+ * 履歴ID は履歴テーブルごとの連番（仕様: 履歴テーブル内の履歴ID）。対象種別ごとに古い行から 1, 2, … と振る。
+ * 別の対象種別で同じ履歴ID が出るのが実 API と同じ形（一覧の行キーを 履歴ID だけにすると重複する）。
+ */
+const HISTORY_IDS = (() => {
+  const counters = {}
+  return [...ALL_ROWS]
+    .reverse()
+    .map((row) => {
+      counters[row.type] = (counters[row.type] ?? 0) + 1
+      return counters[row.type]
+    })
+    .reverse()
+})()
+
+/** 変更前後のレコードから、値が変わった項目の差分を作る（登録・削除は全項目が差分になる） */
+function toDiff(before, after) {
+  const fields = [...new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})])]
+  return Object.fromEntries(
+    fields
+      .filter((field) => before?.[field] !== after?.[field])
+      .map((field) => [field, { before: before?.[field] ?? null, after: after?.[field] ?? null }]),
+  )
+}
 
 function toActivityLogItem(row, index) {
+  const typeName = activityLogTargets.find((target) => target.対象種別 === row.type)?.対象種別名
+  const operator = OPERATORS[row.operator] ?? SYSTEM_OPERATOR
+  const diff = toDiff(row.before, row.after)
+
   return {
-    // 新しい行ほど大きい ID になるよう、降順の並びから振る
-    履歴ID: ALL_ROWS.length - index,
-    操作日時: row.at,
-    操作区分: row.category,
-    操作者コード: row.actorCode ?? '',
-    操作者名: row.actorName,
-    実行者区分: row.actorRole,
-    対象機能: row.feature,
-    操作内容: row.action,
-    対象表示名: row.targetLabel,
+    対象種別: row.type,
+    対象種別名: typeName ?? row.type,
+    履歴ID: HISTORY_IDS[index],
+    対象ID: row.targetId,
     対象キー: row.targetKey,
-    変更前: row.before ?? null,
-    変更後: row.after ?? null,
-    内容: row.note ?? null,
-    対象件数: row.targetCount ?? null,
-    結果: row.result ?? '成功',
+    操作区分: row.operation,
+    操作者: row.operator,
+    操作日時: row.at,
+    変更前データ: row.before,
+    変更後データ: row.after,
+    差分: diff,
+    変更項目: Object.keys(diff),
+    // ---- ここから下は仕様に無い（契約提案。docs/api/requests.md #1） ----
+    操作者名: operator.name,
+    実行者区分: operator.role,
+    対象機能: typeName ?? row.type,
+    操作内容: `${typeName ?? row.type}を${OPERATION_VERBS[row.operation]}`,
+    結果: '成功',
   }
 }
 

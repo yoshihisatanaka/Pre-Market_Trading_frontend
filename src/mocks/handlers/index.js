@@ -11,6 +11,8 @@ import { sliceCriteriaHandlers, resetSliceCriteriaRow } from './sliceCriteria'
 import { activityLogHandlers } from './activityLogs'
 import { permissionHandlers } from './permissions'
 import { marketStatusHandlers } from './marketStatus'
+import { announcementHandlers, resetAnnouncementState } from './announcements'
+import { bannerHandlers } from './banner'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -66,6 +68,7 @@ export function resetMockState() {
   resetSymbolRows()
   resetBalanceAdjustmentRows()
   resetSliceCriteriaRow()
+  resetAnnouncementState()
 }
 
 export const handlers = [
@@ -90,4 +93,6 @@ export const handlers = [
   ...activityLogHandlers,
   ...permissionHandlers,
   ...marketStatusHandlers,
+  ...announcementHandlers,
+  ...bannerHandlers,
 ]

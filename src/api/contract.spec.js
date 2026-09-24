@@ -18,6 +18,16 @@ import {
   marketStatusResponse,
   shortenedMarketStatusResponse,
 } from '../mocks/fixtures/marketStatus'
+import {
+  announcement,
+  announcementHistories,
+  initialAnnouncement,
+} from '../mocks/fixtures/announcements'
+import {
+  incidentBannerResponse,
+  noneBannerResponse,
+  noticeBannerResponse,
+} from '../mocks/fixtures/banner'
 import { fetchOrders } from './orders'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
@@ -51,6 +61,12 @@ import {
   fetchBalanceAdjustments,
   updateBalanceAdjustment,
 } from './balanceAdjustments'
+import {
+  fetchAnnouncement,
+  fetchAnnouncementHistory,
+  updateAnnouncement,
+} from './announcements'
+import { fetchBanner } from './banner'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -270,6 +286,17 @@ const FIXTURES = [
     name: 'marketStatus',
     schema: 'MarketStatusResponse',
     rows: [marketStatusResponse, closedMarketStatusResponse, shortenedMarketStatusResponse],
+  },
+  { name: 'announcements', schema: 'AnnouncementItem', rows: [announcement, initialAnnouncement] },
+  {
+    name: 'announcementHistories',
+    schema: 'AnnouncementHistoryItem',
+    rows: announcementHistories,
+  },
+  {
+    name: 'banner',
+    schema: 'BannerResponse',
+    rows: [incidentBannerResponse, noticeBannerResponse, noneBannerResponse],
   },
 ]
 
@@ -506,6 +533,13 @@ const PROBES = [
     name: 'updateBalanceAdjustment',
     run: () => updateBalanceAdjustment({ id: '1', balance: 1, updatedAt: '' }),
   },
+  { name: 'fetchAnnouncement', run: () => fetchAnnouncement() },
+  {
+    name: 'updateAnnouncement',
+    run: () => updateAnnouncement({ enabled: false, message: '', updatedAt: '' }),
+  },
+  { name: 'fetchAnnouncementHistory', run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }) },
+  { name: 'fetchBanner', run: () => fetchBanner() },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

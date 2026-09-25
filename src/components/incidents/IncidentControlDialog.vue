@@ -66,7 +66,8 @@ const REASON_MAX_LENGTH = 200
  * 再開の説明。テンプレートに直接書くと、日本語の途中で改行した位置が半角スペースとして描画される
  * （prettier の折り返しでも同じ）。1 つの文字列にしておけば表示は変わらない
  */
-const RESUME_NOTE = '停止中に保留された発注待ちの注文は、通常のバッチ周期で順次発注されます。'
+const RESUME_NOTE =
+  '復旧確認が完了していることを確認してください。停止中に保留された発注待ちの注文は、通常のバッチ周期で順次発注されます。'
 
 const reason = ref('')
 const reasonError = ref('')
@@ -85,7 +86,12 @@ const targetName = computed(() => props.target?.targetName ?? '')
 const isAll = computed(() => props.target?.target === 'ALL')
 const isResume = computed(() => props.mode === 'resume')
 
-const title = computed(() => (isResume.value ? '発注再開の確認' : '発注停止の確認'))
+// 見出しはモック 08986d1 の「〈対象〉を開始しますか？ / 解除しますか？」の形。語は停止 / 再開に揃える
+const title = computed(() =>
+  isResume.value
+    ? `${targetName.value}の発注を再開しますか？`
+    : `${targetName.value}の発注を停止しますか？`,
+)
 
 const submitLabel = computed(() => {
   if (isResume.value) return props.pending ? '再開中…' : '再開する'

@@ -36,6 +36,7 @@ const SUSPENDED_IB = toTarget(rawOf('1'), { suspended: true, reason: REASON })
 
 const ALL_WARNING = '全ルートの発注が止まり、注文の新規受付・取消も停止します。'
 const REQUIRED_ERROR = '停止理由を入力してください。'
+const RECOVERY_NOTE = '復旧確認が完了していることを確認してください。'
 
 /*
  * BaseModal の Teleport で body に出るため、teleport を stub して wrapper 内に描画させる。
@@ -67,7 +68,9 @@ describe('IncidentControlDialog', () => {
   it('[IND-02] 停止の確認は見出し・対象名・必須の停止理由欄を出し、全ルート停止の警告は出さない', () => {
     const wrapper = mountDialog()
 
-    expect(dialogOf(wrapper).attributes('aria-label')).toBe('発注停止の確認')
+    expect(dialogOf(wrapper).attributes('aria-label')).toBe(
+      `${IB.targetName}の発注を停止しますか？`,
+    )
     expect(dialogText(wrapper)).toContain(`「${IB.targetName}」`)
     const reason = byTestid(wrapper, 'reason')
     expect(reason.exists()).toBe(true)
@@ -169,8 +172,11 @@ describe('IncidentControlDialog', () => {
   it('[IND-15] 再開の確認は見出し・対象名・停止時の記録を読み取り専用で出し、入力欄と警告は出さない', () => {
     const wrapper = mountDialog({ mode: 'resume', target: SUSPENDED_IB })
 
-    expect(dialogOf(wrapper).attributes('aria-label')).toBe('発注再開の確認')
+    expect(dialogOf(wrapper).attributes('aria-label')).toBe(
+      `${SUSPENDED_IB.targetName}の発注を再開しますか？`,
+    )
     expect(dialogText(wrapper)).toContain(`「${SUSPENDED_IB.targetName}」`)
+    expect(dialogText(wrapper)).toContain(RECOVERY_NOTE)
 
     const summary = byTestid(wrapper, 'summary')
     const pairs = Object.fromEntries(

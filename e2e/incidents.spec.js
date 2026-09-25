@@ -67,6 +67,11 @@ function dialogOf(page) {
   return page.getByRole('dialog')
 }
 
+/** 行ごとの発注停止トグル（role="switch"・ON = 停止中） */
+function switchOf(page, target) {
+  return page.getByTestId(`incidents-target-${target}-action`)
+}
+
 /** IB を停止する（IN-15 の操作）。成功の通知が出るまで待つ */
 async function suspendIb(page) {
   await page.getByTestId('incidents-target-1-action').click()
@@ -103,12 +108,14 @@ test.describe('障害管理', () => {
     await expect(page.getByTestId('incidents-state')).toHaveText('通常運用')
   })
 
-  test('[IN-04] 全体の「停止する」で確認ダイアログが開く', async ({ page }) => {
+  test('[IN-04] 全体のトグルで確認ダイアログが開く', async ({ page }) => {
     await page.goto(PATH)
 
-    await page.getByTestId('incidents-target-ALL-action').click()
+    await page.getByRole('switch', { name: `${allTarget.停止対象名}の発注停止` }).click()
 
-    const dialog = page.getByRole('dialog', { name: '発注停止の確認' })
+    const dialog = page.getByRole('dialog', {
+      name: `${allTarget.停止対象名}の発注を停止しますか？`,
+    })
     await expect(dialog).toBeVisible()
     await expect(dialog).toContainText(`「${allTarget.停止対象名}」の発注を停止します。`)
     await expect(page.getByTestId('incidents-control-reason')).toBeVisible()
@@ -127,14 +134,14 @@ test.describe('障害管理', () => {
     await expect(historyRowsOf(page)).toHaveCount(suspensionHistories.length)
   })
 
-  test('[IN-07] IB の「停止する」では対象が IB で、全ルート停止の警告は出ない', async ({
-    page,
-  }) => {
+  test('[IN-07] IB のトグルでは対象が IB で、全ルート停止の警告は出ない', async ({ page }) => {
     await page.goto(PATH)
 
-    await page.getByTestId('incidents-target-1-action').click()
+    await switchOf(page, '1').click()
 
-    const dialog = page.getByRole('dialog', { name: '発注停止の確認' })
+    const dialog = page.getByRole('dialog', {
+      name: `${ibTarget.停止対象名}の発注を停止しますか？`,
+    })
     await expect(dialog).toContainText(`「${ibTarget.停止対象名}」の発注を停止します。`)
     await expect(page.getByTestId('incidents-control-reason')).toBeVisible()
     await expect(page.getByTestId('incidents-control-warning')).toHaveCount(0)
@@ -145,11 +152,10 @@ test.describe('障害管理', () => {
 
     const history = page.getByTestId('incidents-history')
     await expect(history.getByRole('columnheader')).toHaveText([
-      '操作日時',
-      '停止対象',
-      '操作区分',
+      '変更日時',
+      '制御内容',
       '停止理由',
-      '操作者',
+      '更新者',
     ])
 
     const rows = historyRowsOf(page)
@@ -159,8 +165,9 @@ test.describe('障害管理', () => {
     const latest = suspensionHistories[0]
     const first = rows.first()
     await expect(first).toContainText(formatDateTime(latest.操作日時))
-    await expect(first).toContainText(latest.停止対象名)
-    await expect(first).toContainText(latest.操作区分名)
+    await expect(first.getByRole('cell').nth(1)).toHaveText(
+      `${latest.停止対象名}：${latest.操作区分名}`,
+    )
     await expect(first).toContainText(latest.操作者)
   })
 
@@ -169,7 +176,7 @@ test.describe('障害管理', () => {
     await page.goto(PATH)
 
     await expect(page.getByTestId('incidents-history-empty')).toHaveText(
-      '発注停止・再開の操作履歴はありません。',
+      '障害対応履歴はありません。',
     )
     await expect(page.getByTestId('incidents-history')).toHaveCount(0)
     await expect(targetRowsOf(page)).toHaveCount(suspensionTargets.length)
@@ -268,6 +275,7 @@ test.describe('障害管理', () => {
     await suspendIb(page)
 
     await expect(dialogOf(page)).toHaveCount(0)
+    await expect(switchOf(page, '1')).toHaveAttribute('aria-checked', 'true')
     const ibRow = targetRowOf(page, '1')
     await expect(ibRow).toContainText('停止中')
     await expect(ibRow).toContainText(NEW_REASON)
@@ -284,8 +292,7 @@ test.describe('障害管理', () => {
     const rows = historyRowsOf(page)
     await expect(rows).toHaveCount(suspensionHistories.length + 1)
     const first = rows.first()
-    await expect(first).toContainText(ibTarget.停止対象名)
-    await expect(first).toContainText('発注停止')
+    await expect(first.getByRole('cell').nth(1)).toHaveText(`${ibTarget.停止対象名}：発注停止`)
     await expect(first).toContainText(NEW_REASON)
   })
 
@@ -346,14 +353,17 @@ test.describe('障害管理', () => {
     await page.goto(PATH)
     await suspendIb(page)
 
-    await page.getByTestId('incidents-target-1-action').click()
-    await expect(page.getByRole('dialog', { name: '発注再開の確認' })).toBeVisible()
+    await switchOf(page, '1').click()
+    await expect(
+      page.getByRole('dialog', { name: `${ibTarget.停止対象名}の発注を再開しますか？` }),
+    ).toBeVisible()
     await page.getByTestId('incidents-control-submit').click()
 
     await expect(dialogOf(page)).toHaveCount(0)
     await expect(page.getByTestId('incidents-notice')).toHaveText(
       `${ibTarget.停止対象名}の発注を再開しました。`,
     )
+    await expect(switchOf(page, '1')).toHaveAttribute('aria-checked', 'false')
     const ibRow = targetRowOf(page, '1')
     await expect(ibRow).toContainText('通常')
     await expect(ibRow).not.toContainText('停止中')
@@ -368,25 +378,45 @@ test.describe('障害管理', () => {
     await page.goto(PATH)
     await suspendIb(page)
 
-    await page.getByTestId('incidents-target-1-action').click()
+    await switchOf(page, '1').click()
 
-    await expect(page.getByRole('dialog', { name: '発注再開の確認' })).toBeVisible()
+    const dialog = page.getByRole('dialog', {
+      name: `${ibTarget.停止対象名}の発注を再開しますか？`,
+    })
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('復旧確認が完了していることを確認してください。')
     await expect(page.getByTestId('incidents-control-summary')).toContainText(NEW_REASON)
     await expect(page.getByTestId('incidents-control-reason')).toHaveCount(0)
   })
 
-  test('[IN-23] 全体停止中はルート行の操作が押せず、注意書きが出る', async ({ page }) => {
+  test('[IN-23] 全体停止中はルート行のトグルが押せず、注意書きが出る', async ({ page }) => {
     await mockApi(page, [{ path: STATUS_PATH, body: statusBody(['ALL']) }])
     await page.goto(PATH)
 
-    const allAction = page.getByTestId('incidents-target-ALL-action')
-    await expect(allAction).toHaveText('再開する')
-    await expect(allAction).toBeEnabled()
+    const allSwitch = switchOf(page, 'ALL')
+    await expect(allSwitch).toHaveAttribute('aria-checked', 'true')
+    await expect(allSwitch).toBeEnabled()
     for (const target of routeTargets) {
-      await expect(page.getByTestId(`incidents-target-${target.停止対象}-action`)).toBeDisabled()
+      await expect(switchOf(page, target.停止対象)).toBeDisabled()
     }
     await expect(page.getByTestId('incidents-locked')).toContainText(
       '全体停止中はルート別に停止・再開できません。',
     )
+  })
+
+  test('[IN-24] トグルを押しただけでは切り替わらず、キャンセルで元のまま', async ({ page }) => {
+    await page.goto(PATH)
+    const ibSwitch = switchOf(page, '1')
+    await expect(ibSwitch).toHaveAttribute('aria-checked', 'false')
+
+    await ibSwitch.click()
+    await expect(dialogOf(page)).toBeVisible()
+    await expect(ibSwitch).toHaveAttribute('aria-checked', 'false')
+
+    await page.getByTestId('incidents-control-cancel').click()
+
+    await expect(dialogOf(page)).toHaveCount(0)
+    await expect(ibSwitch).toHaveAttribute('aria-checked', 'false')
+    await expect(targetRowOf(page, '1')).not.toContainText('停止中')
   })
 })

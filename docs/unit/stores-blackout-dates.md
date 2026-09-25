@@ -53,6 +53,10 @@
 | BDS-38 | 既定モック、`load()` 済み | 編集で事前検証に弾かれたあと、登録側の `validationErrors` を見る | 編集の理由は `updateValidationErrors` にだけ入り、`validationErrors` は空のまま。逆に登録で弾かれても `updateValidationErrors` は空のまま | 実装済 |
 | BDS-39 | 既定モック（取消済みの行を 1 件持つ）、`load()` 済み | 取消済みの日付で `create()` を呼ぶ | 警告を挟まず 1 回で登録できる（実 API がその行を再有効化する）。`validationWarnings` / `validationErrors` は空。行は増えないが、取消済みが有効になるので `total` は 1 増え、その日付が `items` に現れる | 実装済 |
 | BDS-40 | 既定モック | 存在しない id で `update()` を呼ぶ | 事前検証が先に弾き、更新の API を呼ばない。`updateValidationErrors` に「指定された受注不可日(ID=…)は存在しません」が入り、`updateError` は null のまま | 実装済 |
+| BDS-41 | 既定モック、`load()` 済み。市場状況ストアの `load` を差し替える | 一覧に無い日付で `create()` が成功する | 市場状況の `load` が 1 回呼ばれる（当日を受注不可にしたときにヘッダを追随させる） | 実装済 |
+| BDS-42 | 同上 | `update()` が成功する | 市場状況の `load` が 1 回呼ばれる | 実装済 |
+| BDS-43 | 同上 | `remove()` が成功する | 市場状況の `load` が 1 回呼ばれる | 実装済 |
+| BDS-44 | 同上 | 事前検証で弾かれる `create()`、古い `updatedAt` で 409 になる `update()`、PUT が 500 を返す `update()` を呼ぶ | どれでも市場状況の `load` は呼ばれない（保存されていないので取り直さない） | 実装済 |
 
 ## 主キーが `id` になったことで変わった点
 

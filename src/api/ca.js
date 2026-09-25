@@ -161,8 +161,8 @@ export async function createCorporateAction(ca) {
 /**
  * CA を 1 件更新する（全項目を変更できる）。
  *
- * `CARequest` はレコード全体を差し替える形なので、変えない項目も含めて送る。
- * 呼び出し側は編集フォームの現在値をそのまま渡せばよい。
+ * 本文は `CAUpdateRequest`（含めた項目だけを更新する部分更新）だが、変えない項目も含めて
+ * 全項目を送る。呼び出し側は編集フォームの現在値をそのまま渡せばよい。
  *
  * updatedAt は一覧取得時の更新日時をそのまま送り返す楽観的ロックの合札で、
  * サーバ側の現在値と違えば 409 で弾かれる（他の利用者が先に更新していた場合）。
@@ -195,11 +195,11 @@ export async function deleteCorporateAction(id) {
 }
 
 /**
- * アプリ内モデル → CARequest（登録・更新・事前検証で共用する入力の形）。
+ * アプリ内モデル → CARequest / CAUpdateRequest（登録・更新・事前検証で共用する入力の形）。
  *
  * 日付と比率は「未設定」を **null で明示する**（クエリパラメータのように値ごと省くのではない）。
- * CARequest はレコード全体を差し替える形なので、キーを落とすと更新で
- * 「変えない」と「空にする」が区別できなくなる。
+ * 更新の CAUpdateRequest は部分更新で、キーを落とすと「変えない」、null を送ると「空にする」と
+ * 解釈される。フォームで消した値を確実に空にするため、キーは落とさない。
  */
 function toCaRequest({
   stockCode,
@@ -227,9 +227,9 @@ function toCaRequest({
      * 解釈する。登録直後の行は実 API 側の更新日時が未設定で、照合する相手が無い）。
      *
      * 書式は変換しない。CAItem は ISO の date-time（'2026-08-20T09:30:00'）を返し、
-     * CARequest の説明は 'YYYY-MM-DD HH:MM:SS' と書かれているが、受注不可日
-     * （BlackoutDateItem / BlackoutDateRequest）もまったく同じ非対称で、そちらは ISO を
-     * 素通しして実 API の編集が通っている（docs/e2e/masters/blackout-dates-real-api.md の BDR-06）。
+     * CAUpdateRequest の説明は 'YYYY-MM-DD HH:MM:SS' と書かれているが、ISO を素通しして
+     * 実 API の編集が通ること、古い合札が 409 で弾かれることを確かめてある
+     * （docs/e2e/ca-real-api.md の CAR-07 / CAR-08）。
      * 合札は照合用の不透明なトークンなので、秒未満の桁を落とすような整形はかえって
      * 不一致を作りうる。
      */

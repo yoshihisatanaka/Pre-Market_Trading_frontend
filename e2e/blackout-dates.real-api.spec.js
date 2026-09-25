@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 /*
  * 受注不可日マスタを「実 API に当てて」確かめる E2E。
- * シナリオ: docs/e2e/masters/blackout-dates-real-api.md（タイトル先頭の [BDR-xx] が対応 ID）
+ * シナリオ: docs/e2e/blackout-dates-real-api.md（タイトル先頭の [BDR-xx] が対応 ID）
  *
  * blackout-dates.spec.js（BD）とは目的が違う。BD は MSW のモックに当てて画面の挙動を
  * 細かく固定する。こちらはフロントとバックエンドの噛み合わせだけを見るので、
@@ -312,7 +312,7 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
 
   /*
    * 実 API の PUT はパスの受注不可日で本文の 受注不可日 を上書きするため、いまは備考しか
-   * 変更できない（バックエンド対応待ち。docs/e2e/masters/blackout-dates-real-api.md に理由を書いてある）。
+   * 変更できない（バックエンド対応待ち。docs/e2e/blackout-dates-real-api.md に理由を書いてある）。
    * 対応したら test.fixme を test に戻し、文書の状態を実装済にする。
    */
   test.fixme('[BDR-07] 日付を変更すると、その行が新しい日付に移る', async ({ page }) => {

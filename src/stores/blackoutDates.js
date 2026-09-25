@@ -7,6 +7,7 @@ import {
   validateBlackoutDate,
 } from '@/api/blackoutDates'
 import { useCrudList } from '@/composables/useCrudList'
+import { reloadMarketStatusAfter } from './marketStatus'
 
 /**
  * 一覧 1 ページあたりの表示件数。
@@ -35,15 +36,18 @@ export const BLACKOUT_DATES_PAGE_SIZE = 50
  * 競合（409）は通信・サーバ障害と同じ updateError に入る（画面は 409 を特別扱いしない）。
  *
  * 一覧は実 API と同じ**受注不可日の降順**で返る（並べ替えはサーバの責務。ここでは触らない）。
+ *
+ * 登録・更新・削除が成功したら市場状況（ヘッダ）を取り直す。当日を受注不可にしたときに、
+ * 起動時に取った市場日時と表示が食い違わないようにするため（stores/marketStatus.js）。
  */
 export const useBlackoutDatesStore = defineStore('blackoutDates', () =>
   useCrudList({
     pageSize: BLACKOUT_DATES_PAGE_SIZE,
     filterKeys: ['dateFrom', 'dateTo'],
     fetchPage: fetchBlackoutDates,
-    createItem: createBlackoutDate,
+    createItem: reloadMarketStatusAfter(createBlackoutDate),
     validateItem: validateBlackoutDate,
-    updateItem: updateBlackoutDate,
-    deleteItem: deleteBlackoutDate,
+    updateItem: reloadMarketStatusAfter(updateBlackoutDate),
+    deleteItem: reloadMarketStatusAfter(deleteBlackoutDate),
   }),
 )

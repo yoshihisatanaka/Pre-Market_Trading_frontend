@@ -1,29 +1,27 @@
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useMarketStatusStore } from '@/stores/marketStatus'
 import { toMarketDisplay } from '@/utils/marketStatus'
 
 /*
  * ヘッダの市場状況を「動かし続ける」ための時計。
  *
- * 更新の仕方を 2 つに分けてある。
- *   毎分のティック … now を進めるだけ。サーバがくれる JPN開始 / JPN終了 は tz 付きの
- *                    絶対時刻なので、現在セッションの判定はローカルの比較だけで済む
- *   5 分ごとの再取得 … 画面を開いたまま日付を跨いだときと、運用中に海外休場日マスタが
- *                    編集されたときに追いつくため
+ * **通信は起動時の 1 回だけ**（main.js の useMarketStatusStore().load()）。以後はフロント側で
+ * 時刻を数え、sessions の各窓の境界（JPN開始 / JPN終了）に達したら表示を切り替える。
+ * サーバがくれる境界は tz 付きの絶対時刻なので、次の境界までの setTimeout を 1 本置けば足りる。
+ * 毎分ティックで判定し直す必要も、定期的に取り直す必要も無い。
  *
- * 60 秒ごとに API を叩く案は採らない。ヘッダは全画面に常時マウントされるので
- * 利用者 1 人あたり常時 1 req/min になり、表示の情報量に対して割高になる。
- * 起動時 1 回だけの案も、日付を跨いだときに前日の時間帯を出し続けるので不可。
+ * 例外として、受注不可日マスタ / 海外休場日マスタを保存したときはストア側が取り直す
+ * （stores/marketStatus.js の reloadMarketStatusAfter）。取り直した status は下の watch が拾い、
+ * 境界を予約し直す。
  *
- * **タイマーをストアに置かないこと。** ストアは unmount されないので setInterval が
- * 永久に残る。ヘッダは 1 箇所にしかマウントされないので、ここが実質シングルトンになる。
+ * トレードオフ:
+ *   - 翌日のセッションは画面を再読み込みするまで反映されない（最後の境界を過ぎたら Closed のまま）
+ *   - 他の利用者の端末で行われたマスタの編集も、再読み込みするまで反映されない
+ *   - スリープ復帰などで遅れて発火しても、発火時点の Date.now() で判定し直すので表示は正しい側に戻る
+ *
+ * **タイマーをストアに置かないこと。** ストアは unmount されないのでタイマーが永久に残る。
+ * ヘッダは 1 箇所にしかマウントされないので、ここが実質シングルトンになる。
  */
-
-/** 現在セッションを判定し直す間隔 */
-const TICK_INTERVAL_MS = 60_000
-
-/** サーバに取り直しに行く間隔 */
-const RELOAD_INTERVAL_MS = 300_000
 
 /**
  * ヘッダが描くだけでよい市場状況を返す。
@@ -37,23 +35,50 @@ export function useMarketStatus() {
   const store = useMarketStatusStore()
   const now = ref(Date.now())
 
-  let tickTimer = null
-  let reloadTimer = null
+  let timer = null
 
-  onMounted(() => {
-    tickTimer = setInterval(() => {
+  /*
+   * 次の境界で 1 回だけ発火するように予約し直す。発火したら now を進めて、また次を予約する。
+   * 早く発火しても（時計の補正など）同じ境界の残り時間で予約し直すだけなので自己修正される。
+   * 境界が残っていなければ（休場・未取得・最後のセッションの後）予約しない。
+   */
+  function schedule() {
+    clearTimeout(timer)
+    timer = null
+
+    const next = nextBoundary(store.status?.sessions ?? [], Date.now())
+    if (next === null) return
+
+    timer = setTimeout(() => {
       now.value = Date.now()
-    }, TICK_INTERVAL_MS)
+      schedule()
+    }, next - Date.now())
+  }
 
-    reloadTimer = setInterval(() => {
-      store.load()
-    }, RELOAD_INTERVAL_MS)
-  })
+  // 起動時の取得がマウントより後に終わった場合と、マスタ保存後の取り直しで予約し直す
+  watch(
+    () => store.status,
+    () => {
+      now.value = Date.now()
+      schedule()
+    },
+  )
+
+  onMounted(schedule)
 
   onUnmounted(() => {
-    clearInterval(tickTimer)
-    clearInterval(reloadTimer)
+    clearTimeout(timer)
+    timer = null
   })
 
   return computed(() => toMarketDisplay(store.status, now.value, { error: store.error }))
+}
+
+/** 現在時刻より後で最も早い境界（ミリ秒）。無ければ null */
+function nextBoundary(sessions, nowMs) {
+  const upcoming = sessions
+    .flatMap((session) => [Date.parse(session.startJst), Date.parse(session.endJst)])
+    .filter((ms) => Number.isFinite(ms) && ms > nowMs)
+
+  return upcoming.length ? Math.min(...upcoming) : null
 }

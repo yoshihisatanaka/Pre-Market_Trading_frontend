@@ -57,11 +57,33 @@
   --color-sidebar-text-active: #ffffff;
   --color-sidebar-section: #aeb9c7;
 
-  /* 市場ステータス（ニューヨーク時間の取引セッション） */
-  --color-market-premarket: #d97706;
-  --color-market-regular: #059669;
-  --color-market-afterhours: #7c3aed;
-  --color-market-closed: #9ca3af;
+  /*
+   * 市場ステータス（ヘッダのバッジ）。モック 08986d1 の base.html から。
+   * セッションごとに 文字 / 枠線 / 淡色面 / 丸印 の 4 色。既定は未取得（unknown）のとき
+   */
+  --color-market-text: #364152;
+  --color-market-border: #d5dde7;
+  --color-market-marker: #7a8797;
+  --color-market-pre-text: #875b13;
+  --color-market-pre-border: #e8c488;
+  --color-market-pre-bg: #fffaf0;
+  --color-market-pre-marker: #b7791f;
+  --color-market-regular-text: #1f4f7a;
+  --color-market-regular-border: #9eb4cc;
+  --color-market-regular-bg: #f6faff;
+  --color-market-regular-marker: #2d6a9f;
+  --color-market-after-text: #7f3040;
+  --color-market-after-border: #d8a4aa;
+  --color-market-after-bg: #fff8f8;
+  --color-market-after-marker: #9b3b4b;
+  --color-market-holiday-text: #526274;
+  --color-market-holiday-border: #cbd5df;
+  --color-market-holiday-bg: #f8fafc;
+  --color-market-holiday-marker: #64748b;
+  --color-market-closed-text: #687789;
+  --color-market-closed-border: #d6dde5;
+  --color-market-closed-bg: #fbfcfd;
+  --color-market-closed-marker: #9aa7b5;
 
   /* layout */
   --layout-sidebar-width: 220px;

@@ -168,8 +168,11 @@ const AFTER = BEFORE + ADDED
 const CONFLICT_MESSAGE =
   '他のユーザーによって残高データが更新されています。最新データを再取得してください。'
 
-const conflictHandler = () =>
-  http.put(UPDATE_PATH, () => HttpResponse.json({ detail: CONFLICT_MESSAGE }, { status: 409 }))
+/** 売却可否の切り替えは数量の補正と別の口（src/api/balanceAdjustments.js） */
+const SELL_PATH = '*/api/masters/balance-adjustments/:id/sell-prohibited'
+
+const conflictHandler = (path = UPDATE_PATH) =>
+  http.put(path, () => HttpResponse.json({ detail: CONFLICT_MESSAGE }, { status: 409 }))
 
 /**
  * 更新の呼び出しを数え、本文を記録するハンドラ。
@@ -194,13 +197,13 @@ function spyUpdate({ respond = false } = {}) {
 }
 
 /** 更新の応答を握る。解放するまで応答しない */
-function gateUpdateResponse() {
+function gateUpdateResponse(path = UPDATE_PATH) {
   let release
   const gate = new Promise((resolve) => {
     release = resolve
   })
   server.use(
-    http.put(UPDATE_PATH, async () => {
+    http.put(path, async () => {
       await gate
       return HttpResponse.json({ detail: CONFLICT_MESSAGE }, { status: 409 })
     }),
@@ -341,7 +344,7 @@ const sellMessage = (wrapper) => wrapper.find('[data-testid="balance-adjustments
 function spySell(raw) {
   const calls = []
   server.use(
-    http.put(UPDATE_PATH, async ({ request, params }) => {
+    http.put(SELL_PATH, async ({ request, params }) => {
       const body = await request.json()
       calls.push({ id: params.id, body })
       return HttpResponse.json({
@@ -999,7 +1002,7 @@ describe('BalanceAdjustmentListView', () => {
     })
 
     it('[BLV-42] 切り替えが 409 のときは確認が開いたまま理由が出て、成功メッセージは出ない', async () => {
-      server.use(conflictHandler())
+      server.use(conflictHandler(SELL_PATH))
       const { wrapper } = await openSellConfirm(SELLABLE)
 
       await clickSell(wrapper, 'submit')
@@ -1013,7 +1016,7 @@ describe('BalanceAdjustmentListView', () => {
     })
 
     it('[BLV-43] 更新の応答待ちのあいだは「キャンセル」を押しても確認が閉じない', async () => {
-      const release = gateUpdateResponse()
+      const release = gateUpdateResponse(SELL_PATH)
       const { wrapper } = await openSellConfirm(SELLABLE)
 
       await clickSell(wrapper, 'submit')

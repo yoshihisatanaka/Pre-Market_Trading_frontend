@@ -6,6 +6,7 @@ import {
   createBalanceAdjustment,
   fetchBalanceAdjustments,
   updateBalanceAdjustment,
+  updateBalanceSellProhibited,
 } from './balanceAdjustments'
 
 /*
@@ -349,6 +350,7 @@ describe('api/balanceAdjustments', () => {
 
   describe('売却不可区分', () => {
     const UPDATE_PATH = '*/api/masters/balance-adjustments/:id'
+    const SELL_PATH = '*/api/masters/balance-adjustments/:id/sell-prohibited'
     /** 売却不可の行と売却可の行をフィクスチャから探す（値を直接書かない） */
     const PROHIBITED = balanceAdjustments.find((raw) => raw.売却不可区分 === 1)
     const SELLABLE = balanceAdjustments.find((raw) => raw.売却不可区分 === 0)
@@ -360,19 +362,40 @@ describe('api/balanceAdjustments', () => {
 
       expect((await fetchOne(PROHIBITED)).sellProhibited).toBe(true)
       expect((await fetchOne(SELLABLE)).sellProhibited).toBe(false)
-      // 実 API にまだ無い項目なので、欠けていれば売却可
+      // 仕様の既定は 0 なので、欠けていれば売却可
       expect(withoutFlag).not.toHaveProperty('売却不可区分')
       expect((await fetchOne(withoutFlag)).sellProhibited).toBe(false)
     })
 
-    it('[BLA-20] sellProhibited だけを渡すと本文は { 売却不可区分: 1 } だけになり、残高を送らない', async () => {
-      record('put', UPDATE_PATH, { success: true, balance: { ...SELLABLE, 売却不可区分: 1 } })
+    it('[BLA-20] updateBalanceSellProhibited は専用の口に { 売却不可区分: 1 } だけを送り、残高を送らない', async () => {
+      record('put', SELL_PATH, { success: true, balance: { ...SELLABLE, 売却不可区分: 1 } })
 
-      await updateBalanceAdjustment({ id: String(SELLABLE.ID), sellProhibited: true })
+      const updated = await updateBalanceSellProhibited({
+        id: String(SELLABLE.ID),
+        sellProhibited: true,
+      })
 
-      expect(lastRequest.url.pathname).toBe(`/api/masters/balance-adjustments/${SELLABLE.ID}`)
+      expect(lastRequest.url.pathname).toBe(
+        `/api/masters/balance-adjustments/${SELLABLE.ID}/sell-prohibited`,
+      )
       expect(lastRequest.body).toEqual({ 売却不可区分: 1 })
       expect(lastRequest.body).not.toHaveProperty('残高')
+      expect(updated.sellProhibited).toBe(true)
+    })
+
+    it('[BLA-22] sellProhibited が false なら 売却不可区分 0 を送り、updatedAt は 更新日時 として添える', async () => {
+      record('put', SELL_PATH, { success: true, balance: { ...PROHIBITED, 売却不可区分: 0 } })
+
+      // 合札は画面が取得時の値をそのまま渡すもの。ここでは操作の入力値として置く
+      const updatedAt = '2026-09-25T09:00:00'
+      const updated = await updateBalanceSellProhibited({
+        id: String(PROHIBITED.ID),
+        sellProhibited: false,
+        updatedAt,
+      })
+
+      expect(lastRequest.body).toEqual({ 売却不可区分: 0, 更新日時: updatedAt })
+      expect(updated.sellProhibited).toBe(false)
     })
 
     it('[BLA-21] balance だけを渡すと本文に 売却不可区分 が載らない', async () => {

@@ -32,6 +32,7 @@
 | BLA-16 | — | `updateBalanceAdjustment({ id, balance, updatedAt })` | `PUT /masters/balance-adjustments/{id}` に `{ 残高, 更新日時 }` **だけ**が送られる（部分更新） | 実装済 |
 | BLA-17 | `updatedAt` が空文字 | `updateBalanceAdjustment({ id, balance })` | 本文に `更新日時` が載らない | 実装済 |
 | BLA-18 | 更新が 409 を返す | `updateBalanceAdjustment(...)` | 例外になり、`message` にサーバの理由が入る（呼び出し側の updateError に入る） | 実装済 |
-| BLA-19 | 応答の `売却不可区分` が 1 / 0 / 未定義 | `fetchBalanceAdjustments()` を呼ぶ | `sellProhibited` が true / false / false になる（実 API にまだ無い項目なので欠けていれば売却可） | 実装済 |
-| BLA-20 | — | `updateBalanceAdjustment({ id, sellProhibited: true })` | 本文が `{ 売却不可区分: 1 }` だけになる（`残高` を送らない） | 実装済 |
+| BLA-19 | 応答の `売却不可区分` が 1 / 0 / 未定義 | `fetchBalanceAdjustments()` を呼ぶ | `sellProhibited` が true / false / false になる（仕様の既定は 0 なので欠けていれば売却可） | 実装済 |
+| BLA-20 | — | `updateBalanceSellProhibited({ id, sellProhibited: true })` | 専用の口 `PUT /masters/balance-adjustments/{id}/sell-prohibited` に `{ 売却不可区分: 1 }` だけが送られ（`残高` を送らない）、応答の 1 件が `sellProhibited: true` で返る | 実装済 |
 | BLA-21 | — | `updateBalanceAdjustment({ id, balance })` | 本文に `売却不可区分` が載らない | 実装済 |
+| BLA-22 | — | `updateBalanceSellProhibited({ id, sellProhibited: false, updatedAt })` | 本文が `{ 売却不可区分: 0, 更新日時 }` になり、応答の 1 件が `sellProhibited: false` で返る | 実装済 |

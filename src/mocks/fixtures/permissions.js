@@ -2,72 +2,89 @@
  * モックのレスポンス実体。
  * ここに書くのは「バックエンドが返す生の形」であり、アプリ内モデルではない。
  *
- * ただし他のフィクスチャと違い、**これは実 API の形ではない**。
- * docs/api/openapi.json に権限・ロールを扱うパスは 1 本も無い。
+ * GET /masters/permissions の roles[] の 1 件（openapi.json の RolePermissionItem）。
+ * キーは日本語、権限は 0 / 1。`権限` は同じ内容の英語キーの真偽値（PermissionFlags）で、
+ * サーバが 4 権限から導く値なので、ここでも 4 権限と食い違わないように書く。
  *
- * 画面モック（https://uspreorder-vmbhej3k.manus.space/masters/permissions）が編集モーダルへ
- * 渡している JSON をそのまま写した**暫定の契約**なので、キーは他のマスタのような日本語では
- * なく snake_case になっている。実 API が出てきたら、この形と src/api/permissions.js の変換を
- * 仕様側と決め直す。
- *
- * 4 ロールしか無いのでページャーの確認用に件数を盛る必要は無い（一覧はページャーを持たない）。
- * 権限が全て true なのもモックのとおりで、モック自身の注記が
- * 「画面確認期間中は全操作を許可」と説明している。不許可のバッジを目で見たいときは、
- * どれかを false にして dev サーバを開くのが手早い。
+ * 値はバックエンドの初期データ（../Pre-Market_Trading の db/schema.sql の m_ロール権限）に揃える。
+ * IFA は全部不可、営業員は発注だけ、管理者・管理責任者は全部許可なので、
+ * 許可 / 不可のバッジが両方とも目で見える。
  *
  * ブラウザ(MSW worker)・単体テスト・E2E で共用する。
  */
 
-/** ロール別の権限。並びはモックの一覧と同じ */
-export const rolePermissions = [
-  {
-    role: 'ifa',
-    role_label: 'IFA',
-    description: '画面確認期間中は全操作を許可',
-    can_order: true,
-    can_master_update: true,
-    can_order_stop: true,
-    can_activity_log_view: true,
-    can_admin_function: true,
-  },
-  {
-    role: 'sales',
-    role_label: '営業員',
-    description: '画面確認期間中は全操作を許可',
-    can_order: true,
-    can_master_update: true,
-    can_order_stop: true,
-    can_activity_log_view: true,
-    can_admin_function: true,
-  },
-  {
-    role: 'manager',
-    role_label: '管理者',
-    description: '画面確認期間中は全操作を許可',
-    can_order: true,
-    can_master_update: true,
-    can_order_stop: true,
-    can_activity_log_view: true,
-    can_admin_function: true,
-  },
-  {
-    role: 'supervisor',
-    role_label: '管理責任者',
-    description: '画面確認期間中は全操作を許可',
-    can_order: true,
-    can_master_update: true,
-    can_order_stop: true,
-    can_activity_log_view: true,
-    can_admin_function: true,
-  },
-]
-
 /**
- * いまの利用者が権限マスタを変更できるか。
+ * 4 権限から `権限`（PermissionFlags）を導いて行に載せる（サーバと同じ対応）。
+ * ハンドラが更新後の行を組み直すときにも使う。
  *
- * モックは `?as_user=` で操作者を切り替えられ、管理責任者のときだけ編集できる。
- * こちらには認証もログインロールもまだ無いので、管理責任者で入っている想定の固定値にする。
- * **「閲覧のみ」の見た目を確かめたいときはここを false にする**（操作列と編集ボタンが消え、
- * 画面上部の注記の見出しが変わる）。
+ * @param {object} row RolePermissionItem の生の形（`権限` 以外）
+ * @returns {object} `権限` を 4 権限と揃えた行
  */
-export const permissionsEditable = true
+export function withPermissionFlags(row) {
+  return {
+    ...row,
+    権限: {
+      order: row.発注権限 === 1,
+      master: row.マスタ更新権限 === 1,
+      operation: row.運用管理権限 === 1,
+      branch_all: row.全店参照権限 === 1,
+    },
+  }
+}
+
+/** ロール別の権限。並びは実 API と同じ ID 順（ifa → sales → manager → supervisor） */
+export const rolePermissions = [
+  withPermissionFlags({
+    ID: 1,
+    ロールコード: 'ifa',
+    ロール名: 'IFA',
+    説明: 'IFAユーザー。PH1〜PH2 は参照・仮計算のみ',
+    発注権限: 0,
+    マスタ更新権限: 0,
+    運用管理権限: 0,
+    全店参照権限: 0,
+    ユーザー操作フラグ: 0,
+    更新日時: '2026-09-18 10:00:00',
+    更新者: 'BATCH',
+  }),
+  withPermissionFlags({
+    ID: 2,
+    ロールコード: 'sales',
+    ロール名: '営業員',
+    説明: '本部・支店の営業員。発注・取消が可能',
+    発注権限: 1,
+    マスタ更新権限: 0,
+    運用管理権限: 0,
+    全店参照権限: 0,
+    ユーザー操作フラグ: 0,
+    更新日時: '2026-09-18 10:00:00',
+    更新者: 'BATCH',
+  }),
+  withPermissionFlags({
+    ID: 3,
+    ロールコード: 'manager',
+    ロール名: '管理者',
+    説明: '本部管理者。発注・マスタ更新・運用管理が可能',
+    発注権限: 1,
+    マスタ更新権限: 1,
+    運用管理権限: 1,
+    全店参照権限: 1,
+    ユーザー操作フラグ: 0,
+    更新日時: '2026-09-18 10:00:00',
+    更新者: 'BATCH',
+  }),
+  withPermissionFlags({
+    ID: 4,
+    ロールコード: 'supervisor',
+    ロール名: '管理責任者',
+    説明: '全権限。権限マスタの変更は管理責任者のみ',
+    発注権限: 1,
+    マスタ更新権限: 1,
+    運用管理権限: 1,
+    全店参照権限: 1,
+    ユーザー操作フラグ: 0,
+    // 一度も画面から更新されていない行（合札が無い）。更新日時 を送らない経路の確認用
+    更新日時: null,
+    更新者: null,
+  }),
+]

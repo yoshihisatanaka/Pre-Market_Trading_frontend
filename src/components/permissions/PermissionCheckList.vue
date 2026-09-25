@@ -1,6 +1,6 @@
 <script setup>
 /**
- * ロール 1 件の権限チェック 5 行（編集モーダルの中身）。
+ * ロール 1 件の権限チェック 4 行（編集モーダルの中身）。
  *
  * `MasterFormDialog` の既定スロットに差す中身だけを持つ。枠・ボタン・エラーの出し先は
  * ダイアログ側の責務。項目そのものは utils/permissionTypes.js の PERMISSION_ITEMS が正で、
@@ -33,8 +33,8 @@ defineProps({
 })
 
 /*
- * 権限の値。オブジェクトごと v-model する（項目が 5 つあり、
- * 1 項目 1 model にすると呼び出し側が 5 本の ref を並べることになるため）。
+ * 権限の値。オブジェクトごと v-model する（項目が 4 つあり、
+ * 1 項目 1 model にすると呼び出し側が 4 本の ref を並べることになるため）。
  * キーは PERMISSION_ITEMS と同じ。
  */
 const form = defineModel({ type: Object, required: true })

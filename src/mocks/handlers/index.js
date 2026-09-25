@@ -9,7 +9,7 @@ import { marketHolidayHandlers, resetMarketHolidayRows } from './marketHolidays'
 import { blackoutDateHandlers, resetBlackoutDateRows } from './blackoutDates'
 import { sliceCriteriaHandlers, resetSliceCriteriaRow } from './sliceCriteria'
 import { activityLogHandlers } from './activityLogs'
-import { permissionHandlers } from './permissions'
+import { permissionHandlers, resetPermissionRows } from './permissions'
 import { marketStatusHandlers } from './marketStatus'
 import { announcementHandlers, resetAnnouncementState } from './announcements'
 import { bannerHandlers } from './banner'
@@ -70,6 +70,7 @@ export function resetMockState() {
   resetSymbolRows()
   resetBalanceAdjustmentRows()
   resetSliceCriteriaRow()
+  resetPermissionRows()
   resetAnnouncementState()
   resetIncidentState()
 }

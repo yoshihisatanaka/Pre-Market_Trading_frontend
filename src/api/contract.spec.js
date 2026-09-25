@@ -10,6 +10,7 @@ import { sliceCriteriaSetting } from '../mocks/fixtures/sliceCriteria'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../mocks/fixtures/activityLogTargets'
 import { rolePermissions } from '../mocks/fixtures/permissions'
+import { supervisorOperator, viewerOperator } from '../mocks/fixtures/currentOperator'
 import {
   balanceAdjustments,
   canceledBalanceAdjustments,
@@ -57,7 +58,8 @@ import {
 import { fetchSliceCriteria, updateSliceCriteria } from './sliceCriteria'
 import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
 import { fetchStalledOrders } from './stalledOrders'
-import { fetchPermissions } from './permissions'
+import { fetchPermissions, updateRolePermission } from './permissions'
+import { fetchCurrentOperator } from './auth'
 import { fetchMarketStatus } from './marketStatus'
 import {
   createBalanceAdjustment,
@@ -174,21 +176,9 @@ const KNOWN_GAPS = [
    * 残っているのは更新系のパスキーで、そちらは型で検出できない（CON-06 のコメント）。
    */
   /*
-   * パスは 2026-09-18 の取り込みで入った（GET / PUT / history）。ただし**形が全く違う**。
-   * 仕様の RolePermissionItem は ID / ロールコード / ロール名 / 説明 / 発注権限 / マスタ更新権限 /
-   * 運用管理権限 …（日本語キー・3 権限）で、フロントの実装は role / role_label / can_order /
-   * can_master_update / can_order_stop / can_activity_log_view / can_admin_function（英語キー・5 権限）。
-   * 画面モックを正として先に作った形なので、src/api/permissions.js と fixture と画面の列を
-   * 仕様に合わせ直す作業が要る（docs/api/requests.md #4）。それまでここで食い違いを記録しておく。
+   * 権限マスタは 2026-09-25 に RolePermissionItem の形（日本語キー・4 権限）へ張り替えた。
+   * 画面モック由来の英語キー・5 権限の食い違い（#4）は解消したので行を外した。
    */
-  {
-    kind: 'fixture',
-    fixture: 'permissions',
-    reason:
-      '権限マスタのパスは仕様に入ったが、フロントは画面モックの形（英語キー・5 権限）のまま。' +
-      '仕様は日本語キー・3 権限（発注 / マスタ更新 / 運用管理）',
-    request: '#4',
-  },
   {
     kind: 'query',
     method: 'GET',
@@ -281,6 +271,11 @@ const FIXTURES = [
   { name: 'activityLogs', schema: 'ActivityLogItem', rows: activityLogs },
   { name: 'activityLogTargets', schema: 'ActivityLogTargetItem', rows: activityLogTargets },
   { name: 'permissions', schema: 'RolePermissionItem', rows: rolePermissions },
+  {
+    name: 'currentOperator',
+    schema: 'CurrentOperatorResponse',
+    rows: [supervisorOperator, viewerOperator],
+  },
   {
     name: 'balanceAdjustments',
     schema: 'BalanceAdjustmentItem',
@@ -519,6 +514,18 @@ const PROBES = [
     run: () => fetchStalledOrders({ branchCode: '123', accountNumber: '1234567', symbol: 'AAPL' }),
   },
   { name: 'fetchPermissions', run: () => fetchPermissions() },
+  {
+    name: 'updateRolePermission',
+    run: () =>
+      updateRolePermission('sales', {
+        canOrder: true,
+        canMasterUpdate: false,
+        canOperation: false,
+        canBranchAll: false,
+        updatedAt: '',
+      }),
+  },
+  { name: 'fetchCurrentOperator', run: () => fetchCurrentOperator() },
   { name: 'fetchMarketStatus', run: () => fetchMarketStatus() },
   {
     name: 'fetchBalanceAdjustments',

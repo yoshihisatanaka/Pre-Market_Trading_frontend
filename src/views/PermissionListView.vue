@@ -14,27 +14,29 @@ import { PERMISSION_ITEMS, permissionBadge } from '@/utils/permissionTypes'
 /*
  * 権限マスタ（ロール別権限の一覧と編集）。
  *
- * **いまは見た目だけ。** 実 API に権限系のエンドポイントが無いので、一覧は
- * src/mocks/handlers/index.js のモックが応え、編集の「保存」は通信せず手元の表示だけを変える
- * （繋ぎ込みの手掛かりは src/api/permissions.js と src/stores/permissions.js の冒頭）。
+ * 一覧は GET /masters/permissions、保存は PUT /masters/permissions/{role_code}。
+ * 編集できるか（「操作」列を出すか）は GET /auth/me のロールが管理責任者かで決まる
+ * （判定は src/stores/permissions.js）。
  *
  * 画面モック（https://uspreorder-vmbhej3k.manus.space/masters/permissions）からの
- * 意図的なずれが 3 つある。
+ * 意図的なずれがある。
+ *   - 権限の列は仕様（RolePermissionItem）の 4 つ。モックの「操作ログ閲覧」「管理者機能」は
+ *     仕様に無いので出さない（docs/api/requests.md #4）
  *   - ヘッダに「再読み込み」を置く（既存のマスタ画面と揃える。エラー状態からの復帰導線も兼ねる）
- *   - 注記から「紙芝居モック」の語を外す（この実装はモックそのものではないため）
- *   - 「閲覧のみ」への切替入口（モックの ?as_user= セレクタ）は作らない。認証が入るまでは
- *     サーバの応答（editable）だけが決め手になる
+ *   - 注記から「紙芝居モック」の暫定付与の説明を外す（実データを出すため）
+ *   - 「閲覧のみ」への切替入口（モックの ?as_user= セレクタ）は作らない。操作者は
+ *     /auth/me（SSO セッションか開発用の X-User-Code）で決まる
  */
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = usePermissionsStore()
-const { roles, canEdit, loading, error, isEmpty } = storeToRefs(store)
+const { roles, canEdit, loading, error, isEmpty, saving, saveError } = storeToRefs(store)
 
 store.load()
 
 /*
- * 列は画面モックの並びどおり。権限の 5 列は PERMISSION_ITEMS から生やすので、
- * 項目を足すときも一覧とモーダルがずれない。
+ * 列は画面モックの並びどおり（ロール・運用概要・権限・操作）。権限の列は PERMISSION_ITEMS から
+ * 生やすので、項目を足すときも一覧とモーダルがずれない。
  * 「操作」列は編集できるときだけ出す（モックも管理責任者以外では列ごと消える）。
  */
 const columns = computed(() => [
@@ -56,7 +58,13 @@ const editForm = ref({})
 
 const editTitle = computed(() => (editTarget.value ? `${editTarget.value.roleLabel}の権限設定` : ''))
 
+/** 保存の成功通知。次の編集を開くか再読み込みするまで出しておく */
+const noticeMessage = ref('')
+
 function openEdit(row) {
+  noticeMessage.value = ''
+  // 前回の保存失敗の文言を持ち越さない
+  store.clearSaveError()
   editTarget.value = row
   // 一覧の行をそのまま編むと、キャンセルしたときに戻せない。真偽値だけ写して持つ
   editForm.value = Object.fromEntries(
@@ -69,13 +77,22 @@ function closeEdit() {
 }
 
 /**
- * 保存。**まだ通信しない**ので、手元の一覧の表示だけが変わる（再読み込みで元に戻る）。
- * 実 API が来たら、ここをストアの非同期な save に替え、保存中・保存失敗を
- * MasterFormDialog の pending / error に渡す。
+ * 保存。失敗（403 / 404 / 409 など）したらダイアログを開いたまま、理由を
+ * MasterFormDialog の error に出す（入力した内容は残る）。
  */
-function submitEdit() {
-  store.applyLocalEdit(editTarget.value.role, editForm.value)
+async function submitEdit() {
+  const target = editTarget.value
+  const result = await store.save(target.role, editForm.value)
+  if (!result) return
+
   closeEdit()
+  // 文言はサーバが決める（変更が無ければ「変更はありません。」）。空なら画面の既定で補う
+  noticeMessage.value = result.message || `${result.role.roleLabel}の権限設定を更新しました。`
+}
+
+function reload() {
+  noticeMessage.value = ''
+  store.load()
 }
 </script>
 
@@ -87,7 +104,7 @@ function submitEdit() {
         variant="secondary"
         data-testid="permissions-reload"
         :disabled="loading"
-        @click="store.load()"
+        @click="reload"
       >
         再読み込み
       </BaseButton>
@@ -96,8 +113,12 @@ function submitEdit() {
     <!-- 画面の説明。4 状態に関わらず常時出す。見出しだけが編集可否で変わる -->
     <BaseAlert variant="info" data-testid="permissions-description">
       <strong>{{ canEdit ? '権限設定可能' : '閲覧のみ' }}</strong>
-      現時点では全ロールに発注・マスタ更新・運用制御・操作ログ閲覧・管理者機能を暫定付与しています。
-      すべての利用者が全画面を閲覧できます。権限マスタ自体の変更は管理責任者のみ実行できます。
+      ロールごとに発注・マスタ更新・運用管理・全店参照の権限を設定します。
+      権限マスタ自体の変更は管理責任者のみ実行できます。
+    </BaseAlert>
+
+    <BaseAlert v-if="noticeMessage" variant="success" data-testid="permissions-notice">
+      {{ noticeMessage }}
     </BaseAlert>
 
     <!-- ロールは 4 つ固定で増えないので、件数の単位を言い換えてページャーを出さない -->
@@ -111,7 +132,7 @@ function submitEdit() {
       :loading="loading"
       :is-empty="isEmpty"
       :error="error"
-      @reload="store.load()"
+      @reload="reload"
     >
       <DataTable
         flat
@@ -129,7 +150,7 @@ function submitEdit() {
           <span class="permission-list__description">{{ row.description }}</span>
         </template>
 
-        <!-- 権限 5 列。許可 / 不可のバッジだけを置く -->
+        <!-- 権限 4 列。許可 / 不可のバッジだけを置く -->
         <template v-for="item in permissionSlots" #[item.slot]="{ value }" :key="item.key">
           <BaseBadge :variant="permissionBadge(value).variant">
             {{ permissionBadge(value).label }}
@@ -155,6 +176,8 @@ function submitEdit() {
       submit-label="保存"
       :open="editTarget !== null"
       :title="editTitle"
+      :pending="saving"
+      :error="saveError"
       @close="closeEdit"
       @submit="submitEdit"
     >
@@ -189,7 +212,7 @@ function submitEdit() {
 }
 
 /*
- * 3 列目より後（権限 5 列と操作）は見出しもセルも中央寄せ。モックと同じ。
+ * 3 列目より後（権限 4 列と操作）は見出しもセルも中央寄せ。モックと同じ。
  * DataTable は右寄せ（numeric）しか持たないので、ここで列位置を指して当てる。
  * **列の並びを変えるときはこの指定も見直すこと。**
  */

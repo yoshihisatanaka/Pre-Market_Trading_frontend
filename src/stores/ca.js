@@ -27,7 +27,7 @@ export const CA_PAGE_SIZE = 50
  * 検証の不合格は例外ではなく validationErrors / updateValidationErrors に入り、
  * 通信・サーバ障害だけが createError / updateError に入る。
  *
- * 編集は全項目を変更でき（CARequest がレコード全体を差し替える形なので）、更新は一覧取得時の
+ * 編集は全項目を変更でき（CA のパスキーは ID で、業務キーを持たないので）、更新は一覧取得時の
  * 更新日時を送り返す楽観的ロック付き。競合（409）は通信・サーバ障害と同じ updateError に入る
  * （画面は 409 を特別扱いしない）。
  *

@@ -258,8 +258,8 @@ describe('api/ca', () => {
     await createCorporateAction({ stockCode: 'A0001', caType: '120', paymentDate: '' })
 
     /*
-     * CARequest はレコード全体を差し替える形なので、キーを落とすと
-     * 「変えない」と「空にする」が区別できない（クエリパラメータとは扱いが逆）
+     * 更新の CAUpdateRequest は部分更新で、キーを落とすと「変えない」と解釈される。
+     * 空は null で明示する（クエリパラメータとは扱いが逆）
      */
     expect(lastRequest.body).toEqual({
       銘柄コード: 'A0001',

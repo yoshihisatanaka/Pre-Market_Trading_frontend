@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
@@ -8,6 +8,7 @@ import {
   MARKET_HOLIDAY_TYPE_OPTIONS,
 } from '@/utils/marketHolidayTypes'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from './marketHolidays'
+import { useMarketStatusStore } from './marketStatus'
 
 /*
  * フィクスチャはバックエンドの生の形（日本語キー / 休場日は YYYYMMDD の integer）なので、
@@ -438,5 +439,54 @@ describe('useMarketHolidaysStore', () => {
     // 取消済みの行が有効に戻るので、一覧の件数は 1 件増える（行そのものは増えていない）
     expect(store.total).toBe(TOTAL + 1)
     expect(dates(store.items)).toContain(CANCELED_DATE)
+  })
+
+  /*
+   * 当日を短縮取引・休場にしたときにヘッダを追随させるため、保存に成功したら市場状況を取り直す。
+   * 市場状況の load は差し替えて、呼ばれたかどうかだけを見る（通信の中身は MSS の担当）。
+   */
+  const spyMarketStatusLoad = () =>
+    vi.spyOn(useMarketStatusStore(), 'load').mockResolvedValue(null)
+
+  it('[MHS-23] create が成功すると市場状況を取り直す', async () => {
+    const load = spyMarketStatusLoad()
+    const store = useMarketHolidaysStore()
+    await store.load()
+
+    await store.create({ date: NEW_DATE, reason: NEW_REASON, holidayType: NEW_TYPE })
+
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('[MHS-24] remove が成功すると市場状況を取り直す', async () => {
+    const load = spyMarketStatusLoad()
+    const store = useMarketHolidaysStore()
+    await store.load()
+
+    await store.remove(DELETE_TARGET_ID)
+
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('[MHS-25] 保存に至らなかったときは市場状況を取り直さない', async () => {
+    const load = spyMarketStatusLoad()
+    const store = useMarketHolidaysStore()
+    await store.load()
+
+    // 事前検証で不合格
+    await store.create({ date: DUPLICATE_DATE, reason: NEW_REASON, holidayType: NEW_TYPE })
+    // 存在しない id の削除は 404
+    await store.remove(MISSING_ID)
+    // 事前検証は通るが登録が 500
+    server.use(
+      http.post('*/api/masters/market-holidays', () =>
+        HttpResponse.json({ detail: 'サーバーでエラーが発生しました。' }, { status: 500 }),
+      ),
+    )
+    await store.create({ date: NEW_DATE, reason: NEW_REASON, holidayType: NEW_TYPE })
+
+    expect(store.createError).not.toBeNull()
+    expect(store.deleteError).not.toBeNull()
+    expect(load).not.toHaveBeenCalled()
   })
 })

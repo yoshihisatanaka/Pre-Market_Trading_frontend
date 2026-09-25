@@ -1,9 +1,10 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { blackoutDates, canceledBlackoutDates } from '@/mocks/fixtures/blackoutDates'
 import { BLACKOUT_DATES_PAGE_SIZE, useBlackoutDatesStore } from './blackoutDates'
+import { useMarketStatusStore } from './marketStatus'
 
 /*
  * フィクスチャはバックエンドの生の形（日本語キー / 受注不可日は YYYYMMDD の integer）なので、
@@ -903,5 +904,72 @@ describe('useBlackoutDatesStore', () => {
     expect(store.validationErrors).toEqual([])
     expect(store.total).toBe(TOTAL + 1)
     expect(dates(store.items)).toContain(CANCELED_DATE)
+  })
+
+  /*
+   * 当日を受注不可にしたときにヘッダを追随させるため、保存に成功したら市場状況を取り直す。
+   * 市場状況の load は差し替えて、呼ばれたかどうかだけを見る（通信の中身は MSS の担当）。
+   */
+  const spyMarketStatusLoad = () =>
+    vi.spyOn(useMarketStatusStore(), 'load').mockResolvedValue(null)
+
+  it('[BDS-41] create が成功すると市場状況を取り直す', async () => {
+    const load = spyMarketStatusLoad()
+    const store = useBlackoutDatesStore()
+    await store.load()
+
+    await store.create({ date: NEW_DATE, reason: NEW_REASON })
+
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('[BDS-42] update が成功すると市場状況を取り直す', async () => {
+    const load = spyMarketStatusLoad()
+    const store = useBlackoutDatesStore()
+    await store.load()
+    const target = store.items[0]
+
+    await store.update({
+      id: target.id,
+      date: target.date,
+      reason: EDITED_REASON,
+      updatedAt: target.updatedAt,
+    })
+
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('[BDS-43] remove が成功すると市場状況を取り直す', async () => {
+    const load = spyMarketStatusLoad()
+    const store = useBlackoutDatesStore()
+    await store.load()
+
+    await store.remove(DELETE_TARGET_ID)
+
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('[BDS-44] 保存に至らなかったときは市場状況を取り直さない', async () => {
+    const load = spyMarketStatusLoad()
+    const store = useBlackoutDatesStore()
+    await store.load()
+    const target = store.items[0]
+    const edit = { id: target.id, date: target.date, reason: EDITED_REASON }
+
+    // 事前検証で不合格
+    await store.create({ date: DUPLICATE_DATE, reason: NEW_REASON })
+    // 古い合札で 409
+    await store.update({ ...edit, updatedAt: OTHER_ROW.更新日時 })
+    expect(store.updateError.status).toBe(409)
+    // 事前検証は通るが更新が 500
+    server.use(
+      http.put('*/api/masters/blackout-dates/:blackoutDate', () =>
+        HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+      ),
+    )
+    await store.update({ ...edit, updatedAt: target.updatedAt })
+    expect(store.updateError.status).toBe(500)
+
+    expect(load).not.toHaveBeenCalled()
   })
 })

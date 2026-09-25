@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { closedMarketStatusResponse, marketStatusResponse } from '@/mocks/fixtures/marketStatus'
-import { useMarketStatusStore } from './marketStatus'
+import { reloadMarketStatusAfter, useMarketStatusStore } from './marketStatus'
 
 /*
  * 「サーバが言ったこと」を持つだけのストア。表示の組み立て（toMarketDisplay）と
@@ -88,5 +88,29 @@ describe('useMarketStatusStore', () => {
     expect(store.error).toBeNull()
     expect(store.status.closed).toBe(true)
     expect(store.status.closedReason).toBe('感謝祭')
+  })
+})
+
+describe('reloadMarketStatusAfter', () => {
+  it('[MSS-07] 包んだ書き込みが成功すると市場状況を取り直し、戻り値はそのまま返す', async () => {
+    const load = vi.spyOn(useMarketStatusStore(), 'load').mockResolvedValue(null)
+    const write = vi.fn().mockResolvedValue({ id: '1' })
+
+    const result = await reloadMarketStatusAfter(write)({ date: '2026-11-27' })
+
+    expect(write).toHaveBeenCalledWith({ date: '2026-11-27' })
+    expect(result).toEqual({ id: '1' })
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('[MSS-08] 包んだ書き込みが失敗すると取り直さず、例外をそのまま伝える', async () => {
+    const load = vi.spyOn(useMarketStatusStore(), 'load').mockResolvedValue(null)
+    const failure = new Error('保存に失敗しました')
+
+    await expect(
+      reloadMarketStatusAfter(vi.fn().mockRejectedValue(failure))('1'),
+    ).rejects.toBe(failure)
+
+    expect(load).not.toHaveBeenCalled()
   })
 })

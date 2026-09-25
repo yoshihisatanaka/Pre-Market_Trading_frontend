@@ -55,9 +55,8 @@ DB 全テーブルの主キーを `id` に統一する方針に合わせて、�
 - **事前検証が対象を id で指せる**（`BDA-08` / `BDA-09`）。日付を変えたかどうかで
   新規検証と変更検証を使い分ける回避策が要らなくなった
 
-**この層はフロントが先行している。** 取り込み時点の `docs/api/openapi.json` の `BlackoutDateItem` に
-`ID` は無く、パスも `/masters/blackout-dates/{blackout_date}` のまま。対象 id を渡すクエリ
-`blackout_date_id` も仕様に無く、CA の `ca_id` に倣った決め打ち（→ バックエンドへの確認事項）。
+パスキー・事前検証のクエリ名はいずれも仕様の `/masters/blackout-dates/{blackout_date_id}` /
+`blackout_date_id`（integer の行ID）と一致する（2026-09-18 の取り込みで確定）。
 
-`BDA-17` はその穴を見張るためのシナリオ。**値で取り繕わない**
+`BDA-17` は `ID` が欠けた応答を見張るためのシナリオ。**値で取り繕わない**
 （銘柄マスタの [api-symbols.md](api-symbols.md) の `STA-24` と同じ扱い）。

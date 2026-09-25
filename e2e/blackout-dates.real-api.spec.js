@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 /*
  * 受注不可日マスタを「実 API に当てて」確かめる E2E。
- * シナリオ: docs/e2e/masters/blackout-dates-real-api.md（タイトル先頭の [BDR-xx] が対応 ID）
+ * シナリオ: docs/e2e/blackout-dates-real-api.md（タイトル先頭の [BDR-xx] が対応 ID）
  *
  * blackout-dates.spec.js（BD）とは目的が違う。BD は MSW のモックに当てて画面の挙動を
  * 細かく固定する。こちらはフロントとバックエンドの噛み合わせだけを見るので、
@@ -32,8 +32,10 @@ const USER_CODE = 'e2e'
 
 /** BDR-04〜09 が使う日付。beforeAll が「まだ 1 度も使われていない日」を選ぶ */
 let testDate = 0
-/** BDR-07（保留）が日付の変更先に使う予備の日。同じく未使用日から選ぶ */
+/** BDR-07 が日付の変更先に使う予備の日。同じく未使用日から選ぶ */
 let spareDate = 0
+/** 試験用の行がいまある日付。BDR-07 が spareDate へ移し、BDR-08 / 09 はそれを追う */
+let rowDate = 0
 
 const toIsoDate = (blackoutDate) => {
   const digits = String(blackoutDate)
@@ -69,6 +71,28 @@ async function usedDatesIn(api, year) {
     offset += items.length
     if (items.length === 0 || offset >= total) return used
   }
+}
+
+/**
+ * 受注不可日（YYYYMMDD）から、その行の BlackoutDateItem を引く。
+ *
+ * 主キーは `ID` で、受注不可日は一意制約を持つ業務上の日付。削除のパスには `ID` を載せるので、
+ * 日付しか手元に無い後始末では一覧を引いて `ID` に変換する。無ければ null。
+ */
+async function findBlackoutDateByDate(api, blackoutDate) {
+  const res = await api.get('/api/masters/blackout-dates', {
+    params: {
+      start_date: blackoutDate,
+      end_date: blackoutDate,
+      include_deleted: true,
+      // 実 API の一覧は limit というクエリを持たない（海外休場日と違う点）
+      offset: 0,
+    },
+  })
+  if (!res.ok()) return null
+
+  const { blackout_dates: items } = await res.json()
+  return items.find((item) => item.受注不可日 === blackoutDate) ?? null
 }
 
 /*
@@ -156,9 +180,27 @@ async function submitAdd(page, isoDate, reason = TEST_REASON) {
   await page.getByTestId('blackout-dates-add-submit').click()
 }
 
-/** 対象の行の編集モーダルを開いて、日付と理由を入れ直して送信する */
-async function submitEdit(page, key, { isoDate, reason }) {
-  await page.getByTestId(`blackout-dates-edit-${key}`).click()
+/** 行の操作ボタン。行を日付で絞ってから引く（testid に入る id は実行時にしか判らない） */
+function rowButtonOf(page, isoDate, name) {
+  return rowsOf(page).filter({ hasText: isoDate }).getByRole('button', { name })
+}
+
+/*
+ * 行の指定は id（実 API の `ID`）。値は実行時にしか判らないので日付で行を絞って引くが、
+ * testid が数字で終わっていることだけは確かめる。ここが `blackout-dates-edit-`（id が空文字）に
+ * なるのは実 API が `ID` を返していない徴候で、そのまま進めても対象を特定できずに落ちるため、
+ * 原因の判る形で先に止める。
+ */
+async function expectIdTestId(button, action) {
+  await expect(button).toHaveAttribute('data-testid', new RegExp(`^blackout-dates-${action}-\\d+$`))
+}
+
+/** 対象の日付の行の編集モーダルを開いて、日付と理由を入れ直して送信する */
+async function submitEdit(page, targetIsoDate, { isoDate, reason }) {
+  const editButton = rowButtonOf(page, targetIsoDate, '編集')
+  await expectIdTestId(editButton, 'edit')
+
+  await editButton.click()
   await expect(editDialogOf(page)).toBeVisible()
   if (isoDate) await page.getByTestId('blackout-dates-edit-date').fill(isoDate)
   if (reason) await page.getByTestId('blackout-dates-edit-reason').fill(reason)
@@ -167,22 +209,6 @@ async function submitEdit(page, key, { isoDate, reason }) {
 
 // 登録 → 重複 → 更新 → 削除 → 再有効化 は 1 本の流れなので順に実行する
 test.describe.configure({ mode: 'serial' })
-
-/*
- * **書き込み系（BDR-04〜09）はバックエンドの主キー id 化を待って保留にしている。**
- *
- * フロントは主キーを id に寄せたが、実 API の BlackoutDateItem はまだ `ID` を返さない。
- * 行の id が空文字になるため、`blackout-dates-edit-<id>` で対象の行を特定できない。
- * 追加・重複（BDR-04/05）だけは id を使わないが、この 6 本は
- * 「登録 → 重複 → 更新 → 削除 → 再有効化」の直列 1 本で、削除を止めると
- * 試験データが実 DB に残って次回の登録が失敗する。だから流れごと止める。
- *
- * 一覧・検索（BDR-01〜03）は id を使わないのでそのまま実行する。
- * 実 API が `ID` を返し始めたら、この定数を消すだけで戻る。
- */
-const PENDING_BACKEND_ID = true
-const PENDING_BACKEND_ID_REASON =
-  'バックエンドの主キー id 化待ち。実 API がまだ ID を返さず、行を id で特定できない'
 
 test.describe('受注不可日マスタ（実 API 接続）', () => {
   test.skip(
@@ -193,15 +219,21 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
   test.beforeAll(async ({ playwright }) => {
     const api = await apiContext(playwright)
     ;[testDate, spareDate] = await pickUnusedDates(api, 2)
+    rowDate = testDate
     await api.dispose()
   })
 
   test.afterAll(async ({ playwright }) => {
     // 試験用の行を有効なまま残さない（論理削除なので行自体は DB に残る）
+    // 削除のパスキーは ID。日付では引けないので一覧から ID を取り直す。
+    // BDR-07 が日付を移すので、testDate と spareDate のどちらに行が残っているかは流れ次第
     const api = await apiContext(playwright)
-    await api.delete(`/api/masters/blackout-dates/${testDate}`)
-    // BDR-07 が有効になったときのため。使っていなければ 404 になるだけで害は無い
-    await api.delete(`/api/masters/blackout-dates/${spareDate}`)
+    for (const date of [testDate, spareDate]) {
+      const item = await findBlackoutDateByDate(api, date)
+      if (item && item.取消区分 === 0) {
+        await api.delete(`/api/masters/blackout-dates/${item.ID}`)
+      }
+    }
     await api.dispose()
   })
 
@@ -264,7 +296,6 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
   })
 
   test('[BDR-04] 未登録の日付を追加すると件数が 1 増える', async ({ page }) => {
-    test.skip(PENDING_BACKEND_ID, PENDING_BACKEND_ID_REASON)
     await openList(page)
     const before = await countOf(page)
     const isoDate = toIsoDate(testDate)
@@ -279,7 +310,6 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
   })
 
   test('[BDR-05] 同じ日付をもう一度追加すると事前検証で弾かれる', async ({ page }) => {
-    test.skip(PENDING_BACKEND_ID, PENDING_BACKEND_ID_REASON)
     await openList(page)
     const before = await countOf(page)
 
@@ -296,13 +326,12 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
   })
 
   test('[BDR-06] 理由だけを変更すると、その行の理由が変わる', async ({ page }) => {
-    test.skip(PENDING_BACKEND_ID, PENDING_BACKEND_ID_REASON)
     await openList(page)
     const before = await countOf(page)
     const isoDate = toIsoDate(testDate)
 
     // 日付は変えない。実 API 側は変更検証（is_update）に切り替わり、自分自身を重複としない
-    await submitEdit(page, testDate, { reason: EDITED_REASON })
+    await submitEdit(page, isoDate, { reason: EDITED_REASON })
 
     await expect(editDialogOf(page)).toBeHidden()
     await expect(page.getByTestId('blackout-dates-notice')).toHaveText(`${isoDate} を更新しました。`)
@@ -311,9 +340,11 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
   })
 
   /*
-   * 実 API の PUT はパスの受注不可日で本文の 受注不可日 を上書きするため、いまは備考しか
-   * 変更できない（バックエンド対応待ち。docs/e2e/masters/blackout-dates-real-api.md に理由を書いてある）。
+   * 実 API の事前検証は blackout_date_id を付けると、本文の 受注不可日 が ID の指す日付と
+   * 違うだけで 400 を返す（PUT 自体は日付の変更を受け付ける）。バックエンド対応待ち
+   * （docs/api/requests.md の依頼 #18、docs/e2e/blackout-dates-real-api.md に経緯）。
    * 対応したら test.fixme を test に戻し、文書の状態を実装済にする。
+   * 戻るまでは rowDate が testDate のままなので、BDR-08 / 09 は testDate の行を追う。
    */
   test.fixme('[BDR-07] 日付を変更すると、その行が新しい日付に移る', async ({ page }) => {
     await openList(page)
@@ -321,22 +352,27 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
     const fromIso = toIsoDate(testDate)
     const toIso = toIsoDate(spareDate)
 
-    await submitEdit(page, testDate, { isoDate: toIso })
+    await submitEdit(page, fromIso, { isoDate: toIso })
 
     await expect(editDialogOf(page)).toBeHidden()
     await expect(page.getByTestId('blackout-dates-notice')).toHaveText(`${toIso} を更新しました。`)
     await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${before} 件`)
     await expect(rowsOf(page).filter({ hasText: toIso })).toHaveCount(1)
     await expect(rowsOf(page).filter({ hasText: fromIso })).toHaveCount(0)
+
+    // 以降の削除・再有効化は、移した先の日付で行を追う
+    rowDate = spareDate
   })
 
   test('[BDR-08] 追加した行を削除すると件数が 1 減る', async ({ page }) => {
-    test.skip(PENDING_BACKEND_ID, PENDING_BACKEND_ID_REASON)
     await openList(page)
     const before = await countOf(page)
-    const isoDate = toIsoDate(testDate)
+    const isoDate = toIsoDate(rowDate)
 
-    await page.getByTestId(`blackout-dates-delete-${testDate}`).click()
+    const deleteButton = rowButtonOf(page, isoDate, '削除')
+    await expectIdTestId(deleteButton, 'delete')
+
+    await deleteButton.click()
     await page.getByTestId('blackout-dates-delete-submit').click()
 
     await expect(page.getByRole('dialog', { name: '削除確認' })).toBeHidden()
@@ -346,10 +382,9 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
   })
 
   test('[BDR-09] 削除した日付を追加し直すと警告なしで再有効化される', async ({ page }) => {
-    test.skip(PENDING_BACKEND_ID, PENDING_BACKEND_ID_REASON)
     await openList(page)
     const before = await countOf(page)
-    const isoDate = toIsoDate(testDate)
+    const isoDate = toIsoDate(rowDate)
 
     await submitAdd(page, isoDate)
 

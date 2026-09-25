@@ -40,7 +40,7 @@
 | BDS-25 | DELETE の応答が返る前 | `remove()` を await せずに状態を見る | `deleting` が true で、一覧側の `loading` は false のまま。完了後に false に戻る | 実装済 |
 | BDS-26 | 既定モック、`load()` 済み | 先頭の行の `id` / `updatedAt` で理由だけを変えて `update({ id, date, reason, updatedAt })` を呼ぶ | 更新後の 1 件が返る（日付は元のまま、理由は渡した値）。`updateError` は null、`updateValidationErrors` は空。一覧が読み直されて `total` は変わらず、その日付の行の理由が新しい値になる | 実装済 |
 | BDS-27 | 既定モック、`load()` 済み | 先頭の行の日付を一覧に無い日付へ変えて `update()` を呼ぶ | 戻り値の日付が新しい日付になる。`total` は変わらず、`items` から元の日付が消えて新しい日付が日付降順の位置に入る | 実装済 |
-| BDS-28 | 既定モック、`load()` 済み | 日付を変えずに（自分自身の日付のまま）`update()` を呼ぶ | 自分自身は重複と見なされず成功する。事前検証のリクエストに変更検証であること（`is_update=true`）が載る。対象を渡す `id` クエリは送らない（実 API に無く、本文の受注不可日が対象を兼ねる） | 実装済 |
+| BDS-28 | 既定モック、`load()` 済み | 日付を変えずに（自分自身の日付のまま）`update()` を呼ぶ | 自分自身は重複と見なされず成功する。事前検証のリクエストに変更検証であること（`is_update=true`）が載る。対象は `blackout_date_id=<id>` のクエリで渡す（本文の受注不可日ではなく行ID で指す） | 実装済 |
 | BDS-29 | 既定モック、`load()` 済み | 先頭の行の日付を**別の行の日付**へ変えて `update()` を呼ぶ | 戻り値が null。`updateValidationErrors` に重複を知らせる文言が入り、`updateError` は null のまま。`items` / `total` は変わらない | 実装済 |
 | BDS-30 | 事前検証が不合格になる入力 | `update()` を呼ぶ | 更新の API（`PUT /masters/blackout-dates/{受注不可日}`）は 1 度も呼ばれない | 実装済 |
 | BDS-31 | 更新の API が 500（`detail` 付き）を返す（事前検証は通る） | `update()` を呼ぶ | 戻り値が null、`updateError` に status 500 とその message が入る。`updateValidationErrors` は空のまま。`items` / `total` は変わらない | 実装済 |

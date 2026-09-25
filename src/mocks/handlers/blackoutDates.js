@@ -71,7 +71,7 @@ export const blackoutDateHandlers = [
    * **対象は本文の日付ではなくクエリの blackout_date_id で指す**（CA の ca_id と同じ形）。
    * 主キーが ID になり、日付を変える編集でも対象を見失わなくなった。
    * これにより重複検査の根拠は主キーではなく **日付の一意制約**になる。
-   * クエリ名は openapi.json にまだ無く、ca_id に倣った先行実装（→ バックエンドへの確認事項）。
+   * クエリ名は仕様の `blackout_date_id`（integer の行ID）と一致する（2026-09-18 の取り込みで確定）。
    */
   http.post('*/api/masters/blackout-dates/validate', async ({ request }) => {
     const { blackoutDate, reason } = await readBlackoutDateRequest(request)
@@ -145,9 +145,8 @@ export const blackoutDateHandlers = [
    * 受注不可日の更新（日付と理由の両方を変更できる）。
    * パスが対象の ID、本文の 受注不可日 が変更後の日付。
    *
-   * **パスキーは ID。** 取り込み時点の openapi.json はまだ
-   * `/masters/blackout-dates/{blackout_date}`（受注不可日・integer）だが、DB の主キーを id に
-   * 寄せる方針に合わせて先に置いている（src/mocks/handlers の銘柄と同じ）。
+   * パスキーは仕様の `/masters/blackout-dates/{blackout_date_id}`（integer の行ID）と一致する
+   * （2026-09-18 の取り込みで確定）。
    *
    * 検査の順序が要点で、「対象が居るか → 入力の形 → 盤面が古くないか → 他の行との重複」と見る。
    * 競合（409）を重複より先に見るのは、他の利用者が書き換えた後の行に

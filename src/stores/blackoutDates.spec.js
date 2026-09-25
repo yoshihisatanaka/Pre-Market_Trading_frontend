@@ -585,13 +585,13 @@ describe('useBlackoutDatesStore', () => {
       expect(store.updateValidationErrors).toEqual([])
 
       /*
-       * 日付を変えないときは変更検証（is_update=true）にする。新規検証だと自分自身が
-       * 重複として弾かれる。対象を渡す口は実 API に無く、本文の受注不可日が対象を兼ねる。
+       * 日付を変えないときも変更検証（is_update=true）にする。新規検証だと自分自身が
+       * 重複として弾かれる。対象は本文の受注不可日ではなくクエリの blackout_date_id で指す。
        */
       expect(validateUrls).toHaveLength(1)
       const params = new URL(validateUrls[0]).searchParams
       expect(params.get('is_update')).toBe('true')
-      expect(params.has('id')).toBe(false)
+      expect(params.get('blackout_date_id')).toBe(target.id)
     } finally {
       server.events.removeListener('request:start', record)
     }

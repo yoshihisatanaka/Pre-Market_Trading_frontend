@@ -7,6 +7,7 @@ import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
+import BaseSwitch from '@/components/ui/BaseSwitch.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { useIncidentsStore } from '@/stores/incidents'
 import { formatDateTime } from '@/utils/format'
@@ -30,6 +31,8 @@ const {
  * 停止対象の表。行は サーバの targets の並び（ALL が先頭）のまま出す。
  * 公開モックの「IB送信制御 / 注文入力制御」の 2 区画は採らない（仕様の停止対象と軸が違い、
  * みずほ / VWAP / 自己取引 / OTC の停止が画面に出なくなるため）。
+ * モック 08986d1 のスライド式トグルは、この表の「発注停止」列に取り込む（ON = 停止中）。
+ * 語はモックの「制御 / 解除」ではなく、API とサーバ文言に揃えて「停止 / 再開」にする。
  */
 const TARGET_COLUMNS = [
   { key: 'targetName', label: '停止対象' },
@@ -37,22 +40,19 @@ const TARGET_COLUMNS = [
   { key: 'reason', label: '停止理由' },
   { key: 'suspendedAt', label: '停止日時・停止者' },
   { key: 'resumedAt', label: '再開日時・再開者' },
-  { key: 'action', label: '操作' },
-]
-
-const HISTORY_COLUMNS = [
-  { key: 'operatedAt', label: '操作日時' },
-  { key: 'targetName', label: '停止対象' },
-  { key: 'operationName', label: '操作区分' },
-  { key: 'reason', label: '停止理由' },
-  { key: 'operator', label: '操作者' },
+  { key: 'action', label: '発注停止' },
 ]
 
 /*
- * 操作区分の色分け。文言はサーバの 操作区分名 をそのまま出し、ここは色だけを決める
- * （操作区分は description だけで enum 宣言が無いので、src/utils/apiEnums.js には載せられない）。
+ * 履歴はモックの 変更日時 / 制御内容 / 更新者 に、停止理由の列を足した 4 列。
+ * 停止理由はモックに無い意図的なずれ（API は停止に理由を必須とし、何のために止めたかは監査上残す必要がある）。
  */
-const OPERATION_BADGE_VARIANTS = { SUSPEND: 'error', RESUME: 'success' }
+const HISTORY_COLUMNS = [
+  { key: 'operatedAt', label: '変更日時' },
+  { key: 'content', label: '制御内容' },
+  { key: 'reason', label: '停止理由' },
+  { key: 'operator', label: '更新者' },
+]
 
 /*
  * 説明文。テンプレートに直接書くと、日本語の途中で改行した位置が
@@ -69,8 +69,14 @@ function targetRowClass(row) {
   return { 'is-all': row.target === 'ALL', 'is-suspended': row.suspended }
 }
 
+// 制御内容。モックの「IB送信制御：制御開始」と同じ形で、停止対象名と操作区分名をサーバの文言のまま繋ぐ
+function historyContent(row) {
+  return `${row.targetName}：${row.operationName}`
+}
+
 /*
  * 確認ダイアログ。「開いているか」と「何を・どの対象に」を 1 つの ref で持つ（null なら閉じている）。
+ * トグルを押しただけでは状態を変えない。ダイアログで確定し、サーバから取り直した値で切り替わる。
  * 対象は開いた時点の行の写し。操作後の取り直しで表の行が差し替わっても、ダイアログの文言はぶれない。
  */
 const dialog = ref(null)
@@ -161,7 +167,7 @@ store.load()
     </p>
 
     <template v-else>
-      <BaseCard title="発注停止の状態" flush>
+      <BaseCard title="障害時の運用制御" flush>
         <template #header-actions>
           <span :class="['incident__state', `is-${summary.tone}`]">
             <span class="incident__state-label">現在の運用状態</span>
@@ -210,21 +216,19 @@ store.load()
             <template v-else>—</template>
           </template>
           <template #cell-action="{ row }">
-            <BaseButton
-              :variant="row.suspended ? 'primary' : 'danger'"
-              size="sm"
+            <BaseSwitch
+              :model-value="row.suspended"
+              :label="`${row.targetName}の発注停止`"
               :data-testid="`incidents-target-${row.target}-action`"
               :disabled="isActionLocked(row)"
-              @click="openDialog(row)"
-            >
-              {{ row.suspended ? '再開する' : '停止する' }}
-            </BaseButton>
+              @toggle="openDialog(row)"
+            />
           </template>
         </DataTable>
       </BaseCard>
 
       <!-- 表を全幅で載せるときだけ flush。0 件の一行は本文余白の中に置きたいので付けない -->
-      <BaseCard title="停止・再開の操作履歴" :flush="hasHistories">
+      <BaseCard title="障害対応履歴" :flush="hasHistories">
         <template #header-actions>
           <span class="incident__head-note">新しい順</span>
         </template>
@@ -237,16 +241,12 @@ store.load()
           :rows="histories"
         >
           <template #cell-operatedAt="{ value }">{{ formatDateTime(value) }}</template>
-          <template #cell-operationName="{ row }">
-            <BaseBadge :variant="OPERATION_BADGE_VARIANTS[row.operation] ?? 'gray'">
-              {{ row.operationName }}
-            </BaseBadge>
-          </template>
+          <template #cell-content="{ row }">{{ historyContent(row) }}</template>
           <template #cell-reason="{ value }">{{ value ?? '—' }}</template>
         </DataTable>
 
         <p v-else data-testid="incidents-history-empty" class="incident__history-empty">
-          発注停止・再開の操作履歴はありません。
+          障害対応履歴はありません。
         </p>
       </BaseCard>
     </template>

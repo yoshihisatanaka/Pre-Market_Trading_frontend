@@ -6,6 +6,7 @@ import {
   validateMarketHoliday,
 } from '@/api/marketHolidays'
 import { useCrudList } from '@/composables/useCrudList'
+import { reloadMarketStatusAfter } from './marketStatus'
 
 /** 一覧 1 ページあたりの表示件数 */
 export const MARKET_HOLIDAYS_PAGE_SIZE = 50
@@ -22,14 +23,17 @@ export const MARKET_HOLIDAYS_PAGE_SIZE = 50
  * validationErrors / validationWarnings で受け取る。
  *
  * 行ごとの編集はまだ持たないので updateItem は渡さない。
+ *
+ * 登録・削除が成功したら市場状況（ヘッダ）を取り直す。当日を短縮取引や休場に変えたときに、
+ * 起動時に取った市場日時と表示が食い違わないようにするため（stores/marketStatus.js）。
  */
 export const useMarketHolidaysStore = defineStore('marketHolidays', () =>
   useCrudList({
     pageSize: MARKET_HOLIDAYS_PAGE_SIZE,
     filterKeys: ['dateFrom', 'dateTo', 'holidayType'],
     fetchPage: fetchMarketHolidays,
-    createItem: createMarketHoliday,
+    createItem: reloadMarketStatusAfter(createMarketHoliday),
     validateItem: validateMarketHoliday,
-    deleteItem: deleteMarketHoliday,
+    deleteItem: reloadMarketStatusAfter(deleteMarketHoliday),
   }),
 )

@@ -28,3 +28,6 @@
 | MHS-20 | 既定モック、`load()` 済み | 一覧に無い日付で `create({ date, reason, holidayType: '1' })` を呼ぶ | 戻り値の `holidayType` が `'1'` で、読み直した一覧に現れたその日付の行も `'1'` になる | 実装済 |
 | MHS-21 | 既定モック（取消済みの日付を 1 件持つ）、`load()` 済み | その取消済みの日付で `create()` を呼ぶ | 戻り値が null。`validationWarnings` に再有効化の警告が入り、`validationErrors` / `createError` は空のまま。まだ登録しないので `total` は変わらない | 実装済 |
 | MHS-22 | MHS-21 の直後（警告が出ている） | 同じ内容に `acknowledgedWarnings: true` を足して `create()` を呼ぶ | 登録された 1 件が返り、`validationWarnings` が空になる。取消済みの行が有効に戻るので `total` が 1 増え、その日付が `items` に入る | 実装済 |
+| MHS-23 | 既定モック、`load()` 済み。市場状況ストアの `load` を差し替える | 一覧に無い日付で `create()` が成功する | 市場状況の `load` が 1 回呼ばれる（当日を短縮取引・休場にしたときにヘッダを追随させる） | 実装済 |
+| MHS-24 | 同上 | `remove()` が成功する | 市場状況の `load` が 1 回呼ばれる | 実装済 |
+| MHS-25 | 同上 | 事前検証で弾かれる `create()`、POST が 500 を返す `create()`、404 になる `remove()` を呼ぶ | どれでも市場状況の `load` は呼ばれない（保存されていないので取り直さない） | 実装済 |

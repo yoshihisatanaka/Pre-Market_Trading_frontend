@@ -87,52 +87,51 @@ const shortenedDay = {
 /** JST の時刻をミリ秒で */
 const at = (iso) => Date.parse(iso)
 
-const codes = (display) => display.sessions.map((s) => s.code)
-const currentCodes = (display) => display.sessions.filter((s) => s.current).map((s) => s.code)
+const DURING_REGULAR = at('2026-03-03T01:00:00+09:00')
 
 describe('toMarketDisplay', () => {
-  it('[MKS-14] 窓に入っているセッションが現在になる', () => {
-    const display = toMarketDisplay(regularDay, at('2026-03-03T01:00:00+09:00'))
+  it('[MKS-14] 窓に入っているセッションのラベルと JST / ET の時間帯を出す', () => {
+    const display = toMarketDisplay(regularDay, DURING_REGULAR)
 
     expect(display.key).toBe('regular')
-    expect(display.label).toBe('● Regular')
-    expect(codes(display)).toEqual(['PRE', 'REGULAR', 'AFTER'])
-    expect(currentCodes(display)).toEqual(['REGULAR'])
+    expect(display.label).toBe('Regular')
+    expect(display.jst).toBe('日本時間 23:30–翌06:00（冬時間）')
+    expect(display.et).toBe('ET 09:30–16:00')
   })
 
   it('[MKS-15] 開始ちょうどはそのセッションに入る', () => {
     const display = toMarketDisplay(regularDay, at('2026-03-02T18:00:00+09:00'))
 
     expect(display.key).toBe('premarket')
-    expect(currentCodes(display)).toEqual(['PRE'])
+    expect(display.label).toBe('Pre-Market')
+    expect(display.jst).toBe('日本時間 18:00–23:30（冬時間）')
+    expect(display.et).toBe('ET 04:00–09:30')
   })
 
   it('[MKS-16] 終了ちょうどは次のセッションに移る', () => {
     const display = toMarketDisplay(regularDay, at('2026-03-02T23:30:00+09:00'))
 
     expect(display.key).toBe('regular')
-    expect(currentCodes(display)).toEqual(['REGULAR'])
   })
 
-  it('[MKS-17] 日跨ぎのレギュラーは翌日でも現在のまま、JST の表記に (翌) が付く', () => {
-    const display = toMarketDisplay(regularDay, at('2026-03-03T02:00:00+09:00'))
+  it('[MKS-17] 日跨ぎ後もレギュラーのまま、翌日の端点には 翌 が前置される', () => {
+    expect(toMarketDisplay(regularDay, at('2026-03-03T02:00:00+09:00')).key).toBe('regular')
 
-    expect(currentCodes(display)).toEqual(['REGULAR'])
-
-    const regular = display.sessions[1]
-    expect(regular.hoursJst).toBe('23:30 - 06:00(翌)')
+    const after = toMarketDisplay(regularDay, at('2026-03-03T07:00:00+09:00'))
+    expect(after.key).toBe('afterhours')
+    expect(after.label).toBe('After-Hours')
+    expect(after.jst).toBe('日本時間 翌06:00–翌10:00（冬時間）')
     // ET 側は日を跨がないので目印を付けない
-    expect(regular.hoursEt).toBe('09:30 - 16:00')
-    expect(display.sessions[0].hoursJst).toBe('18:00 - 23:30')
+    expect(after.et).toBe('ET 16:00–20:00')
   })
 
-  it('[MKS-18] 休場は理由を添えて Closed になり、時間帯を出さない', () => {
+  it('[MKS-18] 休場は Closed になり、理由を JST 側に出す', () => {
     const display = toMarketDisplay(closedDay, at('2026-11-26T23:00:00+09:00'))
 
-    expect(display.key).toBe('closed')
-    expect(display.label).toBe('○ Closed')
-    expect(display.note).toBe('休場（感謝祭）')
-    expect(display.sessions).toEqual([])
+    expect(display.key).toBe('holiday')
+    expect(display.label).toBe('Closed')
+    expect(display.jst).toBe('休場（感謝祭）')
+    expect(display.et).toBe('ET Market Holiday')
   })
 
   it('[MKS-19] 休場理由が無ければ「休場」だけを出す', () => {
@@ -141,72 +140,78 @@ describe('toMarketDisplay', () => {
       at('2026-11-26T23:00:00+09:00'),
     )
 
-    expect(display.note).toBe('休場')
+    expect(display.jst).toBe('休場')
   })
 
-  it('[MKS-20] 最終セッションの終了後は Closed になるが、時間帯は残る', () => {
+  it('[MKS-20] 最終セッションの終了後は Closed になり、次に開くまでの窓を出す', () => {
     const display = toMarketDisplay(regularDay, at('2026-03-03T11:00:00+09:00'))
 
     expect(display.key).toBe('closed')
-    expect(display.label).toBe('○ Closed')
-    expect(codes(display)).toEqual(['PRE', 'REGULAR', 'AFTER'])
-    expect(currentCodes(display)).toEqual([])
+    expect(display.label).toBe('Closed')
+    expect(display.jst).toBe('日本時間 10:00–18:00（冬時間）')
+    expect(display.et).toBe('ET 20:00–04:00')
   })
 
-  it('[MKS-21] 開場前も Closed になるが、時間帯は残る', () => {
-    const display = toMarketDisplay(regularDay, at('2026-03-02T12:00:00+09:00'))
+  it('[MKS-21] 開場前もセッション外と同じ表示になる', () => {
+    const before = toMarketDisplay(regularDay, at('2026-03-02T12:00:00+09:00'))
+    const after = toMarketDisplay(regularDay, at('2026-03-03T11:00:00+09:00'))
 
-    expect(display.key).toBe('closed')
-    expect(codes(display)).toEqual(['PRE', 'REGULAR', 'AFTER'])
-    expect(currentCodes(display)).toEqual([])
+    expect(before.key).toBe('closed')
+    expect({ jst: before.jst, et: before.et }).toEqual({ jst: after.jst, et: after.et })
   })
 
-  it('[MKS-22] 短縮取引日は目印が立ち、理由が title に入る', () => {
-    const display = toMarketDisplay(shortenedDay, at('2026-03-03T01:00:00+09:00'))
+  it('[MKS-22] 短縮取引日は理由が title に入り、時間帯はサーバの値のまま', () => {
+    const shortened = {
+      ...shortenedDay,
+      sessions: [
+        regularDay.sessions[0],
+        { ...regularDay.sessions[1], hoursJst: '23:30 - 03:00', hoursEt: '09:30 - 13:00' },
+      ],
+    }
 
-    expect(display.shortened).toBe(true)
+    const display = toMarketDisplay(shortened, DURING_REGULAR)
+
     expect(display.title).toContain('短縮取引: 感謝祭翌日')
-    expect(toMarketDisplay(regularDay, at('2026-03-03T01:00:00+09:00')).shortened).toBe(false)
+    expect(display.et).toBe('ET 09:30–13:00')
+    expect(toMarketDisplay(regularDay, DURING_REGULAR).title).not.toContain('短縮取引')
   })
 
   it('[MKS-23] 未取得のときは推定を出さず「—」にする', () => {
-    const display = toMarketDisplay(null, at('2026-03-03T01:00:00+09:00'))
+    const display = toMarketDisplay(null, DURING_REGULAR)
 
     expect(display.key).toBe('unknown')
     expect(display.label).toBe('—')
-    expect(display.sessions).toEqual([])
-    expect(display.note).toBe('')
+    expect(display.jst).toBe('')
+    expect(display.et).toBe('')
   })
 
   it('[MKS-24] 一度も取れずに失敗したときは取得できない旨を出す', () => {
     const error = new ApiError('サーバーでエラーが発生しました。', { status: 500 })
 
-    const display = toMarketDisplay(null, at('2026-03-03T01:00:00+09:00'), { error })
+    const display = toMarketDisplay(null, DURING_REGULAR, { error })
 
     expect(display.label).toBe('—')
-    expect(display.note).toBe('市場状況を取得できません')
+    expect(display.jst).toBe('市場状況を取得できません')
     expect(display.title).toBe('サーバーでエラーが発生しました。')
   })
 
   it('[MKS-25] 取得済みのあとで失敗しても、古い値を出し続ける', () => {
     const error = new ApiError('サーバーでエラーが発生しました。', { status: 500 })
 
-    const display = toMarketDisplay(regularDay, at('2026-03-03T01:00:00+09:00'), { error })
+    const display = toMarketDisplay(regularDay, DURING_REGULAR, { error })
 
     expect(display.key).toBe('regular')
-    expect(display.label).toBe('● Regular')
-    expect(display.note).toBe('')
+    expect(display.label).toBe('Regular')
+    expect(display.jst).toBe('日本時間 23:30–翌06:00（冬時間）')
   })
 
   it('[MKS-26] title に基準日・サマータイムの別と 3 セッションの JST / ET が並ぶ', () => {
-    const display = toMarketDisplay(regularDay, at('2026-03-03T01:00:00+09:00'))
+    const display = toMarketDisplay(regularDay, DURING_REGULAR)
 
     expect(display.title).toContain('基準日 2026-03-02（EST）')
-    expect(display.title).toContain('プレ JST 18:00 - 23:30 / ET 04:00 - 09:30')
-    expect(display.title).toContain('レギュラー JST 23:30 - 06:00(翌) / ET 09:30 - 16:00')
-    expect(display.title).toContain('アフター JST 06:00 - 10:00 / ET 16:00 - 20:00')
-    // 夏時間なら EDT に変わる
-    expect(toMarketDisplay({ ...regularDay, dst: true }, 0).title).toContain('（EDT）')
+    expect(display.title).toContain('プレ JST 18:00–23:30 / ET 04:00–09:30')
+    expect(display.title).toContain('レギュラー JST 23:30–翌06:00 / ET 09:30–16:00')
+    expect(display.title).toContain('アフター JST 翌06:00–翌10:00 / ET 16:00–20:00')
   })
 
   it('[MKS-27] 未知のセッション文字列でも落ちない', () => {
@@ -216,11 +221,46 @@ describe('toMarketDisplay', () => {
       sessions: [{ ...regularDay.sessions[1], code: 'SNACK_TIME' }],
     }
 
-    const display = toMarketDisplay(unknownSession, at('2026-03-03T01:00:00+09:00'))
+    const display = toMarketDisplay(unknownSession, DURING_REGULAR)
 
-    expect(currentCodes(display)).toEqual(['SNACK_TIME'])
-    // 色と丸印の割り当てが無いので Closed 扱いに落ちる（表示は壊れない）
+    // 配色とラベルの割り当てが無いので Closed 扱いに落ちる（表示は壊れない）
     expect(display.key).toBe('closed')
-    expect(display.label).toBe('○ Closed')
+    expect(display.label).toBe('Closed')
+    expect(display.et).toBe('ET 09:30–16:00')
+  })
+
+  it('[MKS-28] 土日の休場はモックの週末表記になる', () => {
+    const display = toMarketDisplay(
+      { ...closedDay, closedReason: '土日' },
+      at('2026-11-28T23:00:00+09:00'),
+    )
+
+    expect(display.key).toBe('holiday')
+    expect(display.jst).toBe('休場（週末）')
+    expect(display.et).toBe('ET Weekend')
+  })
+
+  it('[MKS-29] 夏時間は（夏時間）と EDT になる', () => {
+    const display = toMarketDisplay({ ...regularDay, dst: true }, DURING_REGULAR)
+
+    expect(display.jst).toBe('日本時間 23:30–翌06:00（夏時間）')
+    expect(display.title).toContain('（EDT）')
+  })
+
+  it('[MKS-30] 時間帯の文字列が想定外の形でも落ちない', () => {
+    const odd = {
+      ...regularDay,
+      sessions: regularDay.sessions.map((s) => ({ ...s, hoursJst: '未定', hoursEt: '' })),
+    }
+
+    const during = toMarketDisplay(odd, DURING_REGULAR)
+    expect(during.key).toBe('regular')
+    expect(during.jst).toBe('日本時間 未定（冬時間）')
+    expect(during.et).toBe('')
+
+    const outside = toMarketDisplay(odd, at('2026-03-03T11:00:00+09:00'))
+    expect(outside.key).toBe('closed')
+    expect(outside.jst).toBe('')
+    expect(outside.et).toBe('')
   })
 })

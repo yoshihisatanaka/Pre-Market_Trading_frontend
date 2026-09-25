@@ -63,6 +63,7 @@ import {
   createBalanceAdjustment,
   fetchBalanceAdjustments,
   updateBalanceAdjustment,
+  updateBalanceSellProhibited,
 } from './balanceAdjustments'
 import {
   fetchAnnouncement,
@@ -212,18 +213,10 @@ const KNOWN_GAPS = [
     request: '#1',
   },
   /*
-   * 残高マスタの 2 つは画面モックにだけある項目で、src/api/balanceAdjustments.js の冒頭コメントの
-   * 1 番（銘柄名の検索）と 4 番（売却不可区分）。MSW だけが解釈し、実 API は黙って無視する。
+   * 残高マスタの銘柄名の検索は画面モックにだけある条件で、src/api/balanceAdjustments.js の
+   * 冒頭コメントの 1 番。MSW だけが解釈し、実 API は黙って無視する。
+   * 4 番（売却不可区分）は 2026-09-25 の取り込みで仕様に入ったので行を外した。
    */
-  {
-    kind: 'fixture',
-    fixture: 'balanceAdjustments',
-    keys: ['売却不可区分'],
-    reason:
-      '一覧の売却不可バッジと「売却を停止 / 売却停止を解除」の元になる項目が BalanceAdjustmentItem に無い。' +
-      '更新側も BalanceAdjustmentUpdateRequest に無く、残高 が required なので売却可否だけの更新は 422 になる見込み',
-    request: '#13',
-  },
   {
     kind: 'query',
     method: 'GET',
@@ -552,6 +545,10 @@ const PROBES = [
   {
     name: 'updateBalanceAdjustment',
     run: () => updateBalanceAdjustment({ id: '1', balance: 1, updatedAt: '' }),
+  },
+  {
+    name: 'updateBalanceSellProhibited',
+    run: () => updateBalanceSellProhibited({ id: '1', sellProhibited: true, updatedAt: '' }),
   },
   { name: 'fetchAnnouncement', run: () => fetchAnnouncement() },
   {

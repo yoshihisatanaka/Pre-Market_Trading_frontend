@@ -58,8 +58,8 @@ const MANUAL_INDEXES = new Set([11, 44, 58])
 
 /**
  * 売却を止めてある行の位置。一覧に赤いバッジ（売却不可）が出る。
- * **`売却不可区分` は openapi.json に無い項目**（2026-09-18 時点で画面モックにだけある）。
- * 経緯は src/api/balanceAdjustments.js の冒頭コメント。
+ * `売却不可区分` は 2026-09-25 の取り込みで BalanceAdjustmentItem に入った
+ * （それまでは画面モックにだけあった。経緯は src/api/balanceAdjustments.js の冒頭コメント）。
  */
 const SELL_PROHIBITED_INDEXES = new Set([3, 8, 26, 55])
 

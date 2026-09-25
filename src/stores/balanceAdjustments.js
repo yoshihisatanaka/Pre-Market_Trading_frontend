@@ -3,6 +3,7 @@ import {
   createBalanceAdjustment,
   fetchBalanceAdjustments,
   updateBalanceAdjustment,
+  updateBalanceSellProhibited,
 } from '@/api/balanceAdjustments'
 import { useCrudList } from '@/composables/useCrudList'
 
@@ -26,6 +27,10 @@ export const BALANCE_ADJUSTMENTS_PAGE_SIZE = 50
  *
  * **create / update に渡す残高は補正後の絶対値。** 画面が入力させるのは「加算数量」だが、
  * 実 API に加算の概念は無いので、変換は view が行う（理由は src/api/balanceAdjustments.js）。
+ *
+ * **update は 2 つの口に振り分ける。** `sellProhibited` を持つ payload は売却可否の切り替え
+ * （専用の `.../sell-prohibited`）、それ以外は数量の補正（部分更新の `PUT .../{id}`）。
+ * どちらも useCrudList の update を通すので、競合防止・エラー表示・読み直しは共通のまま。
  */
 export const useBalanceAdjustmentsStore = defineStore('balanceAdjustments', () =>
   useCrudList({
@@ -33,6 +38,13 @@ export const useBalanceAdjustmentsStore = defineStore('balanceAdjustments', () =
     filterKeys: ['branchCode', 'accountNumber', 'customerName', 'ticker', 'symbolName'],
     fetchPage: fetchBalanceAdjustments,
     createItem: createBalanceAdjustment,
-    updateItem: updateBalanceAdjustment,
+    updateItem: updateBalanceAdjustmentOrSellProhibited,
   }),
 )
+
+/** update の payload を 2 つの口のどちらかへ振り分ける */
+function updateBalanceAdjustmentOrSellProhibited(payload) {
+  return payload.sellProhibited === undefined
+    ? updateBalanceAdjustment(payload)
+    : updateBalanceSellProhibited(payload)
+}

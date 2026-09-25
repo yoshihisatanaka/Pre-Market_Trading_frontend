@@ -101,7 +101,7 @@ const DELETE_LABEL = [EDIT_TARGET.stockCode, EDIT_TARGET.caTypeName, EDIT_TARGET
 
 // 楽観的ロックの競合（PUT が 409）。実 API と同じ文言を body に載せる
 const CONFLICT_MESSAGE =
-  '他のユーザーによってCAデータが更新されています。最新データを再取得してください。'
+  '他のユーザーによって更新されています。最新の情報を取得してからやり直してください。(取得時: 2026-08-20T09:30:00, 最新: 2026-08-21 10:00:00)'
 
 /** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function rowsOf(page) {

@@ -150,10 +150,11 @@ export const caHandlers = [
     if (errors.length > 0) return detailError(400, errors[0])
 
     // 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば弾く
+    // 文言は実 API の実測（docs/e2e/ca-real-api.md の CAR-08）に揃える
     if (!isSameTimestamp(ca.updatedAt, current.更新日時)) {
       return detailError(
         409,
-        '他のユーザーによってCAデータが更新されています。最新データを再取得してください。',
+        `他のユーザーによって更新されています。最新の情報を取得してからやり直してください。(取得時: ${ca.updatedAt}, 最新: ${current.更新日時})`,
       )
     }
 

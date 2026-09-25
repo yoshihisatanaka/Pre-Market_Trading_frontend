@@ -36,7 +36,7 @@ const NO_REASON_CODE = suspensionTargets.find((row) => row['停止理由'] === n
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 const LEAD_TEXT = '障害発生時に、全体または注文ルート別に発注を停止・再開します。'
 const EMPTY_TEXT = '現在の発注停止状態を取得できませんでした。'
-const HISTORY_EMPTY_TEXT = '発注停止・再開の操作履歴はありません。'
+const HISTORY_EMPTY_TEXT = '障害対応履歴はありません。'
 const REJECT_MESSAGE = `${nameOf(IB_CODE)}はすでに停止中です。`
 
 /*
@@ -99,7 +99,9 @@ const targetRows = (wrapper) =>
 const historyRows = (wrapper) =>
   find(wrapper, 'incidents-history').findAll('[data-testid="data-table-row"]')
 const rowOf = (wrapper, code) => targetRows(wrapper)[TARGET_CODES.indexOf(code)]
+// 行ごとの発注停止トグル（BaseSwitch。ON = 停止中）
 const actionOf = (wrapper, code) => find(wrapper, `incidents-target-${code}-action`)
+const isOn = (wrapper, code) => actionOf(wrapper, code).attributes('aria-checked') === 'true'
 const stateText = (wrapper) => find(wrapper, 'incidents-state').text()
 const dialog = (wrapper) => wrapper.findComponent(IncidentControlDialog)
 const isDialogOpen = (wrapper) => exists(wrapper, 'incidents-control-dialog')
@@ -206,7 +208,7 @@ describe('IncidentManagementView', () => {
     expect(normalClasses).not.toContain('is-danger')
   })
 
-  it('[INV-09] 全体の「停止する」で全体を対象に停止の確認ダイアログが開く', async () => {
+  it('[INV-09] 全体のトグルで全体を対象に停止の確認ダイアログが開く', async () => {
     const { wrapper } = await mountView()
     await settle()
     expect(isDialogOpen(wrapper)).toBe(false)
@@ -218,7 +220,7 @@ describe('IncidentManagementView', () => {
     expect(dialog(wrapper).props('target').target).toBe('ALL')
   })
 
-  it('[INV-10] IB の「停止する」で IB を対象に停止の確認ダイアログが開く', async () => {
+  it('[INV-10] IB のトグルで IB を対象に停止の確認ダイアログが開く', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -271,8 +273,14 @@ describe('IncidentManagementView', () => {
     const headers = find(wrapper, 'incidents-history')
       .findAll('th')
       .map((th) => th.text())
-    expect(headers).toEqual(['操作日時', '停止対象', '操作区分', '停止理由', '操作者'])
+    expect(headers).toEqual(['変更日時', '制御内容', '停止理由', '更新者'])
     expect(historyRows(wrapper)).toHaveLength(suspensionHistories.length)
+
+    // 制御内容（2 列目）は「停止対象名：操作区分名」
+    const latest = suspensionHistories[0]
+    expect(historyRows(wrapper)[0].findAll('td')[1].text()).toBe(
+      `${latest['停止対象名']}：${latest['操作区分名']}`,
+    )
   })
 
   it('[INV-14] 停止中の行は「停止中」、通常の行は「通常」、停止理由が null の行は「—」', async () => {
@@ -339,19 +347,21 @@ describe('IncidentManagementView', () => {
     expect(exists(wrapper, 'incidents-notice')).toBe(false)
   })
 
-  it('[INV-19] IB だけが停止中なら IB は「再開する」、他は「停止する」で、どれも押せる', async () => {
+  it('[INV-19] IB だけが停止中なら IB のトグルだけが ON で、どれも押せる', async () => {
     const { wrapper } = await mountView(suspendIb)
     await settle()
 
     TARGET_CODES.forEach((code) => {
       const action = actionOf(wrapper, code)
-      expect(action.text()).toBe(code === IB_CODE ? '再開する' : '停止する')
+      expect(action.attributes('role')).toBe('switch')
+      expect(isOn(wrapper, code)).toBe(code === IB_CODE)
+      expect(action.attributes('aria-label')).toBe(`${nameOf(code)}の発注停止`)
       expect(action.attributes('disabled')).toBeUndefined()
     })
     expect(exists(wrapper, 'incidents-locked')).toBe(false)
   })
 
-  it('[INV-20] IB の「再開する」で再開の確認が開き、確定で再開されて成功通知が出る', async () => {
+  it('[INV-20] IB のトグル（ON）で再開の確認が開き、確定で再開されて成功通知が出る', async () => {
     const { wrapper } = await mountView(suspendIb)
     await settle()
 
@@ -366,20 +376,36 @@ describe('IncidentManagementView', () => {
 
     expect(isDialogOpen(wrapper)).toBe(false)
     expect(find(wrapper, 'incidents-notice').text()).toBe(RESUMED_NOTICE)
-    expect(actionOf(wrapper, IB_CODE).text()).toBe('停止する')
+    expect(isOn(wrapper, IB_CODE)).toBe(false)
     expect(stateText(wrapper)).toBe('通常運用')
   })
 
-  it('[INV-21] 全体停止中は全体の「再開する」だけが押せ、ルートは押せず注意書きが出る', async () => {
+  it('[INV-21] 全体停止中は全体のトグル（ON）だけが押せ、ルートは押せず注意書きが出る', async () => {
     const { wrapper } = await mountView(suspendAll)
     await settle()
 
-    const all = actionOf(wrapper, 'ALL')
-    expect(all.text()).toBe('再開する')
-    expect(all.attributes('disabled')).toBeUndefined()
+    expect(isOn(wrapper, 'ALL')).toBe(true)
+    expect(actionOf(wrapper, 'ALL').attributes('disabled')).toBeUndefined()
     ROUTE_CODES.forEach((code) => {
       expect(actionOf(wrapper, code).attributes('disabled')).toBeDefined()
     })
     expect(exists(wrapper, 'incidents-locked')).toBe(true)
+  })
+
+  it('[INV-22] トグルを押しただけでは切り替わらず、閉じても OFF のまま停止されない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    await actionOf(wrapper, IB_CODE).trigger('click')
+    expect(isDialogOpen(wrapper)).toBe(true)
+    expect(isOn(wrapper, IB_CODE)).toBe(false)
+
+    dialog(wrapper).vm.$emit('close')
+    await settle()
+
+    expect(isDialogOpen(wrapper)).toBe(false)
+    expect(isOn(wrapper, IB_CODE)).toBe(false)
+    expect(rowOf(wrapper, IB_CODE).text()).not.toContain('停止中')
+    expect(stateText(wrapper)).toBe('通常運用')
   })
 })

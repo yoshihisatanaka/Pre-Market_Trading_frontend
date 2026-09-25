@@ -6,12 +6,14 @@ import { apiClient } from './client'
  * **バックエンドのレスポンス形を知ってよいのはこの層だけ。**
  * ここで camelCase のアプリ内モデルに変換してから外へ返す。
  *
- * **実 API にこのエンドポイントは存在しない。** docs/api/openapi.json に権限・ロールを
- * 扱うパスは 1 本も無く、いまは src/mocks/handlers/index.js のモックが応えている。
- * 形は画面モック（https://uspreorder-vmbhej3k.manus.space/masters/permissions）が
- * 編集モーダルへ渡している JSON をそのまま写した**暫定の契約**で、
- * 他のマスタのような日本語キーではなく snake_case なのもそのため
- * （実 API が出てきたら、そのときの形に合わせてこの変換を書き直す）。
+ * **パスは 2026-09-18 の取り込みで仕様に入ったが、形が違う。** 仕様は `RolePermissionListResponse`
+ * （`roles[]` = `RolePermissionItem`。日本語キー・`発注権限` / `マスタ更新権限` / `運用管理権限` /
+ * `全店参照権限`）で、`PUT /masters/permissions/{role_code}` と `/history` もある。
+ * この層はまだ画面モック（https://uspreorder-vmbhej3k.manus.space/masters/permissions）が
+ * 編集モーダルへ渡している JSON を写した**暫定の契約**（英語キー・5 権限）のままで、
+ * src/mocks/handlers/permissions.js のモックだけが応える。どちらの権限体系を正とするかは
+ * docs/api/requests.md #4 で確認中で、決まったらこの変換と fixture を仕様の形に書き直す
+ * （契約テストの `KNOWN_GAPS` に食い違いとして載せてある）。
  *
  * 更新（PUT）はまだ用意していない。いまの画面は保存しても通信しない。
  */

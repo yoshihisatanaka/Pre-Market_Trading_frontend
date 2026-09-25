@@ -16,7 +16,8 @@ import { apiClient } from './client'
  * 持っており、画面に出ている数と送る数を同一にできるため。src/views/BalanceAdjustmentListView.vue）。
  * ここに足し算を置くと「加算式 UI」という画面の都合がワイヤ層に漏れる。
  *
- * **実 API に送り先の無い画面項目が 3 つある**（画面モックにはあるが仕様に無い）。
+ * **実 API に送り先の無い画面項目が 3 つある**（画面モックにはあるが仕様に無い。
+ * 4 番は 2026-09-25 の取り込みで仕様に入ったので、経緯として残している）。
  *   1. 検索の「銘柄名」… GET のクエリは branch_code / account_no / symbol / customer_name の
  *      4 つだけで、銘柄名に当たるものが無い。ここでは `symbol_name` という綴りで送っておき、
  *      **MSW のハンドラだけがそれを解釈して絞り込む**（FastAPI は知らないクエリを無視するので
@@ -26,14 +27,12 @@ import { apiClient } from './client'
  *      入力値をそのまま 銘柄コード として送る。実 API が Ticker を解決してくれるかは未確認
  *   3. 新規追加の「銘柄名」… 本文に項目が無い。確認ステップの表示だけに使い、送らない
  *      （登録後の 銘柄名 はサーバが m_銘柄情報 から結合して返す）
- *   4. 一覧の「売却不可区分」と行操作の「売却を停止 / 売却停止を解除」…
- *      **`売却不可区分` という項目が openapi.json のどこにも無い**（2026-09-18 時点）。
- *      画面モックは専用の口（`POST .../sell-prohibited`）へ 0 / 1 を送るが、実 API には
- *      それが無いので、ここでは既存の部分更新（`PUT .../{id}`）に `売却不可区分` を
- *      1 項目足す形にしている。**いまはモックだけが解釈する。** 仕様追加を依頼する対象で、
- *      専用エンドポイントになるならこの関数を割るだけで済む
+ *   4. （解消済み）一覧の「売却不可区分」と行操作の「売却を停止 / 売却停止を解除」…
+ *      2026-09-18 時点では仕様に無く、汎用の部分更新（`PUT .../{id}`）に 1 項目足して送っていた。
+ *      2026-09-25 の取り込みで `BalanceAdjustmentItem.売却不可区分` と専用の口
+ *      `PUT .../{balance_id}/sell-prohibited` が入ったので、updateBalanceSellProhibited に割った
  *
- * いまは一覧・登録・更新の 3 本だけを持つ。事前検証（/validate）・削除・更新履歴・
+ * いまは一覧・登録・更新・売却可否の切り替えの 4 本だけを持つ。事前検証（/validate）・削除・更新履歴・
  * CSV 入出力は画面モックに導線が無いので作らない。
  * 更新系の `X-User-Code` ヘッダは client.js の interceptor が全 API 共通で付ける。
  */
@@ -159,32 +158,48 @@ export async function createBalanceAdjustment({
 }
 
 /**
- * 既存の残高を 1 件更新する（画面モックの「数量を加算」と「売却を停止 / 解除」）。
+ * 既存の残高を 1 件更新する（画面モックの「数量を加算」）。
  *
- * 本文は部分更新（BalanceAdjustmentUpdateRequest）。**渡した項目だけ**を送るので、
- * 数量の補正なら `balance`、売却可否の切り替えなら `sellProhibited` だけを渡す。
+ * 本文は部分更新（BalanceAdjustmentUpdateRequest）。**渡した項目だけ**を送る。
  * 口座番号・銘柄コード・口座区分は変えられない。
+ * 売却可否の切り替えは別の口なので updateBalanceSellProhibited を使う。
  *
- * @param {{ id: string, balance?: number, sellProhibited?: boolean, updatedAt?: string }} params
+ * @param {{ id: string, balance?: number, updatedAt?: string }} params
  *   balance は補正後の絶対値（加算数量ではない）。
- *   sellProhibited は実 API に無い項目（冒頭コメントの 4 番）。
  *   updatedAt は一覧で取得したときの更新日時。取得後に他の担当者が更新していれば 409 になる
  * @returns {Promise<BalanceAdjustment>} 更新後の 1 件
  */
-export async function updateBalanceAdjustment({
-  id,
-  balance,
-  sellProhibited,
-  updatedAt = '',
-}) {
+export async function updateBalanceAdjustment({ id, balance, updatedAt = '' }) {
   const { data } = await apiClient.put(`/masters/balance-adjustments/${encodeURIComponent(id)}`, {
     // 部分更新なので、渡された項目だけを本文に載せる
     ...(balance === undefined ? {} : { 残高: balance }),
-    // フラグは実 API の他の区分に合わせて 0 / 1 の integer で送る
-    ...(sellProhibited === undefined ? {} : { 売却不可区分: sellProhibited ? 1 : 0 }),
     // 未取得（null）のときは送らない。サーバ側は「合札なし」として扱う
     ...(updatedAt ? { 更新日時: updatedAt } : {}),
   })
+
+  return toBalanceAdjustment(data.balance)
+}
+
+/**
+ * 保有 1 件の売却可否を切り替える（画面モックの「売却を停止 / 売却停止を解除」）。
+ *
+ * 専用の口 `PUT /masters/balance-adjustments/{balance_id}/sell-prohibited`
+ * （本文 SellProhibitedUpdateRequest）。残高そのものは変わらない。
+ *
+ * @param {{ id: string, sellProhibited: boolean, updatedAt?: string }} params
+ *   updatedAt は一覧で取得したときの更新日時。取得後に他の担当者が更新していれば 409 になる
+ * @returns {Promise<BalanceAdjustment>} 更新後の 1 件
+ */
+export async function updateBalanceSellProhibited({ id, sellProhibited, updatedAt = '' }) {
+  const { data } = await apiClient.put(
+    `/masters/balance-adjustments/${encodeURIComponent(id)}/sell-prohibited`,
+    {
+      // 実 API は 0 / 1 の integer（必須）
+      売却不可区分: sellProhibited ? 1 : 0,
+      // 未取得（null）のときは送らない。サーバ側は「合札なし」として扱う
+      ...(updatedAt ? { 更新日時: updatedAt } : {}),
+    },
+  )
 
   return toBalanceAdjustment(data.balance)
 }
@@ -215,7 +230,7 @@ function toBalanceAdjustment(raw) {
     customerNameKana: raw?.顧客名カナ ?? '',
     ticker: raw?.Ticker ?? '',
     symbolName: raw?.銘柄名 ?? '',
-    // 実 API にはまだ無い項目なので、欠けていれば「売却可」として扱う
+    // 欠けていれば「売却可」として扱う（BalanceAdjustmentItem でも既定は 0）
     sellProhibited: raw?.売却不可区分 === 1,
     userModified: raw?.ユーザー操作フラグ === 1,
     // 更新の合札としてそのまま送り返すので、形を変えずに運ぶ

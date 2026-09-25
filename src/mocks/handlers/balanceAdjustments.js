@@ -117,12 +117,8 @@ export const balanceAdjustmentHandlers = [
   }),
 
   /*
-   * 残高の更新（画面モックの「数量を加算」と「売却を停止 / 解除」）。
-   * 本文は部分更新で、送られてきた項目（残高 / 売却不可区分）だけを書き換える。
-   *
-   * **`売却不可区分` は openapi.json に無い項目。** 画面モックは専用の口
-   * （`POST .../sell-prohibited`）を持つが、実 API にそれが無いのでここでは部分更新に寄せてある
-   * （経緯は src/api/balanceAdjustments.js の冒頭コメント）。
+   * 残高の更新（画面モックの「数量を加算」）。
+   * 本文は部分更新（BalanceAdjustmentUpdateRequest）で、`残高` だけを書き換える。
    *
    * 検査の順序は銘柄・CA と同じ「本文の形(422) → 対象が居るか(404) → 値の妥当性(400) →
    * 盤面が古くないか(409)」。
@@ -130,7 +126,6 @@ export const balanceAdjustmentHandlers = [
   http.put('*/api/masters/balance-adjustments/:id', async ({ params, request }) => {
     const body = await request.json().catch(() => null)
     const balance = body?.残高
-    const sellProhibited = body?.売却不可区分
 
     if (balance !== undefined && !Number.isInteger(balance)) {
       return requestValidationError(
@@ -139,52 +134,88 @@ export const balanceAdjustmentHandlers = [
         'int_parsing',
       )
     }
-    if (sellProhibited !== undefined && ![0, 1].includes(sellProhibited)) {
-      return requestValidationError(['body', '売却不可区分'], 'Input should be 0 or 1', 'enum')
-    }
-    if (balance === undefined && sellProhibited === undefined) {
+    if (balance === undefined) {
       return requestValidationError(['body'], 'Field required', 'missing')
     }
 
-    const targetId = Number(params.id)
-    const current = balanceAdjustmentRows.find((row) => row.ID === targetId && row.取消区分 === 0)
-    if (!current) {
-      return detailError(404, '指定された残高データが存在しません')
-    }
+    const found = findUpdatable(params.id)
+    if (found.error) return found.error
 
-    if (balance !== undefined && balance < 0) {
+    if (balance < 0) {
       return detailError(400, '残高は 0 以上で指定してください')
     }
+    const conflict = staleError(found.current, body)
+    if (conflict) return conflict
 
-    // 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば弾く
-    if (!isSameTimestamp(body?.更新日時 ?? null, current.更新日時)) {
-      return detailError(
-        409,
-        '他のユーザーによって残高データが更新されています。最新データを再取得してください。',
+    const updated = applyUpdate(found.current, { 残高: balance }, request)
+    return HttpResponse.json({ success: true, balance: updated, message: '残高を更新しました' })
+  }),
+
+  /*
+   * 売却可否の切り替え（画面モックの「売却を停止 / 売却停止を解除」）。
+   * 本文は SellProhibitedUpdateRequest（`売却不可区分` 0 / 1 が必須・`更新日時` 任意）。
+   * 残高そのものは変えない。検査の順序は数量の更新と同じ。
+   */
+  http.put('*/api/masters/balance-adjustments/:id/sell-prohibited', async ({ params, request }) => {
+    const body = await request.json().catch(() => null)
+    const sellProhibited = body?.売却不可区分
+
+    if (sellProhibited === undefined) {
+      return requestValidationError(['body', '売却不可区分'], 'Field required', 'missing')
+    }
+    if (![0, 1].includes(sellProhibited)) {
+      return requestValidationError(
+        ['body', '売却不可区分'],
+        'Input should be less than or equal to 1',
+        'less_than_equal',
       )
     }
 
-    const updated = {
-      ...current,
-      // 送られてきた項目だけを書き換える（部分更新）
-      ...(balance === undefined ? {} : { 残高: balance }),
-      ...(sellProhibited === undefined ? {} : { 売却不可区分: sellProhibited }),
-      // 手で補正された行になるので、印と更新の記録を立てる
-      ユーザー操作フラグ: 1,
-      更新日時: nowIsoTimestamp(),
-      /*
-       * 更新者は送られてきた X-User-Code をそのまま記録する（他のマスタのモックは '006' を
-       * 決め打つが、この画面は確認ステップで更新者を見せるので、そこと食い違わせない）。
-       */
-      更新者: request.headers.get('X-User-Code') || '006',
-    }
-    balanceAdjustmentRows = balanceAdjustmentRows.map((row) =>
-      row.ID === targetId ? updated : row,
-    )
+    const found = findUpdatable(params.id)
+    if (found.error) return found.error
+    const conflict = staleError(found.current, body)
+    if (conflict) return conflict
 
-    return HttpResponse.json({ success: true, balance: updated, message: '残高を更新しました' })
+    const updated = applyUpdate(found.current, { 売却不可区分: sellProhibited }, request)
+    return HttpResponse.json({ success: true, balance: updated, message: '売却不可区分を更新しました' })
   }),
 ]
+
+/** 更新の対象行（取消されていないもの）を探す。居なければ 404 を error に入れて返す */
+function findUpdatable(id) {
+  const targetId = Number(id)
+  const current = balanceAdjustmentRows.find((row) => row.ID === targetId && row.取消区分 === 0)
+  return current ? { current } : { error: detailError(404, '指定された残高データが存在しません') }
+}
+
+/** 楽観的ロック。取得してから保存するまでに他の担当者が更新していれば 409 を返す */
+function staleError(current, body) {
+  if (isSameTimestamp(body?.更新日時 ?? null, current.更新日時)) return null
+  return detailError(
+    409,
+    '他のユーザーによって残高データが更新されています。最新データを再取得してください。',
+  )
+}
+
+/** 送られてきた項目だけを書き換え（部分更新）、行を差し替えて更新後の 1 件を返す */
+function applyUpdate(current, changes, request) {
+  const updated = {
+    ...current,
+    ...changes,
+    // 手で補正された行になるので、印と更新の記録を立てる
+    ユーザー操作フラグ: 1,
+    更新日時: nowIsoTimestamp(),
+    /*
+     * 更新者は送られてきた X-User-Code をそのまま記録する（他のマスタのモックは '006' を
+     * 決め打つが、この画面は確認ステップで更新者を見せるので、そこと食い違わせない）。
+     */
+    更新者: request.headers.get('X-User-Code') || '006',
+  }
+  balanceAdjustmentRows = balanceAdjustmentRows.map((row) =>
+    row.ID === current.ID ? updated : row,
+  )
+  return updated
+}
 
 /**
  * BalanceAdjustmentRequest の形（pydantic）で弾かれるものを 422 で返す。

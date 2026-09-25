@@ -748,7 +748,7 @@ test.describe('残高マスタ 新規保有を追加', () => {
 
 /*
  * 売却不可区分の切替（BA-28〜33）。入力が無いので 2 段階ではなく、問いを出す確認ダイアログ 1 枚。
- * 既定ハンドラ（PUT /masters/balance-adjustments/:id）は部分更新で 売却不可区分 だけを書き換え、
+ * 既定ハンドラ（PUT /masters/balance-adjustments/:id/sell-prohibited）は 売却不可区分 だけを書き換え、
  * 更新した行を保持するので、確定後に行のバッジとボタンが変わるところまで見る
  * （ページを開き直すと初期化される）。通信・サーバ障害は balance-adjustments-sell-error に出る。
  */
@@ -870,7 +870,7 @@ test.describe('残高マスタ 売却不可区分の切替', () => {
     await mockApi(page, [
       {
         method: 'put',
-        path: '*/api/masters/balance-adjustments/:id',
+        path: '*/api/masters/balance-adjustments/:id/sell-prohibited',
         status: 409,
         body: { detail: CONFLICT_MESSAGE },
       },

@@ -70,8 +70,8 @@ export async function fetchBlackoutDates({ offset = 0, dateFrom = '', dateTo = '
  * 自分自身が重複として弾かれることもない。
  * （主キーが受注不可日だった頃は「日付を変えたかどうか」で新規検証と変更検証を使い分けていた）
  *
- * **クエリ名 `blackout_date_id` は決め打ち。** 取り込み時点の openapi.json に対象 id を渡す
- * クエリは無く、CA の `ca_id` に倣って先に置いている（→ バックエンドへの確認事項）。
+ * クエリ名 `blackout_date_id`（integer の行ID）は仕様の `/masters/blackout-dates/validate` と
+ * 一致する（2026-09-18 の取り込みで確定）。
  *
  * @param {{ date: string, reason: string, id?: string }} params date は 'YYYY-MM-DD'。
  *   id は編集のときだけ渡す（対象の id。受注不可日ではない）
@@ -113,9 +113,8 @@ export async function createBlackoutDate({ date, reason }) {
  *
  * パスは対象の id、本文の 受注不可日 が変更後の日付になる。
  *
- * **パスキーを ID にしているのは決め打ち。** 取り込み時点の openapi.json は
- * `/masters/blackout-dates/{blackout_date}`（受注不可日・integer）で、BlackoutDateItem も
- * ID を持たない。DB の主キーを id に寄せる方針に合わせて先に置いている（src/api/symbols.js と同じ）。
+ * パスキーの ID は仕様の `/masters/blackout-dates/{blackout_date_id}`（integer の行ID）と
+ * 一致する（2026-09-18 の取り込みで確定）。
  *
  * updatedAt は一覧取得時の更新日時をそのまま送り返す楽観的ロックの合札で、
  * サーバ側の現在値と違えば 409 で弾かれる（他の利用者が先に更新していた場合）。
@@ -167,9 +166,9 @@ function toBlackoutDate(raw) {
     /*
      * 実 API の主キーは integer の ID。画面と URL では文字列として扱う（src/api/ca.js と同じ）。
      *
-     * **受注不可日へフォールバックしない。** 取り込み時点の openapi.json はまだ
-     * BlackoutDateItem に ID を持たないが、欠けていたら空文字のまま外へ出して、
-     * 行のキーが壊れていることをテストで検知させる。
+     * **受注不可日へフォールバックしない。** BlackoutDateItem の ID は required だが、
+     * 欠けていたら空文字のまま外へ出して、行のキーが壊れていることをテストで検知させる
+     * （静かに日付で代用するより、落ちて気づけるほうがよい）。
      */
     id: String(raw?.ID ?? ''),
     // 主キーではなくなったが、一意制約を持つ業務上の日付として残る

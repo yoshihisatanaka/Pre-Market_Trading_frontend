@@ -34,9 +34,8 @@ const BLACKOUT_DATES_PER_YEAR = [
 const UPDATED_AT_TIME = 'T09:00:00'
 
 /*
- * **`ID` だけは仕様より先行している。** 取り込み時点の openapi.json の BlackoutDateItem に
- * `ID` は無く、パスも `/masters/blackout-dates/{blackout_date}` のままだが、DB 全テーブルの
- * 主キーを id に統一する方針に合わせて先に置いてある（src/mocks/fixtures/symbols.js と同じ扱い）。
+ * `ID` は BlackoutDateItem の主キー（integer の行ID）で、仕様の
+ * `/masters/blackout-dates/{blackout_date_id}` と一致する（2026-09-18 の取り込みで確定）。
  *
  * 採番は実 API の AUTO_INCREMENT を模して単調増加させる。取消済みの行も母数に入れるので、
  * blackoutDates と canceledBlackoutDates を通して一意になる。

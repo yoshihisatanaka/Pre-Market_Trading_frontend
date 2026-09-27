@@ -2429,6 +2429,192 @@
         }
       }
     },
+    "/closing/ib": {
+      "post": {
+        "tags": [
+          "Closing"
+        ],
+        "summary": "Execute Ib Closing Endpoint",
+        "description": "IB 締め実行API（Phase 50）\n\n締め種別 `IB` を締め済にし、続けて ①IB発注（保留していたレギュラー注文 03 を送る）\n②VWAP集計 ③IB発注（VWAP集計注文）④Dream締後バッチ を順に実行する。\n通常はスケジューラが時刻マスタの IB 締時刻に自動実行する。手動実行・再実行用。\n`d_バッチ実行管理` の `IB_CLOSE` で同日二重実行を防ぐ（`force=true` で再実行）。",
+        "operationId": "execute_ib_closing_endpoint_closing_ib_post",
+        "parameters": [
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "同日実行済みでも再実行する",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "同日実行済みでも再実行する"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ClosingActionRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IbClosingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/closing/ib/reset": {
+      "post": {
+        "tags": [
+          "Closing"
+        ],
+        "summary": "Reset Ib Closing Endpoint",
+        "description": "IB 締め解除API（フラグ=0）。解除すると未発注のレギュラー注文（03）は再び保留される。",
+        "operationId": "reset_ib_closing_endpoint_closing_ib_reset_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ClosingActionRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClosingStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/closing/mizuho/reset": {
       "post": {
         "tags": [
@@ -6633,6 +6819,391 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SliceSimulateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/schedule-times": {
+      "get": {
+        "tags": [
+          "Schedule Times"
+        ],
+        "summary": "Get Schedule Time Endpoint",
+        "description": "時刻設定照会API（IB 締時刻・Dream 入力締切・各周期）",
+        "operationId": "get_schedule_time_endpoint_masters_schedule_times_get",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleTimeItem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Schedule Times"
+        ],
+        "summary": "Update Schedule Time Endpoint",
+        "description": "時刻設定更新API\n\n- 指定した項目だけ更新する（未指定は現在値を維持）\n- 受付開始 < Dream入力締切 <= IB締時刻 を通常・夏それぞれで検証\n- 変更が無ければ履歴を残さず現在値を返す。`更新日時` 指定で楽観ロック（競合時 409）\n- 変更はスケジューラの次の周期（30秒）から反映される",
+        "operationId": "update_schedule_time_endpoint_masters_schedule_times_put",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleTimeUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleTimeActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "時刻形式不正・前後関係不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "楽観ロック競合",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/schedule-times/effective": {
+      "get": {
+        "tags": [
+          "Schedule Times"
+        ],
+        "summary": "Get Effective Times Endpoint",
+        "description": "本日の実効時刻照会API\n\nサマータイム適用区分（自動判定／固定）を反映した IB 締時刻・Dream 入力締切を返す。\nスケジューラが実際に使う値の確認用。",
+        "operationId": "get_effective_times_endpoint_masters_schedule_times_effective_get",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EffectiveTimesResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/schedule-times/history": {
+      "get": {
+        "tags": [
+          "Schedule Times"
+        ],
+        "summary": "Get Schedule Time History Endpoint",
+        "description": "時刻設定変更履歴照会API",
+        "operationId": "get_schedule_time_history_endpoint_masters_schedule_times_history_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "取得開始位置",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "取得開始位置"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleTimeHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "検索条件不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -23364,6 +23935,69 @@
         "title": "DreamStatusTransitionItem",
         "description": "STS変更で選択可能な遷移先"
       },
+      "EffectiveTimesResponse": {
+        "properties": {
+          "対象日": {
+            "type": "string",
+            "title": "対象日",
+            "description": "YYYYMMDD（JST）"
+          },
+          "サマータイム適用区分": {
+            "type": "integer",
+            "title": "サマータイム適用区分"
+          },
+          "サマータイム適用区分名": {
+            "type": "string",
+            "title": "サマータイム適用区分名"
+          },
+          "サマータイム": {
+            "type": "boolean",
+            "title": "サマータイム",
+            "description": "この日を夏時間として扱うか"
+          },
+          "IB締時刻": {
+            "type": "string",
+            "title": "Ib締時刻",
+            "description": "IB 締め処理（VWAP 集計・Dream 締後バッチを含む）の起動時刻（HH:MM）"
+          },
+          "Dream入力締切": {
+            "type": "string",
+            "title": "Dream入力締切",
+            "description": "Dream 先行登録の終了時刻（HH:MM）"
+          },
+          "受付開始時刻": {
+            "type": "string",
+            "title": "受付開始時刻"
+          },
+          "朝バッチ開始時刻": {
+            "type": "string",
+            "title": "朝バッチ開始時刻"
+          },
+          "Dream先行登録周期分": {
+            "type": "integer",
+            "title": "Dream先行登録周期分"
+          },
+          "ワーカー周期分": {
+            "type": "integer",
+            "title": "ワーカー周期分"
+          }
+        },
+        "type": "object",
+        "required": [
+          "対象日",
+          "サマータイム適用区分",
+          "サマータイム適用区分名",
+          "サマータイム",
+          "IB締時刻",
+          "Dream入力締切",
+          "受付開始時刻",
+          "朝バッチ開始時刻",
+          "Dream先行登録周期分",
+          "ワーカー周期分"
+        ],
+        "title": "EffectiveTimesResponse",
+        "description": "本日の実効時刻（サマータイム判定を反映）"
+      },
       "ErrorCountBreakdown": {
         "properties": {
           "区分": {
@@ -26148,6 +26782,46 @@
         ],
         "title": "HolidayTypeEnum"
       },
+      "IbClosingResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "success / error / skipped"
+          },
+          "skipped": {
+            "type": "boolean",
+            "title": "Skipped",
+            "description": "同日実行済みのためスキップした場合 true"
+          },
+          "base_date": {
+            "type": "integer",
+            "title": "Base Date"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Steps",
+            "description": "各ステップの結果"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "skipped",
+          "base_date",
+          "message"
+        ],
+        "title": "IbClosingResponse",
+        "description": "IB 締め実行結果（Phase 50）"
+      },
       "LatestFxResponse": {
         "properties": {
           "ID": {
@@ -28673,6 +29347,417 @@
           "message"
         ],
         "title": "RolePermissionUpdateResponse"
+      },
+      "ScheduleTimeActionResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "schedule_time": {
+            "$ref": "#/components/schemas/ScheduleTimeItem"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "schedule_time",
+          "message"
+        ],
+        "title": "ScheduleTimeActionResponse"
+      },
+      "ScheduleTimeHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "時刻設定ID": {
+            "type": "integer",
+            "title": "時刻設定Id"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分"
+          },
+          "操作区分名": {
+            "type": "string",
+            "title": "操作区分名"
+          },
+          "操作者": {
+            "type": "string",
+            "title": "操作者"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ"
+          },
+          "差分データ": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "差分データ"
+          },
+          "操作日時": {
+            "type": "string",
+            "format": "date-time",
+            "title": "操作日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "時刻設定ID",
+          "操作区分",
+          "操作区分名",
+          "操作者",
+          "操作日時"
+        ],
+        "title": "ScheduleTimeHistoryItem"
+      },
+      "ScheduleTimeHistoryResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "histories": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduleTimeHistoryItem"
+            },
+            "type": "array",
+            "title": "Histories"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "histories"
+        ],
+        "title": "ScheduleTimeHistoryResponse"
+      },
+      "ScheduleTimeItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "時刻設定ID（単一行のため常に 1）"
+          },
+          "サマータイム適用区分": {
+            "type": "integer",
+            "title": "サマータイム適用区分",
+            "description": "0:自動判定（米国DST）, 1:冬時間固定, 2:夏時間固定"
+          },
+          "サマータイム適用区分名": {
+            "type": "string",
+            "title": "サマータイム適用区分名"
+          },
+          "IB締時刻_通常": {
+            "type": "string",
+            "title": "Ib締時刻 通常",
+            "description": "冬時間の IB 締時刻（JST, HH:MM）"
+          },
+          "IB締時刻_夏": {
+            "type": "string",
+            "title": "Ib締時刻 夏",
+            "description": "夏時間の IB 締時刻（JST, HH:MM）"
+          },
+          "Dream入力締切_通常": {
+            "type": "string",
+            "title": "Dream入力締切 通常",
+            "description": "冬時間の Dream 先行登録終了時刻（HH:MM）"
+          },
+          "Dream入力締切_夏": {
+            "type": "string",
+            "title": "Dream入力締切 夏",
+            "description": "夏時間の Dream 先行登録終了時刻（HH:MM）"
+          },
+          "受付開始時刻": {
+            "type": "string",
+            "title": "受付開始時刻",
+            "description": "Dream 先行登録の開始時刻（HH:MM）"
+          },
+          "Dream先行登録周期分": {
+            "type": "integer",
+            "title": "Dream先行登録周期分"
+          },
+          "ワーカー周期分": {
+            "type": "integer",
+            "title": "ワーカー周期分",
+            "description": "IB発注・IB取消・受信ワーカーの周期（分）"
+          },
+          "朝バッチ開始時刻": {
+            "type": "string",
+            "title": "朝バッチ開始時刻",
+            "description": "朝バッチ一括実行の起動時刻（HH:MM）"
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考"
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "1: 画面操作で更新済み",
+            "default": 0
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用の更新日時"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "サマータイム適用区分",
+          "サマータイム適用区分名",
+          "IB締時刻_通常",
+          "IB締時刻_夏",
+          "Dream入力締切_通常",
+          "Dream入力締切_夏",
+          "受付開始時刻",
+          "Dream先行登録周期分",
+          "ワーカー周期分",
+          "朝バッチ開始時刻"
+        ],
+        "title": "ScheduleTimeItem",
+        "description": "時刻設定（単一行）"
+      },
+      "ScheduleTimeUpdateRequest": {
+        "properties": {
+          "サマータイム適用区分": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "サマータイム適用区分"
+          },
+          "IB締時刻_通常": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ib締時刻 通常",
+            "description": "HH:MM"
+          },
+          "IB締時刻_夏": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ib締時刻 夏",
+            "description": "HH:MM"
+          },
+          "Dream入力締切_通常": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream入力締切 通常",
+            "description": "HH:MM"
+          },
+          "Dream入力締切_夏": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream入力締切 夏",
+            "description": "HH:MM"
+          },
+          "受付開始時刻": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受付開始時刻",
+            "description": "HH:MM"
+          },
+          "Dream先行登録周期分": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1440.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream先行登録周期分"
+          },
+          "ワーカー周期分": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1440.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "ワーカー周期分"
+          },
+          "朝バッチ開始時刻": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "朝バッチ開始時刻",
+            "description": "HH:MM"
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考"
+          },
+          "実行者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "実行者",
+            "description": "操作者コード。未指定時は認証情報から解決"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用。取得時の更新日時を指定すると競合時に409を返す"
+          }
+        },
+        "type": "object",
+        "title": "ScheduleTimeUpdateRequest",
+        "description": "時刻設定更新リクエスト（指定した項目だけ更新）"
       },
       "SecuritiesDeliveryEnum": {
         "type": "string",

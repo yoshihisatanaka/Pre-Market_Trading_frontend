@@ -66,6 +66,12 @@ const routes = [
     meta: { title: '残高マスタ' },
   },
   {
+    path: '/orders/dream-status',
+    name: 'dream-status-list',
+    component: () => import('@/views/DreamStatusListView.vue'),
+    meta: { title: 'Dream登録状況' },
+  },
+  {
     path: '/operations/announcements',
     name: 'announcement-management',
     component: () => import('@/views/AnnouncementsView.vue'),

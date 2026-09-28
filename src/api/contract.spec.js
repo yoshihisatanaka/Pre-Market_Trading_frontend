@@ -31,6 +31,7 @@ import {
   noticeBannerResponse,
 } from '../mocks/fixtures/banner'
 import { suspensionHistories, suspensionTargets } from '../mocks/fixtures/incidents'
+import { dreamOrders, dreamStatusCodes } from '../mocks/fixtures/dreamStatus'
 import { fetchOrders } from './orders'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
@@ -67,11 +68,7 @@ import {
   updateBalanceAdjustment,
   updateBalanceSellProhibited,
 } from './balanceAdjustments'
-import {
-  fetchAnnouncement,
-  fetchAnnouncementHistory,
-  updateAnnouncement,
-} from './announcements'
+import { fetchAnnouncement, fetchAnnouncementHistory, updateAnnouncement } from './announcements'
 import { fetchBanner } from './banner'
 import {
   fetchSuspensionHistories,
@@ -79,6 +76,7 @@ import {
   resumeOrders,
   suspendOrders,
 } from './incidents'
+import { fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -303,6 +301,8 @@ const FIXTURES = [
   },
   { name: 'suspensionTargets', schema: 'SuspensionTargetItem', rows: suspensionTargets },
   { name: 'suspensionHistories', schema: 'SuspensionHistoryItem', rows: suspensionHistories },
+  { name: 'dreamOrders', schema: 'DreamOrderItem', rows: dreamOrders },
+  { name: 'dreamStatusCodes', schema: 'DreamStatusCodeItem', rows: dreamStatusCodes },
 ]
 
 function describeSchema(schema) {
@@ -562,15 +562,35 @@ const PROBES = [
     name: 'updateAnnouncement',
     run: () => updateAnnouncement({ enabled: false, message: '', updatedAt: '' }),
   },
-  { name: 'fetchAnnouncementHistory', run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }) },
+  {
+    name: 'fetchAnnouncementHistory',
+    run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }),
+  },
   { name: 'fetchBanner', run: () => fetchBanner() },
   { name: 'fetchSuspensionStatus', run: () => fetchSuspensionStatus() },
-  { name: 'fetchSuspensionHistories', run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }) },
+  {
+    name: 'fetchSuspensionHistories',
+    run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }),
+  },
   {
     name: 'suspendOrders',
     run: () => suspendOrders({ target: '1', reason: 'x', updatedAt: null }),
   },
   { name: 'resumeOrders', run: () => resumeOrders({ target: '1', updatedAt: null }) },
+  {
+    name: 'fetchDreamOrders',
+    run: () =>
+      fetchDreamOrders({
+        branchCode: '123',
+        accountNumber: '123456',
+        symbol: 'AAPL',
+        status: 'ERROR',
+        dateFrom: '2026-09-01',
+        dateTo: '2026-09-30',
+        receiptNumber: 'DR-20260928-0002',
+      }),
+  },
+  { name: 'fetchDreamStatusCodes', run: () => fetchDreamStatusCodes() },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

@@ -14,8 +14,9 @@ import {
  * （プロパティ名は日本語、口座番号は integer、取消区分・ユーザー操作フラグは 0/1）。
  * ブラウザ(MSW worker)・単体テスト・E2E で共用する。
  *
- * 画面が使わない項目（各種書類受入・商品別の取引停止区分・特定口座区分）は省いている。
- * 実 API はこれらも返すが、持たせても一覧の確認には効かず読みにくくなるだけなので入れない。
+ * 登録・編集フォームの初期値に使うので、CustomerRequest の入力項目はすべて持たせる
+ * （書類受入 3 種・商品別の取引停止区分 4 種・特定口座区分を 2026-09-28 に足した）。
+ * フォームの項目が増えたら、ここにも 1 項目足す（src/utils/customerFields.js の冒頭）。
  *
  * 区分の名前（取引停止区分_全取引名 など）はコードマスタ（fixtures/codes.js）から引く。
  * プルダウンの選択肢と一覧の表示名を同じ出どころにして、モックの中でずれないようにする。
@@ -27,6 +28,15 @@ import {
 
 /** コード → 区分名。コードマスタの label がそのまま区分名になる */
 const nameOf = (codes, code) => codes.find((entry) => entry.code === code)?.label ?? null
+
+/** 書類受入の名前。CustomerItem の description「(0: 未受入, 1: 受入済)」 */
+export const DOCUMENT_NAMES = { 0: '未受入', 1: '受入済' }
+
+/** 取引停止区分（商品別）の名前。CustomerItem の description「(0: 通常, 1: 停止)」 */
+export const SUSPENSION_NAMES = { 0: '通常', 1: '停止' }
+
+/** 特定口座区分の名前。「(0: 未登録, 1: 源泉あり, 2: 源泉なし, 3: 非特定)」 */
+export const SPECIFIC_ACCOUNT_NAMES = { 0: '未登録', 1: '源泉あり', 2: '源泉なし', 3: '非特定' }
 
 /**
  * 1 部店あたりの顧客。14 件。部店ごとに同じ並びで作り、口座番号と扱者だけがずれる。
@@ -241,6 +251,10 @@ function toAccountItem({ id, branch, handler, seq, profile, canceled = false }) 
   const accidentAccount = profile.accident ? '1' : '0'
   const corporateType = profile.corporate ? '1' : '0'
   const nisaContract = profile.nisaContract ?? '1'
+  // 法人は特定口座を持たない（非特定）。個人は源泉あり
+  const specificAccountType = profile.corporate ? '3' : '1'
+  // 書類は VWAP だけ未受入の顧客がいる（2 人に 1 人）。ほかは受入済
+  const vwapDocument = seq % 2 === 0 ? '0' : '1'
 
   return {
     /*
@@ -266,6 +280,12 @@ function toAccountItem({ id, branch, handler, seq, profile, canceled = false }) 
     コンプラランク名: profile.rank,
     投資方針: profile.policy,
     投資方針名: nameOf(investmentPolicyCodes, profile.policy),
+    VWAP書類受入: vwapDocument,
+    VWAP書類受入名: DOCUMENT_NAMES[vwapDocument],
+    リスク外株書類受入: '1',
+    リスク外株書類受入名: DOCUMENT_NAMES[1],
+    外国証券同意書受入: '1',
+    外国証券同意書受入名: DOCUMENT_NAMES[1],
     // 総預り資産は円貨と外貨の合計（1 ドル 150 円で換算した、モック限りの概算）
     総預り資産: (profile.cashJpy ?? 0) + Math.round((profile.cashUsd ?? 0) * 150),
     NISA契約: nisaContract,
@@ -277,6 +297,17 @@ function toAccountItem({ id, branch, handler, seq, profile, canceled = false }) 
     // 取引停止区分だけ integer（法人区分や事故処理口座区分は文字列。実 API の型の差をそのまま持つ）
     取引停止区分_全取引: Number(restriction),
     取引停止区分_全取引名: nameOf(restrictionCodes, restriction),
+    // 商品別の停止は全取引に揃える（全取引が停止なら商品別もすべて停止）
+    取引停止区分_エクイティ商品取引_売買: Number(restriction),
+    取引停止区分_エクイティ商品取引_売買名: SUSPENSION_NAMES[restriction],
+    取引停止区分_リスク商品取引_売買: Number(restriction),
+    取引停止区分_リスク商品取引_売買名: SUSPENSION_NAMES[restriction],
+    取引停止区分_エクイティ商品取引_買: Number(restriction),
+    取引停止区分_エクイティ商品取引_買名: SUSPENSION_NAMES[restriction],
+    取引停止区分_リスク商品取引_買: Number(restriction),
+    取引停止区分_リスク商品取引_買名: SUSPENSION_NAMES[restriction],
+    特定口座区分: specificAccountType,
+    特定口座区分名: SPECIFIC_ACCOUNT_NAMES[specificAccountType],
     口座区分: profile.accountType,
     口座区分名: nameOf(accountTypeCodes, profile.accountType),
     事故処理口座区分: accidentAccount,

@@ -5,6 +5,8 @@
  * close イベントで伝える。この部品自身は状態を持たない。
  *
  * size='sm' は削除確認のような本文の短いダイアログ用。
+ * size='lg' は入力項目の多い登録・編集（顧客マスタなど）用。本文が画面の高さを超えたら
+ * 箱の中でスクロールする（見出しとフッタのボタンは常に見えるまま）。
  */
 import { onBeforeUnmount, watch } from 'vue'
 
@@ -20,7 +22,7 @@ const props = defineProps({
   size: {
     type: String,
     default: 'md',
-    validator: (value) => ['md', 'sm'].includes(value),
+    validator: (value) => ['lg', 'md', 'sm'].includes(value),
   },
 })
 
@@ -53,7 +55,10 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
       >
         <p v-if="title" class="modal__title">{{ title }}</p>
 
-        <slot />
+        <!-- 本文だけがスクロールする（見出しとフッタのボタンを画面外へ押し出さない） -->
+        <div class="modal__body">
+          <slot />
+        </div>
 
         <footer v-if="$slots.footer" class="modal__footer">
           <slot name="footer" />
@@ -76,11 +81,24 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 }
 
 .modal__box {
+  display: flex;
+  flex-direction: column;
   width: 100%;
+  /* 外側の .modal の余白（上下）を引いた高さに収める。超えた分は本文がスクロールする */
+  max-height: calc(100vh - 2 * var(--space-4));
   padding: var(--space-6);
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-modal);
+}
+
+.modal__body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.modal__box--lg {
+  max-width: 960px;
 }
 
 .modal__box--md {

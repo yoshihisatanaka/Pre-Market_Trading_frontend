@@ -47,6 +47,11 @@ const props = defineProps({
     type: String,
     default: 'add',
   },
+  /** ダイアログの大きさ（BaseModal の size）。入力項目の多い画面だけ 'lg' を渡す */
+  size: {
+    type: String,
+    default: 'md',
+  },
   /** 送信ボタンの文言。実行中は「〈この文言〉中…」になる */
   submitLabel: {
     type: String,
@@ -81,7 +86,7 @@ const pendingLabel = computed(() => `${props.submitLabel}中…`)
 </script>
 
 <template>
-  <BaseModal :open="open" :title="title" @close="emit('close')">
+  <BaseModal :open="open" :title="title" :size="size" @close="emit('close')">
     <!-- 送信ボタンはモーダルのフッタ（この form の外）にあるので、
          ここでの submit は入力欄での Enter キーのためだけにある -->
     <form

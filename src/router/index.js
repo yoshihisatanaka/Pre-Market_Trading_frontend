@@ -25,6 +25,12 @@ const routes = [
   },
   {
     // path は navigation.js（サイドメニュー）の項目と一致させる
+    path: '/orders/inquiry',
+    name: 'order-inquiry',
+    component: () => import('@/views/OrderInquiryListView.vue'),
+    meta: { title: '注文照会' },
+  },
+  {
     path: '/masters/customers',
     name: 'customer-list',
     component: () => import('@/views/CustomerListView.vue'),

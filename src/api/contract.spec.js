@@ -40,7 +40,9 @@ import { suspensionHistories, suspensionTargets } from '../mocks/fixtures/incide
 import { mizuhoExecutions } from '../mocks/fixtures/mizuhoExecutions'
 import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '../mocks/fixtures/closing'
 import { executions } from '../mocks/fixtures/executions'
+import { orderInquiryRows } from '../mocks/fixtures/orderInquiry'
 import { fetchOrders } from './orders'
+import { fetchOrderInquiry } from './orderInquiry'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
 import {
@@ -330,6 +332,7 @@ const FIXTURES = [
     rows: [mizuhoClosingStatus, closedMizuhoClosingStatus],
   },
   { name: 'executions', schema: 'ExecutionItem', rows: executions },
+  { name: 'orderInquiry', schema: 'OrderItemResponse', rows: orderInquiryRows },
 ]
 
 function describeSchema(schema) {
@@ -428,6 +431,16 @@ function fixtureProblems({ name, schema, rows }) {
  */
 const PROBES = [
   { name: 'fetchOrders', run: () => fetchOrders() },
+  {
+    name: 'fetchOrderInquiry',
+    run: () =>
+      fetchOrderInquiry({
+        branchCode: '123',
+        accountNumber: '300001',
+        symbol: 'AAPL',
+        executionStatus: '注文中',
+      }),
+  },
   { name: 'fetchCodes', run: () => fetchCodes() },
   {
     name: 'fetchCustomers',

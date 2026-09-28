@@ -4,6 +4,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { useCodesStore } from './stores/codes'
+import { useCurrentOperatorStore } from './stores/currentOperator'
 import { useMarketStatusStore } from './stores/marketStatus'
 import './assets/styles/main.css'
 
@@ -49,6 +50,13 @@ enableMocking()
      * 業務は続けられる。
      */
     useMarketStatusStore(pinia).load()
+
+    /*
+     * ログイン中の操作者と権限。サイドメニューの出し分けとルートのガードが使う。
+     * ガードは完了を待つので、ここでは始めるだけにする（mount の前に始めて待ち時間を縮める）。
+     * 取得に失敗しても起動は止めない（権限なしとして扱い、マスタメンテが隠れるだけ）。
+     */
+    useCurrentOperatorStore(pinia).load()
 
     app.mount('#app')
   })

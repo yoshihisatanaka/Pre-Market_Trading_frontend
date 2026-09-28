@@ -22,6 +22,21 @@ export const supervisorOperator = {
   認可強制: false,
 }
 
+/**
+ * 営業員（マスタ更新権限が無い。権限は fixtures/permissions.js の sales 行と同じ）。
+ * サイドメニューのマスタメンテが隠れ、/masters/* を開くと「アクセス権限がありません」に回される。
+ */
+export const salesOperator = {
+  操作者コード: 'sales01',
+  氏名: '開発用営業員',
+  ロールコード: 'sales',
+  ロール名: '営業員',
+  部店コード: '123',
+  登録済: true,
+  権限: { order: true, master: false, operation: false, branch_all: false },
+  認可強制: false,
+}
+
 /** 管理者（権限マスタは閲覧のみ。ほかの権限は全部ある） */
 export const viewerOperator = {
   操作者コード: 'manager01',

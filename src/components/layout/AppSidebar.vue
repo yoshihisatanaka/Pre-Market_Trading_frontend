@@ -5,8 +5,13 @@
  *
  * 開閉状態は自分では持たず、所有者（AppLayout）から open で受け取る。
  * 押し出し式なので、閉じると板ごと画面外へ出て本文が全幅になる。
+ *
+ * permission を持つ区分は、ログイン中の操作者がその権限を持つときだけ出す。
+ * 操作者の読み込みが終わるまでは出さない（権限の無い人に一瞬見せないため。読めたら現れる）。
  */
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { navSections } from './navigation'
 import { navIcons } from './navIcons'
 
@@ -17,6 +22,14 @@ defineProps({
     default: true,
   },
 })
+
+const operatorStore = useCurrentOperatorStore()
+
+const visibleSections = computed(() =>
+  navSections.filter(
+    (section) => !section.permission || operatorStore.hasPermission(section.permission),
+  ),
+)
 </script>
 
 <template>
@@ -37,7 +50,7 @@ defineProps({
     </div>
 
     <nav class="sidebar__nav" aria-label="メインメニュー">
-      <template v-for="section in navSections" :key="section.label">
+      <template v-for="section in visibleSections" :key="section.label">
         <h2 class="sidebar__section">{{ section.label }}</h2>
         <RouterLink
           v-for="item in section.items"

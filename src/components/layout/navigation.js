@@ -5,6 +5,10 @@
  * （顧客マスタ / スライス基準マスタ）。その場合は公開モックの並びに合わせて足す。
  * 画面を実装したら router/index.js に同じ path のルートを足す。
  * 未実装の path は NotFoundView に落ちる。
+ *
+ * 区分の permission … その権限を持たない操作者には、区分ごと（見出しも項目も）出さない。
+ * キーは src/api/auth.js の permissions と同じ。router/index.js の meta.permission とそろえる
+ * （メニューを隠すだけでは URL の直打ちで開けてしまうので、ガードは router 側が持つ）。
  */
 export const navSections = [
   {
@@ -27,6 +31,8 @@ export const navSections = [
   },
   {
     label: 'マスタメンテ',
+    // マスタ更新権限が無い操作者には全項目を出さない（2026-09-28 決定）
+    permission: 'master',
     items: [
       { label: '顧客マスタ', to: '/masters/customers' },
       { label: '権限マスタ', to: '/masters/permissions' },

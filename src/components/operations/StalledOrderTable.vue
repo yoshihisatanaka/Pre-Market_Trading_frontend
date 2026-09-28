@@ -14,7 +14,7 @@
  */
 import { computed } from 'vue'
 import DataTable from '@/components/ui/DataTable.vue'
-import { formatDateTime, formatQuantity, formatUsd } from '@/utils/format'
+import { formatDateTime, formatQuantity, formatUsdUnit } from '@/utils/format'
 
 const props = defineProps({
   rows: {
@@ -63,11 +63,11 @@ function textOrDash(value) {
 
 /**
  * 価格。成行は単価を持たないので区分名だけを出す。
- * モックは記号なしの `指値 228.5` だが、通貨が分かるよう formatUsd に揃えている。
+ * モックは単位なしの `指値 228.5` だが、通貨が分かるよう全画面共通の「228.50 ドル」に揃えている。
  */
 function priceLabel(row) {
   if (row.orderType === 'MO') return '成行'
-  if (row.orderType === 'LO') return `指値 ${formatUsd(row.limitPrice)}`
+  if (row.orderType === 'LO') return `指値 ${formatUsdUnit(row.limitPrice)}`
   return '—'
 }
 </script>

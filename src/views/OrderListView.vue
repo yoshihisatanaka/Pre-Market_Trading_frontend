@@ -5,7 +5,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { useOrdersStore } from '@/stores/orders'
-import { formatDateTime, formatQuantity, formatUsd } from '@/utils/format'
+import { formatDateTime, formatQuantity, formatUsdUnit } from '@/utils/format'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useOrdersStore()
@@ -55,7 +55,7 @@ onMounted(() => store.load())
         <span :class="['side', `side--${value}`]">{{ sideLabels[value] ?? value }}</span>
       </template>
       <template #cell-quantity="{ value }">{{ formatQuantity(value) }}</template>
-      <template #cell-price="{ value }">{{ formatUsd(value) }}</template>
+      <template #cell-price="{ value }">{{ formatUsdUnit(value) }}</template>
       <template #cell-status="{ value }">{{ statusLabels[value] ?? value }}</template>
       <template #cell-orderedAt="{ value }">{{ formatDateTime(value) }}</template>
     </DataTable>

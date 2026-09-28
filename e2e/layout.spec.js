@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { navItems, navSections } from '../src/components/layout/navigation'
+import { noOperationOperator } from '../src/mocks/fixtures/currentOperator'
 import { closedMarketStatusResponse } from '../src/mocks/fixtures/marketStatus'
 import { mockApi } from './helpers/mockApi'
 
@@ -237,5 +238,53 @@ test.describe('共通レイアウト', () => {
     await nav.getByRole('link', { name: '顧客検索', exact: true }).click()
 
     await expect(page).toHaveURL(/\/customers\/search$/)
+  })
+
+  /*
+   * 権限の要る区分（navigation.js の requiredPermission）。ここで見るのは区分の有無だけで、
+   * URL を直接開いたときの制限は e2e/access-control.spec.js（AC）が見る。
+   * 既定モックの /auth/me は全権限ありなので、権限なしは mockApi() で差し替える。
+   */
+  const guardedSections = navSections.filter((section) => section.requiredPermission)
+  const openSections = navSections.filter((section) => !section.requiredPermission)
+
+  /** 権限の要る区分が見出しもリンクも出ず、それ以外の区分は出ていることを確かめる */
+  async function expectGuardedSectionsHidden(page) {
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    for (const section of openSections) {
+      await expect(nav.getByRole('heading', { name: section.label, exact: true })).toBeVisible()
+      for (const item of section.items) {
+        await expect(nav.getByRole('link', { name: item.label, exact: true })).toBeVisible()
+      }
+    }
+    for (const section of guardedSections) {
+      await expect(nav.getByRole('heading', { name: section.label, exact: true })).toHaveCount(0)
+      for (const item of section.items) {
+        await expect(nav.getByRole('link', { name: item.label, exact: true })).toHaveCount(0)
+      }
+    }
+    await expect(nav.getByRole('link')).toHaveCount(
+      openSections.flatMap((section) => section.items).length,
+    )
+  }
+
+  test('[LAY-16] 運用管理権限が無いとサイドメニューに運用管理の区分が出ない', async ({ page }) => {
+    // 区分の名前が変わったときに黙って空振りしないよう、対象が在ることを先に確かめる
+    expect(guardedSections.map((section) => section.label)).toContain('運用管理')
+
+    await mockApi(page, [{ path: '*/api/auth/me', body: noOperationOperator }])
+    await page.goto('/')
+
+    await expectGuardedSectionsHidden(page)
+  })
+
+  test('[LAY-17] 操作者を取得できないときは運用管理の区分を出さない', async ({ page }) => {
+    await mockApi(page, [
+      { path: '*/api/auth/me', status: 500, body: { detail: 'サーバーでエラーが発生しました。' } },
+    ])
+    await page.goto('/')
+
+    await expectGuardedSectionsHidden(page)
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
   })
 })

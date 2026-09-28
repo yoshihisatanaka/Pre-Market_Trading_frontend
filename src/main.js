@@ -4,6 +4,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { useCodesStore } from './stores/codes'
+import { useCurrentOperatorStore } from './stores/currentOperator'
 import { useMarketStatusStore } from './stores/marketStatus'
 import './assets/styles/main.css'
 
@@ -49,6 +50,13 @@ enableMocking()
      * 業務は続けられる。
      */
     useMarketStatusStore(pinia).load()
+
+    /*
+     * ログイン中の操作者（GET /auth/me）も起動時に一度だけ読み込む。サイドメニューが
+     * 権限で区分を出し分け、権限の要るルートのガード（router/permissionGuard.js）が完了を待つ。
+     * オーバーレイの判定には足さない。失敗しても権限なしに倒れるだけで、他の画面は使える。
+     */
+    useCurrentOperatorStore(pinia).ensureLoaded()
 
     app.mount('#app')
   })

@@ -5,6 +5,10 @@
  * （顧客マスタ / スライス基準マスタ）。その場合は公開モックの並びに合わせて足す。
  * 画面を実装したら router/index.js に同じ path のルートを足す。
  * 未実装の path は NotFoundView に落ちる。
+ *
+ * 区分に requiredPermission（GET /auth/me の権限のキー）を付けると、その権限の無い利用者には
+ * 区分ごと出さない（AppSidebar）。付けたら router/index.js の各ルートの meta.requiredPermission にも
+ * 同じ値を付ける（メニューを隠すだけでは URL を直接開けば入れてしまう）。
  */
 export const navSections = [
   {
@@ -48,8 +52,10 @@ export const navSections = [
      * 公開モックの区分「運用管理」には お知らせ管理 / 滞留注文抽出 / 操作ログ / 障害管理 の
      * 4 項目がある。並びは公開モックに合わせる。
      * navIcons.js に運用管理向けのアイコンが無いので icon は付けない（Dream登録状況 と同じ）。
+     * 運用管理権限の無い利用者（IFA / 営業員）には区分ごと出さない。
      */
     label: '運用管理',
+    requiredPermission: 'operation',
     items: [
       { label: 'お知らせ管理', to: '/operations/announcements' },
       { label: '滞留注文抽出', to: '/operations/stalled-orders' },

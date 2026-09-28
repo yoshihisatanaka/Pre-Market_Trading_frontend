@@ -14,12 +14,6 @@ import { apiClient } from './client'
 const SUSPENSIONS_PATH = '/operations/order-suspensions'
 
 /**
- * 履歴の取得件数。画面はページングしないので、実 API の既定（50）を明示して送る
- * （既定が変わっても画面に出る件数が黙って変わらないように）。
- */
-const HISTORY_LIMIT = 50
-
-/**
  * 停止対象ごとの停止状態を取得する。
  *
  * 実 API は必ず 200 + SuspensionStatusResponse を返すが、本文なしで来ても落ちないよう
@@ -33,14 +27,22 @@ export async function fetchSuspensionStatus() {
 /**
  * 停止・再開の操作履歴を取得する（最新順はサーバが並べて返す）。
  *
- * この画面はページングしないので、エンベロープの total / limit / offset は捨てて配列だけ返す
- * （使わない値を運ぶと、使っていないものをテストで守る羽目になる）。
+ * ページャーを持つ表なので、配列ではなく `{ items, total }` を返す。
+ * limit（1〜200）は呼び出し側が決める。件数はフロントが管理する（stores/incidents.js の
+ * INCIDENT_HISTORY_PAGE_SIZE）。エンベロープの limit / offset は呼び出し側が知っているので運ばない。
+ *
+ * @param {{ limit?: number, offset?: number }} [params]
+ * @returns {Promise<{ items: object[], total: number }>}
  */
-export async function fetchSuspensionHistories() {
+export async function fetchSuspensionHistories({ limit, offset = 0 } = {}) {
   const { data } = await apiClient.get(`${SUSPENSIONS_PATH}/history`, {
-    params: { limit: HISTORY_LIMIT },
+    // 値が undefined のパラメータは axios が送らない
+    params: { limit, offset },
   })
-  return (data?.histories ?? []).map(toSuspensionHistory)
+  return {
+    items: (data?.histories ?? []).map(toSuspensionHistory),
+    total: data?.total ?? 0,
+  }
 }
 
 /**

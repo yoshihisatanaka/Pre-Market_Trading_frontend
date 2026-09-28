@@ -6,10 +6,11 @@ import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
+import BasePagination from '@/components/ui/BasePagination.vue'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import BaseSwitch from '@/components/ui/BaseSwitch.vue'
 import DataTable from '@/components/ui/DataTable.vue'
-import { useIncidentsStore } from '@/stores/incidents'
+import { INCIDENT_HISTORY_PAGE_SIZE, useIncidentsStore } from '@/stores/incidents'
 import { formatDateTime } from '@/utils/format'
 import { summarizeSuspension } from '@/utils/suspensionState'
 
@@ -19,6 +20,10 @@ const {
   status,
   targets,
   histories,
+  historyTotal,
+  historyOffset,
+  historyLoading,
+  historyError,
   loading,
   error,
   isEmpty,
@@ -118,9 +123,10 @@ async function confirmControl({ reason }) {
   noticeMessage.value = result.message
 }
 
+// 再読み込みは見ている履歴のページを保つ（初回とエラーからの再試行も同じ入口）
 function reload() {
   noticeMessage.value = ''
-  store.load()
+  store.load(historyOffset.value)
 }
 
 // 初回読み込み。onMounted に置くと最初の描画で一瞬「取得できませんでした」が出る
@@ -227,14 +233,27 @@ store.load()
         </DataTable>
       </BaseCard>
 
-      <!-- 表を全幅で載せるときだけ flush。0 件の一行は本文余白の中に置きたいので付けない -->
-      <BaseCard title="障害対応履歴" :flush="hasHistories">
+      <!-- 表を全幅で載せるときだけ flush。0 件やエラーの一行は本文余白の中に置きたいので付けない -->
+      <BaseCard title="障害対応履歴" :flush="hasHistories && !historyError">
         <template #header-actions>
           <span class="incident__head-note">新しい順</span>
         </template>
 
+        <!--
+          ページ送りの失敗はこのカードの中だけで出す（停止対象の表と操作は使えるまま残す）。
+          ページ送りの応答待ちは表を消さない（位置が跳ねないように）。ページャーを押せなくするだけ
+        -->
+        <div
+          v-if="historyError"
+          data-testid="incidents-history-error"
+          class="incident__history-empty is-error"
+        >
+          <p>{{ historyError.message }}</p>
+          <BaseButton variant="secondary" @click="store.loadHistory()">再試行</BaseButton>
+        </div>
+
         <DataTable
-          v-if="hasHistories"
+          v-else-if="hasHistories"
           flat
           data-testid="incidents-history"
           :columns="HISTORY_COLUMNS"
@@ -248,6 +267,16 @@ store.load()
         <p v-else data-testid="incidents-history-empty" class="incident__history-empty">
           障害対応履歴はありません。
         </p>
+
+        <BasePagination
+          v-if="!historyError && historyTotal > 0"
+          :total="historyTotal"
+          :limit="INCIDENT_HISTORY_PAGE_SIZE"
+          :offset="historyOffset"
+          :disabled="historyLoading || saving"
+          data-testid="incidents-history-pagination"
+          @update:offset="store.loadHistory($event)"
+        />
       </BaseCard>
     </template>
 
@@ -356,6 +385,14 @@ store.load()
   color: var(--color-text-muted);
   text-align: center;
   font-size: var(--font-size-sm);
+}
+
+.incident__history-empty.is-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  color: var(--color-danger);
 }
 
 /* カードの外に出る 4 状態の表示。面と枠線を自前で持つ */

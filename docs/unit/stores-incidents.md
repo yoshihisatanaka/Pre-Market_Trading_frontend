@@ -9,6 +9,9 @@
 取得口を 2 つに割ると、画面の 4 状態が状態側と履歴側でねじれる。
 片方が落ちたら `error` は 1 本だけ立つ（どちらが落ちたかは利用者の関心ではない）。
 
+履歴のページ送り（`loadHistory`）だけは別の取得で、`historyLoading` / `historyError` を使う。
+ページ送りに失敗しても停止対象の表と操作は使えるまま残す。1 ページの件数は `INCIDENT_HISTORY_PAGE_SIZE` を `limit` で送る。
+
 `Promise.all` を `src/api/` ではなくここに置くのは、api 層が「1 エンドポイント = 1 関数」だから。
 ストアは axios もバックエンドの生の形も知らないので、レイヤ規約には抵触しない。
 
@@ -30,3 +33,16 @@
 | INS-14 | `load()` 前（`targets` が空） | `suspend({ target: '1', … })` を呼ぶ | 送信本文の `更新日時` が null になる（合札が無ければ照合させない） | 実装済 |
 | INS-15 | IB を停止した後 | `resume({ target: '1' })` を呼ぶ | 操作の応答が返る。取り直しにより IB 行が通常に戻り、`histories` が 1 件増える | 実装済 |
 | INS-16 | 再開 API が 400 を返す | `resume()` を呼ぶ | `null` が返り、`saveError` が立つ。`status` は元のまま残る | 実装済 |
+| INS-17 | 既定モック | `load()` を呼ぶ | `historyTotal` がフィクスチャの履歴件数、`historyOffset` が 0 になる | 実装済 |
+| INS-18 | 既定モック | `load()` を呼ぶ | 履歴の取得が `limit` = `INCIDENT_HISTORY_PAGE_SIZE`、`offset=0` で送られる | 実装済 |
+| INS-19 | 履歴の `total` が 1 ページより多い | `load(INCIDENT_HISTORY_PAGE_SIZE)` を呼ぶ | 履歴がその offset で取得され、`historyOffset` がその値、`histories` がそのページの内容になる | 実装済 |
+| INS-20 | `load()` 済み・履歴の `total` が 1 ページより多い | `loadHistory(INCIDENT_HISTORY_PAGE_SIZE)` を呼ぶ | `histories` が 2 ページ目の内容に替わり、`historyOffset` / `historyTotal` が更新される。`status` はそのまま、`error` / `historyError` は null | 実装済 |
+| INS-21 | `load()` 済み | `loadHistory()` の解決前に参照する | `historyLoading` が true、`loading` は false のまま（表を消さない） | 実装済 |
+| INS-22 | `load()` 済み・履歴の取得だけが 500 を返す | `loadHistory(INCIDENT_HISTORY_PAGE_SIZE)` を呼ぶ | `historyError` が立ち、`historyOffset` は要求した値に動く。`error` は立たず、`status` / `targets` は元のまま残る | 実装済 |
+| INS-23 | INS-22 の状態から API が回復する | `loadHistory()` を引数なしで呼ぶ | 失敗したページの offset で取り直され、`historyError` が null に戻り、`histories` がそのページの内容になる | 実装済 |
+| INS-24 | 2 ページ目を表示中 | `suspend()` が成功する | 取り直しで履歴が `offset=0` で取得され、`historyOffset` が 0 に戻る | 実装済 |
+| INS-25 | ページ送りに失敗して `historyError` がある | `suspend()` が成功する | `historyError` が null に戻る | 実装済 |
+| INS-26 | ページ送りに失敗して `historyError` がある | `load()` を呼ぶ | `historyError` が null に戻り、`histories` が入る | 実装済 |
+| INS-27 | `load()` 済み | `loadHistory(A)` の応答前に `loadHistory(B)` を呼び、B → A の順に応答が届く | `histories` と `historyOffset` は B のまま（遅れて届いた A の応答で上書きしない） | 実装済 |
+| INS-28 | `load()` 済み | `loadHistory(A)` の応答前に `loadHistory(B)` を呼び、B が成功した後に A が 500 で届く | `historyError` は立たず、`histories` は B のまま | 実装済 |
+| INS-29 | `load()` 済み | `loadHistory(A)` の応答前に `loadHistory(B)` を呼び、A → B の順に応答が届く | A が届いた時点では `historyLoading` が `true` のまま（B の応答待ちでページャーを押せる状態に戻さない）。B が届くと `false` になり、`histories` と `historyOffset` は B | 実装済 |

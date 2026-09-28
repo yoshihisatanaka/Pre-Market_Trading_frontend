@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { h } from 'vue'
+import { describe, expect, it, vi } from 'vitest'
+import { h, nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -7,7 +7,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { suspensionHistories, suspensionTargets } from '@/mocks/fixtures/incidents'
 import IncidentControlDialog from '@/components/incidents/IncidentControlDialog.vue'
-import { useIncidentsStore } from '@/stores/incidents'
+import { INCIDENT_HISTORY_PAGE_SIZE, useIncidentsStore } from '@/stores/incidents'
 import IncidentManagementView from './IncidentManagementView.vue'
 
 /*
@@ -108,6 +108,62 @@ const isDialogOpen = (wrapper) => exists(wrapper, 'incidents-control-dialog')
 
 const errorHandler = (options) =>
   http.get(STATUS_PATH, () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }), options)
+const historyErrorHandler = (options) =>
+  http.get(HISTORY_PATH, () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }), options)
+
+/*
+ * 履歴のページング用。フィクスチャの履歴は 1 ページに収まるので、total が 3 ページ分ある応答を差し込む。
+ * 行の 更新者 を offset から導き、表がどのページを出しているかを見分ける。
+ */
+const PAGE = INCIDENT_HISTORY_PAGE_SIZE
+const PAGED_TOTAL = PAGE * 2 + 1
+const operatorOf = (offset) => `op-${offset}`
+const pageBody = (offset) => ({
+  total: PAGED_TOTAL,
+  limit: PAGE,
+  offset,
+  histories: [{ ...suspensionHistories[0], 操作者: operatorOf(offset) }],
+})
+const offsetOf = (request) => Number(new URL(request.url).searchParams.get('offset'))
+
+/** 履歴の要求の offset を記録し、offset に応じたページを返す */
+function pagedHistories() {
+  const offsets = []
+  server.use(
+    http.get(HISTORY_PATH, ({ request }) => {
+      offsets.push(offsetOf(request))
+      return HttpResponse.json(pageBody(offsetOf(request)))
+    }),
+  )
+  return offsets
+}
+
+/** 応答を release() まで止める履歴ハンドラ（応答待ちの画面を見るため） */
+function gatedHistories() {
+  let open = null
+  server.use(
+    http.get(HISTORY_PATH, async ({ request }) => {
+      await new Promise((resolve) => (open = resolve))
+      return HttpResponse.json(pageBody(offsetOf(request)))
+    }),
+  )
+  return {
+    async release() {
+      await vi.waitFor(() => expect(open).not.toBeNull())
+      open()
+    },
+  }
+}
+
+const pagination = (wrapper) => find(wrapper, 'incidents-history-pagination')
+const pageButton = (wrapper, page) =>
+  pagination(wrapper).find(`[data-testid="pagination-page"][data-page="${page}"]`)
+const currentPage = (wrapper) =>
+  pagination(wrapper).find('[data-testid="pagination-page"][aria-current="page"]').text()
+const pagerButtons = (wrapper) => pagination(wrapper).findAll('button')
+// 更新者（4 列目）
+const historyOperators = (wrapper) =>
+  historyRows(wrapper).map((row) => row.findAll('td')[3].text())
 
 // シナリオ: docs/unit/views-incident-management-view.md
 describe('IncidentManagementView', () => {
@@ -407,5 +463,132 @@ describe('IncidentManagementView', () => {
     expect(isOn(wrapper, IB_CODE)).toBe(false)
     expect(rowOf(wrapper, IB_CODE).text()).not.toContain('停止中')
     expect(stateText(wrapper)).toBe('通常運用')
+  })
+
+  it('[INV-23] 履歴が 1 ページより多ければページャーが出て 1 ページ目を示す', async () => {
+    pagedHistories()
+    const { wrapper } = await mountView()
+    await settle()
+
+    expect(pagination(wrapper).exists()).toBe(true)
+    expect(pagination(wrapper).find('[data-testid="pagination-range"]').text()).toBe(
+      `${PAGED_TOTAL} 件中 1–${PAGE} 件`,
+    )
+    expect(currentPage(wrapper)).toBe('1')
+  })
+
+  it('[INV-24] 履歴が 0 件ならページャーは出ない', async () => {
+    server.use(
+      http.get(HISTORY_PATH, () =>
+        HttpResponse.json({ total: 0, limit: PAGE, offset: 0, histories: [] }),
+      ),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+
+    expect(exists(wrapper, 'incidents-history-empty')).toBe(true)
+    expect(pagination(wrapper).exists()).toBe(false)
+  })
+
+  it('[INV-25] ページ番号「2」で 2 ページ目の offset で取り直し、表が替わる', async () => {
+    const offsets = pagedHistories()
+    const { wrapper } = await mountView()
+    await settle()
+    expect(historyOperators(wrapper)).toEqual([operatorOf(0)])
+
+    await pageButton(wrapper, 2).trigger('click')
+    await settle()
+
+    expect(offsets.at(-1)).toBe(PAGE)
+    expect(historyOperators(wrapper)).toEqual([operatorOf(PAGE)])
+    expect(currentPage(wrapper)).toBe('2')
+  })
+
+  it('[INV-26] ページ送りが 500 なら履歴カード内にエラーと「再試行」を出し、停止対象の表は残る', async () => {
+    pagedHistories()
+    const { wrapper } = await mountView()
+    await settle()
+    server.use(historyErrorHandler())
+
+    await pageButton(wrapper, 2).trigger('click')
+    await settle()
+
+    const historyError = find(wrapper, 'incidents-history-error')
+    expect(historyError.exists()).toBe(true)
+    expect(historyError.text()).toContain(ERROR_MESSAGE)
+    expect(historyError.find('button').text()).toBe('再試行')
+    expect(exists(wrapper, 'incidents-history')).toBe(false)
+    expect(pagination(wrapper).exists()).toBe(false)
+    expect(targetRows(wrapper)).toHaveLength(TARGET_CODES.length)
+    expect(exists(wrapper, 'incidents-error')).toBe(false)
+  })
+
+  it('[INV-27] 回復後に履歴の「再試行」で失敗したページを読み直し、表とページャーが戻る', async () => {
+    const offsets = pagedHistories()
+    const { wrapper } = await mountView()
+    await settle()
+    server.use(historyErrorHandler({ once: true }))
+    await pageButton(wrapper, 2).trigger('click')
+    await settle()
+    expect(exists(wrapper, 'incidents-history-error')).toBe(true)
+
+    await find(wrapper, 'incidents-history-error').find('button').trigger('click')
+    await settle()
+
+    expect(offsets.at(-1)).toBe(PAGE)
+    expect(exists(wrapper, 'incidents-history-error')).toBe(false)
+    expect(historyOperators(wrapper)).toEqual([operatorOf(PAGE)])
+    expect(currentPage(wrapper)).toBe('2')
+  })
+
+  it('[INV-28] 2 ページ目で「再読み込み」しても同じページを読み直し、ページ位置を保つ', async () => {
+    const offsets = pagedHistories()
+    const { wrapper } = await mountView()
+    await settle()
+    await pageButton(wrapper, 2).trigger('click')
+    await settle()
+    const before = offsets.length
+
+    await find(wrapper, 'incidents-reload').trigger('click')
+    await settle()
+
+    expect(offsets.length).toBe(before + 1)
+    expect(offsets.at(-1)).toBe(PAGE)
+    expect(currentPage(wrapper)).toBe('2')
+    expect(historyOperators(wrapper)).toEqual([operatorOf(PAGE)])
+  })
+
+  it('[INV-29] ページ送りの応答待ちはページャーを押せず、応答後は押せる', async () => {
+    pagedHistories()
+    const { wrapper } = await mountView()
+    await settle()
+    const gate = gatedHistories()
+
+    await pageButton(wrapper, 2).trigger('click')
+    await nextTick()
+
+    pagerButtons(wrapper).forEach((button) => {
+      expect(button.attributes('disabled')).toBeDefined()
+    })
+
+    await gate.release()
+    await settle()
+    expect(pageButton(wrapper, 1).attributes('disabled')).toBeUndefined()
+  })
+
+  it('[INV-30] 停止の実行中はページャーを押せない', async () => {
+    pagedHistories()
+    const { wrapper } = await mountView()
+    await settle()
+    await actionOf(wrapper, IB_CODE).trigger('click')
+
+    dialog(wrapper).vm.$emit('confirm', { reason: REASON })
+    await nextTick()
+
+    pagerButtons(wrapper).forEach((button) => {
+      expect(button.attributes('disabled')).toBeDefined()
+    })
+    await settle()
+    await settle()
   })
 })

@@ -420,3 +420,235 @@ test.describe('障害管理', () => {
     await expect(targetRowOf(page, '1')).not.toContainText('停止中')
   })
 })
+
+/* ここから履歴のページャー */
+
+// src/stores/incidents.js の INCIDENT_HISTORY_PAGE_SIZE（= utils/pagination.js の DEFAULT_PAGE_SIZE）と同じ値。
+// ストアは import.meta.env を辿る api/client.js に依存しており Playwright からは import できない。
+const PAGE_SIZE = 50
+
+// 3 ページになる件数（50 + 50 + 20）
+const PAGED_TOTAL = 120
+
+const SERVER_ERROR = 'サーバーでエラーが発生しました。'
+
+/** ページ送りの件数表示（BasePagination の rangeLabel と同じ形） */
+function rangeText(total, first, last) {
+  return `${total} 件中 ${first}–${last} 件`
+}
+
+/** 合成した履歴の n 件目（1 始まり・新しい順）の停止理由。行の取り違えを見分けるための印 */
+function pagedReason(n) {
+  return `E2E履歴-${String(n).padStart(3, '0')}`
+}
+
+function paginationOf(page) {
+  return page.getByTestId('incidents-history-pagination')
+}
+
+function pageButtonsOf(page) {
+  return paginationOf(page).getByTestId('pagination-page')
+}
+
+/**
+ * ページ内の MSW worker に、offset を解釈する履歴ハンドラを足す。
+ * mockApi() は固定の body しか返せず、既定モックの履歴は 4 件で 1 ページに収まるため。
+ * worker は IN-11 と同じく dev サーバが配るモジュールを同じ URL で import して掴む。
+ * http / HttpResponse も worker と同じ msw の実体でないと扱えないので、
+ * browser.js が import している依存の URL（?v= 付き）をそのまま辿る。
+ * failOnce を付けると、次の 1 回の取得だけ 500 を返す（以降は先に足したハンドラへ落ちる）。
+ */
+async function installHistoryHandler(page, { total, failOnce = false }) {
+  await page.evaluate(
+    async ({ path, total, template, failOnce, detail }) => {
+      const { worker } = await import('/src/mocks/browser.js')
+      const source = await (await fetch('/src/mocks/browser.js')).text()
+      const mswUrl = source.match(/from "([^"]*\/deps\/msw\.js[^"]*)"/)[1]
+      const { http, HttpResponse } = await import(mswUrl)
+
+      if (failOnce) {
+        worker.use(
+          http.get(path, () => HttpResponse.json({ detail }, { status: 500 }), { once: true }),
+        )
+        return
+      }
+
+      const rows = Array.from({ length: total }, (_, index) => ({
+        ...template,
+        ID: total - index,
+        操作区分: 'SUSPEND',
+        操作区分名: '発注停止',
+        変更後データ: { 発注停止フラグ: 1, 停止理由: `E2E履歴-${String(index + 1).padStart(3, '0')}` },
+      }))
+      worker.use(
+        http.get(path, ({ request }) => {
+          const params = new URL(request.url).searchParams
+          const limit = Number(params.get('limit') ?? 50)
+          const offset = Number(params.get('offset') ?? 0)
+          return HttpResponse.json({
+            total,
+            limit,
+            offset,
+            histories: rows.slice(offset, offset + limit),
+          })
+        }),
+      )
+    },
+    { path: HISTORY_PATH, total, template: suspensionHistories[0], failOnce, detail: SERVER_ERROR },
+  )
+}
+
+/** 履歴が PAGED_TOTAL 件ある状態で画面を開く（IN-26 の前提）。再読み込みでページ応答に取り直す */
+async function openPaged(page) {
+  await page.goto(PATH)
+  await expect(historyRowsOf(page)).toHaveCount(suspensionHistories.length)
+  await installHistoryHandler(page, { total: PAGED_TOTAL })
+  await page.getByTestId('incidents-reload').click()
+  await expect(paginationOf(page).getByTestId('pagination-range')).toHaveText(
+    rangeText(PAGED_TOTAL, 1, PAGE_SIZE),
+  )
+}
+
+/** 2 ページ目を開く（IN-27 の操作） */
+async function goToSecondPage(page) {
+  await paginationOf(page).getByRole('button', { name: '2', exact: true }).click()
+  await expect(paginationOf(page).getByTestId('pagination-range')).toHaveText(
+    rangeText(PAGED_TOTAL, PAGE_SIZE + 1, PAGE_SIZE * 2),
+  )
+}
+
+/** 履歴の表の先頭行が、合成した履歴の n 件目であること */
+async function expectFirstHistory(page, n) {
+  await expect(historyRowsOf(page).first().getByRole('cell').nth(2)).toHaveText(pagedReason(n))
+}
+
+// シナリオ: docs/e2e/incidents.md（タイトル先頭の [IN-nn] が対応 ID）
+// 障害対応履歴のページャー。件数表示とページ番号の出し分け、ページ送りで履歴だけが替わること、
+// ページ送りの失敗が履歴カードに閉じること、再読み込み・停止後のページ位置を守る。
+// 番号の畳み方や範囲外 offset の丸めは BasePagination の単体テスト側が担保する。
+test.describe('障害管理 履歴のページャー', () => {
+  test('[IN-25] 1 ページに収まるときは件数表示だけでページ番号は出ない', async ({ page }) => {
+    await page.goto(PATH)
+
+    const pagination = paginationOf(page)
+    await expect(pagination.getByTestId('pagination-range')).toHaveText(
+      rangeText(suspensionHistories.length, 1, suspensionHistories.length),
+    )
+    await expect(pageButtonsOf(page)).toHaveCount(0)
+    await expect(pagination.getByTestId('pagination-prev')).toHaveCount(0)
+    await expect(pagination.getByTestId('pagination-next')).toHaveCount(0)
+  })
+
+  test('[IN-26] 1 ページを超えると件数表示とページ番号が出る', async ({ page }) => {
+    await openPaged(page)
+
+    const pageCount = Math.ceil(PAGED_TOTAL / PAGE_SIZE)
+    await expect(pageButtonsOf(page)).toHaveText(
+      Array.from({ length: pageCount }, (_, index) => String(index + 1)),
+    )
+    await expect(paginationOf(page).getByRole('button', { name: '1', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(historyRowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expectFirstHistory(page, 1)
+  })
+
+  test('[IN-27] ページ番号を押すと履歴だけが替わり、URL と停止対象の表はそのまま', async ({
+    page,
+  }) => {
+    await openPaged(page)
+    const url = page.url()
+
+    await goToSecondPage(page)
+
+    await expect(paginationOf(page).getByRole('button', { name: '2', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(historyRowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expectFirstHistory(page, PAGE_SIZE + 1)
+    expect(page.url()).toBe(url)
+    await expect(targetRowsOf(page)).toHaveCount(suspensionTargets.length)
+  })
+
+  test('[IN-28] 履歴が 0 件のときはページャーも出ない', async ({ page }) => {
+    await mockApi(page, [{ path: HISTORY_PATH, body: historyBody([]) }])
+    await page.goto(PATH)
+
+    await expect(page.getByTestId('incidents-history-empty')).toHaveText(
+      '障害対応履歴はありません。',
+    )
+    await expect(paginationOf(page)).toHaveCount(0)
+  })
+
+  test('[IN-29] ページ送りに失敗すると履歴カードにエラーが出て、停止対象の表は残る', async ({
+    page,
+  }) => {
+    await openPaged(page)
+    await installHistoryHandler(page, { total: PAGED_TOTAL, failOnce: true })
+
+    await paginationOf(page).getByRole('button', { name: '次のページ' }).click()
+
+    const error = page.getByTestId('incidents-history-error')
+    await expect(error).toContainText(SERVER_ERROR)
+    await expect(error.getByRole('button', { name: '再試行' })).toBeVisible()
+    await expect(page.getByTestId('incidents-history')).toHaveCount(0)
+    await expect(paginationOf(page)).toHaveCount(0)
+
+    // 画面全体のエラーではない。停止対象の表と操作は使えるまま
+    await expect(page.getByTestId('incidents-error')).toHaveCount(0)
+    await expect(targetRowsOf(page)).toHaveCount(suspensionTargets.length)
+    await expect(switchOf(page, '1')).toBeEnabled()
+  })
+
+  test('[IN-30] 履歴カードの「再試行」で失敗したページが表示される', async ({ page }) => {
+    await openPaged(page)
+    await installHistoryHandler(page, { total: PAGED_TOTAL, failOnce: true })
+    await paginationOf(page).getByRole('button', { name: '次のページ' }).click()
+    const error = page.getByTestId('incidents-history-error')
+    await expect(error).toBeVisible()
+
+    await error.getByRole('button', { name: '再試行' }).click()
+
+    await expect(error).toHaveCount(0)
+    await expect(paginationOf(page).getByTestId('pagination-range')).toHaveText(
+      rangeText(PAGED_TOTAL, PAGE_SIZE + 1, PAGE_SIZE * 2),
+    )
+    await expectFirstHistory(page, PAGE_SIZE + 1)
+  })
+
+  test('[IN-31] ヘッダの「再読み込み」は見ている履歴のページを保つ', async ({ page }) => {
+    await openPaged(page)
+    await goToSecondPage(page)
+
+    await page.getByTestId('incidents-reload').click()
+
+    // 再読み込み中は画面全体がローディングになるので、表示が戻るのを待ってから見る
+    await expect(targetRowsOf(page)).toHaveCount(suspensionTargets.length)
+    await expect(paginationOf(page).getByTestId('pagination-range')).toHaveText(
+      rangeText(PAGED_TOTAL, PAGE_SIZE + 1, PAGE_SIZE * 2),
+    )
+    await expect(paginationOf(page).getByRole('button', { name: '2', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expectFirstHistory(page, PAGE_SIZE + 1)
+  })
+
+  test('[IN-32] 停止に成功すると履歴は先頭ページに戻る', async ({ page }) => {
+    await openPaged(page)
+    await goToSecondPage(page)
+
+    await suspendIb(page)
+
+    await expect(paginationOf(page).getByTestId('pagination-range')).toHaveText(
+      rangeText(PAGED_TOTAL, 1, PAGE_SIZE),
+    )
+    await expect(paginationOf(page).getByRole('button', { name: '1', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expectFirstHistory(page, 1)
+  })
+})

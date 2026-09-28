@@ -23,6 +23,8 @@ export const navSections = [
       { label: 'Dream登録状況', to: '/orders/dream-status' },
       // モックは /executions/ だが、ルートは末尾スラッシュ無しで統一する
       { label: '約定照会', to: '/executions', icon: 'chartBar' },
+      // 公開モックでは約定照会の直後。navIcons.js に合うアイコンが無いので icon は付けない
+      { label: 'みずほ注文締', to: '/executions/mizuho-operations' },
     ],
   },
   {

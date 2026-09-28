@@ -17,6 +17,7 @@ import { stalledOrderHandlers, resetStalledOrderState } from './stalledOrders'
 import { incidentHandlers, resetIncidentState } from './incidents'
 import { mizuhoExecutionHandlers } from './mizuhoExecutions'
 import { closingHandlers } from './closing'
+import { executionHandlers } from './executions'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -104,6 +105,8 @@ export const handlers = [
   ...bannerHandlers,
   ...stalledOrderHandlers,
   ...incidentHandlers,
+  // みずほ（route=0）の問い合わせだけを先に拾い、それ以外は約定照会のモックへ流す
   ...mizuhoExecutionHandlers,
   ...closingHandlers,
+  ...executionHandlers,
 ]

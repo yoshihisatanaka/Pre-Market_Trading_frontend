@@ -72,6 +72,13 @@ const routes = [
     meta: { title: '残高マスタ' },
   },
   {
+    // モックは /executions/ だが、ルートは末尾スラッシュ無しで統一する（navigation.js と同じ）
+    path: '/executions',
+    name: 'execution-list',
+    component: () => import('@/views/ExecutionListView.vue'),
+    meta: { title: '約定照会' },
+  },
+  {
     path: '/operations/announcements',
     name: 'announcement-management',
     component: () => import('@/views/AnnouncementsView.vue'),

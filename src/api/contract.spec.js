@@ -38,6 +38,7 @@ import {
 import { suspensionHistories, suspensionTargets } from '../mocks/fixtures/incidents'
 import { mizuhoExecutions } from '../mocks/fixtures/mizuhoExecutions'
 import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '../mocks/fixtures/closing'
+import { executions } from '../mocks/fixtures/executions'
 import { fetchOrders } from './orders'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
@@ -84,6 +85,7 @@ import {
 } from './incidents'
 import { fetchMizuhoExecutions } from './mizuhoExecutions'
 import { fetchMizuhoClosingStatus } from './closing'
+import { fetchExecutions } from './executions'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -326,6 +328,7 @@ const FIXTURES = [
     schema: 'ClosingStatusResponse',
     rows: [mizuhoClosingStatus, closedMizuhoClosingStatus],
   },
+  { name: 'executions', schema: 'ExecutionItem', rows: executions },
 ]
 
 function describeSchema(schema) {
@@ -631,6 +634,19 @@ const PROBES = [
       }),
   },
   { name: 'fetchMizuhoClosingStatus', run: () => fetchMizuhoClosingStatus() },
+  {
+    name: 'fetchExecutions',
+    run: () =>
+      fetchExecutions({
+        branchCode: '123',
+        symbol: 'AAPL',
+        side: 'buy',
+        status: '011',
+        dateFrom: '2026-09-01',
+        dateTo: '2026-09-30',
+        route: '1',
+      }),
+  },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

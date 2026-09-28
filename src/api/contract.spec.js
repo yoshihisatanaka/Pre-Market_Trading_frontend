@@ -31,7 +31,9 @@ import {
   noticeBannerResponse,
 } from '../mocks/fixtures/banner'
 import { suspensionHistories, suspensionTargets } from '../mocks/fixtures/incidents'
+import { orderInquiryRows } from '../mocks/fixtures/orderInquiry'
 import { fetchOrders } from './orders'
+import { fetchOrderInquiry } from './orderInquiry'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
 import {
@@ -67,11 +69,7 @@ import {
   updateBalanceAdjustment,
   updateBalanceSellProhibited,
 } from './balanceAdjustments'
-import {
-  fetchAnnouncement,
-  fetchAnnouncementHistory,
-  updateAnnouncement,
-} from './announcements'
+import { fetchAnnouncement, fetchAnnouncementHistory, updateAnnouncement } from './announcements'
 import { fetchBanner } from './banner'
 import {
   fetchSuspensionHistories,
@@ -303,6 +301,7 @@ const FIXTURES = [
   },
   { name: 'suspensionTargets', schema: 'SuspensionTargetItem', rows: suspensionTargets },
   { name: 'suspensionHistories', schema: 'SuspensionHistoryItem', rows: suspensionHistories },
+  { name: 'orderInquiry', schema: 'OrderItemResponse', rows: orderInquiryRows },
 ]
 
 function describeSchema(schema) {
@@ -401,6 +400,16 @@ function fixtureProblems({ name, schema, rows }) {
  */
 const PROBES = [
   { name: 'fetchOrders', run: () => fetchOrders() },
+  {
+    name: 'fetchOrderInquiry',
+    run: () =>
+      fetchOrderInquiry({
+        branchCode: '123',
+        accountNumber: '300001',
+        symbol: 'AAPL',
+        executionStatus: '注文中',
+      }),
+  },
   { name: 'fetchCodes', run: () => fetchCodes() },
   {
     name: 'fetchCustomers',
@@ -562,10 +571,16 @@ const PROBES = [
     name: 'updateAnnouncement',
     run: () => updateAnnouncement({ enabled: false, message: '', updatedAt: '' }),
   },
-  { name: 'fetchAnnouncementHistory', run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }) },
+  {
+    name: 'fetchAnnouncementHistory',
+    run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }),
+  },
   { name: 'fetchBanner', run: () => fetchBanner() },
   { name: 'fetchSuspensionStatus', run: () => fetchSuspensionStatus() },
-  { name: 'fetchSuspensionHistories', run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }) },
+  {
+    name: 'fetchSuspensionHistories',
+    run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }),
+  },
   {
     name: 'suspendOrders',
     run: () => suspendOrders({ target: '1', reason: 'x', updatedAt: null }),

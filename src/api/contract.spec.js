@@ -1,4 +1,5 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { File as NodeFile } from 'node:buffer'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import openapi from '../../docs/api/openapi.json'
 import { server } from '../mocks/server'
 import { canceledSymbols, symbols } from '../mocks/fixtures/symbols'
@@ -531,7 +532,21 @@ const PROBES = [
   },
   {
     name: 'importConfirmationCsv',
-    run: () => importConfirmationCsv(new File(['order_id\r\n'], 'c.csv', { type: 'text/csv' })),
+    /*
+     * jsdom の FormData は MSW(node) が Request に変換できず POST が止まる。
+     * この呼び出しの間だけ Node（undici）の FormData と File に差し替える（stalledOrders.spec.js と同じ回避）
+     */
+    run: async () => {
+      const form = await new Response('', {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }).formData()
+      vi.stubGlobal('FormData', form.constructor)
+      try {
+        await importConfirmationCsv(new NodeFile(['order_id\r\n'], 'c.csv', { type: 'text/csv' }))
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    },
   },
   { name: 'fetchPermissions', run: () => fetchPermissions() },
   {

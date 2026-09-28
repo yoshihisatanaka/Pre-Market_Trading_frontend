@@ -55,4 +55,22 @@ describe('FileDropZone', () => {
 
     expect(wrapper.find('.drop-zone__hint').text()).toBe('UTF-8 / Shift-JIS 対応')
   })
+
+  it('[FDZ-08] 選択後に modelValue を null に戻すと隠しの input の値が空に戻る', async () => {
+    const wrapper = mount(FileDropZone, { props: { modelValue: csv } })
+    const input = wrapper.find('input[type="file"]').element
+    // jsdom の file input は value を観測しづらいので、setter に渡された値を記録する
+    const assigned = []
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get: () => '',
+      set: (value) => {
+        assigned.push(value)
+      },
+    })
+
+    await wrapper.setProps({ modelValue: null })
+
+    expect(assigned).toEqual([''])
+  })
 })

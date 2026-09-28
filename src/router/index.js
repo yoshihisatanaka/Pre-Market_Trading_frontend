@@ -1,6 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import OrderListView from '@/views/OrderListView.vue'
+import { permissionGuard } from './permissionGuard'
 
+/*
+ * meta.requiredPermission を付けたルートは、その権限（GET /auth/me の権限）が無いと開けない
+ * （permissionGuard）。運用管理の 4 画面は operation。サイドメニューの区分の出し分け
+ * （navigation.js の requiredPermission）と必ず揃える。メニューだけ隠しても URL で入れてしまう。
+ */
 const routes = [
   {
     path: '/',
@@ -69,25 +75,32 @@ const routes = [
     path: '/operations/announcements',
     name: 'announcement-management',
     component: () => import('@/views/AnnouncementsView.vue'),
-    meta: { title: 'お知らせ管理' },
+    meta: { title: 'お知らせ管理', requiredPermission: 'operation' },
   },
   {
     path: '/operations/stalled-orders',
     name: 'stalled-order-list',
     component: () => import('@/views/StalledOrderListView.vue'),
-    meta: { title: '滞留注文抽出' },
+    meta: { title: '滞留注文抽出', requiredPermission: 'operation' },
   },
   {
     path: '/operations/activity-logs',
     name: 'activity-log-list',
     component: () => import('@/views/ActivityLogListView.vue'),
-    meta: { title: '操作ログ' },
+    meta: { title: '操作ログ', requiredPermission: 'operation' },
   },
   {
     path: '/operations/incidents',
     name: 'incident-management',
     component: () => import('@/views/IncidentManagementView.vue'),
-    meta: { title: '障害管理' },
+    meta: { title: '障害管理', requiredPermission: 'operation' },
+  },
+  {
+    // permissionGuard の行き先。サイドメニューには載せない
+    path: '/forbidden',
+    name: 'forbidden',
+    component: () => import('@/views/ForbiddenView.vue'),
+    meta: { title: 'アクセス権限がありません' },
   },
   {
     // 最初の画面以外は遅延 import にして初期バンドルを膨らませない
@@ -102,6 +115,8 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
+
+router.beforeEach(permissionGuard)
 
 router.afterEach((to) => {
   document.title = to.meta.title ? `${to.meta.title} | US Stock Order` : 'US Stock Order'

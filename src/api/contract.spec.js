@@ -10,7 +10,11 @@ import { sliceCriteriaSetting } from '../mocks/fixtures/sliceCriteria'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../mocks/fixtures/activityLogTargets'
 import { rolePermissions } from '../mocks/fixtures/permissions'
-import { supervisorOperator, viewerOperator } from '../mocks/fixtures/currentOperator'
+import {
+  noOperationOperator,
+  supervisorOperator,
+  viewerOperator,
+} from '../mocks/fixtures/currentOperator'
 import {
   balanceAdjustments,
   canceledBalanceAdjustments,
@@ -286,7 +290,7 @@ const FIXTURES = [
   {
     name: 'currentOperator',
     schema: 'CurrentOperatorResponse',
-    rows: [supervisorOperator, viewerOperator],
+    rows: [supervisorOperator, viewerOperator, noOperationOperator],
   },
   {
     name: 'balanceAdjustments',

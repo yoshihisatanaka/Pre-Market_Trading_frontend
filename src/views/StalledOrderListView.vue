@@ -13,6 +13,7 @@ import ConfirmationImportErrors from '@/components/operations/ConfirmationImport
 import StalledOrderListCard from '@/components/operations/StalledOrderListCard.vue'
 import StalledOrderTable from '@/components/operations/StalledOrderTable.vue'
 import { useListQuery } from '@/composables/useListQuery'
+import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useStalledOrdersStore } from '@/stores/stalledOrders'
 import { downloadCsv } from '@/utils/download'
 import {
@@ -36,6 +37,15 @@ const {
   importing,
   importError,
 } = storeToRefs(store)
+
+/*
+ * 権限の表示。運用管理権限の無い利用者はルートのガードでこの画面に入れないので、
+ * 実際には常に「操作可能」になる（/auth/me に繋いであるのは、ガードと表示を食い違わせないため）。
+ * ensureLoaded はガードが済ませているので通常は何もしない（ガードを通らない単体テストのための保険）。
+ */
+const operator = useCurrentOperatorStore()
+operator.ensureLoaded()
+const canOperate = computed(() => operator.can('operation'))
 
 /*
  * 検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
@@ -165,8 +175,12 @@ async function importConfirmation() {
 
     <BaseCard title="別システム発注・コンファメーション取込">
       <template #header-actions>
-        <!-- 権限の表示。認証が入るまでは固定で「操作可能」（モックも as_user に依らず同じ） -->
-        <BaseBadge variant="success" data-testid="stalled-orders-permission">操作可能</BaseBadge>
+        <BaseBadge
+          :variant="canOperate ? 'success' : 'gray'"
+          data-testid="stalled-orders-permission"
+        >
+          {{ canOperate ? '操作可能' : '操作不可' }}
+        </BaseBadge>
       </template>
 
       <div class="stalled-orders__actions">

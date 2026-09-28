@@ -57,7 +57,7 @@ import {
 } from './blackoutDates'
 import { fetchSliceCriteria, updateSliceCriteria } from './sliceCriteria'
 import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
-import { fetchStalledOrders } from './stalledOrders'
+import { fetchStalledOrders, importConfirmationCsv } from './stalledOrders'
 import { fetchPermissions, updateRolePermission } from './permissions'
 import { fetchCurrentOperator } from './auth'
 import { fetchMarketStatus } from './marketStatus'
@@ -200,6 +200,18 @@ const KNOWN_GAPS = [
     method: 'GET',
     path: '/operations/stalled-orders',
     reason: '滞留注文抽出の検索 API が仕様に無い。fixture を契約提案として先に置いている',
+    request: '#1',
+  },
+  /*
+   * コンファメーション CSV の取込も同じく仕様に無い。パスと項目名（file）は docs/api/requests.md の
+   * 契約提案で、応答は既存の CsvImportResponse を流用する前提。MSW だけが応答する。
+   */
+  {
+    kind: 'path',
+    method: 'POST',
+    path: '/operations/stalled-orders/confirmation-import',
+    reason:
+      'コンファメーション CSV の取込 API が仕様に無い。MSW のハンドラを契約提案として先に置いている',
     request: '#1',
   },
   /*
@@ -512,6 +524,10 @@ const PROBES = [
   {
     name: 'fetchStalledOrders',
     run: () => fetchStalledOrders({ branchCode: '123', accountNumber: '1234567', symbol: 'AAPL' }),
+  },
+  {
+    name: 'importConfirmationCsv',
+    run: () => importConfirmationCsv(new File(['order_id\r\n'], 'c.csv', { type: 'text/csv' })),
   },
   { name: 'fetchPermissions', run: () => fetchPermissions() },
   {

@@ -9,8 +9,11 @@ import { apiClient } from './client'
  * **この API はバックエンド未実装。** openapi.json に該当パスが無いため、形は実 API の
  * `OrderItemResponse` に寄せた仮置きで、モック（src/mocks/）だけが応答する。
  * 仕様が来たらこの層の変換だけを直せば、ストアと画面は無変更で済む。
+ * コンファメーション CSV の取込（importConfirmationCsv）も同じく未実装で、形は
+ * docs/api/requests.md の「契約提案」に書いた提案（応答は既存の CsvImportResponse）。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり:
+ *   - 一覧の 2 本が日本語キー（注文エラー / 注文中）。バックエンドへ渡した依頼書の形に合わせてある
  *   - プロパティ名が日本語（ID / 部店 / 口座番号 / 銘柄コード / 売買区分 …）
  *   - 売買区分は '1'（買）/ '3'（売）。アプリ内は 'buy' / 'sell'
  *   - 受注日と受注時刻が別項目。アプリ内は 1 本の日時文字列
@@ -58,9 +61,73 @@ export async function fetchStalledOrders({
   })
 
   return {
-    orderErrors: (data?.order_errors ?? []).map(toStalledOrder),
-    workingOrders: (data?.working_orders ?? []).map(toStalledOrder),
+    orderErrors: (data?.注文エラー ?? []).map(toStalledOrder),
+    workingOrders: (data?.注文中 ?? []).map(toStalledOrder),
   }
+}
+
+/**
+ * 取込の結果（アプリ内モデル）。
+ *
+ * @typedef {{
+ *   success: boolean, totalCount: number, successCount: number, errorCount: number,
+ *   message: string,
+ *   errors: Array<{ lineNumber: number|null, orderId: string, messages: string[] }>,
+ * }} ConfirmationImportResult
+ *   success は行エラーが 0 件のときだけ true。1 件でもあれば 1 行も反映されない（提案）。
+ *   message はサーバの文言で、画面はそのまま出す。
+ *   lineNumber は CSV の行番号（ヘッダが 1 行目なのでデータは 2 から）。
+ *   orderId はその行の order_id（読めなければ空文字）。
+ */
+
+/**
+ * 別システムのコンファメーション CSV を取り込み、注文照会へ反映する。
+ *
+ * 行ごとの不備（知らない注文 ID など）は 200 の中の errors で返り、例外にならない。
+ * ファイルそのものの不備（ヘッダ違い・空ファイル）は 400、file 欠落は 422 で ApiError になる。
+ *
+ * @param {File} file コンファメーション CSV（UTF-8。BOM の有無はサーバが吸収する）
+ * @returns {Promise<ConfirmationImportResult>}
+ */
+export async function importConfirmationCsv(file) {
+  const body = new FormData()
+  // 項目名はモックの confirmation_file ではなく、既存の /masters/*/import-csv に揃えた file（提案）
+  body.append('file', file)
+
+  const { data } = await apiClient.post('/operations/stalled-orders/confirmation-import', body, {
+    /*
+     * client.js の既定は application/json。そのままだと axios は FormData を JSON に直して送る。
+     * multipart を明示すれば、境界（boundary）付きの Content-Type はブラウザが付け直す。
+     */
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return toImportResult(data)
+}
+
+/** CsvImportResponse → ConfirmationImportResult */
+function toImportResult(raw) {
+  return {
+    success: Boolean(raw?.success),
+    totalCount: toCount(raw?.total_count),
+    successCount: toCount(raw?.success_count),
+    errorCount: toCount(raw?.error_count),
+    message: raw?.message ?? '',
+    errors: (raw?.errors ?? []).map(toImportError),
+  }
+}
+
+/** CsvImportErrorItem → 1 行ぶんのエラー */
+function toImportError(raw) {
+  const orderId = raw?.row_data?.order_id
+  return {
+    lineNumber: Number.isInteger(raw?.line_number) ? raw.line_number : null,
+    orderId: orderId == null ? '' : String(orderId),
+    messages: raw?.errors ?? [],
+  }
+}
+
+function toCount(value) {
+  return Number.isInteger(value) ? value : 0
 }
 
 function toStalledOrder(raw) {

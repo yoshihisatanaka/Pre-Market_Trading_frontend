@@ -19,6 +19,6 @@
 | SOA-06 | 成行（指成区分 `'MO'`・指値単価が null）の行 | `fetchStalledOrders()` を呼ぶ | `limitPrice` が null のまま返る（0 に寄せない） | 未着手 |
 | SOA-07 | 受注日と受注時刻を持つ行 | `fetchStalledOrders()` を呼ぶ | `orderedAt` が `'2026-09-16T10:22:00'` になる | 未着手 |
 | SOA-08 | 受注日か受注時刻が欠けた行 | `fetchStalledOrders()` を呼ぶ | `orderedAt` が空文字になる | 未着手 |
-| SOA-09 | 応答に `order_errors` / `working_orders` が無い | `fetchStalledOrders()` を呼ぶ | どちらも空配列で返り、例外にならない | 未着手 |
+| SOA-09 | 応答に `注文エラー` / `注文中` が無い | `fetchStalledOrders()` を呼ぶ | どちらも空配列で返り、例外にならない | 未着手 |
 | SOA-10 | 既定モック | `fetchStalledOrders({ branchCode: '123' })` を呼ぶ | クエリに `branch_code=123` だけが載り、空の条件は送られない | 未着手 |
 | SOA-11 | API が 500 を返す | `fetchStalledOrders()` を呼ぶ | `ApiError` が投げられる | 未着手 |

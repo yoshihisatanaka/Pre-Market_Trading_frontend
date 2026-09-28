@@ -17,7 +17,9 @@ test.describe('注文一覧', () => {
     // 表示整形（api 層 → utils/format）まで通っていることを確認する
     const firstRow = rows.first()
     await expect(firstRow).toContainText('AAPL')
-    await expect(firstRow).toContainText('$227.52')
+    // 金額は全画面共通の「数字 + 半角スペース + 単位」（$ を前置しない）
+    await expect(firstRow).toContainText('227.52 ドル')
+    await expect(firstRow).not.toContainText('$')
     await expect(firstRow).toContainText('約定済')
   })
 

@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { canceledCustomers, customers } from '@/mocks/fixtures/customers'
+import { toCustomerForm } from '@/utils/customerFields'
 import { CUSTOMERS_PAGE_SIZE, useCustomersStore } from './customers'
 
 /*
@@ -64,6 +65,25 @@ function slowList(waitFor) {
 }
 
 const numbersOf = (store) => store.items.map((item) => item.accountNumber)
+
+/* ここから登録・更新用 */
+
+// フィクスチャに無い口座番号（取消済みも含めた最大値 + 1）と、取消済みの口座番号
+const NEW_ACCOUNT_NUMBER = String(
+  Math.max(...[...customers, ...canceledCustomers].map((row) => row.口座番号)) + 1,
+)
+const CANCELED_NUMBER = String(canceledCustomers[0].口座番号)
+const NEW_NAME = '更新 太郎'
+
+/** 1 ページ目を読み込んだストア */
+async function loadedStore() {
+  const store = useCustomersStore()
+  await store.load()
+  return store
+}
+
+/** 先頭行をフォームの値に開いたもの（必須がすべて埋まっている） */
+const formOfHead = (store) => toCustomerForm(store.items[0])
 
 describe('stores/customers', () => {
   beforeEach(() => {
@@ -194,14 +214,17 @@ describe('stores/customers', () => {
     expect(numbersOf(store)).toEqual(expected)
   })
 
-  it('[CUS-11] 読むだけの一覧なので登録・更新・削除を公開しない', () => {
+  it('[CUS-11] 登録・更新は公開し、削除は公開しない', () => {
     const store = useCustomersStore()
 
-    expect(store.create).toBeUndefined()
-    expect(store.update).toBeUndefined()
+    expect(typeof store.create).toBe('function')
+    expect(typeof store.update).toBe('function')
+    expect(store.creating).toBe(false)
+    expect(store.updating).toBe(false)
+    // 削除は実装しない（2026-09-28 決定）
     expect(store.remove).toBeUndefined()
-    expect(store.creating).toBeUndefined()
     expect(store.deleting).toBeUndefined()
+    expect(store.deleteError).toBeUndefined()
   })
 
   it('[CUS-12] 古い応答が新しい結果を上書きしない', async () => {
@@ -226,5 +249,113 @@ describe('stores/customers', () => {
 
     expect(store.total).toBe(TOTAL)
     expect(numbersOf(store)).not.toContain(deletedNumber)
+  })
+
+  it('[CUS-14] 新しい口座番号は事前検証を通って登録され、件数が増える', async () => {
+    const store = await loadedStore()
+
+    const created = await store.create({ ...formOfHead(store), accountNumber: NEW_ACCOUNT_NUMBER })
+
+    expect(created?.accountNumber).toBe(NEW_ACCOUNT_NUMBER)
+    expect(store.validationErrors).toEqual([])
+    expect(store.createError).toBeNull()
+    expect(store.total).toBe(TOTAL + 1)
+  })
+
+  it('[CUS-15] 既にある口座番号は事前検証で弾かれ、登録まで進まない', async () => {
+    const store = await loadedStore()
+
+    const created = await store.create({ ...formOfHead(store), accountNumber: ACCOUNT_NUMBER })
+
+    expect(created).toBeNull()
+    expect(store.validationErrors).toEqual([`口座番号 ${ACCOUNT_NUMBER} は既に登録されています`])
+    expect(store.createError).toBeNull()
+    expect(store.total).toBe(TOTAL)
+  })
+
+  it('[CUS-16] 取消済みの口座番号は 1 回目に警告だけ返し、承知して押し直すと登録する', async () => {
+    const store = await loadedStore()
+    const input = { ...formOfHead(store), accountNumber: CANCELED_NUMBER }
+
+    const first = await store.create(input)
+
+    expect(first).toBeNull()
+    expect(store.validationWarnings).toEqual([
+      `口座番号 ${CANCELED_NUMBER} は削除済みです。登録すると再有効化されます`,
+    ])
+    expect(store.validationErrors).toEqual([])
+    expect(store.total).toBe(TOTAL)
+
+    const second = await store.create({ ...input, acknowledgedWarnings: true })
+
+    expect(second?.accountNumber).toBe(CANCELED_NUMBER)
+    expect(store.validationWarnings).toEqual([])
+    // 再有効化なので、取消済みだった行が一覧に戻る
+    expect(store.total).toBe(TOTAL + 1)
+  })
+
+  it('[CUS-17] 更新すると新しい内容が返り、一覧の該当行も変わる', async () => {
+    const store = await loadedStore()
+    const target = store.items[0]
+
+    const updated = await store.update({
+      ...toCustomerForm(target),
+      customerName: NEW_NAME,
+      id: target.id,
+      updatedAt: target.updatedAt,
+    })
+
+    expect(updated?.customerName).toBe(NEW_NAME)
+    expect(store.items.find((item) => item.id === target.id).customerName).toBe(NEW_NAME)
+    expect(store.total).toBe(TOTAL)
+  })
+
+  it('[CUS-18] 更新の競合(409)は updateError に入り、一覧は変わらない', async () => {
+    const detail = '他のユーザーによって口座情報が更新されています。'
+    server.use(
+      http.put('*/api/masters/customers/:id', () => HttpResponse.json({ detail }, { status: 409 })),
+    )
+    const store = await loadedStore()
+    const target = store.items[0]
+    const before = numbersOf(store)
+
+    const updated = await store.update({
+      ...toCustomerForm(target),
+      customerName: NEW_NAME,
+      id: target.id,
+      updatedAt: target.updatedAt,
+    })
+
+    expect(updated).toBeNull()
+    expect(store.updateError?.message).toBe(detail)
+    expect(store.updateValidationErrors).toEqual([])
+    expect(numbersOf(store)).toEqual(before)
+    expect(store.items[0].customerName).toBe(target.customerName)
+  })
+
+  it('[CUS-19] 更新の事前検証が不合格なら更新 API を呼ばない', async () => {
+    const message = '扱者コード 999 は存在しません'
+    let putCalls = 0
+    server.use(
+      http.post('*/api/masters/customers/validate', () =>
+        HttpResponse.json({ valid: false, errors: [message], warnings: [], details: null }),
+      ),
+      http.put('*/api/masters/customers/:id', () => {
+        putCalls += 1
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const store = await loadedStore()
+    const target = store.items[0]
+
+    const updated = await store.update({
+      ...toCustomerForm(target),
+      id: target.id,
+      updatedAt: target.updatedAt,
+    })
+
+    expect(updated).toBeNull()
+    expect(store.updateValidationErrors).toEqual([message])
+    expect(putCalls).toBe(0)
   })
 })

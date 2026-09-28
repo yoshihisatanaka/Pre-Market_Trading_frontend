@@ -11,7 +11,7 @@ test.describe('スライス基準マスタ', () => {
     // 比率 0.05 → 5.00%、整形（utils/format）まで通っていることを確認する
     await expect(page.getByTestId('slice-criteria-rate')).toHaveText('5.00%')
     await expect(page.getByTestId('slice-criteria-quantity')).toHaveText('10,000 株')
-    await expect(page.getByTestId('slice-criteria-amount')).toHaveText('USD 1,000,000')
+    await expect(page.getByTestId('slice-criteria-amount')).toHaveText('1,000,000.00 ドル')
   })
 
   test('[SC-02] 取得が失敗したときエラー表示と再試行ボタンが出る', async ({ page }) => {
@@ -45,7 +45,7 @@ test.describe('スライス基準マスタ', () => {
     )
     await expect(page.getByTestId('slice-criteria-rate')).toHaveText('3.00%')
     await expect(page.getByTestId('slice-criteria-quantity')).toHaveText('5,000 株')
-    await expect(page.getByTestId('slice-criteria-amount')).toHaveText('USD 500,000')
+    await expect(page.getByTestId('slice-criteria-amount')).toHaveText('500,000.00 ドル')
   })
 
   test('[SC-04] 範囲外の値で保存すると理由が出て現在値は変わらない', async ({ page }) => {

@@ -174,7 +174,8 @@ test.describe('権限マスタ', () => {
     await expectFixtureBadges(page)
   })
 
-  test('[PM-08] 操作者の取得が失敗しても一覧は出て閲覧のみになる', async ({ page }) => {
+  test('[PM-08] 操作者の取得が失敗すると権限なしとして forbidden へ回される', async ({ page }) => {
+    // 2026-09-28 から /masters/* はマスタ更新権限が要り、取得失敗は権限なしに倒れる（docs/e2e/forbidden.md）
     await mockApi(page, [
       {
         path: '*/api/auth/me',
@@ -184,9 +185,11 @@ test.describe('権限マスタ', () => {
     ])
     await page.goto(PATH)
 
-    await expect(rowsOf(page)).toHaveCount(rolePermissions.length)
-    await expect(page.getByTestId('permissions-error')).toHaveCount(0)
-    await expect(page.getByTestId('permissions-description')).toContainText('閲覧のみ')
+    await expect(page).toHaveURL(/\/forbidden$/)
+    await expect(
+      page.getByRole('heading', { name: 'アクセス権限がありません', exact: true }),
+    ).toBeVisible()
+    await expect(page.getByTestId('permissions-table')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '編集' })).toHaveCount(0)
   })
 

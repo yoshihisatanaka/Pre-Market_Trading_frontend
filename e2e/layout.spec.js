@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { navItems, navSections } from '../src/components/layout/navigation'
+import { salesOperator } from '../src/mocks/fixtures/currentOperator'
 import { closedMarketStatusResponse } from '../src/mocks/fixtures/marketStatus'
 import { mockApi } from './helpers/mockApi'
 
@@ -237,5 +238,36 @@ test.describe('共通レイアウト', () => {
     await nav.getByRole('link', { name: '顧客検索', exact: true }).click()
 
     await expect(page).toHaveURL(/\/customers\/search$/)
+  })
+
+  /*
+   * 区分の出し分け（navigation.js の section.permission）。URL の直打ちを弾く側は
+   * docs/e2e/forbidden.md（FB）が持つので、ここではメニューに出るかどうかだけを見る。
+   */
+  test('[LAY-16] マスタ更新権限が無い操作者にはマスタメンテ区分が出ない', async ({ page }) => {
+    await mockApi(page, [{ path: '*/api/auth/me', body: salesOperator }])
+    await page.goto('/')
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    const hidden = navSections.filter((section) => section.permission === 'master')
+    const shown = navSections.filter((section) => !section.permission)
+    // 隠れる区分と残る区分の両方が無いと、このシナリオは意味を失う
+    expect(hidden.length).toBeGreaterThan(0)
+    expect(shown.length).toBeGreaterThan(0)
+
+    // 残る区分が描かれてから「無い」を見る（読み込み前の空振りで通らないように）
+    for (const section of shown) {
+      await expect(nav.getByRole('heading', { name: section.label, exact: true })).toBeVisible()
+    }
+    await expect(nav.getByRole('link')).toHaveCount(
+      shown.reduce((sum, section) => sum + section.items.length, 0),
+    )
+
+    for (const section of hidden) {
+      await expect(nav.getByRole('heading', { name: section.label, exact: true })).toHaveCount(0)
+      for (const item of section.items) {
+        await expect(nav.getByRole('link', { name: item.label, exact: true })).toHaveCount(0)
+      }
+    }
   })
 })

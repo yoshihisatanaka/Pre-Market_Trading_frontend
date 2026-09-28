@@ -7,6 +7,7 @@
  * `v-model:offset` でも `@update:offset` でも受けられる。
  */
 import { computed } from 'vue'
+import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
 import BaseButton from './BaseButton.vue'
 
 const props = defineProps({
@@ -16,7 +17,7 @@ const props = defineProps({
   },
   limit: {
     type: Number,
-    default: 50,
+    default: DEFAULT_PAGE_SIZE,
   },
   offset: {
     type: Number,

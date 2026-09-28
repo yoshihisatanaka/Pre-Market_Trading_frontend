@@ -15,6 +15,9 @@ import { reloadMarketStatusAfter } from './marketStatus'
  * 実 API 側の 1 ページ 50 件に合わせた値で、**勝手に変えられない**。
  * `GET /masters/blackout-dates` は limit というクエリを持たず 50 件で固定されているため、
  * ここを別の値にするとページャーの見た目と実際の返却件数がずれる。
+ *
+ * **utils/pagination.js の DEFAULT_PAGE_SIZE には従わない**（全画面の件数を変えても、
+ * この画面だけは 50 のまま残る）。limit の追加は docs/api/requests.md の #21 で依頼している。
  */
 export const BLACKOUT_DATES_PAGE_SIZE = 50
 

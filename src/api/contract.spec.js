@@ -31,6 +31,7 @@ import {
   noticeBannerResponse,
 } from '../mocks/fixtures/banner'
 import { suspensionHistories, suspensionTargets } from '../mocks/fixtures/incidents'
+import { executions } from '../mocks/fixtures/executions'
 import { fetchOrders } from './orders'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
@@ -67,11 +68,7 @@ import {
   updateBalanceAdjustment,
   updateBalanceSellProhibited,
 } from './balanceAdjustments'
-import {
-  fetchAnnouncement,
-  fetchAnnouncementHistory,
-  updateAnnouncement,
-} from './announcements'
+import { fetchAnnouncement, fetchAnnouncementHistory, updateAnnouncement } from './announcements'
 import { fetchBanner } from './banner'
 import {
   fetchSuspensionHistories,
@@ -79,6 +76,7 @@ import {
   resumeOrders,
   suspendOrders,
 } from './incidents'
+import { fetchExecutions } from './executions'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -303,6 +301,7 @@ const FIXTURES = [
   },
   { name: 'suspensionTargets', schema: 'SuspensionTargetItem', rows: suspensionTargets },
   { name: 'suspensionHistories', schema: 'SuspensionHistoryItem', rows: suspensionHistories },
+  { name: 'executions', schema: 'ExecutionItem', rows: executions },
 ]
 
 function describeSchema(schema) {
@@ -562,15 +561,34 @@ const PROBES = [
     name: 'updateAnnouncement',
     run: () => updateAnnouncement({ enabled: false, message: '', updatedAt: '' }),
   },
-  { name: 'fetchAnnouncementHistory', run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }) },
+  {
+    name: 'fetchAnnouncementHistory',
+    run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }),
+  },
   { name: 'fetchBanner', run: () => fetchBanner() },
   { name: 'fetchSuspensionStatus', run: () => fetchSuspensionStatus() },
-  { name: 'fetchSuspensionHistories', run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }) },
+  {
+    name: 'fetchSuspensionHistories',
+    run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }),
+  },
   {
     name: 'suspendOrders',
     run: () => suspendOrders({ target: '1', reason: 'x', updatedAt: null }),
   },
   { name: 'resumeOrders', run: () => resumeOrders({ target: '1', updatedAt: null }) },
+  {
+    name: 'fetchExecutions',
+    run: () =>
+      fetchExecutions({
+        branchCode: '123',
+        symbol: 'AAPL',
+        side: 'buy',
+        status: '011',
+        dateFrom: '2026-09-01',
+        dateTo: '2026-09-30',
+        route: '1',
+      }),
+  },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

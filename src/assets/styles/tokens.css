@@ -105,6 +105,7 @@
   --font-size-md: 13px;
   --font-size-lg: 15px;
   --font-size-xl: 17px;
+  --font-size-2xl: 24px; /* 件数カードの数値（モックの .stat-value） */
 
   /* other */
   --radius-sm: 6px;

@@ -1,109 +1,74 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { createPinia, setActivePinia } from 'pinia'
-import { createMemoryHistory, createRouter } from 'vue-router'
-import { delay, http, HttpResponse } from 'msw'
-import { server } from '@/mocks/server'
-import { salesOperator, supervisorOperator } from '@/mocks/fixtures/currentOperator'
-import { useCurrentOperatorStore } from '@/stores/currentOperator'
-import { requirePermission, routes } from './index'
+import { describe, expect, it } from 'vitest'
+import { navSections } from '@/components/layout/navigation'
+import { routes } from './index'
 
 /*
- * ルート定義と権限のガード。requirePermission は to.meta だけを見るので、
- * ルートを模した { meta } を渡して直接呼ぶ。遷移を通しで見るときだけ、
- * export された routes でテスト用ルータ（メモリ履歴）を組む。
+ * ルート定義（router/index.js の routes）の検査。ガードの挙動（権限の有無で forbidden へ回すか）は
+ * permissionGuard.spec.js（PMG）が見るので、ここでは meta.requiredPermission の付け方だけを見る。
+ * 運用管理の 4 ルートの権限は PMG-05 が見ている。
  */
 
-const FORBIDDEN = { name: 'forbidden', replace: true }
-const MASTER_ROUTE = { meta: { permission: 'master' } }
-
-/**
- * /auth/me を指定の本文で返し、叩かれた回数を数えるハンドラを立てる。
- *
- * @returns {{ count: () => number }}
- */
-function countingMe(body = supervisorOperator, { status = 200, wait = 0 } = {}) {
-  let calls = 0
-  server.use(
-    http.get('*/api/auth/me', async () => {
-      calls += 1
-      if (wait) await delay(wait)
-      return HttpResponse.json(body, { status })
-    }),
-  )
-  return { count: () => calls }
-}
-
-beforeEach(() => {
-  setActivePinia(createPinia())
-})
+const pathsOf = (list) => list.map((route) => route.path)
+const routeAt = (path) => routes.find((route) => route.path === path)
 
 // シナリオ: docs/unit/router-index.md
-describe('router', () => {
-  it('[RTR-01] 権限の指定が無いルートは読み込みを待たずに通す', async () => {
-    const me = countingMe()
-
-    expect(await requirePermission({ meta: {} })).toBe(true)
-    expect(me.count()).toBe(0)
-  })
-
-  it('[RTR-02] 権限を持つ操作者は通す', async () => {
-    countingMe(supervisorOperator)
-
-    expect(await requirePermission(MASTER_ROUTE)).toBe(true)
-  })
-
-  it('[RTR-03] 権限の無い操作者は forbidden へ置き換えで回す', async () => {
-    countingMe(salesOperator)
-
-    expect(await requirePermission(MASTER_ROUTE)).toEqual(FORBIDDEN)
-  })
-
-  it('[RTR-04] 操作者の取得に失敗したら forbidden へ回す', async () => {
-    countingMe({ detail: 'サーバーでエラーが発生しました。' }, { status: 500 })
-
-    expect(await requirePermission(MASTER_ROUTE)).toEqual(FORBIDDEN)
-  })
-
-  it('[RTR-05] 起動時の読み込みが終わるのを待ってから判定する', async () => {
-    const me = countingMe(supervisorOperator, { wait: 20 })
-    const store = useCurrentOperatorStore()
-    // main.js が起動時に始める読み込み（待たない）
-    const booting = store.load()
-    expect(store.loading).toBe(true)
-
-    const verdict = await requirePermission(MASTER_ROUTE)
-
-    // 途中で判定していたら false 側（forbidden）に倒れている
-    expect(verdict).toBe(true)
-    expect(store.loading).toBe(false)
-    expect(me.count()).toBe(1)
-    await booting
-  })
-
-  it('[RTR-06] /masters/ 配下の全ルートがマスタ権限を要求する', () => {
+describe('router/index の routes', () => {
+  it('[RTR-01] /masters/ 配下の全ルートがマスタ権限を要求する', () => {
     const masterRoutes = routes.filter((route) => route.path.startsWith('/masters/'))
 
     expect(masterRoutes.length).toBeGreaterThan(0)
     for (const route of masterRoutes) {
-      expect(route.meta?.permission, route.path).toBe('master')
+      expect(route.meta?.requiredPermission, route.path).toBe('master')
     }
   })
 
-  it('[RTR-07] 回し先の forbidden は権限を要求しない', () => {
-    const forbidden = routes.find((route) => route.name === FORBIDDEN.name)
+  it('[RTR-02] マスタ権限を要求するのは /masters/ 配下のルートだけ', () => {
+    const requiringMaster = routes.filter((route) => route.meta?.requiredPermission === 'master')
 
-    expect(forbidden?.path).toBe('/forbidden')
-    expect(forbidden.meta?.permission).toBeUndefined()
+    for (const path of pathsOf(requiringMaster)) {
+      expect(path.startsWith('/masters/'), path).toBe(true)
+    }
   })
 
-  it('[RTR-08] 権限の無い操作者がマスタ画面を開くと forbidden に行き着く', async () => {
-    countingMe(salesOperator)
-    const router = createRouter({ history: createMemoryHistory(), routes })
-    router.beforeEach(requirePermission)
+  it('[RTR-03] 権限の要る区分のリンク先は、区分と同じ権限をルートの meta に持つ', () => {
+    const guardedSections = navSections.filter((section) => section.requiredPermission)
+    expect(guardedSections.length).toBeGreaterThan(0)
 
-    await router.push('/masters/customers')
+    for (const section of guardedSections) {
+      // ルートの無い項目（未実装の画面）は NotFound に落ちるだけなので対象外
+      const linked = section.items.map((item) => routeAt(item.to)).filter(Boolean)
+      expect(linked.length, section.label).toBeGreaterThan(0)
+      for (const route of linked) {
+        expect(route.meta?.requiredPermission, route.path).toBe(section.requiredPermission)
+      }
 
-    expect(router.currentRoute.value.name).toBe(FORBIDDEN.name)
-    expect(router.currentRoute.value.path).toBe('/forbidden')
+      // 逆向き: その権限を要求するルートは、すべてその区分に載っている（メニューから辿れない制限を作らない）
+      const requiring = routes.filter(
+        (route) => route.meta?.requiredPermission === section.requiredPermission,
+      )
+      expect(new Set(pathsOf(requiring))).toEqual(new Set(pathsOf(linked)))
+    }
+  })
+
+  it('[RTR-04] 権限の要らない区分のリンク先は権限を要求しない', () => {
+    const openItems = navSections
+      .filter((section) => !section.requiredPermission)
+      .flatMap((section) => section.items)
+    const linked = openItems.map((item) => routeAt(item.to)).filter(Boolean)
+    expect(linked.length).toBeGreaterThan(0)
+
+    for (const route of linked) {
+      expect(route.meta?.requiredPermission, route.path).toBeUndefined()
+    }
+  })
+
+  it('[RTR-05] 回し先の forbidden と NotFound は権限を要求しない', () => {
+    const forbidden = routes.find((route) => route.name === 'forbidden')
+    const notFound = routes.find((route) => route.path === '/:pathMatch(.*)*')
+
+    expect(forbidden?.path).toBe('/forbidden')
+    expect(forbidden.meta?.requiredPermission).toBeUndefined()
+    expect(notFound).toBeTruthy()
+    expect(notFound.meta?.requiredPermission).toBeUndefined()
   })
 })

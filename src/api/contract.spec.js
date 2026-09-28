@@ -1,4 +1,5 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { File as NodeFile } from 'node:buffer'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import openapi from '../../docs/api/openapi.json'
 import { server } from '../mocks/server'
 import { canceledSymbols, symbols } from '../mocks/fixtures/symbols'
@@ -11,6 +12,7 @@ import { activityLogs } from '../mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../mocks/fixtures/activityLogTargets'
 import { rolePermissions } from '../mocks/fixtures/permissions'
 import {
+  noOperationOperator,
   salesOperator,
   supervisorOperator,
   viewerOperator,
@@ -35,6 +37,8 @@ import {
   noticeBannerResponse,
 } from '../mocks/fixtures/banner'
 import { suspensionHistories, suspensionTargets } from '../mocks/fixtures/incidents'
+import { mizuhoExecutions } from '../mocks/fixtures/mizuhoExecutions'
+import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '../mocks/fixtures/closing'
 import { fetchOrders } from './orders'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
@@ -61,7 +65,7 @@ import {
 } from './blackoutDates'
 import { fetchSliceCriteria, updateSliceCriteria } from './sliceCriteria'
 import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
-import { fetchStalledOrders } from './stalledOrders'
+import { fetchStalledOrders, importConfirmationCsv } from './stalledOrders'
 import { fetchPermissions, updateRolePermission } from './permissions'
 import { fetchCurrentOperator } from './auth'
 import { fetchMarketStatus } from './marketStatus'
@@ -71,11 +75,7 @@ import {
   updateBalanceAdjustment,
   updateBalanceSellProhibited,
 } from './balanceAdjustments'
-import {
-  fetchAnnouncement,
-  fetchAnnouncementHistory,
-  updateAnnouncement,
-} from './announcements'
+import { fetchAnnouncement, fetchAnnouncementHistory, updateAnnouncement } from './announcements'
 import { fetchBanner } from './banner'
 import {
   fetchSuspensionHistories,
@@ -83,6 +83,8 @@ import {
   resumeOrders,
   suspendOrders,
 } from './incidents'
+import { fetchMizuhoExecutions } from './mizuhoExecutions'
+import { fetchMizuhoClosingStatus } from './closing'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -207,6 +209,18 @@ const KNOWN_GAPS = [
     request: '#1',
   },
   /*
+   * コンファメーション CSV の取込も同じく仕様に無い。パスと項目名（file）は docs/api/requests.md の
+   * 契約提案で、応答は既存の CsvImportResponse を流用する前提。MSW だけが応答する。
+   */
+  {
+    kind: 'path',
+    method: 'POST',
+    path: '/operations/stalled-orders/confirmation-import',
+    reason:
+      'コンファメーション CSV の取込 API が仕様に無い。MSW のハンドラを契約提案として先に置いている',
+    request: '#1',
+  },
+  /*
    * 残高マスタの銘柄名の検索は画面モックにだけある条件で、src/api/balanceAdjustments.js の
    * 冒頭コメントの 1 番。MSW だけが解釈し、実 API は黙って無視する。
    * 4 番（売却不可区分）は 2026-09-25 の取り込みで仕様に入ったので行を外した。
@@ -278,7 +292,7 @@ const FIXTURES = [
   {
     name: 'currentOperator',
     schema: 'CurrentOperatorResponse',
-    rows: [supervisorOperator, viewerOperator, salesOperator],
+    rows: [supervisorOperator, viewerOperator, noOperationOperator, salesOperator],
   },
   {
     name: 'balanceAdjustments',
@@ -307,6 +321,12 @@ const FIXTURES = [
   },
   { name: 'suspensionTargets', schema: 'SuspensionTargetItem', rows: suspensionTargets },
   { name: 'suspensionHistories', schema: 'SuspensionHistoryItem', rows: suspensionHistories },
+  { name: 'mizuhoExecutions', schema: 'ExecutionItem', rows: mizuhoExecutions },
+  {
+    name: 'closing',
+    schema: 'ClosingStatusResponse',
+    rows: [mizuhoClosingStatus, closedMizuhoClosingStatus],
+  },
 ]
 
 function describeSchema(schema) {
@@ -517,6 +537,24 @@ const PROBES = [
     name: 'fetchStalledOrders',
     run: () => fetchStalledOrders({ branchCode: '123', accountNumber: '1234567', symbol: 'AAPL' }),
   },
+  {
+    name: 'importConfirmationCsv',
+    /*
+     * jsdom の FormData は MSW(node) が Request に変換できず POST が止まる。
+     * この呼び出しの間だけ Node（undici）の FormData と File に差し替える（stalledOrders.spec.js と同じ回避）
+     */
+    run: async () => {
+      const form = await new Response('', {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }).formData()
+      vi.stubGlobal('FormData', form.constructor)
+      try {
+        await importConfirmationCsv(new NodeFile(['order_id\r\n'], 'c.csv', { type: 'text/csv' }))
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    },
+  },
   { name: 'fetchPermissions', run: () => fetchPermissions() },
   {
     name: 'updateRolePermission',
@@ -566,15 +604,34 @@ const PROBES = [
     name: 'updateAnnouncement',
     run: () => updateAnnouncement({ enabled: false, message: '', updatedAt: '' }),
   },
-  { name: 'fetchAnnouncementHistory', run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }) },
+  {
+    name: 'fetchAnnouncementHistory',
+    run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }),
+  },
   { name: 'fetchBanner', run: () => fetchBanner() },
   { name: 'fetchSuspensionStatus', run: () => fetchSuspensionStatus() },
-  { name: 'fetchSuspensionHistories', run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }) },
+  {
+    name: 'fetchSuspensionHistories',
+    run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }),
+  },
   {
     name: 'suspendOrders',
     run: () => suspendOrders({ target: '1', reason: 'x', updatedAt: null }),
   },
   { name: 'resumeOrders', run: () => resumeOrders({ target: '1', updatedAt: null }) },
+  {
+    name: 'fetchMizuhoExecutions',
+    run: () =>
+      fetchMizuhoExecutions({
+        branchCode: '123',
+        symbol: 'AAPL',
+        side: '3',
+        fillStatus: 'filled',
+        dateFrom: '2026-09-01',
+        dateTo: '2026-09-30',
+      }),
+  },
+  { name: 'fetchMizuhoClosingStatus', run: () => fetchMizuhoClosingStatus() },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

@@ -1,63 +1,42 @@
-import { computed } from 'vue'
 import { defineStore } from 'pinia'
 import { fetchCurrentOperator } from '@/api/auth'
 import { useAsync } from '@/composables/useAsync'
 
 /**
- * ログイン中の操作者（GET /auth/me）と、その権限。
+ * ログイン中の操作者（GET /auth/me）。サイドメニューの出し分けとルートの制限が共用する。
  *
- * 画面の出し分け（サイドメニューの項目・ルートのガード）が全画面で同じ答えを使うよう、
- * 取得はここで 1 回だけ行う。main.js が起動時に load し、ルートのガードは ensureLoaded で
- * その完了を待つ（読み込みの途中で判定して、権限があるのに弾くことを避ける）。
+ * 読むのは 1 回だけ（ensureLoaded）。main.js が起動時に始め、ルートのガードはその完了を待つ。
+ * **失敗したら権限は全部「持っていない」扱い**にする（誤って操作を出さない側に倒す。
+ * src/api/auth.js の欠けた権限の読み方と同じ方針）。失敗したときだけ次の ensureLoaded で
+ * 読み直すので、一時的な失敗で運用管理に入れないまま、にはならない（画面を開き直せば戻る）。
  *
- * **取得に失敗したら「権限なし」に倒す。** 誤って操作を出すより、出さないほうが安全なため
- * （api 層も欠けた権限を false と読む）。失敗の理由は error に残る。
- *
- * 認可強制（authzEnforced）が false の間はサーバが権限不足でも拒否しないが、
- * 画面の出し分けはそれに関係なく権限フラグで行う。
+ * 権限マスタの画面（stores/permissions.js）は自前で /auth/me を読んでいる。ここへ寄せるのは別作業。
+ * 1 件の形は src/api/auth.js の CurrentOperator を参照。
  */
 export const useCurrentOperatorStore = defineStore('currentOperator', () => {
-  const { data, error, loading, execute } = useAsync(fetchCurrentOperator)
+  const { data: operator, error, loading, execute } = useAsync(fetchCurrentOperator)
 
-  const operator = computed(() => data.value)
-
-  /*
-   * 読み込みを 1 本にまとめる。main.js の load とガードの ensureLoaded が重なっても 2 回叩かない。
-   * **失敗したら握っている Promise を捨てる**。起動時の一時的な失敗（/auth/me の 500 など）で
-   * 権限なしのまま固まらないよう、次の画面遷移（ガードの ensureLoaded）で読み直させる。
-   */
+  /** 読み込み中（または読み終えた）の Promise。同時に呼ばれたら同じものを返す */
   let pending = null
 
-  function load() {
-    const request = execute().then((result) => {
-      if (error.value && pending === request) pending = null
-      return result
-    })
-    pending = request
-    return request
-  }
-
-  /** まだ読んでいなければ読み、読み込み中ならその完了を待つ（前回失敗していれば読み直す） */
+  /**
+   * @returns {Promise<void>} 読み終えたら解決する（失敗しても reject しない。理由は error）
+   */
   function ensureLoaded() {
-    return pending ?? load()
+    pending ??= execute().then((result) => {
+      if (!result) pending = null
+    })
+    return pending
   }
 
   /**
-   * 権限を持っているか。未取得・取得失敗のあいだは false。
+   * 権限を持っているか。読み終える前と、読めなかったときは false。
    *
-   * @param {'order'|'master'|'operation'|'branchAll'} permission
-   *   キーは src/api/auth.js の CurrentOperator.permissions と同じ
+   * @param {'order'|'master'|'operation'|'branchAll'} permission CurrentOperator.permissions のキー
    */
-  function hasPermission(permission) {
-    return operator.value?.permissions?.[permission] === true
+  function can(permission) {
+    return Boolean(operator.value?.permissions?.[permission])
   }
 
-  return {
-    operator,
-    loading,
-    error,
-    load,
-    ensureLoaded,
-    hasPermission,
-  }
+  return { operator, loading, error, ensureLoaded, can }
 })

@@ -5,7 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { salesOperator } from '@/mocks/fixtures/currentOperator'
+import { supervisorOperator } from '@/mocks/fixtures/currentOperator'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import AppSidebar from './AppSidebar.vue'
 import { navItems, navSections } from './navigation'
@@ -15,15 +15,28 @@ import { navItems, navSections } from './navigation'
  * RouterLink を stub せず実ルータ（メモリ履歴）を差すことで、
  * 現在ページの判定（aria-current）と遷移まで通しで検証できる。
  *
- * 区分の出し分けはログイン中の操作者（stores/currentOperator）で決まるので、
- * 既定では /auth/me の既定モック（管理責任者 = 全権限あり）を読み込んでからマウントする。
+ * 権限の要る区分（navigation.js の requiredPermission。マスタメンテ = master、運用管理 = operation）は
+ * /auth/me の結果で出し分けるので、Pinia を用意し、既定では操作者の読み込み
+ * （既定モックは全権限あり）を済ませてからマウントする。
+ * 期待値は navigation.js の定義から導く（区分名やリンク数を直接書かない）。
  */
 const Page = { render: () => h('div') }
+const AUTH_ME = '*/api/auth/me'
 
-// 期待値は navigation.js の定義から導く（区分名やリンク数を直接書かない）
-const MASTER_SECTION = navSections.find((section) => section.permission === 'master')
-const OPEN_SECTIONS = navSections.filter((section) => !section.permission)
-const OPEN_ITEMS = OPEN_SECTIONS.flatMap((section) => section.items)
+const MASTER_SECTION = navSections.find((s) => s.requiredPermission === 'master')
+const OPERATION_SECTION = navSections.find((s) => s.requiredPermission === 'operation')
+/** 権限の要らない区分だけ（未取得・取得失敗のときに残るもの） */
+const PUBLIC_SECTIONS = navSections.filter((s) => !s.requiredPermission)
+
+/** 1 つの権限だけを外した操作者（ほかの区分への影響が無いことを切り分けるため） */
+const operatorWithout = (permission) => ({
+  ...supervisorOperator,
+  権限: { ...supervisorOperator.権限, [permission]: false },
+})
+
+beforeEach(() => {
+  setActivePinia(createPinia())
+})
 
 function createTestRouter() {
   return createRouter({
@@ -41,8 +54,7 @@ function createTestRouter() {
  * @param {{ loadOperator?: boolean }} [options] loadOperator が false なら操作者を読み込まずにマウントする
  */
 async function mountAt(path, props = {}, { loadOperator = true } = {}) {
-  if (loadOperator) await useCurrentOperatorStore().load()
-
+  if (loadOperator) await useCurrentOperatorStore().ensureLoaded()
   const router = createTestRouter()
   // mount 前に遷移を済ませておけば router.isReady() を待つ必要がない
   await router.push(path)
@@ -57,25 +69,16 @@ const currentPageLabels = (wrapper) =>
     .map((link) => link.text())
 
 const headings = (wrapper) => wrapper.findAll('h2').map((el) => el.text())
-const linkLabels = (wrapper) => wrapper.findAll('a').map((link) => link.text())
+const hrefs = (wrapper) => wrapper.findAll('a').map((link) => link.attributes('href'))
 
-/** マスタメンテの見出しと配下のリンクが 1 つも出ていないこと */
-function expectMasterSectionHidden(wrapper) {
-  expect(headings(wrapper)).not.toContain(MASTER_SECTION.label)
-  for (const item of MASTER_SECTION.items) {
-    expect(linkLabels(wrapper)).not.toContain(item.label)
-  }
-  // ほかの区分は影響を受けない
-  expect(headings(wrapper)).toEqual(OPEN_SECTIONS.map((section) => section.label))
-  expect(linkLabels(wrapper)).toEqual(OPEN_ITEMS.map((item) => item.label))
+/** 指定の区分だけが並んでいること（見出しもリンクも定義順） */
+function expectSections(wrapper, sections) {
+  expect(headings(wrapper)).toEqual(sections.map((s) => s.label))
+  expect(hrefs(wrapper)).toEqual(sections.flatMap((s) => s.items).map((item) => item.to))
 }
 
 // シナリオ: docs/unit/components-layout-app-sidebar.md
 describe('AppSidebar', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-  })
-
   it('[ASB-01] システム名とセクション見出し、定義順のリンクを描画する', async () => {
     const { wrapper } = await mountAt('/')
 
@@ -127,43 +130,59 @@ describe('AppSidebar', () => {
     expect(aside.attributes('inert')).toBeDefined()
   })
 
-  it('[ASB-07] マスタ権限の無い操作者にはマスタメンテを見出しごと出さない', async () => {
-    // フィクスチャの前提（master なし）が崩れたら、このシナリオは意味を失う
-    expect(salesOperator.権限.master).toBe(false)
-    server.use(http.get('*/api/auth/me', () => HttpResponse.json(salesOperator)))
-
+  it('[ASB-07] 運用管理権限の無い利用者には運用管理の区分を出さない', async () => {
+    server.use(http.get(AUTH_ME, () => HttpResponse.json(operatorWithout('operation'))))
     const { wrapper } = await mountAt('/')
 
-    expectMasterSectionHidden(wrapper)
+    // マスタメンテは master 権限で出るので残る
+    expectSections(wrapper, navSections.filter((s) => s !== OPERATION_SECTION))
   })
 
-  it('[ASB-08] 操作者が未取得のあいだはマスタメンテを出さない', async () => {
+  it('[ASB-08] /auth/me の応答前は権限の要る区分を出さない', async () => {
+    // 応答を握ったまま読み込みを始め、応答前の状態でマウントする
+    let release
+    const opened = new Promise((resolve) => {
+      release = resolve
+    })
+    server.use(
+      http.get(AUTH_ME, async () => {
+        await opened
+        return HttpResponse.json(supervisorOperator)
+      }),
+    )
+    const loading = useCurrentOperatorStore().ensureLoaded()
     const { wrapper } = await mountAt('/', {}, { loadOperator: false })
 
-    expectMasterSectionHidden(wrapper)
+    // 未取得は権限なし。運用管理もマスタメンテも出さない
+    expectSections(wrapper, PUBLIC_SECTIONS)
+
+    release()
+    await loading
   })
 
-  it('[ASB-09] 操作者の取得に失敗したらマスタメンテを出さない', async () => {
-    server.use(
-      http.get('*/api/auth/me', () =>
-        HttpResponse.json({ detail: 'サーバーでエラーが発生しました。' }, { status: 500 }),
-      ),
-    )
-
+  it('[ASB-09] /auth/me が 500 なら権限の要る区分を出さない', async () => {
+    server.use(http.get(AUTH_ME, () => HttpResponse.json({ detail: 'x' }, { status: 500 })))
     const { wrapper } = await mountAt('/')
 
     expect(useCurrentOperatorStore().error).toBeTruthy()
-    expectMasterSectionHidden(wrapper)
+    expectSections(wrapper, PUBLIC_SECTIONS)
   })
 
-  it('[ASB-10] 操作者の読み込みが終わるとマスタメンテが現れる', async () => {
-    const { wrapper } = await mountAt('/', {}, { loadOperator: false })
-    expect(headings(wrapper)).not.toContain(MASTER_SECTION.label)
+  it('[ASB-10] マスタ権限の無い利用者にはマスタメンテを見出しごと出さない', async () => {
+    server.use(http.get(AUTH_ME, () => HttpResponse.json(operatorWithout('master'))))
+    const { wrapper } = await mountAt('/')
 
-    await useCurrentOperatorStore().load()
+    // 運用管理は operation 権限で出るので残る
+    expectSections(wrapper, navSections.filter((s) => s !== MASTER_SECTION))
+  })
+
+  it('[ASB-11] 操作者の読み込みが終わると権限の要る区分が現れる', async () => {
+    const { wrapper } = await mountAt('/', {}, { loadOperator: false })
+    expectSections(wrapper, PUBLIC_SECTIONS)
+
+    await useCurrentOperatorStore().ensureLoaded()
     await flushPromises()
 
-    expect(headings(wrapper)).toEqual(navSections.map((s) => s.label))
-    expect(linkLabels(wrapper)).toEqual(navItems.map((item) => item.label))
+    expectSections(wrapper, navSections)
   })
 })

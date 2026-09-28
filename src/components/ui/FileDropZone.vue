@@ -3,7 +3,7 @@
  * ファイル 1 件を、クリックまたはドラッグ&ドロップで選ばせる領域（CSV 一括注文の取込み口）。
  * v-model には File（未選択なら null）が入る。アップロード自体は行わない（呼び出し側の責務）。
  */
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 defineProps({
   accept: {
@@ -24,6 +24,14 @@ const model = defineModel({ type: File, default: null })
 
 const inputRef = ref(null)
 const isDragOver = ref(false)
+
+/*
+ * 呼び出し側が null に戻したら（取込が済んだ・取り消した）、隠しの input の選択も消す。
+ * 残したままだと、同じファイルを選び直したときに値が変わらず change が発火しない。
+ */
+watch(model, (file) => {
+  if (!file && inputRef.value) inputRef.value.value = ''
+})
 
 function openPicker() {
   inputRef.value?.click()

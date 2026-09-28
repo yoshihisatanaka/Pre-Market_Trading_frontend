@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
@@ -9,15 +9,43 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import FileDropZone from '@/components/ui/FileDropZone.vue'
 import FormField from '@/components/ui/FormField.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
+import ConfirmationImportErrors from '@/components/operations/ConfirmationImportErrors.vue'
 import StalledOrderListCard from '@/components/operations/StalledOrderListCard.vue'
 import StalledOrderTable from '@/components/operations/StalledOrderTable.vue'
 import { useListQuery } from '@/composables/useListQuery'
+import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useStalledOrdersStore } from '@/stores/stalledOrders'
+import { downloadCsv } from '@/utils/download'
+import {
+  CONFIRMATION_SAMPLE_CSV_FILENAME,
+  TWS_ORDER_CSV_FILENAME,
+  TWS_ORDER_SAMPLE_CSV_FILENAME,
+  buildConfirmationSampleCsv,
+  buildTwsOrderCsv,
+  buildTwsOrderSampleCsv,
+} from '@/utils/stalledOrderCsv'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useStalledOrdersStore()
-const { orderErrors, workingOrders, loading, error, isOrderErrorsEmpty, isWorkingOrdersEmpty } =
-  storeToRefs(store)
+const {
+  orderErrors,
+  workingOrders,
+  loading,
+  error,
+  isOrderErrorsEmpty,
+  isWorkingOrdersEmpty,
+  importing,
+  importError,
+} = storeToRefs(store)
+
+/*
+ * 権限の表示。運用管理権限の無い利用者はルートのガードでこの画面に入れないので、
+ * 実際には常に「操作可能」になる（/auth/me に繋いであるのは、ガードと表示を食い違わせないため）。
+ * ensureLoaded はガードが済ませているので通常は何もしない（ガードを通らない単体テストのための保険）。
+ */
+const operator = useCurrentOperatorStore()
+operator.ensureLoaded()
+const canOperate = computed(() => operator.can('operation'))
 
 /*
  * 検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
@@ -34,33 +62,56 @@ const { inputs, submitSearch, clearSearch } = useListQuery({
   load: (params) => store.load(params),
 })
 
-/** 取込むコンファメーション CSV。選ぶまでは null */
-const confirmationFile = ref(null)
-
 /*
- * CSV の出力・取込は処理が未実装（UI だけ先に置く）。
- * バックエンドに該当 API がまだ無いため、押しても何も起きない。
+ * CSV の出力とサンプル 2 種はサーバを通さず、ここで組み立ててダウンロードさせる
+ * （書式は公開モックの実物から採取。列と値の変換は utils/stalledOrderCsv.js）。
  *
- * TODO(処理実装): 別システム発注 CSV の出力は検索条件を引き継いで
- *   order_id,account_number,symbol,action,quantity,order_type,limit_price,time_in_force,market_category
- *   の書式で、コンファメーション CSV の取込は
- *   order_id,confirmation_ref,confirmation_status,filled_quantity,average_price,confirmed_at,message
- *   の書式で行う（書式は公開モックのサンプル実物から採取）。
+ * 「注文エラーをCSV出力」の対象は、いま画面に出ている注文エラーの行そのもの。
+ * 検索条件はすでに一覧の取得で効いているので、出力は画面の検索結果と同じ行になる（モックも同じ）。
  */
 function downloadOrderSample() {
-  // TODO(処理実装): 別システム発注 CSV のサンプルをダウンロードする
+  downloadCsv(TWS_ORDER_SAMPLE_CSV_FILENAME, buildTwsOrderSampleCsv())
 }
 
 function exportOrderErrors() {
-  // TODO(処理実装): 注文エラーを別システム発注 CSV として出力する
+  downloadCsv(TWS_ORDER_CSV_FILENAME, buildTwsOrderCsv(orderErrors.value))
 }
 
 function downloadConfirmationSample() {
-  // TODO(処理実装): コンファメーション CSV のサンプルをダウンロードする
+  downloadCsv(CONFIRMATION_SAMPLE_CSV_FILENAME, buildConfirmationSampleCsv())
 }
 
-function importConfirmation() {
-  // TODO(処理実装): confirmationFile を送り、注文照会へ反映する
+/*
+ * 出力を押せるのは、注文エラーが読めて 1 件以上あるときだけ。
+ * 取得中・取込中に押すと取り直す前の行が出る。0 件の出力は別システムで発注するものが無い。
+ */
+const canExport = computed(
+  () => !loading.value && !error.value && !importing.value && orderErrors.value.length > 0,
+)
+
+/** 取込むコンファメーション CSV。選ぶまでは null */
+const confirmationFile = ref(null)
+
+/**
+ * 直近の取込の結果（src/api/stalledOrders.js の ConfirmationImportResult）。
+ * 出していないときは null。ファイルごと拒否された・通信に失敗したときの理由は importError 側。
+ */
+const importResult = ref(null)
+
+// ストアは画面を離れても残る。戻ってきたときに前回の取込の失敗を出し直さない
+store.clearImportError()
+
+async function importConfirmation() {
+  importResult.value = null
+  store.clearImportError()
+
+  const result = await store.importConfirmation(confirmationFile.value)
+  // 失敗はファイルを選んだまま importError で出す（直さずに押し直せる）
+  if (!result) return
+
+  importResult.value = result
+  // 反映できたら選択を外す。行エラーのときは同じファイルを直して選び直すので残す
+  if (result.success) confirmationFile.value = null
 }
 </script>
 
@@ -124,8 +175,12 @@ function importConfirmation() {
 
     <BaseCard title="別システム発注・コンファメーション取込">
       <template #header-actions>
-        <!-- 権限の表示。認証が入るまでは固定で「操作可能」（モックも as_user に依らず同じ） -->
-        <BaseBadge variant="success" data-testid="stalled-orders-permission">操作可能</BaseBadge>
+        <BaseBadge
+          :variant="canOperate ? 'success' : 'gray'"
+          data-testid="stalled-orders-permission"
+        >
+          {{ canOperate ? '操作可能' : '操作不可' }}
+        </BaseBadge>
       </template>
 
       <div class="stalled-orders__actions">
@@ -136,7 +191,11 @@ function importConfirmation() {
         >
           別システム発注CSVサンプル
         </BaseButton>
-        <BaseButton data-testid="stalled-orders-export" @click="exportOrderErrors">
+        <BaseButton
+          data-testid="stalled-orders-export"
+          :disabled="!canExport"
+          @click="exportOrderErrors"
+        >
           注文エラーをCSV出力
         </BaseButton>
         <BaseButton
@@ -160,12 +219,46 @@ function importConfirmation() {
 
         <BaseButton
           data-testid="stalled-orders-confirmation-import"
-          :disabled="!confirmationFile"
+          :disabled="!confirmationFile || importing"
           @click="importConfirmation"
         >
-          取込して注文照会へ反映
+          {{ importing ? '取込中…' : '取込して注文照会へ反映' }}
         </BaseButton>
       </div>
+
+      <!--
+        取込の結果は取込口の直下に出す。成功・行エラーの文言はサーバが返す（自前で組み立てない）。
+        行エラーのときは 1 行も反映されていないので、どの行を直すかを表で見せる。
+      -->
+      <BaseAlert
+        v-if="importError"
+        variant="error"
+        class="stalled-orders__import-result"
+        data-testid="stalled-orders-import-error"
+      >
+        {{ importError.message }}
+      </BaseAlert>
+      <BaseAlert
+        v-else-if="importResult?.success"
+        variant="success"
+        class="stalled-orders__import-result"
+        data-testid="stalled-orders-import-notice"
+      >
+        {{ importResult.message }}
+      </BaseAlert>
+      <BaseAlert
+        v-else-if="importResult"
+        variant="warning"
+        class="stalled-orders__import-result"
+        data-testid="stalled-orders-import-errors"
+      >
+        <p>{{ importResult.message }}</p>
+        <ConfirmationImportErrors
+          v-if="importResult.errors.length > 0"
+          class="stalled-orders__import-errors"
+          :errors="importResult.errors"
+        />
+      </BaseAlert>
     </BaseCard>
 
     <StalledOrderListCard
@@ -236,6 +329,15 @@ function importConfirmation() {
 .stalled-orders__upload > :first-child {
   flex: 1;
   min-width: 0;
+}
+
+.stalled-orders__import-result {
+  margin-top: var(--space-3);
+}
+
+/* 行エラーの表は警告の帯の中に敷く。文言との間だけ空ける */
+.stalled-orders__import-errors {
+  margin-top: var(--space-2);
 }
 
 @media (max-width: 720px) {

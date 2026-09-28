@@ -52,11 +52,11 @@ enableMocking()
     useMarketStatusStore(pinia).load()
 
     /*
-     * ログイン中の操作者と権限。サイドメニューの出し分けとルートのガードが使う。
-     * ガードは完了を待つので、ここでは始めるだけにする（mount の前に始めて待ち時間を縮める）。
-     * 取得に失敗しても起動は止めない（権限なしとして扱い、マスタメンテが隠れるだけ）。
+     * ログイン中の操作者（GET /auth/me）も起動時に一度だけ読み込む。サイドメニューが
+     * 権限で区分を出し分け、権限の要るルートのガード（router/permissionGuard.js）が完了を待つ。
+     * オーバーレイの判定には足さない。失敗しても権限なしに倒れるだけで、他の画面は使える。
      */
-    useCurrentOperatorStore(pinia).load()
+    useCurrentOperatorStore(pinia).ensureLoaded()
 
     app.mount('#app')
   })

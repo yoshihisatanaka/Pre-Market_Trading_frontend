@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { navItems, navSections } from '../src/components/layout/navigation'
-import { salesOperator } from '../src/mocks/fixtures/currentOperator'
+import { noOperationOperator, supervisorOperator } from '../src/mocks/fixtures/currentOperator'
 import { closedMarketStatusResponse } from '../src/mocks/fixtures/marketStatus'
 import { mockApi } from './helpers/mockApi'
 
@@ -241,33 +241,83 @@ test.describe('共通レイアウト', () => {
   })
 
   /*
-   * 区分の出し分け（navigation.js の section.permission）。URL の直打ちを弾く側は
-   * docs/e2e/forbidden.md（FB）が持つので、ここではメニューに出るかどうかだけを見る。
+   * 権限の要る区分（navigation.js の requiredPermission）。ここで見るのは区分の有無だけで、
+   * URL を直接開いたときの制限は e2e/access-control.spec.js（AC）が見る。
+   * 既定モックの /auth/me は全権限ありなので、権限なしは mockApi() で差し替える。
    */
-  test('[LAY-16] マスタ更新権限が無い操作者にはマスタメンテ区分が出ない', async ({ page }) => {
-    await mockApi(page, [{ path: '*/api/auth/me', body: salesOperator }])
-    await page.goto('/')
+  const guardedSections = navSections.filter((section) => section.requiredPermission)
+  const openSections = navSections.filter((section) => !section.requiredPermission)
 
+  /** 権限の要る区分が見出しもリンクも出ず、それ以外の区分は出ていることを確かめる */
+  async function expectGuardedSectionsHidden(page) {
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
-    const hidden = navSections.filter((section) => section.permission === 'master')
-    const shown = navSections.filter((section) => !section.permission)
-    // 隠れる区分と残る区分の両方が無いと、このシナリオは意味を失う
-    expect(hidden.length).toBeGreaterThan(0)
-    expect(shown.length).toBeGreaterThan(0)
-
-    // 残る区分が描かれてから「無い」を見る（読み込み前の空振りで通らないように）
-    for (const section of shown) {
+    for (const section of openSections) {
       await expect(nav.getByRole('heading', { name: section.label, exact: true })).toBeVisible()
+      for (const item of section.items) {
+        await expect(nav.getByRole('link', { name: item.label, exact: true })).toBeVisible()
+      }
     }
-    await expect(nav.getByRole('link')).toHaveCount(
-      shown.reduce((sum, section) => sum + section.items.length, 0),
-    )
-
-    for (const section of hidden) {
+    for (const section of guardedSections) {
       await expect(nav.getByRole('heading', { name: section.label, exact: true })).toHaveCount(0)
       for (const item of section.items) {
         await expect(nav.getByRole('link', { name: item.label, exact: true })).toHaveCount(0)
       }
     }
+    await expect(nav.getByRole('link')).toHaveCount(
+      openSections.flatMap((section) => section.items).length,
+    )
+  }
+
+  test('[LAY-16] 運用管理権限が無いとサイドメニューに運用管理の区分が出ない', async ({ page }) => {
+    // 区分の名前が変わったときに黙って空振りしないよう、対象が在ることを先に確かめる
+    expect(guardedSections.map((section) => section.label)).toContain('運用管理')
+
+    await mockApi(page, [{ path: '*/api/auth/me', body: noOperationOperator }])
+    await page.goto('/')
+
+    await expectGuardedSectionsHidden(page)
+  })
+
+  test('[LAY-17] 操作者を取得できないときは運用管理の区分を出さない', async ({ page }) => {
+    await mockApi(page, [
+      { path: '*/api/auth/me', status: 500, body: { detail: 'サーバーでエラーが発生しました。' } },
+    ])
+    await page.goto('/')
+
+    await expectGuardedSectionsHidden(page)
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+  })
+
+  test('[LAY-18] マスタ更新権限だけが無いとマスタメンテの区分だけが出ない', async ({ page }) => {
+    // 全権限ありの管理責任者からマスタ更新権限だけを外す（運用管理は出たままになることで切り分ける）
+    const noMasterOperator = {
+      ...supervisorOperator,
+      権限: { ...supervisorOperator.権限, master: false },
+    }
+    const masterSections = guardedSections.filter(
+      (section) => section.requiredPermission === 'master',
+    )
+    const shownSections = navSections.filter((section) => section.requiredPermission !== 'master')
+    // 区分の名前が変わったときに黙って空振りしないよう、対象が在ることを先に確かめる
+    expect(masterSections.map((section) => section.label)).toContain('マスタメンテ')
+    expect(shownSections.map((section) => section.label)).toContain('運用管理')
+
+    await mockApi(page, [{ path: '*/api/auth/me', body: noMasterOperator }])
+    await page.goto('/')
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    // 残る区分が描かれてから「無い」を見る（読み込み前の空振りで通らないように）
+    for (const section of shownSections) {
+      await expect(nav.getByRole('heading', { name: section.label, exact: true })).toBeVisible()
+    }
+    for (const section of masterSections) {
+      await expect(nav.getByRole('heading', { name: section.label, exact: true })).toHaveCount(0)
+      for (const item of section.items) {
+        await expect(nav.getByRole('link', { name: item.label, exact: true })).toHaveCount(0)
+      }
+    }
+    await expect(nav.getByRole('link')).toHaveCount(
+      shownSections.flatMap((section) => section.items).length,
+    )
   })
 })

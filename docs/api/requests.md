@@ -15,13 +15,14 @@
 | 2 | **約定照会の API**（`/executions` 系: 検索・CSV 出力）と **注文訂正**（`/orders/{order_id}/amend` 相当。`dream-correct` は Dream 用） | 約定照会 / 注文照会（訂正）/ みずほ注文締 | 24.0 | 同上 | 依頼中 | 2026-09-17 |
 | 3 | **レスポンスの中身が未定義**: `/codes` / `/mizuho/*` / `GET /orders/{order_id}` / `/branches` / `/handlers` / `/customers`（注文画面用）/ `/batch/*` | 新規注文 / 顧客詳細 / みずほ注文締 / 滞留注文抽出 | 16.0 | `src/mocks/` の仮フィクスチャで進める | 依頼中 | 2026-09-16 |
 | 4 | **権限マスタをフロント側で仕様の形に合わせ直す**（依頼ではなく**フロントの作業**）。`/masters/permissions` は 2026-09-18 の取り込みで GET / PUT / history が入ったが、**形が違う**: 仕様は `RolePermissionItem`（日本語キー・`発注権限` / `マスタ更新権限` / `運用管理権限` の 3 権限 + `全店参照権限`）、フロントは画面モック由来（英語キー・`can_order` / `can_master_update` / `can_order_stop` / `can_activity_log_view` / `can_admin_function` の 5 権限）。**仕様を正とすることで確定（2026-09-25）**。あわせて `RolePermissionUpdateRequest` / `OperatorUpsertRequest` の `実行者` だけ description が空（`SuspendRequest` ほかは「未指定時は認証情報から解決」）。フロントは送らず `X-User-Code` に任せるので同じ扱いでよいか確認 | 権限マスタ / アクセス制御 | 12.0 | **フロントは 2026-09-25 に追随済み**。画面・api 層・fixture を `RolePermissionItem` の 4 権限に張り替え、保存を `PUT /masters/permissions/{role_code}` に繋いだ。モックの「操作ログ閲覧」「管理者機能」は画面から外した。`KNOWN_GAPS` の行も外した | **解消（2026-09-25・フロントが追随）**。`実行者` の扱いのみ問合せ中 | 2026-09-18 |
-| 1 | **滞留注文抽出の API と操作ログの項目**: ① **滞留注文抽出の一覧。二択で回答がほしい**: (a) `GET /operations/stalled-orders` を足す（形は `src/mocks/fixtures/stalledOrders.js`。注文エラー / 注文中の 2 配列）、(b) 既存の `GET /orders` を拡張する —— `status` のカンマ区切り複数指定（2026-09-25 実測で `?status=101,003` は 400「指定できない処理状況です」）と、`OrderItemResponse` への `発注範囲名` / `確認状況` の追加（無いのはこの 2 つだけ）。(b) ならフロントが注文エラー・注文中を 2 回に分けて呼ぶ。`GET /orders/error-summary` は件数だけなので一覧には使えない。② **確認 CSV（TWS の約定コンファメーション）の取込**（`確認状況` を書き戻す口。`/mizuho/import-confirmation` はみずほの Excel 用で別物）。**CSV 出力 2 種（別システム発注 CSV・サンプル）は一覧データからフロントで生成する方針に変え、依頼から外した**。③ 操作ログの**項目**（操作者名・実行者区分・対象機能・操作内容・結果。2026-09-24 に画面を `ActivityLogItem` の形へ張り替え、この 5 項目は画面から外して fixture にだけ提案として残した。絞り込みクエリ `feature` / `action` / `actor_group` / `result` は送るのをやめた）。お知らせ管理と障害管理は 2026-09-24 に解消（下の「解消済み」） | 滞留注文抽出 / 操作ログ | 6.5（一覧 3.0 + 確認取込 3.5。CSV 出力・サンプル 2 種の 10.5 はフロントで消化） | **fixture を契約提案として先に書き**、3 軸を埋める（`src/mocks/fixtures/` の生の形がそのまま提案書）。CSV 出力はフロント生成で実装する（`StalledOrderListView.vue` の TODO） | 依頼中 | 2026-09-17 |
+| 1 | **滞留注文抽出の API と操作ログの項目**: ① **滞留注文抽出の一覧。二択で回答がほしい**: (a) `GET /operations/stalled-orders` を足す（形は `src/mocks/fixtures/stalledOrders.js`。注文エラー / 注文中の 2 配列）、(b) 既存の `GET /orders` を拡張する —— `status` のカンマ区切り複数指定（2026-09-25 実測で `?status=101,003` は 400「指定できない処理状況です」）と、`OrderItemResponse` への `発注範囲名` / `確認状況` の追加（無いのはこの 2 つだけ）。(b) ならフロントが注文エラー・注文中を 2 回に分けて呼ぶ。`GET /orders/error-summary` は件数だけなので一覧には使えない。② **確認 CSV（TWS の約定コンファメーション）の取込**（`確認状況` を書き戻す口。`/mizuho/import-confirmation` はみずほの Excel 用で別物）。**2026-09-28 にフロントが形を提案した**（下の「契約提案: コンファメーション CSV の取込」。パス・項目名 `file`・応答は既存の `CsvImportResponse`）。この形でよいか、`confirmation_status` の値の体系とあわせて回答がほしい。**CSV 出力 3 種（別システム発注 CSV・発注サンプル・コンファメーションのサンプル）は一覧データからフロントで生成する方針に変え、依頼から外した**（2026-09-28 実装済み）。③ 操作ログの**項目**（操作者名・実行者区分・対象機能・操作内容・結果。2026-09-24 に画面を `ActivityLogItem` の形へ張り替え、この 5 項目は画面から外して fixture にだけ提案として残した。絞り込みクエリ `feature` / `action` / `actor_group` / `result` は送るのをやめた）。お知らせ管理と障害管理は 2026-09-24 に解消（下の「解消済み」） | 滞留注文抽出 / 操作ログ | 6.5（一覧 3.0 + 確認取込 3.5。CSV 出力・サンプル 2 種の 10.5 はフロントで消化済み） | **fixture を契約提案として先に書き**、3 軸を埋める（`src/mocks/fixtures/` の生の形がそのまま提案書）。一覧の応答キーは依頼書に合わせて `注文エラー` / `注文中`。CSV 出力とサンプル 2 種はフロント生成で実装済み（`src/utils/stalledOrderCsv.js`）。取込は MSW のハンドラ（`src/mocks/handlers/stalledOrders.js`）が提案の形で応答し、契約テストの `KNOWN_GAPS` に一覧と取込の 2 パスを載せてある | 依頼中 | 2026-09-17 |
 | 1-b | **操作ログの `操作区分` の値の体系**: 仕様の `operation` は CREATE / UPDATE / DELETE / BATCH、画面は「業務操作 / マスタ更新 / 運用管理」。いまは**名前だけ合わせて値はそのまま**送っている | 操作ログ | （#1 に含む） | 画面を仕様の値（CREATE / UPDATE / DELETE / BATCH）に合わせた | **解消（2026-09-24・フロントが追随）** | 2026-09-18 |
 | 13 | **残高マスタの画面項目 2 つを仕様に足す**: ~~① 一覧・更新の `売却不可区分`~~（**2026-09-25 の取り込みで解消**。下の「解消済み」）② 検索の **銘柄名**（`GET /masters/balance-adjustments` に `symbol_name` 相当のクエリが無い。実 API は無視するので絞り込みが黙って効かない） | 残高マスタ（一覧・検索 / 売却不可区分の切替） | 2.0 | `symbol_name` は送っている（MSW だけが解釈する）。契約テストの `KNOWN_GAPS` に載せてある。①は 2026-09-25 にフロントが追随した（専用の口へ張り替え、`KNOWN_GAPS` から外した）。実 API E2E（`BAR`）は銘柄名の絞り込みだけ解消まで保留 | 依頼中（②のみ） | 2026-09-24 |
 | 5 | **PUT / DELETE のパスキーの統一** → **ID に統一で確定**（下の「解消済み」を参照）。残るのは**ロール権限（`role_code`）とユーザ（`operator_code`）の 2 つだけ**で、この 2 つは業務コードが主キーのまま・DELETE のオペレーション自体が無い。**削除をどう表現するか**（論理削除の PUT で代替するのか、DELETE を足すのか）は未回答 | 権限マスタ / ユーザマスタ | 1.0 | 削除の導線を作らない（一覧・登録・変更まで） | **解消（2026-09-25・要件で確定）**: ロール権限は Web 画面に削除の導線が無く、ユーザは管理画面で管理しないので削除も無い。DELETE が無いままでよく、バックエンドへの問い合わせは不要 | 2026-09-17 |
 | 8 | **`/masters/customers` の検索クエリ追加**: `handler_code` / `restriction` / `account_type` / `corporate_type`。画面モックにある検索条件で、いまは実 API が無視する（絞り込みが黙って効かない） | 顧客マスタ（一覧・検索） | 1.0 | 送っている（実 API は無視する）。契約テストの `KNOWN_GAPS` に載せてある | 依頼中 | 2026-09-14 |
 | 19 | **`GET /masters/symbols` の `symbol` を Ticker にも当ててほしい**: 2026-09-25 実測で `?symbol=AAPL`（Ticker）は 0 件、`?symbol=A0030`（銘柄コード）と `?ticker=AAPL` は 1 件。同じ `AAPL` を `/masters/ca?symbol=` は 3 件、`/masters/balance-adjustments?symbol=` は 5 件返す（description も「銘柄コードまたはTicker」）。**銘柄マスタだけ挙動が違う**。画面の検索欄「銘柄コード・ティッカーコード」は `symbol` に乗せるので、Ticker 検索が実 API で黙って 0 件になる。当てない方針ならその回答をもらい、フロントが検索欄を分ける（`ticker` は効いている） | 銘柄マスタ（一覧・検索） | 1.0 | 検索欄 1 つのまま。MSW は銘柄コードと Ticker の両方に当てるので E2E `SM-03` は通る（`src/mocks/handlers/symbols.js`）。実 API E2E を書くときは Ticker 検索を保留にする | 依頼中 | 2026-09-25 |
 | 20 | **`POST /masters/balance-adjustments` の `銘柄コード` に Ticker を受けるか**: 画面の新規追加はティッカー入力をそのまま `銘柄コード` に載せる。2026-09-25 実測で `POST …/validate` に `銘柄コード: "AAPL"` は「指定された銘柄コードが存在しません: AAPL」、`"A0030"` は通る（`details` に `Ticker: AAPL` が付く）。**実装済みの「残高マスタ / 新規」が実 API では必ず失敗する**。バックエンドで Ticker も受けるか、フロントが `GET /masters/symbols?ticker=` で銘柄コードに引き直してから送るかの二択 | 残高マスタ（新規追加） | 1.0 | フロント側の追随でも解消できる。10/15 の実 API スモークまでにどちらかに決める（回答が無ければフロントで引き直す） | 要判断 | 2026-09-25 |
+| 22 | **みずほ注文締の画面項目 4 つ**: ① `ExecutionSummary` に**一部出来の件数**が無い（画面モックの件数カード「一部出来」）② `ExecutionItem` に**円貨の約定金額**が無い（約定代金は USD のみ。モックの列「約定金額(円)」）③ `GET /executions` の `status` は処理状況コードを 1 つしか受け取らず、**取消済（出来有）で絞れない**（取消済は `032` / `034` の 2 つ。カンマ区切りを受けるか、出来状況の区分で絞るクエリがほしい）④ **締め・締め解除の履歴を返す口が無い**（`ClosingStatusResponse` は最後の 1 回の 更新日時 / 実行者 だけ。モックは「状態変更履歴」を並べる） | みずほ注文締（検索・結果一覧 / 注文締め・締め解除） | 1.0 | ①②は `—` を出す。③は `status` を送らない（E2E `MZ-17` を保留）。④は最後の 1 回だけを 1 行で出す（`src/api/mizuhoExecutions.js` / `src/api/closing.js` の冒頭コメント） | 依頼中 | 2026-09-28 |
 | 14 | **全体停止中にルート単位の停止・再開を受け付けるか**: `POST /operations/order-suspensions/suspend` の description は「全体停止はルート単位の停止に優先」とだけ書き、全体停止中にルートを操作したときの応答（受け付ける / 400）が無い | 障害管理（停止・再開） | 1.0 | 画面は**全体停止中はルート行のボタンを押せなくする**（誤操作防止。`IN-23` / `INV-21`）。サーバが受け付けるかは見ていない | 問合せ中 | 2026-09-24 |
 | 10 | **再有効化の ID**: 取消済みの休場日 / 受注不可日を登録し直したとき、元の行の ID を引き継ぐのか新しく採番するのか | 海外休場日 / 受注不可日（新規追加） | 0.5 | モックの挙動（元の ID を引き継ぐ）が実 API と一致していた。実 API E2E（`MR-07` / `MR-08`）は**どちらでも通る**書き方のまま置く（「id が付いていること」だけを見る） | **解消（2026-09-18・海外休場日で実測）** | 2026-09-17 |
 | 17 | **スライス基準マスタの更新が最新の `更新日時` を送っても 409 になる**（退行）: `GET /masters/hard-limits` で取った `更新日時`（`2026-08-26T00:00:00`）をそのまま添えた `PUT /masters/hard-limits` が「他のユーザーによってスライス設定が更新されました」の 409 を返す。画面からの保存も、テストの API 直叩きも同じ。2026-09-17 から実 API E2E `SCR-03` は通っており、フロント・テストとも変更なし。バックエンドの 2026-09-24 の変更（Phase 39〜45）以降に出たと見ている。楽観ロックで比べる値が GET の返す値とずれていないか確認してほしい | スライス基準マスタ（設定変更） | 0.5 | 手を入れない（フロント側で回避すると楽観ロックの意味が無くなる）。実 API E2E `SCR-03` 以降は失敗のまま置き、朝の点検で解消を見る。2026-09-28 の朝の点検でも再現（`SCR-03` の最初の PUT が同じ 409） | 依頼中 | 2026-09-25 |
@@ -31,6 +32,40 @@
 | 16 | **発注再開に理由を残すか**: `ResumeRequest` に理由の項目が無く、履歴には「誰がいつ再開したか」しか残らない（停止理由は再開後も直前の値を保持する）。障害報告で再開の判断根拠を残す要件があるか | 障害管理（再開） | 0 | 再開のダイアログは理由を取らず、停止時の理由・日時・停止者を読み取り専用で見せる | 問合せ中 | 2026-09-24 |
 | 21 | **`limit` の無い一覧・履歴 4 本に `limit`（1〜200・既定 50）を足してほしい**: `GET /masters/blackout-dates`・`GET /customers`（注文画面用）・`GET /masters/customers/{account_id}/history`・`GET /masters/blackout-dates/{blackout_date_id}/history` は `offset` だけ。2026-09-25 実測で `?limit=2` は無視される（受注不可日は応答が `limit: 50`、`/customers` は 50 行）。他の一覧・履歴はすべて `limit` を持つ | 受注不可日マスタ（一覧）/ 新規注文（顧客検索） | 0 | 受注不可日は 50 件固定に合わせてある（`src/api/blackoutDates.js`・`src/stores/blackoutDates.js`）。**一覧の件数はフロントが決めて `limit` で送る方針に確定（2026-09-28）**。全画面の件数は `src/utils/pagination.js` の `DEFAULT_PAGE_SIZE` で変えるが、受注不可日だけはこれに従えず 50 のまま残る | 依頼中（2026-09-25 に一度取り下げ、2026-09-28 に再依頼。件数をフロント管理にしたため必要になった） | 2026-09-25 |
 | 11 | **手数料優遇マスタの要件**: モック自体が「設定内容は要件整理中」 | 手数料優遇マスタ | 4.0 | 着手しない | 要件待ち | 2026-09-17 |
+
+## 契約提案: コンファメーション CSV の取込（#1 ②）
+
+2026-09-28 にフロントが先に形を決め、MSW（`src/mocks/handlers/stalledOrders.js`）と
+`src/api/stalledOrders.js` の `importConfirmationCsv` をこの形で実装した。バックエンドが同じ形で作れば
+ハンドラを消すだけで切り替わる。違う形になるなら `src/api/` の変換だけを直す。
+
+```text
+POST /operations/stalled-orders/confirmation-import
+Content-Type: multipart/form-data
+  file: コンファメーション CSV（UTF-8。BOM の有無はどちらも可）
+
+200 → 既存の CsvImportResponse をそのまま使う
+  { success, total_count, success_count, error_count, errors: CsvImportErrorItem[], message }
+  CsvImportErrorItem = { line_number, errors: string[], row_data: { order_id, ... } }
+400 → 空ファイル・ヘッダ不一致・データ行なし（detail）
+422 → file 欠落（FastAPI の検証エラー）
+```
+
+CSV の列は公開モックのサンプル実物のとおり:
+
+```text
+order_id,confirmation_ref,confirmation_status,filled_quantity,average_price,confirmed_at,message
+6,TWS-20260904-0006,CANCELLED,0,0,2026-09-04 10:15:00,TWSで取消確認
+```
+
+| 論点 | 提案 | 理由 |
+|---|---|---|
+| パス | モックのとおり `/operations/stalled-orders/confirmation-import` | 一覧と同じ配下に置く |
+| 項目名 | モックの `confirmation_file` ではなく `file` | 既存の `/masters/*/import-csv` と揃え、取込の部品を流用しやすくする |
+| `confirmation_status` の値 | `FILLED`（約定）/ `CANCELLED`（取消）→ 滞留一覧から除外。`WORKING`（注文中）/ `PARTIALLY_FILLED`（一部約定）→ 注文中へ移す | モックのサンプルに出るのは `CANCELLED` だけ。**残りの値の体系を確認したい** |
+| 行エラーの扱い | 1 行でも不備があれば **1 行も反映しない**（`success: false`・`success_count: 0`） | 直した CSV を丸ごと取り込み直せるようにするため（一部だけ反映されると、どの行を除いて再取込するかを人が判断することになる） |
+| 行の不備の例 | 滞留一覧に無い注文 ID / 知らない `confirmation_status` / 同じ注文 ID の重複 | MSW が返すもの。文言はサーバが決めてよい（画面は `errors` をそのまま出す） |
+| 成功の文言 | サーバが `message` で返す | 画面は `message` をそのまま出し、自前で組み立てない（障害管理と同じ方針） |
 
 ## 未使用の API / パラメータ（2026-09-25 棚卸し）
 

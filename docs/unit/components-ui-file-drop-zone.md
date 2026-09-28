@@ -13,3 +13,4 @@
 | FDZ-05 | ドラッグ中 | 領域から離れる | `data-dragover` が `false` に戻る | 実装済 |
 | FDZ-06 | `accept=".csv"` を渡す | マウントする | ファイル入力の `accept` が `.csv` になる | 実装済 |
 | FDZ-07 | `hint` を渡す | マウントする | 補助文が表示される | 実装済 |
+| FDZ-08 | `v-model` に File を渡した状態 | `modelValue` を null に戻す | 隠しの input の `value` が空に戻る（同じファイルを選び直しても `change` が発火するように）。jsdom の file input は value を観測しづらいので、`value` の setter に渡された値で見る | 実装済 |

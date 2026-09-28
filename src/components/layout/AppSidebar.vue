@@ -6,8 +6,9 @@
  * 開閉状態は自分では持たず、所有者（AppLayout）から open で受け取る。
  * 押し出し式なので、閉じると板ごと画面外へ出て本文が全幅になる。
  *
- * permission を持つ区分は、ログイン中の操作者がその権限を持つときだけ出す。
- * 操作者の読み込みが終わるまでは出さない（権限の無い人に一瞬見せないため。読めたら現れる）。
+ * 権限の要る区分（requiredPermission）は、その権限を持つ利用者にだけ出す。
+ * /auth/me を読み終えるまでは持っていない扱いにする（出てから消えるちらつきを防ぐ）。
+ * 読み込みを始めるのは main.js で、ここは結果を見るだけ。画面そのものの制限は router の permissionGuard。
  */
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -23,11 +24,11 @@ defineProps({
   },
 })
 
-const operatorStore = useCurrentOperatorStore()
+const operator = useCurrentOperatorStore()
 
 const visibleSections = computed(() =>
   navSections.filter(
-    (section) => !section.permission || operatorStore.hasPermission(section.permission),
+    (section) => !section.requiredPermission || operator.can(section.requiredPermission),
   ),
 )
 </script>

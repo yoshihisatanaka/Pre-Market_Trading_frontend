@@ -5,6 +5,7 @@
  * この API はバックエンド未実装（openapi.json に該当パスが無い）。形は実 API の
  * `OrderItemResponse` に寄せた仮置きで、プロパティ名が日本語なのもそれに合わせたもの。
  * 実装されたら openapi.json の example でこのファイルを起こし直す。
+ * 応答は下の 2 本を `{ 注文エラー: [...], 注文中: [...] }` に包んだ形（バックエンドへ渡した依頼書と同じ）。
  *
  * 行の値は公開モック（https://uspreorder-vmbhej3k.manus.space/operations/stalled-orders）の
  * 一覧そのまま。件数も 注文エラー 3 件 / 注文中 2 件 でモックと 1:1 にしてある

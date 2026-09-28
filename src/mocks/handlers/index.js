@@ -13,8 +13,10 @@ import { permissionHandlers, resetPermissionRows } from './permissions'
 import { marketStatusHandlers } from './marketStatus'
 import { announcementHandlers, resetAnnouncementState } from './announcements'
 import { bannerHandlers } from './banner'
-import { stalledOrderHandlers } from './stalledOrders'
+import { stalledOrderHandlers, resetStalledOrderState } from './stalledOrders'
 import { incidentHandlers, resetIncidentState } from './incidents'
+import { mizuhoExecutionHandlers } from './mizuhoExecutions'
+import { closingHandlers } from './closing'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -73,6 +75,7 @@ export function resetMockState() {
   resetSliceCriteriaRow()
   resetPermissionRows()
   resetAnnouncementState()
+  resetStalledOrderState()
   resetIncidentState()
 }
 
@@ -102,4 +105,6 @@ export const handlers = [
   ...bannerHandlers,
   ...stalledOrderHandlers,
   ...incidentHandlers,
+  ...mizuhoExecutionHandlers,
+  ...closingHandlers,
 ]

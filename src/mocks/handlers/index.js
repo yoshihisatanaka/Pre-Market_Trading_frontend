@@ -15,6 +15,8 @@ import { announcementHandlers, resetAnnouncementState } from './announcements'
 import { bannerHandlers } from './banner'
 import { stalledOrderHandlers } from './stalledOrders'
 import { incidentHandlers, resetIncidentState } from './incidents'
+import { mizuhoExecutionHandlers } from './mizuhoExecutions'
+import { closingHandlers } from './closing'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -101,4 +103,6 @@ export const handlers = [
   ...bannerHandlers,
   ...stalledOrderHandlers,
   ...incidentHandlers,
+  ...mizuhoExecutionHandlers,
+  ...closingHandlers,
 ]

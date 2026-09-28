@@ -31,6 +31,8 @@ import {
   noticeBannerResponse,
 } from '../mocks/fixtures/banner'
 import { suspensionHistories, suspensionTargets } from '../mocks/fixtures/incidents'
+import { mizuhoExecutions } from '../mocks/fixtures/mizuhoExecutions'
+import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '../mocks/fixtures/closing'
 import { fetchOrders } from './orders'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
@@ -67,11 +69,7 @@ import {
   updateBalanceAdjustment,
   updateBalanceSellProhibited,
 } from './balanceAdjustments'
-import {
-  fetchAnnouncement,
-  fetchAnnouncementHistory,
-  updateAnnouncement,
-} from './announcements'
+import { fetchAnnouncement, fetchAnnouncementHistory, updateAnnouncement } from './announcements'
 import { fetchBanner } from './banner'
 import {
   fetchSuspensionHistories,
@@ -79,6 +77,8 @@ import {
   resumeOrders,
   suspendOrders,
 } from './incidents'
+import { fetchMizuhoExecutions } from './mizuhoExecutions'
+import { fetchMizuhoClosingStatus } from './closing'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -303,6 +303,12 @@ const FIXTURES = [
   },
   { name: 'suspensionTargets', schema: 'SuspensionTargetItem', rows: suspensionTargets },
   { name: 'suspensionHistories', schema: 'SuspensionHistoryItem', rows: suspensionHistories },
+  { name: 'mizuhoExecutions', schema: 'ExecutionItem', rows: mizuhoExecutions },
+  {
+    name: 'closing',
+    schema: 'ClosingStatusResponse',
+    rows: [mizuhoClosingStatus, closedMizuhoClosingStatus],
+  },
 ]
 
 function describeSchema(schema) {
@@ -562,15 +568,34 @@ const PROBES = [
     name: 'updateAnnouncement',
     run: () => updateAnnouncement({ enabled: false, message: '', updatedAt: '' }),
   },
-  { name: 'fetchAnnouncementHistory', run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }) },
+  {
+    name: 'fetchAnnouncementHistory',
+    run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }),
+  },
   { name: 'fetchBanner', run: () => fetchBanner() },
   { name: 'fetchSuspensionStatus', run: () => fetchSuspensionStatus() },
-  { name: 'fetchSuspensionHistories', run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }) },
+  {
+    name: 'fetchSuspensionHistories',
+    run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }),
+  },
   {
     name: 'suspendOrders',
     run: () => suspendOrders({ target: '1', reason: 'x', updatedAt: null }),
   },
   { name: 'resumeOrders', run: () => resumeOrders({ target: '1', updatedAt: null }) },
+  {
+    name: 'fetchMizuhoExecutions',
+    run: () =>
+      fetchMizuhoExecutions({
+        branchCode: '123',
+        symbol: 'AAPL',
+        side: '3',
+        fillStatus: 'filled',
+        dateFrom: '2026-09-01',
+        dateTo: '2026-09-30',
+      }),
+  },
+  { name: 'fetchMizuhoClosingStatus', run: () => fetchMizuhoClosingStatus() },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

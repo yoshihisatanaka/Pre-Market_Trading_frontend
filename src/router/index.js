@@ -84,6 +84,13 @@ const routes = [
     meta: { title: '操作ログ' },
   },
   {
+    // 公開モックのパスどおり。約定照会（/executions）の配下に置かれている
+    path: '/executions/mizuho-operations',
+    name: 'mizuho-operations',
+    component: () => import('@/views/MizuhoOperationsView.vue'),
+    meta: { title: 'みずほ注文締' },
+  },
+  {
     path: '/operations/incidents',
     name: 'incident-management',
     component: () => import('@/views/IncidentManagementView.vue'),

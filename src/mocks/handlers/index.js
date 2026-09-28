@@ -18,6 +18,7 @@ import { incidentHandlers, resetIncidentState } from './incidents'
 import { mizuhoExecutionHandlers } from './mizuhoExecutions'
 import { closingHandlers } from './closing'
 import { executionHandlers } from './executions'
+import { dreamStatusHandlers } from './dreamStatus'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -110,4 +111,5 @@ export const handlers = [
   ...mizuhoExecutionHandlers,
   ...closingHandlers,
   ...executionHandlers,
+  ...dreamStatusHandlers,
 ]

@@ -41,6 +41,7 @@ import { mizuhoExecutions } from '../mocks/fixtures/mizuhoExecutions'
 import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '../mocks/fixtures/closing'
 import { executions } from '../mocks/fixtures/executions'
 import { orderInquiryRows } from '../mocks/fixtures/orderInquiry'
+import { dreamOrders, dreamStatusCodes } from '../mocks/fixtures/dreamStatus'
 import { fetchOrders } from './orders'
 import { fetchOrderInquiry } from './orderInquiry'
 import { fetchCodes } from './codes'
@@ -89,6 +90,7 @@ import {
 import { fetchMizuhoExecutions } from './mizuhoExecutions'
 import { fetchMizuhoClosingStatus } from './closing'
 import { fetchExecutions } from './executions'
+import { fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -333,6 +335,8 @@ const FIXTURES = [
   },
   { name: 'executions', schema: 'ExecutionItem', rows: executions },
   { name: 'orderInquiry', schema: 'OrderItemResponse', rows: orderInquiryRows },
+  { name: 'dreamOrders', schema: 'DreamOrderItem', rows: dreamOrders },
+  { name: 'dreamStatusCodes', schema: 'DreamStatusCodeItem', rows: dreamStatusCodes },
 ]
 
 function describeSchema(schema) {
@@ -661,6 +665,20 @@ const PROBES = [
         route: '1',
       }),
   },
+  {
+    name: 'fetchDreamOrders',
+    run: () =>
+      fetchDreamOrders({
+        branchCode: '123',
+        accountNumber: '123456',
+        symbol: 'AAPL',
+        status: 'ERROR',
+        dateFrom: '2026-09-01',
+        dateTo: '2026-09-30',
+        receiptNumber: 'DR-20260928-0002',
+      }),
+  },
+  { name: 'fetchDreamStatusCodes', run: () => fetchDreamStatusCodes() },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

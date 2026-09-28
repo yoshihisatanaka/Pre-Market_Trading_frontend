@@ -4,8 +4,9 @@ import { permissionGuard } from './permissionGuard'
 
 /*
  * meta.requiredPermission を付けたルートは、その権限（GET /auth/me の権限）が無いと開けない
- * （permissionGuard）。運用管理の 4 画面は operation。サイドメニューの区分の出し分け
- * （navigation.js の requiredPermission）と必ず揃える。メニューだけ隠しても URL で入れてしまう。
+ * （permissionGuard）。運用管理の 4 画面は operation、**マスタメンテ（/masters/*）は全画面 master**
+ * （2026-09-28 決定）。サイドメニューの区分の出し分け（navigation.js の requiredPermission）と
+ * 必ず揃える。メニューだけ隠しても URL で入れてしまう（付け忘れは router/index.spec.js が検出する）。
  */
 const routes = [
   {
@@ -27,49 +28,49 @@ const routes = [
     path: '/masters/customers',
     name: 'customer-list',
     component: () => import('@/views/CustomerListView.vue'),
-    meta: { title: '顧客マスタ' },
+    meta: { title: '顧客マスタ', requiredPermission: 'master' },
   },
   {
     path: '/masters/permissions',
     name: 'permission-list',
     component: () => import('@/views/PermissionListView.vue'),
-    meta: { title: '権限マスタ' },
+    meta: { title: '権限マスタ', requiredPermission: 'master' },
   },
   {
     path: '/masters/market-holidays',
     name: 'market-holiday-list',
     component: () => import('@/views/MarketHolidayListView.vue'),
-    meta: { title: '海外休場日マスタ' },
+    meta: { title: '海外休場日マスタ', requiredPermission: 'master' },
   },
   {
     path: '/masters/blackout-dates',
     name: 'blackout-date-list',
     component: () => import('@/views/BlackoutDateListView.vue'),
-    meta: { title: '受注不可日マスタ' },
+    meta: { title: '受注不可日マスタ', requiredPermission: 'master' },
   },
   {
     path: '/masters/symbols',
     name: 'symbol-list',
     component: () => import('@/views/SymbolListView.vue'),
-    meta: { title: '銘柄マスタ' },
+    meta: { title: '銘柄マスタ', requiredPermission: 'master' },
   },
   {
     path: '/masters/ca',
     name: 'corporate-action-list',
     component: () => import('@/views/CorporateActionListView.vue'),
-    meta: { title: 'CAマスタ' },
+    meta: { title: 'CAマスタ', requiredPermission: 'master' },
   },
   {
     path: '/masters/hard-limits',
     name: 'slice-criteria-master',
     component: () => import('@/views/SliceCriteriaMasterView.vue'),
-    meta: { title: 'スライス基準マスタ' },
+    meta: { title: 'スライス基準マスタ', requiredPermission: 'master' },
   },
   {
     path: '/masters/balance-adjustments',
     name: 'balance-adjustment-list',
     component: () => import('@/views/BalanceAdjustmentListView.vue'),
-    meta: { title: '残高マスタ' },
+    meta: { title: '残高マスタ', requiredPermission: 'master' },
   },
   {
     // モックは /executions/ だが、ルートは末尾スラッシュ無しで統一する（navigation.js と同じ）
@@ -136,4 +137,6 @@ router.afterEach((to) => {
   document.title = to.meta.title ? `${to.meta.title} | US Stock Order` : 'US Stock Order'
 })
 
+// ルート定義の検査（/masters/* の requiredPermission の付け忘れ）に使う
+export { routes }
 export default router

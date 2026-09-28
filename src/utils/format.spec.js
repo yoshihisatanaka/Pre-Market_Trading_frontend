@@ -13,12 +13,14 @@ import { formatDateTime, formatQuantity, formatUsd, formatUsdUnit } from './form
 const BLANKS = [null, undefined, Number.NaN]
 
 describe('format', () => {
-  it('[FMT-01] 米ドルを通貨記号付き・小数 2 桁で整形する', () => {
-    expect(formatUsd(227.16)).toBe('$227.16')
+  it('[FMT-01] formatUsd も単位を後置し、通貨記号を前置しない', () => {
+    // 2026-09-28 に全画面で単位の後置に揃え、formatUsd は formatUsdUnit の別名になった
+    expect(formatUsd(227.16)).toBe('227.16 ドル')
+    expect(formatUsd(227.16)).toBe(formatUsdUnit(227.16))
   })
 
   it('[FMT-02] 0 ドルは空値にしない', () => {
-    expect(formatUsd(0)).toBe('$0.00')
+    expect(formatUsd(0)).toBe('0.00 ドル')
   })
 
   it('[FMT-03] formatUsd の空値は — になる', () => {

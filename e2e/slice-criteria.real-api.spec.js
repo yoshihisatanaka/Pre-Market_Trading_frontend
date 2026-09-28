@@ -93,7 +93,7 @@ async function openView(page) {
   await assertRealApi(page)
 }
 
-/** 「1.00%」「20,000 株」「USD 300,000」から数値だけを取り出す */
+/** 「1.00%」「20,000 株」「300,000.00 ドル」から数値だけを取り出す */
 function numberFrom(text) {
   return Number(text.replace(/[^0-9.]/g, ''))
 }

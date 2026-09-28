@@ -33,6 +33,8 @@ export const navSections = [
   },
   {
     label: 'マスタメンテ',
+    // マスタ更新権限が無い操作者には全項目を出さない（2026-09-28 決定）
+    requiredPermission: 'master',
     items: [
       { label: '顧客マスタ', to: '/masters/customers' },
       { label: '権限マスタ', to: '/masters/permissions' },

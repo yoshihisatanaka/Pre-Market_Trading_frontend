@@ -10,7 +10,7 @@ import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
 import { useSliceCriteriaStore } from '@/stores/sliceCriteria'
-import { formatQuantity } from '@/utils/format'
+import { formatQuantity, formatUsdUnit } from '@/utils/format'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useSliceCriteriaStore()
@@ -36,11 +36,6 @@ function toPercent(ratio) {
 
 function toRatio(percentInput) {
   return Math.round(Number(percentInput) * 100) / 10000
-}
-
-// 金額は $1,000,000.00 ではなく画面モックの「USD 1,000,000」表記に合わせるため formatUsd は使わない
-function formatUsdAmount(value) {
-  return `USD ${formatQuantity(value)}`
 }
 
 /*
@@ -156,7 +151,8 @@ store.load()
             <dt class="slice-criteria__term">1注文あたり金額 上限</dt>
             <dd class="slice-criteria__detail">
               <span class="slice-criteria__value" data-testid="slice-criteria-amount">
-                {{ formatUsdAmount(settings.maxAmount) }}
+                <!-- 画面モックは「USD 1,000,000」だが、全画面共通の単位後置（1,000,000.00 ドル）に揃える -->
+                {{ formatUsdUnit(settings.maxAmount) }}
               </span>
               <span class="slice-criteria__note">価格 × 数量で判定</span>
             </dd>

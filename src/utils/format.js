@@ -1,9 +1,3 @@
-const usd = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-})
-
 const decimal = new Intl.NumberFormat('ja-JP')
 
 // 通貨記号ではなく「ドル」を後ろに置く表記用。金額なので小数第 2 位まで固定する
@@ -28,19 +22,13 @@ const monthDayTime = new Intl.DateTimeFormat('ja-JP', {
   minute: '2-digit',
 })
 
-/**
- * 米ドル建ての価格を表示用に整形する（`$1,234.56`）。
- * 通貨記号を前置する注文系の画面向け。単位を後置する画面は formatUsdUnit を使う。
+/*
+ * 金額は全画面で「数字 + 半角スペース + 単位」に揃える（2026-09-28 決定）。
+ * 円は「1,200,000 円」、ドルは「2,999.00 ドル」。通貨記号（$ / ¥ / USD）を前置しない。
  */
-export function formatUsd(value) {
-  if (value === null || value === undefined || Number.isNaN(value)) return '—'
-  return usd.format(value)
-}
 
 /**
  * 米ドル建ての価格を「227.16 ドル」の形に整形する。
- *
- * 通貨記号で出す formatUsd との違いは見た目だけで、どちらを使うかは画面の指定で決まる。
  */
 export function formatUsdUnit(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
@@ -48,9 +36,16 @@ export function formatUsdUnit(value) {
 }
 
 /**
- * 円建ての金額を「3,500,000 円」の形に整形する。
+ * formatUsdUnit と同じ（「227.16 ドル」）。
  *
- * 単位を後置する側の円版（formatUsdUnit と対になる）。マスタ系の一覧・編集で使う。
+ * かつては通貨記号を前置する（`$1,234.56`）注文系の画面向けだったが、全画面で単位の後置に
+ * 揃えたので中身を formatUsdUnit にした。名前を残すのは、並行して作業中のブランチの
+ * 呼び出しを壊さないため。**新しいコードは formatUsdUnit を使う。**
+ */
+export const formatUsd = formatUsdUnit
+
+/**
+ * 円建ての金額を「3,500,000 円」の形に整形する（formatUsdUnit と対になる）。
  */
 export function formatJpyUnit(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'

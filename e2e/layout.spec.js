@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { navItems, navSections } from '../src/components/layout/navigation'
-import { noOperationOperator } from '../src/mocks/fixtures/currentOperator'
+import { noOperationOperator, supervisorOperator } from '../src/mocks/fixtures/currentOperator'
 import { closedMarketStatusResponse } from '../src/mocks/fixtures/marketStatus'
 import { mockApi } from './helpers/mockApi'
 
@@ -286,5 +286,38 @@ test.describe('共通レイアウト', () => {
 
     await expectGuardedSectionsHidden(page)
     await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+  })
+
+  test('[LAY-18] マスタ更新権限だけが無いとマスタメンテの区分だけが出ない', async ({ page }) => {
+    // 全権限ありの管理責任者からマスタ更新権限だけを外す（運用管理は出たままになることで切り分ける）
+    const noMasterOperator = {
+      ...supervisorOperator,
+      権限: { ...supervisorOperator.権限, master: false },
+    }
+    const masterSections = guardedSections.filter(
+      (section) => section.requiredPermission === 'master',
+    )
+    const shownSections = navSections.filter((section) => section.requiredPermission !== 'master')
+    // 区分の名前が変わったときに黙って空振りしないよう、対象が在ることを先に確かめる
+    expect(masterSections.map((section) => section.label)).toContain('マスタメンテ')
+    expect(shownSections.map((section) => section.label)).toContain('運用管理')
+
+    await mockApi(page, [{ path: '*/api/auth/me', body: noMasterOperator }])
+    await page.goto('/')
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    // 残る区分が描かれてから「無い」を見る（読み込み前の空振りで通らないように）
+    for (const section of shownSections) {
+      await expect(nav.getByRole('heading', { name: section.label, exact: true })).toBeVisible()
+    }
+    for (const section of masterSections) {
+      await expect(nav.getByRole('heading', { name: section.label, exact: true })).toHaveCount(0)
+      for (const item of section.items) {
+        await expect(nav.getByRole('link', { name: item.label, exact: true })).toHaveCount(0)
+      }
+    }
+    await expect(nav.getByRole('link')).toHaveCount(
+      shownSections.flatMap((section) => section.items).length,
+    )
   })
 })

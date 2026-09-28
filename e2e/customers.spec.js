@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { codeMasters } from '../src/mocks/fixtures/codes'
-import { customers } from '../src/mocks/fixtures/customers'
+import { canceledCustomers, customers } from '../src/mocks/fixtures/customers'
+import { CUSTOMER_FIELDS } from '../src/utils/customerFields'
 import { formatJpyUnit, formatUsdUnit } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
 
@@ -9,6 +10,8 @@ import { mockApi } from './helpers/mockApi'
 // mockApi() は固定の body を返すだけで offset や検索条件のクエリを解釈しない。
 // ページングと絞り込み（CU-02 / 03 / 04 / 06 / 07 / 08）は
 // クエリを実際に処理する既定ハンドラで検証する。
+// 追加・編集（CU-16〜22）も既定ハンドラに当てる。登録・更新した行はページ内でだけ保持され、
+// テストごとに新しいページなので持ち越さない。削除の導線は無い（CU-11）。
 
 const PATH = '/masters/customers'
 
@@ -31,8 +34,8 @@ const COLUMNS = [
   '円貨預り金',
   'USD預り金',
   '成長投資枠',
-  '米国株評価額',
-  '評価損益',
+  // 行ごとの操作（編集）。見出しは空
+  '',
 ]
 
 /*
@@ -88,6 +91,69 @@ function rowOf(page, customer) {
 /** 行の中の 1 セル。列名から位置を引く */
 function cellOf(row, column) {
   return row.locator('td').nth(COLUMNS.indexOf(column))
+}
+
+/* 追加・編集（CU-16〜22）で使う値。口座番号はどれもフィクスチャから導く */
+
+/** どのフィクスチャ（削除済みを含む）にも無い口座番号 */
+const NEW_ACCOUNT_NUMBER =
+  Math.max(...[...customers, ...canceledCustomers].map((customer) => customer.口座番号)) + 1
+const NEW_CUSTOMER_NAME = '新規 花子'
+/** 取消済み（論理削除）の口座。登録すると再有効化になる（CU-19） */
+const canceledCustomer = canceledCustomers[0]
+
+/** 新規追加で開いたとき値を持たない必須項目。入力欄の並び順（src/utils/customerFields.js） */
+const REQUIRED_BLANK_FIELDS = CUSTOMER_FIELDS.filter(
+  (field) => field.required && field.initial === undefined,
+)
+
+/** 必須の未入力エラーの文言（src/utils/customerFields.js の fieldError と同じ） */
+function requiredMessage(field) {
+  return field.control === 'select'
+    ? `${field.label}を選択してください。`
+    : `${field.label}を入力してください。`
+}
+
+// PUT が 409 を返すとき（CU-22）の detail。サーバの文言をそのまま出すことを見るための値
+const CONFLICT_MESSAGE =
+  '他のユーザーによって口座情報が更新されています。最新データを再取得してください。'
+
+/** ヘッダの「新規追加」でダイアログを開く */
+async function openAdd(page) {
+  await page.getByTestId('customers-add').click()
+  const dialog = page.getByRole('dialog', { name: '顧客 新規追加' })
+  await expect(dialog).toBeVisible()
+  return dialog
+}
+
+/** 行の「編集」でダイアログを開く */
+async function openEdit(page, customer) {
+  await page.getByTestId(`customers-edit-${customer.ID}`).click()
+  const dialog = page.getByRole('dialog', { name: '顧客 編集' })
+  await expect(dialog).toBeVisible()
+  return dialog
+}
+
+/**
+ * 新規追加のダイアログで、値を持たない必須項目をすべて埋める。
+ * 項目は増える前提なので、テストに並べ書きせず項目の表から埋める
+ * （プルダウンは空でない最初の選択肢、数値は下限、文字は仮の値）。
+ */
+async function fillRequired(dialog, { accountNumber, customerName }) {
+  const values = { accountNumber: String(accountNumber), customerName }
+  for (const field of REQUIRED_BLANK_FIELDS) {
+    const input = dialog.getByTestId(`customers-add-${field.testid}`)
+    if (field.control === 'select') {
+      const value = await input.locator('option:not([value=""])').first().getAttribute('value')
+      await input.selectOption(value)
+    } else if (field.key in values) {
+      await input.fill(values[field.key])
+    } else if (field.control === 'integer' || field.control === 'decimal') {
+      await input.fill(String(field.min ?? 0))
+    } else {
+      await input.fill('ﾃｽﾄ')
+    }
+  }
 }
 
 /** 行の背景色。CSS クラス名ではなく「見えかた」で確かめる（CU-10） */
@@ -265,23 +331,23 @@ test.describe('顧客マスタ一覧', () => {
     expect(markedColor).not.toBe(plainColor)
   })
 
-  test('[CU-11] 列順が仕様どおりで、評価額の列は空のまま行の操作も無い', async ({ page }) => {
+  test('[CU-11] 列順が仕様どおりで、行の操作は編集だけ・削除は無い', async ({ page }) => {
     await page.goto(PATH)
-    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    const rows = rowsOf(page)
+    await expect(rows).toHaveCount(PAGE_SIZE)
 
     const table = page.getByTestId('customers-table')
     await expect(table.locator('th')).toHaveText(COLUMNS)
-
-    // 値の出所が未定の 2 列は、見出しだけで中身を持たない
-    for (const column of ['米国株評価額', '評価損益']) {
-      await expect(table.locator(`td:nth-child(${COLUMNS.indexOf(column) + 1})`)).toHaveText(
-        Array(PAGE_SIZE).fill('—'),
-      )
+    // 2026-09-28 に外した列が戻っていない
+    for (const removed of ['米国株評価額', '評価損益']) {
+      await expect(table.getByRole('columnheader', { name: removed })).toHaveCount(0)
     }
 
-    // 読むだけの画面。追加の導線も行ごとの操作も持たない
-    await expect(page.getByTestId('customers-add')).toHaveCount(0)
-    await expect(rowsOf(page).first().getByRole('button')).toHaveCount(0)
+    await expect(page.getByTestId('customers-add')).toBeVisible()
+    // どの行もボタンは「編集」の 1 つだけ
+    await expect(table.getByRole('button', { name: '編集', exact: true })).toHaveCount(PAGE_SIZE)
+    await expect(rows.first().getByRole('button')).toHaveCount(1)
+    await expect(table.getByRole('button', { name: '削除' })).toHaveCount(0)
   })
 
   test('[CU-12] 金額は単位を後置し、欠損と 0 と年齢を書き分ける', async ({ page }) => {
@@ -368,5 +434,150 @@ test.describe('顧客マスタ一覧', () => {
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(rowsOf(page).first()).toContainText(String(firstRow.口座番号))
+  })
+
+  test('[CU-16] 新規追加すると成功メッセージが出て件数が 1 増える', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(page.getByTestId('customers-count')).toHaveText(`${TOTAL} 件`)
+
+    const dialog = await openAdd(page)
+    await fillRequired(dialog, {
+      accountNumber: NEW_ACCOUNT_NUMBER,
+      customerName: NEW_CUSTOMER_NAME,
+    })
+    await dialog.getByTestId('customers-add-submit').click()
+
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByTestId('customers-notice')).toHaveText(
+      `${NEW_ACCOUNT_NUMBER} ${NEW_CUSTOMER_NAME} を追加しました。`,
+    )
+    await expect(page.getByTestId('customers-count')).toHaveText(`${TOTAL + 1} 件`)
+
+    // 口座番号の昇順なので今のページに出るとは限らない。口座番号で引いて在ることを見る
+    await page.getByTestId('customers-account-number').fill(String(NEW_ACCOUNT_NUMBER))
+    await page.getByTestId('customers-search-submit').click()
+    await expect(page.getByTestId('customers-count')).toHaveText('1 件')
+    await expect(rowsOf(page)).toHaveCount(1)
+    await expect(rowsOf(page).first()).toContainText(NEW_CUSTOMER_NAME)
+  })
+
+  test('[CU-17] 必須を空のまま追加すると項目の直下にエラーが出て送られない', async ({ page }) => {
+    // 初期値を持たない必須項目が無いと、このシナリオは意味を失う
+    expect(REQUIRED_BLANK_FIELDS.length).toBeGreaterThan(0)
+
+    await page.goto(PATH)
+    const dialog = await openAdd(page)
+    await dialog.getByTestId('customers-add-submit').click()
+
+    // 値を持たない必須項目の分だけ、並び順どおりにエラーが出る（初期値のある必須項目には出ない）
+    await expect(dialog.getByRole('alert')).toHaveText(REQUIRED_BLANK_FIELDS.map(requiredMessage))
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('customers-notice')).toHaveCount(0)
+    await expect(page.getByTestId('customers-count')).toHaveText(`${TOTAL} 件`)
+  })
+
+  test('[CU-18] 登録済みの口座番号は事前検証で弾かれて登録されない', async ({ page }) => {
+    await page.goto(PATH)
+    const dialog = await openAdd(page)
+    await fillRequired(dialog, {
+      accountNumber: firstRow.口座番号,
+      customerName: NEW_CUSTOMER_NAME,
+    })
+    await dialog.getByTestId('customers-add-submit').click()
+
+    const reasons = dialog.getByTestId('customers-add-validation-error')
+    await expect(reasons).toContainText(String(firstRow.口座番号))
+    await expect(reasons.getByRole('listitem')).not.toHaveCount(0)
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('customers-notice')).toHaveCount(0)
+    await expect(page.getByTestId('customers-count')).toHaveText(`${TOTAL} 件`)
+  })
+
+  test('[CU-19] 取消済みの口座番号は警告のあと押し直すと登録される', async ({ page }) => {
+    expect(canceledCustomer).toBeDefined()
+
+    await page.goto(PATH)
+    const dialog = await openAdd(page)
+    await fillRequired(dialog, {
+      accountNumber: canceledCustomer.口座番号,
+      customerName: NEW_CUSTOMER_NAME,
+    })
+
+    // 1 回目は警告だけで登録しない
+    await dialog.getByTestId('customers-add-submit').click()
+    await expect(dialog.getByTestId('customers-add-validation-warning')).toContainText(
+      String(canceledCustomer.口座番号),
+    )
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('customers-notice')).toHaveCount(0)
+    await expect(page.getByTestId('customers-count')).toHaveText(`${TOTAL} 件`)
+
+    // 承知して押し直すと登録される（再有効化で有効な行が 1 件増える）
+    await dialog.getByTestId('customers-add-submit').click()
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByTestId('customers-notice')).toHaveText(
+      `${canceledCustomer.口座番号} ${NEW_CUSTOMER_NAME} を追加しました。`,
+    )
+    await expect(page.getByTestId('customers-count')).toHaveText(`${TOTAL + 1} 件`)
+  })
+
+  test('[CU-20] キャンセルすると件数は変わらず開き直すと入力が空に戻る', async ({ page }) => {
+    await page.goto(PATH)
+    const dialog = await openAdd(page)
+    await dialog.getByTestId('customers-add-customer-name').fill(NEW_CUSTOMER_NAME)
+    await dialog.getByTestId('customers-add-cancel').click()
+
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByTestId('customers-count')).toHaveText(`${TOTAL} 件`)
+
+    const reopened = await openAdd(page)
+    await expect(reopened.getByTestId('customers-add-customer-name')).toHaveValue('')
+  })
+
+  test('[CU-21] 編集すると現在値が入っていて、更新が一覧に反映される', async ({ page }) => {
+    const renamed = `${firstRow.顧客名}（改）`
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    const dialog = await openEdit(page, firstRow)
+    const accountNumber = dialog.getByTestId('customers-edit-account-number')
+    await expect(accountNumber).toHaveValue(String(firstRow.口座番号))
+    // 業務キーなので書き換えられない
+    await expect(accountNumber).not.toBeEditable()
+    await expect(dialog.getByTestId('customers-edit-customer-name')).toHaveValue(firstRow.顧客名)
+
+    await dialog.getByTestId('customers-edit-customer-name').fill(renamed)
+    await dialog.getByTestId('customers-edit-submit').click()
+
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByTestId('customers-notice')).toHaveText(
+      `${firstRow.口座番号} ${renamed} を更新しました。`,
+    )
+    await expect(cellOf(rowOf(page, firstRow), '顧客名')).toContainText(renamed)
+    await expect(page.getByTestId('customers-count')).toHaveText(`${TOTAL} 件`)
+  })
+
+  test('[CU-22] 更新が競合するとダイアログは開いたまま detail が出る', async ({ page }) => {
+    // 実ブラウザで「他の担当者」を作れないので、競合の応答そのものを差し替える
+    await mockApi(page, [
+      {
+        method: 'put',
+        path: '*/api/masters/customers/:id',
+        status: 409,
+        body: { detail: CONFLICT_MESSAGE },
+      },
+    ])
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    const dialog = await openEdit(page, firstRow)
+    await dialog.getByTestId('customers-edit-customer-name').fill(`${firstRow.顧客名}（改）`)
+    await dialog.getByTestId('customers-edit-submit').click()
+
+    await expect(dialog.getByTestId('customers-edit-error')).toContainText(CONFLICT_MESSAGE)
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('customers-notice')).toHaveCount(0)
+    await expect(cellOf(rowOf(page, firstRow), '顧客名')).not.toContainText('（改）')
   })
 })

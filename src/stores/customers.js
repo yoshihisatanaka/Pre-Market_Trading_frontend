@@ -1,5 +1,10 @@
 import { defineStore } from 'pinia'
-import { fetchCustomers } from '@/api/customers'
+import {
+  createCustomer,
+  fetchCustomers,
+  updateCustomer,
+  validateCustomer,
+} from '@/api/customers'
 import { useCrudList } from '@/composables/useCrudList'
 import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
 
@@ -15,12 +20,12 @@ export const CUSTOMERS_PAGE_SIZE = DEFAULT_PAGE_SIZE
  * 顧客マスタのストア。
  *
  * ページ位置・検索条件は URL クエリが正で、ここはその写しを持つだけ（画面側が load で渡す）。
- * 取得・競合防止の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
+ * 取得・競合防止・登録・更新の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
  * 1 件の形は src/api/customers.js の JSDoc を参照。
  *
- * **いまは読むだけの一覧**なので createItem / updateItem / deleteItem を渡さない。
- * useCrudList はそれらを渡さない限り登録・更新・削除の名前を公開しないので、
- * この段階では store.create() などは存在しない（追加・編集・削除は別途入れる）。
+ * 登録・更新はどちらも「サーバの事前検証 → 本処理」の 2 段（validateItem を渡す）。
+ * **削除は持たない**（2026-09-28 決定）ので deleteItem を渡さない。useCrudList は渡さない限り
+ * remove / deleting を公開しないので、画面から誤って呼ぶこともできない。
  *
  * 並べ替えはサーバの責務で、ここでは触らない。
  */
@@ -37,5 +42,8 @@ export const useCustomersStore = defineStore('customers', () =>
       'corporateType',
     ],
     fetchPage: fetchCustomers,
+    createItem: createCustomer,
+    validateItem: validateCustomer,
+    updateItem: updateCustomer,
   }),
 )

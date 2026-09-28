@@ -1,7 +1,7 @@
 import { delay, http } from 'msw'
 import { orderHandlers } from './orders'
 import { codeHandlers } from './codes'
-import { customerHandlers } from './customers'
+import { customerHandlers, resetCustomerRows } from './customers'
 import { caHandlers, resetCaRows } from './ca'
 import { symbolHandlers, resetSymbolRows } from './symbols'
 import { balanceAdjustmentHandlers, resetBalanceAdjustmentRows } from './balanceAdjustments'
@@ -67,6 +67,7 @@ function mockDelayMs() {
 
 /** モックの可変状態をフィクスチャの内容に戻す */
 export function resetMockState() {
+  resetCustomerRows()
   resetMarketHolidayRows()
   resetBlackoutDateRows()
   resetCaRows()

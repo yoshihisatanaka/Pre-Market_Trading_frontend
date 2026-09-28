@@ -1,22 +1,46 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import CustomerFormFields from '@/components/customers/CustomerFormFields.vue'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FormField from '@/components/ui/FormField.vue'
+import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { useCodesStore } from '@/stores/codes'
-import { useCustomersStore } from '@/stores/customers'
+import { CUSTOMERS_PAGE_SIZE, useCustomersStore } from '@/stores/customers'
+import {
+  emptyCustomerForm,
+  hasCustomerFormErrors,
+  toCustomerForm,
+  validateCustomerForm,
+} from '@/utils/customerFields'
 import { formatJpyUnit, formatUsdUnit } from '@/utils/format'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useCustomersStore()
-const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(store)
+const {
+  items,
+  total,
+  limit,
+  offset,
+  loading,
+  error,
+  isEmpty,
+  creating,
+  createError,
+  validationErrors,
+  validationWarnings,
+  updating,
+  updateError,
+  updateValidationErrors,
+} = storeToRefs(store)
 
 /*
  * プルダウンの選択肢はコードマスタから。読み込みは main.js が起動時に 1 回だけ行うので、
@@ -34,8 +58,8 @@ const corporateTypeOptions = computed(() => codes.optionsFor('法人区分'))
 
 /*
  * 列は画面モック（https://uspreorder-vmbhej3k.manus.space/masters/customers）の並びどおり。
- *   - 操作列（編集・削除）は別途。この画面はいま読むだけ
- *   - 米国株評価額 / 評価損益 は値の出所が未定なので、見出しだけ置いて値は出さない（下記）
+ *   - 米国株評価額 / 評価損益 はモックにあるが不要になった（2026-09-28 決定）ので出さない
+ *   - 操作列は「編集」だけ。削除は実装しない（2026-09-28 決定）。新規追加はヘッダのボタンから開く
  */
 const columns = [
   { key: 'branch', label: '部店' },
@@ -51,8 +75,8 @@ const columns = [
   { key: 'cashJpy', label: '円貨預り金', numeric: true },
   { key: 'cashUsd', label: 'USD預り金', numeric: true },
   { key: 'growthQuota', label: '成長投資枠', numeric: true },
-  { key: 'equityValue', label: '米国株評価額', numeric: true },
-  { key: 'unrealizedPl', label: '評価損益', numeric: true },
+  // 行ごとの操作（編集）。銘柄マスタと同じく見出しは空にする
+  { key: 'actions', label: '' },
 ]
 
 /*
@@ -87,10 +111,142 @@ function ageLabel(row) {
 function rowClass(row) {
   return row.userModified ? 'is-user-modified' : null
 }
+
+/*
+ * 新規追加と編集。入力項目は CustomerFormFields が src/utils/customerFields.js の表から組み立てる
+ * （項目が増えてもこの画面は触らない）。流れは銘柄マスタと同じで、store 側が
+ * 「サーバの事前検証 → 登録 / 更新」の 2 段を持つ。ここでの検査（validateCustomerForm）は
+ * 必須・書式の漏れで往復しないためのもの。
+ *
+ * エラーの出し先は 3 系統（MasterFormDialog の JSDoc）。
+ *   入力の不備      … 項目の直下
+ *   事前検証の不合格 … validationErrors / updateValidationErrors
+ *   通信・サーバ障害 … createError / updateError（楽観的ロックの 409 もここ）
+ *
+ * 事前検証の警告（validationWarnings）は登録だけが扱う。1 回目は登録せずに警告を出し、
+ * 利用者が承知して押し直すと acknowledgedWarnings を付けて登録する（海外休場日マスタと同じ）。
+ */
+const isAddOpen = ref(false)
+const addForm = ref(emptyCustomerForm())
+const addErrors = ref({})
+
+/*
+ * 警告を出したときの入力の写し。押し直しを「承知した」と扱うのは、入力がこれと同じときだけ。
+ * 警告のあとに口座番号などを書き換えたら、新しい入力はもう一度事前検証から通す
+ * （警告の確認を経ずに別の内容が登録されるのを防ぐ）。
+ */
+const warnedForm = ref('')
+
+// 成功メッセージ（追加・編集で同じ枠に出す）
+const noticeMessage = ref('')
+
+function openAdd() {
+  addForm.value = emptyCustomerForm()
+  addErrors.value = {}
+  warnedForm.value = ''
+  // 前回の失敗と成功をどちらも持ち込まない
+  store.clearCreateError()
+  noticeMessage.value = ''
+  isAddOpen.value = true
+}
+
+function closeAdd() {
+  // 登録中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (creating.value) return
+  isAddOpen.value = false
+}
+
+async function submitAdd() {
+  addErrors.value = validateCustomerForm(addForm.value)
+  if (hasCustomerFormErrors(addErrors.value)) return
+
+  const snapshot = JSON.stringify(addForm.value)
+  await store.create(
+    {
+      ...addForm.value,
+      // 警告を出したときと同じ入力で押し直したら、承知したものとして登録へ進める
+      acknowledgedWarnings: validationWarnings.value.length > 0 && warnedForm.value === snapshot,
+    },
+    {
+      // 閉じるのは登録が受理された時点（一覧の読み直しを待たない。理由は SymbolListView）
+      onSuccess: (created) => {
+        isAddOpen.value = false
+        // 口座番号の昇順なので追加した行が今のページに出るとは限らない。何が増えたかを文言で示す
+        noticeMessage.value = `${customerLabel(created)} を追加しました。`
+      },
+    },
+  )
+  // 警告で止まったら、そのときの入力を覚えておく（次の押し直しの判定に使う）
+  warnedForm.value = validationWarnings.value.length > 0 ? snapshot : ''
+}
+
+/*
+ * 編集。「開いているか」と「どの行か」を editTarget 1 つで持つ（銘柄マスタと同じ形）。
+ * id が更新対象を、updatedAt が楽観的ロックの合札を受け持つ。
+ * **口座番号は変更させない**（業務キー。CustomerUpdateRequest に無い）。
+ */
+const editTarget = ref(null)
+const editForm = ref(emptyCustomerForm())
+const editErrors = ref({})
+
+function openEdit(customer) {
+  editForm.value = toCustomerForm(customer)
+  editErrors.value = {}
+  store.clearUpdateError()
+  noticeMessage.value = ''
+  editTarget.value = customer
+}
+
+function closeEdit() {
+  if (updating.value) return
+  editTarget.value = null
+}
+
+async function submitEdit() {
+  const target = editTarget.value
+  if (!target) return
+
+  editErrors.value = validateCustomerForm(editForm.value)
+  if (hasCustomerFormErrors(editErrors.value)) return
+
+  const updated = await store.update(
+    // id と合札はフォームの外から来る（利用者が触れる値ではない）
+    { ...editForm.value, id: target.id, updatedAt: target.updatedAt },
+    {
+      onSuccess: (customer) => {
+        editTarget.value = null
+        noticeMessage.value = `${customerLabel(customer)} を更新しました。`
+      },
+    },
+  )
+  if (!updated) return
+
+  /*
+   * 絞り込み中に条件の圏外へ変えると、最終ページが空になり得る。そのときは 1 ページ戻す
+   * （銘柄マスタの stepBackIfPageEmpty と同じ）
+   */
+  if (items.value.length === 0 && offset.value > 0) {
+    goToOffset(offset.value - CUSTOMERS_PAGE_SIZE)
+  }
+}
+
+/** 1 件を 1 行で示す文字列（成功メッセージに使う）。口座番号だけでは誰か分からないので名前を添える */
+function customerLabel(customer) {
+  return `${customer.accountNumber || '—'} ${customer.customerName || '—'}`
+}
 </script>
 
 <template>
   <section class="customer-list">
+    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
+    <Teleport defer to="#topbar-actions">
+      <BaseButton data-testid="customers-add" @click="openAdd">新規追加</BaseButton>
+    </Teleport>
+
+    <BaseAlert v-if="noticeMessage" variant="success" data-testid="customers-notice">
+      {{ noticeMessage }}
+    </BaseAlert>
+
     <!-- 画面の説明。4 状態や検索結果に関わらず常時出す -->
     <BaseAlert variant="info" data-testid="customers-description">
       口座情報をもとに顧客を検索します。<strong>色の付いた行</strong>は画面や API
@@ -255,16 +411,55 @@ function rowClass(row) {
           {{ formatJpyUnit(row.growthQuota) }}
         </template>
 
-        <!--
-          米国株評価額 / 評価損益。いま AccountItem に対応する項目が無く値の出所が決まっていない。
-          表示要望が来る見込みが高いので列（見出し）だけ確保し、セルは常に '—' にしてある。
-          アプリ内モデルにも equityValue / unrealizedPl は持たせていない（無いものを null として
-          運ばない）。項目が決まったら api 層の toCustomer() に足して、この slot を差し替える。
-        -->
-        <template #cell-equityValue> — </template>
-        <template #cell-unrealizedPl> — </template>
+        <!-- 削除は実装しないので編集だけ -->
+        <template #cell-actions="{ row }">
+          <BaseButton
+            variant="secondary"
+            :data-testid="`customers-edit-${row.id}`"
+            :disabled="updating"
+            @click="openEdit(row)"
+          >
+            編集
+          </BaseButton>
+        </template>
       </DataTable>
     </MasterListCard>
+
+    <MasterFormDialog
+      :open="isAddOpen"
+      title="顧客 新規追加"
+      testid-prefix="customers"
+      size="lg"
+      :pending="creating"
+      :error="createError"
+      :validation-errors="validationErrors"
+      :validation-warnings="validationWarnings"
+      @close="closeAdd"
+      @submit="submitAdd"
+    >
+      <CustomerFormFields v-model="addForm" testid-prefix="customers-add" :errors="addErrors" />
+    </MasterFormDialog>
+
+    <MasterFormDialog
+      :open="Boolean(editTarget)"
+      title="顧客 編集"
+      testid-prefix="customers"
+      action="edit"
+      submit-label="更新"
+      size="lg"
+      :pending="updating"
+      :error="updateError"
+      :validation-errors="updateValidationErrors"
+      @close="closeEdit"
+      @submit="submitEdit"
+    >
+      <CustomerFormFields
+        v-model="editForm"
+        testid-prefix="customers-edit"
+        editing
+        :errors="editErrors"
+      />
+    </MasterFormDialog>
   </section>
 </template>
 

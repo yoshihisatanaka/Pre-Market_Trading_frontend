@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { noOperationOperator, supervisorOperator } from '@/mocks/fixtures/currentOperator'
+import {
+  noOperationOperator,
+  salesOperator,
+  supervisorOperator,
+} from '@/mocks/fixtures/currentOperator'
 import { useCurrentOperatorStore } from './currentOperator'
 
 const PATH = '*/api/auth/me'
@@ -96,5 +100,65 @@ describe('useCurrentOperatorStore', () => {
     await store.ensureLoaded()
 
     expect(requests.value).toBe(1)
+  })
+
+  it('[COS-08] 作っただけでは /auth/me を叩かず、操作者も持たない', () => {
+    const requests = countRequests()
+    const store = useCurrentOperatorStore()
+
+    expect(store.operator).toBeNull()
+    expect(store.loading).toBe(false)
+    expect(store.error).toBeNull()
+    expect(requests.value).toBe(0)
+  })
+
+  it('[COS-09] 読み終えると操作者の情報が入り、マスタ権限も読める', async () => {
+    const store = useCurrentOperatorStore()
+
+    await store.ensureLoaded()
+
+    expect(store.operator).toMatchObject({
+      operatorCode: supervisorOperator.操作者コード,
+      name: supervisorOperator.氏名,
+      roleCode: supervisorOperator.ロールコード,
+    })
+    expect(supervisorOperator.権限.master).toBe(true)
+    expect(store.can('master')).toBe(true)
+  })
+
+  it('[COS-10] 権限ごとにフラグどおり読む（master なし・order あり）', async () => {
+    // フィクスチャの前提が崩れたら、このシナリオは意味を失う
+    expect(salesOperator.権限.master).toBe(false)
+    expect(salesOperator.権限.order).toBe(true)
+    respond(salesOperator)
+    const store = useCurrentOperatorStore()
+
+    await store.ensureLoaded()
+
+    expect(store.can('master')).toBe(false)
+    expect(store.can('order')).toBe(true)
+  })
+
+  it('[COS-11] 読み込み中は loading が立ち、完了すると下りる', async () => {
+    server.use(
+      http.get(PATH, async () => {
+        await delay(10)
+        return HttpResponse.json(supervisorOperator)
+      }),
+    )
+    const store = useCurrentOperatorStore()
+
+    const pending = store.ensureLoaded()
+    expect(store.loading).toBe(true)
+
+    await pending
+    expect(store.loading).toBe(false)
+  })
+
+  it('[COS-12] 定義に無い権限は持っていないと読む', async () => {
+    const store = useCurrentOperatorStore()
+    await store.ensureLoaded()
+
+    expect(store.can('unknown')).toBe(false)
   })
 })

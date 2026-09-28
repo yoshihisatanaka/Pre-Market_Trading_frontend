@@ -25,6 +25,21 @@ export const supervisorOperator = {
 }
 
 /**
+ * 営業員（マスタ更新権限が無い。権限は fixtures/permissions.js の sales 行と同じ）。
+ * サイドメニューのマスタメンテが隠れ、/masters/* を開くと「アクセス権限がありません」に回される。
+ */
+export const salesOperator = {
+  操作者コード: 'sales01',
+  氏名: '開発用営業員',
+  ロールコード: 'sales',
+  ロール名: '営業員',
+  部店コード: '123',
+  登録済: true,
+  権限: { order: true, master: false, operation: false, branch_all: false },
+  認可強制: false,
+}
+
+/**
  * IFA（権限は全部なし。fixtures/permissions.js の ifa ロールと同じ）。
  * 運用管理権限が無いので、運用管理の 4 画面に入れない。
  */

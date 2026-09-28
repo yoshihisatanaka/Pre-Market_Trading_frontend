@@ -129,7 +129,10 @@ describe('SliceCriteriaMasterView', () => {
 
     expect(text(wrapper, 'slice-criteria-rate')).toBe(`${PERCENT.toFixed(2)}%`)
     expect(text(wrapper, 'slice-criteria-quantity')).toBe(`${formatQuantity(QUANTITY)} 株`)
-    expect(text(wrapper, 'slice-criteria-amount')).toBe(`USD ${formatQuantity(AMOUNT)}`)
+    // 金額は全画面共通の単位後置（2026-09-28 決定。画面モックの「USD 1,000,000」表記はやめた）
+    expect(text(wrapper, 'slice-criteria-amount')).toBe(
+      `${AMOUNT.toLocaleString('ja-JP', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ドル`,
+    )
   })
 
   it('[SCV-05] 入力欄が現在値で初期化される', async () => {

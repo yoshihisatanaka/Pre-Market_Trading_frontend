@@ -6,9 +6,10 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { codeMasters } from '@/mocks/fixtures/codes'
-import { customers } from '@/mocks/fixtures/customers'
+import { canceledCustomers, customers } from '@/mocks/fixtures/customers'
 import { useCodesStore } from '@/stores/codes'
 import { CUSTOMERS_PAGE_SIZE } from '@/stores/customers'
+import { CUSTOMER_FIELDS, emptyCustomerForm } from '@/utils/customerFields'
 import CustomerListView from './CustomerListView.vue'
 
 /*
@@ -123,6 +124,67 @@ const rowFor = (wrapper, accountNumber) =>
 
 const cellsFor = (wrapper, accountNumber) => rowFor(wrapper, accountNumber).findAll('td')
 
+/* ここから新規追加・編集モーダル用のヘルパ（入力欄の testid は customerFields.js の項目表から引く） */
+
+const fieldOf = (key) => CUSTOMER_FIELDS.find((field) => field.key === key)
+const addInput = (wrapper, key) =>
+  wrapper.find(`[data-testid="customers-add-${fieldOf(key).testid}"]`)
+const editInput = (wrapper, key) =>
+  wrapper.find(`[data-testid="customers-edit-${fieldOf(key).testid}"]`)
+
+const openAddModal = (wrapper) => wrapper.find('[data-testid="customers-add"]').trigger('click')
+const openEditModal = (wrapper, id = String(head.ID)) =>
+  wrapper.find(`[data-testid="customers-edit-${id}"]`).trigger('click')
+
+/** 入力欄をまとめて埋める（キーは項目の key） */
+async function fill(input, wrapper, values) {
+  for (const [key, value] of Object.entries(values)) {
+    await input(wrapper, key).setValue(value)
+  }
+}
+
+async function submit(wrapper, action) {
+  await wrapper.find(`[data-testid="customers-${action}-submit"]`).trigger('click')
+  await settle()
+}
+
+const messagesOf = (wrapper, testid) =>
+  wrapper.findAll(`[data-testid="${testid}"] li`).map((item) => item.text())
+
+/** 入力欄の直下に出ている理由（FormField が aria-describedby で結び付けている） */
+const fieldError = (wrapper, input) => {
+  const ids = (input.attributes('aria-describedby') ?? '').split(' ').filter(Boolean)
+  const found = ids.map((id) => wrapper.find(`#${id}[role="alert"]`)).find((el) => el.exists())
+  return found ? found.text() : ''
+}
+
+const requiredMessage = (field) =>
+  field.control === 'select'
+    ? `${field.label}を選択してください。`
+    : `${field.label}を入力してください。`
+
+/** 必須で初期値の無い項目（新規追加で利用者が埋めるもの） */
+const MUST_FILL = CUSTOMER_FIELDS.filter((field) => field.required && field.initial === undefined)
+
+// フィクスチャに無い口座番号（取消済みも含めた最大値 + 1）と、取消済みの口座番号
+const NEW_ACCOUNT_NUMBER = String(
+  Math.max(...[...customers, ...canceledCustomers].map((row) => row.口座番号)) + 1,
+)
+const CANCELED_NUMBER = String(canceledCustomers[0].口座番号)
+
+/** 新規追加で埋める値。選択肢はコードマスタの先頭から取る */
+const NEW_CUSTOMER = {
+  accountNumber: NEW_ACCOUNT_NUMBER,
+  branchCode: codeMasters.部店[0].code,
+  handlerCode: codeMasters.扱者[0].code,
+  customerName: 'テスト 花子',
+  customerNameKana: 'ﾃｽﾄ ﾊﾅｺ',
+  complianceRank: codeMasters.コンプラランク[0].code,
+  totalAssets: '0',
+}
+
+const NEW_NAME = '更新 太郎'
+
 describe('CustomerListView', () => {
   it('[CLV-01] 応答を待つ間はローディングだけを出す', async () => {
     const { wrapper } = await mountView()
@@ -151,7 +213,7 @@ describe('CustomerListView', () => {
     expect(first).toContain(head.顧客名カナ)
   })
 
-  it('[CLV-03] 列がモックの並びどおり 15 列で、操作列を持たない', async () => {
+  it('[CLV-03] 列がモックの並びどおり 13 列で、右端に見出しの無い操作列が付く', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -169,19 +231,21 @@ describe('CustomerListView', () => {
       '円貨預り金',
       'USD預り金',
       '成長投資枠',
-      '米国株評価額',
-      '評価損益',
+      // 操作列（編集）。見出しは空
+      '',
     ])
   })
 
-  it('[CLV-04] 米国株評価額と評価損益は値を持たず常に — を出す', async () => {
+  it('[CLV-04] 米国株評価額と評価損益の列は無い', async () => {
     const { wrapper } = await mountView()
     await settle()
 
+    // 2026-09-28 に不要と決まり、列ごと削除した
+    expect(headers(wrapper)).not.toContain('米国株評価額')
+    expect(headers(wrapper)).not.toContain('評価損益')
+    // 見出しだけ消えてセルが残る、といったずれが無い
     for (const row of rows(wrapper)) {
-      const cells = row.findAll('td')
-      expect(cells[13].text()).toBe('—')
-      expect(cells[14].text()).toBe('—')
+      expect(row.findAll('td')).toHaveLength(headers(wrapper).length)
     }
   })
 
@@ -439,13 +503,19 @@ describe('CustomerListView', () => {
     }
   })
 
-  it('[CLV-21] 読むだけの画面なので追加・編集・削除の導線を持たない', async () => {
+  it('[CLV-21] ヘッダに新規追加があり、行の操作は編集だけで削除は無い', async () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(exists(wrapper, 'customers-add')).toBe(false)
-    // 行の中にボタンが無いこと（操作列そのものが無い）
-    expect(rows(wrapper)[0].findAll('button')).toHaveLength(0)
+    expect(exists(wrapper, 'customers-add')).toBe(true)
+    for (const [index, row] of rows(wrapper).entries()) {
+      const buttons = row.findAll('button')
+      expect(buttons).toHaveLength(1)
+      expect(buttons[0].attributes('data-testid')).toBe(`customers-edit-${firstPage[index].ID}`)
+      expect(buttons[0].text()).toBe('編集')
+    }
+    // 削除は実装しない（2026-09-28 決定）
+    expect(wrapper.findAll('[data-testid^="customers-delete"]')).toHaveLength(0)
   })
 
   it('[CLV-22] コードマスタの取得中は検索カードが回転マークを出して入力を受け付けない', async () => {
@@ -466,5 +536,218 @@ describe('CustomerListView', () => {
       wrapper.find('[data-testid="customers-search"] fieldset').attributes('disabled'),
     ).toBeUndefined()
     expect(wrapper.find('[data-testid="customers-search-submit"]').element.disabled).toBe(false)
+  })
+
+  it('[CLV-23] 新規追加を押すと項目表どおりの空のフォームが開く', async () => {
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+
+    await openAddModal(wrapper)
+
+    expect(exists(wrapper, 'customers-add-form')).toBe(true)
+    const initial = emptyCustomerForm()
+    for (const field of CUSTOMER_FIELDS) {
+      const input = addInput(wrapper, field.key)
+      expect(input.exists(), field.key).toBe(true)
+      expect(input.element.value, field.key).toBe(initial[field.key])
+    }
+    // 新規では口座番号を入力させる（読み取り専用は編集だけ）
+    expect(addInput(wrapper, 'accountNumber').attributes('readonly')).toBeUndefined()
+  })
+
+  it('[CLV-24] 必須が未入力なら項目の直下に理由を出し、API へ送らない', async () => {
+    let calls = 0
+    server.use(
+      http.post('*/api/masters/customers/validate', () => {
+        calls += 1
+        return HttpResponse.json({ valid: true, errors: [], warnings: [], details: null })
+      }),
+      http.post('*/api/masters/customers', () => {
+        calls += 1
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openAddModal(wrapper)
+
+    await submit(wrapper, 'add')
+
+    expect(exists(wrapper, 'customers-add-form')).toBe(true)
+    expect(MUST_FILL.length).toBeGreaterThan(0)
+    for (const field of MUST_FILL) {
+      expect(fieldError(wrapper, addInput(wrapper, field.key)), field.key).toBe(
+        requiredMessage(field),
+      )
+    }
+    // 無駄な往復をしない（事前検証も登録も呼ばない）
+    expect(calls).toBe(0)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[CLV-25] 追加が成功するとモーダルが閉じ、成功通知と増えた件数が出る', async () => {
+    // 埋める値が必須項目を覆っていないと、項目が増えたときに黙って別の理由で落ちる
+    expect(MUST_FILL.map((field) => field.key).sort()).toEqual(Object.keys(NEW_CUSTOMER).sort())
+    const { wrapper, router } = await mountView({ withCodes: true })
+    await settle()
+    await openAddModal(wrapper)
+
+    await fill(addInput, wrapper, NEW_CUSTOMER)
+    await submit(wrapper, 'add')
+
+    expect(exists(wrapper, 'customers-add-form')).toBe(false)
+    // 口座番号の昇順なので追加した行が 1 ページ目に出るとは限らない。通知で何が増えたかを見る
+    const notice = wrapper.find('[data-testid="customers-notice"]').text()
+    expect(notice).toContain(NEW_ACCOUNT_NUMBER)
+    expect(notice).toContain(NEW_CUSTOMER.customerName)
+    expect(countText(wrapper)).toContain(String(TOTAL + 1))
+    // 一覧の単方向フローには触らない
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('[CLV-26] 既にある口座番号は事前検証の理由をモーダル内に箇条書きで出す', async () => {
+    const existing = String(head.口座番号)
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+    await openAddModal(wrapper)
+
+    await fill(addInput, wrapper, { ...NEW_CUSTOMER, accountNumber: existing })
+    await submit(wrapper, 'add')
+
+    expect(exists(wrapper, 'customers-add-form')).toBe(true)
+    expect(messagesOf(wrapper, 'customers-add-validation-error')).toEqual([
+      `口座番号 ${existing} は既に登録されています`,
+    ])
+    // 通信は成功しているので、サーバ障害の枠には出さない
+    expect(exists(wrapper, 'customers-add-error')).toBe(false)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[CLV-27] 取消済みの口座番号は 1 回目に警告を出し、押し直すと登録する', async () => {
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+    await openAddModal(wrapper)
+    await fill(addInput, wrapper, { ...NEW_CUSTOMER, accountNumber: CANCELED_NUMBER })
+
+    await submit(wrapper, 'add')
+
+    expect(exists(wrapper, 'customers-add-form')).toBe(true)
+    expect(messagesOf(wrapper, 'customers-add-validation-warning')).toEqual([
+      `口座番号 ${CANCELED_NUMBER} は削除済みです。登録すると再有効化されます`,
+    ])
+    expect(exists(wrapper, 'customers-add-validation-error')).toBe(false)
+    // 警告の段階ではまだ登録していない
+    expect(countText(wrapper)).toContain(String(TOTAL))
+    expect(exists(wrapper, 'customers-notice')).toBe(false)
+
+    // 承知して押し直す
+    await submit(wrapper, 'add')
+
+    expect(exists(wrapper, 'customers-add-form')).toBe(false)
+    expect(wrapper.find('[data-testid="customers-notice"]').text()).toContain(CANCELED_NUMBER)
+    expect(countText(wrapper)).toContain(String(TOTAL + 1))
+  })
+
+  it('[CLV-28] 「編集」を押すと現在値が入り、口座番号は読み取り専用になる', async () => {
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+
+    await openEditModal(wrapper)
+
+    expect(exists(wrapper, 'customers-edit-form')).toBe(true)
+    expect(editInput(wrapper, 'accountNumber').element.value).toBe(String(head.口座番号))
+    expect(editInput(wrapper, 'customerName').element.value).toBe(head.顧客名)
+    expect(editInput(wrapper, 'customerNameKana').element.value).toBe(head.顧客名カナ)
+    expect(editInput(wrapper, 'branchCode').element.value).toBe(head.部店コード)
+    expect(editInput(wrapper, 'handlerCode').element.value).toBe(head.扱者コード)
+    expect(editInput(wrapper, 'totalAssets').element.value).toBe(String(head.総預り資産))
+    expect(editInput(wrapper, 'suspendAll').element.value).toBe(String(head.取引停止区分_全取引))
+    // 業務キーは変更不可（CustomerUpdateRequest に無い）
+    expect(editInput(wrapper, 'accountNumber').attributes('readonly')).toBeDefined()
+    expect(editInput(wrapper, 'customerName').attributes('readonly')).toBeUndefined()
+  })
+
+  it('[CLV-29] 更新するとモーダルが閉じ、成功通知と一覧の該当行が新しい内容になる', async () => {
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+    await openEditModal(wrapper)
+
+    await fill(editInput, wrapper, { customerName: NEW_NAME })
+    await submit(wrapper, 'edit')
+
+    expect(exists(wrapper, 'customers-edit-form')).toBe(false)
+    const notice = wrapper.find('[data-testid="customers-notice"]').text()
+    expect(notice).toContain(String(head.口座番号))
+    expect(notice).toContain(NEW_NAME)
+    expect(rowFor(wrapper, head.口座番号).text()).toContain(NEW_NAME)
+    // 更新は行を増やさない
+    expect(countText(wrapper)).toContain(String(TOTAL))
+  })
+
+  it('[CLV-30] 競合(409)は通信・サーバ障害の枠に出し、事前検証の枠には出さない', async () => {
+    const detail = '他のユーザーによって口座情報が更新されています。'
+    server.use(
+      http.put('*/api/masters/customers/:id', () => HttpResponse.json({ detail }, { status: 409 })),
+    )
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+    await openEditModal(wrapper)
+
+    await fill(editInput, wrapper, { customerName: NEW_NAME })
+    await submit(wrapper, 'edit')
+
+    expect(exists(wrapper, 'customers-edit-form')).toBe(true)
+    expect(wrapper.find('[data-testid="customers-edit-error"]').text()).toContain(detail)
+    expect(exists(wrapper, 'customers-edit-validation-error')).toBe(false)
+  })
+
+  it('[CLV-31] 編集で必須を空にすると項目の直下に理由を出し、API へ送らない', async () => {
+    let putCalls = 0
+    server.use(
+      http.put('*/api/masters/customers/:id', () => {
+        putCalls += 1
+        return HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })
+      }),
+    )
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+    await openEditModal(wrapper)
+
+    await fill(editInput, wrapper, { customerName: '' })
+    await submit(wrapper, 'edit')
+
+    expect(exists(wrapper, 'customers-edit-form')).toBe(true)
+    expect(fieldError(wrapper, editInput(wrapper, 'customerName'))).toBe(
+      requiredMessage(fieldOf('customerName')),
+    )
+    expect(putCalls).toBe(0)
+    expect(exists(wrapper, 'customers-notice')).toBe(false)
+  })
+
+  it('[CLV-32] 警告のあとに入力を書き換えたら承知扱いにせず、事前検証からやり直す', async () => {
+    const REWRITTEN_NAME = '書き換え 次郎'
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+    await openAddModal(wrapper)
+    await fill(addInput, wrapper, { ...NEW_CUSTOMER, accountNumber: CANCELED_NUMBER })
+    await submit(wrapper, 'add')
+    const warning = [`口座番号 ${CANCELED_NUMBER} は削除済みです。登録すると再有効化されます`]
+    expect(messagesOf(wrapper, 'customers-add-validation-warning')).toEqual(warning)
+
+    // 警告を見たあとで入力を変えて押す（警告の確認を経ずに別の内容を登録させない）
+    await fill(addInput, wrapper, { customerName: REWRITTEN_NAME })
+    await submit(wrapper, 'add')
+
+    expect(exists(wrapper, 'customers-add-form')).toBe(true)
+    expect(messagesOf(wrapper, 'customers-add-validation-warning')).toEqual(warning)
+    expect(exists(wrapper, 'customers-notice')).toBe(false)
+    expect(countText(wrapper)).toContain(String(TOTAL))
+
+    // 書き換えた入力のまま押し直せば、その内容を承知したものとして登録する
+    await submit(wrapper, 'add')
+
+    expect(exists(wrapper, 'customers-add-form')).toBe(false)
+    expect(wrapper.find('[data-testid="customers-notice"]').text()).toContain(REWRITTEN_NAME)
+    expect(countText(wrapper)).toContain(String(TOTAL + 1))
   })
 })

@@ -13,6 +13,7 @@ import { activityLogTargets } from '../mocks/fixtures/activityLogTargets'
 import { rolePermissions } from '../mocks/fixtures/permissions'
 import {
   noOperationOperator,
+  salesOperator,
   supervisorOperator,
   viewerOperator,
 } from '../mocks/fixtures/currentOperator'
@@ -293,7 +294,7 @@ const FIXTURES = [
   {
     name: 'currentOperator',
     schema: 'CurrentOperatorResponse',
-    rows: [supervisorOperator, viewerOperator, noOperationOperator],
+    rows: [supervisorOperator, viewerOperator, noOperationOperator, salesOperator],
   },
   {
     name: 'balanceAdjustments',

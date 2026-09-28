@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { formatUsd } from '@/utils/format'
 import StalledOrderTable from './StalledOrderTable.vue'
 
 /*
@@ -92,7 +91,8 @@ describe('StalledOrderTable', () => {
     const LIMIT = 228.5
     const wrapper = mountTable([{ ...BASE_ROW, orderType: 'LO', limitPrice: LIMIT }])
 
-    expect(cell(wrapper, '価格')).toBe(`指値 ${formatUsd(LIMIT)}`)
+    // 金額は全画面で単位を後置する（2026-09-28 決定。$ は前置しない）
+    expect(cell(wrapper, '価格')).toBe(`指値 ${LIMIT.toFixed(2)} ドル`)
   })
 
   it('[SOT-08] 受注日時が空なら「—」', () => {

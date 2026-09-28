@@ -31,6 +31,17 @@
 金額 3 種（`円貨預り金` / `外貨預り金` / `NISA買付可能額_当年`）は数値のまま運ぶ。
 **0 と「値が無い」は意味が違う**ので、0 を null に潰さない（CUA-11）。
 
+2026-09-28 に事前検証・登録・更新（`validateCustomer` / `createCustomer` / `updateCustomer`）が入った。
+**削除は実装しない。** 送る項目は `src/api/customers.js` の `CUSTOMER_FIELDS` が正で、取り違えやすい点は次の 3 つ。
+
+- **空欄の送りかたが登録と更新で違う。** 登録・事前検証はキーごと送らず、更新は `null` で「クリア」を明示する
+- **更新は `口座番号` を送らない**（`CustomerUpdateRequest` に無い）。パスキーは行 ID（`/masters/customers/{account_id}`）
+- **事前検証の編集モードはクエリで切り替える**（`account_id` と `is_update=true`）。本文には `口座番号` が要る
+
+テストは**アプリ内のキー ↔ 実 API のキーの対応をテスト側に書き写して固定する**（実装の `CUSTOMER_FIELDS` を
+読まない。読むと実装の取り違えをそのまま期待値にしてしまう）。入力はフィクスチャの先頭行（生の形）を
+その対応表でフォームの値（すべて文字列）に開いたもので、期待する本文も同じ行から導く。
+
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
 | CUA-01 | 既定モック | `fetchCustomers()` を引数なしで呼ぶ | `GET /api/masters/customers` に `limit=50` と `offset=0` だけが載る。絞り込みも `include_deleted` も送らない | 実装済 |
@@ -48,6 +59,16 @@
 | CUA-13 | API が `customers` を持たない応答を返す | `fetchCustomers()` を呼ぶ | `items` が空配列、`total` が 0 になる（キーが欠けても落ちない） | 実装済 |
 | CUA-14 | API が 500 を返す | `fetchCustomers()` を呼ぶ | 例外が投げられる（呼び出し側の `useAsync` が `error` に入れる） | 実装済 |
 | CUA-15 | API が `ID` を持たない `CustomerItem` を返す | `fetchCustomers()` を呼ぶ | `id` が空文字のままになる（口座番号へフォールバックしない）。`accountNumber` は従来どおり出る | 実装済 |
+| CUA-16 | 事前検証が合格を返す。フォームの値（数値も文字列で持つ） | `validateCustomer(入力)` を id なしで呼ぶ | `POST /api/masters/customers/validate` にクエリなしで送られる。本文のキーは日本語で、`口座番号` / `総預り資産` / `取引停止区分_*` は integer、`外貨預り金` は小数を許す数値、区分・書類受入・`法人区分` などは文字列のまま。文字列の前後の空白は落とす | 実装済 |
+| CUA-17 | 事前検証・登録が成功を返す。任意項目（`生年月日` / `投資方針` / 預り金 / NISA 買付可能額など）が空欄 | `validateCustomer()` / `createCustomer()` を呼ぶ | 空欄の項目は**キーごと送らない**（`null` も `''` も載せない。数値項目に `''` を送ると 422 になり、省けばサーバの既定が入る） | 実装済 |
+| CUA-18 | 事前検証が合格を返す | `validateCustomer({ id, updatedAt, ...入力 })` を呼ぶ | クエリが `account_id=<id の数値>` と `is_update=true` になる。本文に `口座番号` は載り、`更新日時` は載らない（事前検証は楽観的ロックを照合しない） | 実装済 |
+| CUA-19 | 事前検証が `{ valid: false, errors: [...], warnings: [...] }` / `errors` と `warnings` を欠いた `{ valid: true }` を返す | `validateCustomer()` を呼ぶ | 前者はそのまま `{ valid, errors, warnings }` で返る（不合格を例外にしない）。後者は `errors` / `warnings` が空配列になる | 実装済 |
+| CUA-20 | 登録 API が 201 で `account`（サーバ採番の `ID` 付き）を返す | `createCustomer(入力)` を呼ぶ | `POST /api/masters/customers` に CUA-16 と同じ形の本文が送られ、201 の `account` がアプリ内モデルに変換されて返る（`id` はサーバの採番、`accountNumber` は文字列） | 実装済 |
+| CUA-21 | 更新 API が更新後の `account` を返す。任意項目の一部が空欄 | `updateCustomer({ id, ...入力 })` を呼ぶ | `PUT /api/masters/customers/<id>` に送られる。本文に `口座番号` が**無い**（業務キーは変更不可）。空欄の項目はキーを残して `null` を送る（部分更新なので省くと「変えない」になる）。更新後の `account` が変換されて返る | 実装済 |
+| CUA-22 | 更新 API が成功を返す | `updateCustomer()` を `updatedAt` あり / 空文字で呼ぶ | ありなら本文の `更新日時` にその値がそのまま載る。空文字なら `更新日時` のキーごと送らない | 実装済 |
+| CUA-23 | 更新 API が 409（`{ detail }`）を返す | `updateCustomer()` を呼ぶ | 例外が投げられ、`message` に detail が入る（呼び出し側の `useAsync` が `updateError` に入れる） | 実装済 |
+| CUA-24 | 整数の項目に `'1.5'` / `'abc'`、小数を許す項目に `'abc'` | `createCustomer()` / `updateCustomer()` を呼ぶ | 数値にならない入力は空欄と同じに扱う（登録ではキーを送らず、更新では `null`）。サーバに 422 で弾かせない | 実装済 |
+| CUA-25 | API が `CustomerItem` を 1 件返す（`更新日時` あり / `null`、編集用の項目が欠けた行） | `fetchCustomers()` を呼ぶ | 編集フォームの初期値になる項目（`vwapDocument` / `specificAccountType` / `suspendEquityTrade` / `totalAssets` / `growthQuotaNext` / `birthDate` など）も返る。文字列は欠けたら `''`、数値は欠けたら `null`。`updatedAt` は `更新日時` の文字列で、`null` なら `''` | 実装済 |
 
 ## 主キーは `id`（口座番号ではない）
 
@@ -55,9 +76,9 @@ DB 全テーブルの主キーを `id` に統一する方針に合わせて、�
 実 API の integer な `ID` にしてある。**口座番号は主キーではなく、行を人が識別する一意な業務コード**。
 一覧の行キーも `id` になった（`CustomerListView` の `row-key` は `DataTable` の既定に任せる）。
 
-**この層はフロントが先行している。** 取り込み時点の `docs/api/openapi.json` の `CustomerItem` に
-`ID` は無く、パスも `/masters/customers/{account_no}` のまま。実 API が `ID` を返し始めるまで、
-実 API に当てると `id` は空文字になる（この画面はいま読むだけなので、影響は行キーの重複だけ）。
+`ID` とパス `/masters/customers/{account_id}` は 2026-09-18 の取り込みで仕様に入った
+（フィクスチャの注記）。`ID` が欠けると `id` は空文字になり、行キーの重複に加えて
+**更新のパス（`PUT /masters/customers/{id}`）と編集の事前検証（`account_id`）が壊れる**。
 
 `CUA-15` はその穴を見張るためのシナリオ。**値で取り繕わない**
 （銘柄マスタの [api-symbols.md](api-symbols.md) の `STA-24` と同じ扱い）。

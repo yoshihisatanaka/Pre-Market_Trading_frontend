@@ -42,7 +42,9 @@ describe('OrderListView', () => {
     const firstRow = wrapper.find('[data-testid="data-table-row"]').text()
     expect(firstRow).toContain('AAPL')
     expect(firstRow).toContain('買')
-    expect(firstRow).toContain('$227.52')
+    // 金額は全画面で単位を後置する（2026-09-28 決定。$ は前置しない）
+    expect(firstRow).toContain(`${orderListResponse.items[0].price.toFixed(2)} ドル`)
+    expect(firstRow).not.toContain('$')
     expect(firstRow).toContain('約定済')
   })
 

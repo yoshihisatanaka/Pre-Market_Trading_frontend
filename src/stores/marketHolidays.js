@@ -6,10 +6,14 @@ import {
   validateMarketHoliday,
 } from '@/api/marketHolidays'
 import { useCrudList } from '@/composables/useCrudList'
+import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
 import { reloadMarketStatusAfter } from './marketStatus'
 
-/** 一覧 1 ページあたりの表示件数 */
-export const MARKET_HOLIDAYS_PAGE_SIZE = 50
+/**
+ * 一覧 1 ページあたりの表示件数（既定は utils/pagination.js の DEFAULT_PAGE_SIZE）。
+ * この画面だけ変えるときはここを数値で上書きする（api 層が limit として送る）。
+ */
+export const MARKET_HOLIDAYS_PAGE_SIZE = DEFAULT_PAGE_SIZE
 
 /**
  * 海外休場日マスタのストア。

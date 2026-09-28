@@ -114,10 +114,11 @@ describe('api/incidents', () => {
     await expect(fetchSuspensionStatus()).resolves.toBeNull()
   })
 
-  it('[INA-04] 履歴が camelCase の配列になり、reason は変更後データの停止理由になる', async () => {
-    const histories = await fetchSuspensionHistories()
+  it('[INA-04] 履歴が { items, total } で返り、items は camelCase で reason は変更後データの停止理由になる', async () => {
+    const { items, total } = await fetchSuspensionHistories()
 
-    expect(histories).toEqual(
+    expect(total).toBe(suspensionHistories.length)
+    expect(items).toEqual(
       suspensionHistories.map((raw) => ({
         id: raw['ID'],
         target: raw['停止対象'],
@@ -131,10 +132,10 @@ describe('api/incidents', () => {
     )
   })
 
-  it('[INA-05] histories が無い本文なら空配列になる', async () => {
-    server.use(http.get(HISTORY_PATH, () => HttpResponse.json({ total: 0 })))
+  it('[INA-05] histories と total が無い本文なら { items: [], total: 0 } になる', async () => {
+    server.use(http.get(HISTORY_PATH, () => HttpResponse.json({})))
 
-    await expect(fetchSuspensionHistories()).resolves.toEqual([])
+    await expect(fetchSuspensionHistories()).resolves.toEqual({ items: [], total: 0 })
   })
 
   it('[INA-06] 500 は既定の文言の ApiError になる', async () => {
@@ -156,13 +157,18 @@ describe('api/incidents', () => {
     expect([...lastRequest.params.keys()]).toEqual([])
   })
 
-  it('[INA-08] 履歴は /operations/order-suspensions/history に limit=50 付きで GET する', async () => {
+  it('[INA-08] 履歴は /operations/order-suspensions/history に渡した limit / offset を載せて GET する', async () => {
     record('get', HISTORY_PATH)
+    const limit = 20
+    const offset = 40
 
-    await fetchSuspensionHistories()
+    await fetchSuspensionHistories({ limit, offset })
 
     expect(lastRequest.url.pathname).toBe('/api/operations/order-suspensions/history')
-    expect(Object.fromEntries(lastRequest.params)).toEqual({ limit: '50' })
+    expect(Object.fromEntries(lastRequest.params)).toEqual({
+      limit: String(limit),
+      offset: String(offset),
+    })
   })
 
   it('[INA-09] 変更後データが null の履歴は reason が null になる', async () => {
@@ -177,10 +183,10 @@ describe('api/incidents', () => {
       ),
     )
 
-    const histories = await fetchSuspensionHistories()
+    const { items } = await fetchSuspensionHistories()
 
-    expect(histories).toHaveLength(1)
-    expect(histories[0].reason).toBeNull()
+    expect(items).toHaveLength(1)
+    expect(items[0].reason).toBeNull()
   })
 
   it('[INA-10] 停止は /suspend に { 停止対象, 停止理由, 更新日時 } を POST し、実行者は送らない', async () => {
@@ -261,5 +267,28 @@ describe('api/incidents', () => {
     await expect(
       resumeOrders({ target: IB['停止対象'], updatedAt: IB['更新日時'] }),
     ).rejects.toMatchObject({ name: 'ApiError', status: 400, message: detail })
+  })
+
+  it('[INA-16] 引数なしなら offset=0 だけを送り、limit は載せない', async () => {
+    record('get', HISTORY_PATH)
+
+    await fetchSuspensionHistories()
+
+    expect(Object.fromEntries(lastRequest.params)).toEqual({ offset: '0' })
+  })
+
+  it('[INA-17] total は items の件数ではなくサーバの全体件数を運ぶ', async () => {
+    const pageRows = suspensionHistories.slice(0, 1)
+    const total = suspensionHistories.length * 10
+    server.use(
+      http.get(HISTORY_PATH, () =>
+        HttpResponse.json({ total, limit: pageRows.length, offset: 0, histories: pageRows }),
+      ),
+    )
+
+    const result = await fetchSuspensionHistories({ limit: pageRows.length })
+
+    expect(result.items).toHaveLength(pageRows.length)
+    expect(result.total).toBe(total)
   })
 })

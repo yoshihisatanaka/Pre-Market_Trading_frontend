@@ -7,14 +7,15 @@ import {
   validateSymbol,
 } from '@/api/symbols'
 import { useCrudList } from '@/composables/useCrudList'
+import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
 
 /**
- * 一覧 1 ページあたりの表示件数。
+ * 一覧 1 ページあたりの表示件数（既定は utils/pagination.js の DEFAULT_PAGE_SIZE）。
  *
- * 実 API（`GET /masters/symbols`）の limit は既定 50・最大 200 で、こちらから指定できる。
- * ここを変えるとページャーの表示件数もそのまま変わる（api 層が limit として送る）。
+ * 実 API（`GET /masters/symbols`）の limit は 1〜200 で、こちらから指定できる。
+ * この画面だけ変えるときはここを数値で上書きする（api 層が limit として送る）。
  */
-export const SYMBOLS_PAGE_SIZE = 50
+export const SYMBOLS_PAGE_SIZE = DEFAULT_PAGE_SIZE
 
 /**
  * 銘柄マスタのストア。

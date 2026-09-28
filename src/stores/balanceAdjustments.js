@@ -6,9 +6,13 @@ import {
   updateBalanceSellProhibited,
 } from '@/api/balanceAdjustments'
 import { useCrudList } from '@/composables/useCrudList'
+import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
 
-/** 一覧 1 ページあたりの表示件数 */
-export const BALANCE_ADJUSTMENTS_PAGE_SIZE = 50
+/**
+ * 一覧 1 ページあたりの表示件数（既定は utils/pagination.js の DEFAULT_PAGE_SIZE）。
+ * この画面だけ変えるときはここを数値で上書きする（api 層が limit として送る）。
+ */
+export const BALANCE_ADJUSTMENTS_PAGE_SIZE = DEFAULT_PAGE_SIZE
 
 /**
  * 残高マスタのストア。

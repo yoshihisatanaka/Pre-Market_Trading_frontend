@@ -1,14 +1,15 @@
 import { defineStore } from 'pinia'
 import { fetchActivityLogs } from '@/api/activityLogs'
 import { useCrudList } from '@/composables/useCrudList'
+import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
 
 /**
- * 一覧 1 ページあたりの表示件数。
+ * 一覧 1 ページあたりの表示件数（既定は utils/pagination.js の DEFAULT_PAGE_SIZE）。
  *
- * 実 API（`GET /operations/activity-logs`）の limit は 1〜200 で既定 50。
- * ここの値が api 層から `limit` として送られるので、変えるとリクエストも変わる。
+ * 実 API（`GET /operations/activity-logs`）の limit は 1〜200。
+ * この画面だけ変えるときはここを数値で上書きする（api 層が limit として送る）。
  */
-export const ACTIVITY_LOGS_PAGE_SIZE = 50
+export const ACTIVITY_LOGS_PAGE_SIZE = DEFAULT_PAGE_SIZE
 
 /**
  * 操作ログのストア。

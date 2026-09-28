@@ -6,9 +6,13 @@ import {
   updateAnnouncement,
 } from '@/api/announcements'
 import { useAsync } from '@/composables/useAsync'
+import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
 
-/** 履歴の 1 ページの件数（実 API の limit の既定と同じ） */
-export const ANNOUNCEMENT_HISTORY_PAGE_SIZE = 50
+/**
+ * 履歴の 1 ページの件数（既定は utils/pagination.js の DEFAULT_PAGE_SIZE）。
+ * この画面だけ変えるときはここを数値で上書きする（limit として送る）。
+ */
+export const ANNOUNCEMENT_HISTORY_PAGE_SIZE = DEFAULT_PAGE_SIZE
 
 /**
  * お知らせ管理（全画面共通のお知らせ・計画メンテナンス案内）。

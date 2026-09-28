@@ -565,7 +565,7 @@ const PROBES = [
   { name: 'fetchAnnouncementHistory', run: () => fetchAnnouncementHistory({ limit: 10, offset: 0 }) },
   { name: 'fetchBanner', run: () => fetchBanner() },
   { name: 'fetchSuspensionStatus', run: () => fetchSuspensionStatus() },
-  { name: 'fetchSuspensionHistories', run: () => fetchSuspensionHistories() },
+  { name: 'fetchSuspensionHistories', run: () => fetchSuspensionHistories({ limit: 10, offset: 0 }) },
   {
     name: 'suspendOrders',
     run: () => suspendOrders({ target: '1', reason: 'x', updatedAt: null }),

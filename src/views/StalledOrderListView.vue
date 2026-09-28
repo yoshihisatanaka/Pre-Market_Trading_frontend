@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
@@ -13,6 +13,15 @@ import StalledOrderListCard from '@/components/operations/StalledOrderListCard.v
 import StalledOrderTable from '@/components/operations/StalledOrderTable.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { useStalledOrdersStore } from '@/stores/stalledOrders'
+import { downloadCsv } from '@/utils/download'
+import {
+  CONFIRMATION_SAMPLE_CSV_FILENAME,
+  TWS_ORDER_CSV_FILENAME,
+  TWS_ORDER_SAMPLE_CSV_FILENAME,
+  buildConfirmationSampleCsv,
+  buildTwsOrderCsv,
+  buildTwsOrderSampleCsv,
+} from '@/utils/stalledOrderCsv'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useStalledOrdersStore()
@@ -34,31 +43,39 @@ const { inputs, submitSearch, clearSearch } = useListQuery({
   load: (params) => store.load(params),
 })
 
+/*
+ * CSV の出力とサンプル 2 種はサーバを通さず、ここで組み立ててダウンロードさせる
+ * （書式は公開モックの実物から採取。列と値の変換は utils/stalledOrderCsv.js）。
+ *
+ * 「注文エラーをCSV出力」の対象は、いま画面に出ている注文エラーの行そのもの。
+ * 検索条件はすでに一覧の取得で効いているので、出力は画面の検索結果と同じ行になる（モックも同じ）。
+ */
+function downloadOrderSample() {
+  downloadCsv(TWS_ORDER_SAMPLE_CSV_FILENAME, buildTwsOrderSampleCsv())
+}
+
+function exportOrderErrors() {
+  downloadCsv(TWS_ORDER_CSV_FILENAME, buildTwsOrderCsv(orderErrors.value))
+}
+
+function downloadConfirmationSample() {
+  downloadCsv(CONFIRMATION_SAMPLE_CSV_FILENAME, buildConfirmationSampleCsv())
+}
+
+/*
+ * 出力を押せるのは、注文エラーが読めて 1 件以上あるときだけ。
+ * 取得中に押すと取り直す前の行が出る。0 件の出力は別システムで発注するものが無い。
+ */
+const canExport = computed(() => !loading.value && !error.value && orderErrors.value.length > 0)
+
 /** 取込むコンファメーション CSV。選ぶまでは null */
 const confirmationFile = ref(null)
 
 /*
- * CSV の出力・取込は処理が未実装（UI だけ先に置く）。
- * バックエンドに該当 API がまだ無いため、押しても何も起きない。
- *
- * TODO(処理実装): 別システム発注 CSV の出力は検索条件を引き継いで
- *   order_id,account_number,symbol,action,quantity,order_type,limit_price,time_in_force,market_category
- *   の書式で、コンファメーション CSV の取込は
- *   order_id,confirmation_ref,confirmation_status,filled_quantity,average_price,confirmed_at,message
- *   の書式で行う（書式は公開モックのサンプル実物から採取）。
+ * コンファメーション CSV の取込は処理が未実装（バックエンドに API が無い）。押しても何も起きない。
+ * 書式は order_id,confirmation_ref,confirmation_status,filled_quantity,average_price,confirmed_at,message
+ * （公開モックのサンプル実物から採取）。
  */
-function downloadOrderSample() {
-  // TODO(処理実装): 別システム発注 CSV のサンプルをダウンロードする
-}
-
-function exportOrderErrors() {
-  // TODO(処理実装): 注文エラーを別システム発注 CSV として出力する
-}
-
-function downloadConfirmationSample() {
-  // TODO(処理実装): コンファメーション CSV のサンプルをダウンロードする
-}
-
 function importConfirmation() {
   // TODO(処理実装): confirmationFile を送り、注文照会へ反映する
 }
@@ -136,7 +153,11 @@ function importConfirmation() {
         >
           別システム発注CSVサンプル
         </BaseButton>
-        <BaseButton data-testid="stalled-orders-export" @click="exportOrderErrors">
+        <BaseButton
+          data-testid="stalled-orders-export"
+          :disabled="!canExport"
+          @click="exportOrderErrors"
+        >
           注文エラーをCSV出力
         </BaseButton>
         <BaseButton

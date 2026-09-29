@@ -8,7 +8,9 @@
  * 最新の 1 件が現在のお知らせと食い違わないよう、現在値は履歴の末尾から組み立てる。
  *
  * 変更前データ / 変更後データ / 差分データ は openapi.json で型が宣言されていない
- * （anyOf: [{}, null]）。更新リクエストと同じ { 表示フラグ, 本文 } の object を置いている。
+ * （anyOf: [{}, null]）。実 API は **JSON 文字列**で返す（2026-09-29 実測）ので、
+ * { 表示フラグ, 本文 } の object を JSON.stringify して置く。
+ * 実 API の中身は行の全項目（ID / 更新日時 …）の写しだが、画面が読むのは 本文 だけなので 2 項目に絞る。
  */
 
 /** 本文の見本。画面モックのプレースホルダと同じ系統の文面 */
@@ -64,9 +66,9 @@ function buildHistories() {
       操作区分: operation,
       操作区分名: OPERATION_LABELS[operation],
       操作者: OPERATORS[index % OPERATORS.length],
-      変更前データ: { ...state },
-      変更後データ: { ...next },
-      差分データ: diff(state, next),
+      変更前データ: JSON.stringify(state),
+      変更後データ: JSON.stringify(next),
+      差分データ: JSON.stringify(diff(state, next)),
       操作日時: operatedAt(index),
     }
     state = next
@@ -80,13 +82,14 @@ function buildHistories() {
 export const announcementHistories = buildHistories()
 
 const latest = announcementHistories[0]
+const latestAfter = JSON.parse(latest.変更後データ)
 
 /** 現在のお知らせ。AnnouncementItem（最新の履歴と同じ状態） */
 export const announcement = {
   ID: 1,
-  表示フラグ: latest.変更後データ.表示フラグ,
-  表示中: latest.変更後データ.表示フラグ === 1 && Boolean(latest.変更後データ.本文),
-  本文: latest.変更後データ.本文,
+  表示フラグ: latestAfter.表示フラグ,
+  表示中: latestAfter.表示フラグ === 1 && Boolean(latestAfter.本文),
+  本文: latestAfter.本文,
   ユーザー操作フラグ: 1,
   作成日時: '2026-01-05T09:00:00',
   作成者: 'SYSTEM',

@@ -8,7 +8,7 @@ import { apiClient } from './client'
  *   - プロパティ名が日本語（表示フラグ / 本文 / 更新日時 …）
  *   - 表示フラグは integer の 0 / 1。アプリ内は boolean
  *   - 本文は nullable。アプリ内は空文字に寄せる（textarea にそのまま流すため）
- *   - 履歴の 変更前データ / 変更後データ は型が宣言されていない（anyOf: [{}, null]）
+ *   - 履歴の 変更前データ / 変更後データ は型が宣言されていない（anyOf: [{}, null]）。実 API は JSON 文字列で返す
  * 更新系は `X-User-Code` ヘッダで操作者が決まる。付与は client.js の interceptor が全 API 共通で行う。
  */
 
@@ -135,10 +135,21 @@ function toAnnouncementHistory(raw) {
  * 変更後データから本文を取り出す。
  *
  * 変更後データは openapi.json で型が宣言されていない（anyOf: [{}, null]）。
- * 更新リクエストと同じ `{ 表示フラグ, 本文 }` の object が入る前提で読み、
+ * 実 API は行の写しを **JSON 文字列**で返す（2026-09-29 実測。docs/e2e/announcements-real-api.md）。
+ * 文字列なら解釈してから、object ならそのまま `本文` を読む。
  * 形が違えば空文字にする（画面は「—」を出す。解除で本文が空になったときと同じ見た目）。
  */
 function historyMessage(after) {
-  if (!after || typeof after !== 'object') return ''
-  return typeof after['本文'] === 'string' ? after['本文'] : ''
+  const data = typeof after === 'string' ? parseJsonObject(after) : after
+  if (!data || typeof data !== 'object') return ''
+  return typeof data['本文'] === 'string' ? data['本文'] : ''
+}
+
+/** JSON 文字列を解釈する。壊れていれば null（履歴 1 行の不備で一覧全体を落とさない） */
+function parseJsonObject(text) {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
 }

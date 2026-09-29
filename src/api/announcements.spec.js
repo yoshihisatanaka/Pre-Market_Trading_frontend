@@ -77,7 +77,8 @@ const toHistory = (raw) => ({
   operation: raw.操作区分,
   operationLabel: raw.操作区分名,
   operator: raw.操作者,
-  message: raw.変更後データ?.本文 ?? '',
+  // フィクスチャは実 API と同じく JSON 文字列で持つ
+  message: JSON.parse(raw.変更後データ)?.本文 ?? '',
   operatedAt: raw.操作日時,
 })
 
@@ -230,19 +231,48 @@ describe('api/announcements', () => {
   it('[ANA-13] 変更後データの形が違う行は本文が空文字になる', async () => {
     const base = announcementHistories[0]
     respondWith('get', HISTORY_PATH, {
-      total: 3,
+      total: 5,
       limit: 50,
       offset: 0,
       histories: [
         { ...base, ID: 1, 変更後データ: null },
-        { ...base, ID: 2, 変更後データ: { 表示フラグ: 1, 本文: 123 } },
-        { ...base, ID: 3, 変更後データ: { 表示フラグ: 0, 本文: null } },
+        { ...base, ID: 2, 変更後データ: JSON.stringify({ 表示フラグ: 1, 本文: 123 }) },
+        { ...base, ID: 3, 変更後データ: JSON.stringify({ 表示フラグ: 0, 本文: null }) },
+        { ...base, ID: 4, 変更後データ: '{壊れた JSON' },
+        { ...base, ID: 5, 変更後データ: '"本文"' },
       ],
     })
 
     const { items } = await fetchAnnouncementHistory()
 
-    expect(items.map((item) => item.message)).toEqual(['', '', ''])
+    expect(items.map((item) => item.message)).toEqual(['', '', '', '', ''])
+  })
+
+  it('[ANA-16] 変更後データが JSON 文字列でも object でも本文を読む', async () => {
+    const base = announcementHistories[0]
+    respondWith('get', HISTORY_PATH, {
+      total: 2,
+      limit: 50,
+      offset: 0,
+      histories: [
+        // 実 API の形（2026-09-29 実測）。行の全項目の写しが文字列で入る
+        {
+          ...base,
+          ID: 1,
+          変更後データ: JSON.stringify({
+            ID: 1,
+            本文: '文字列で来た本文',
+            更新日時: '2026-09-29 11:24:05',
+            表示フラグ: 1,
+          }),
+        },
+        { ...base, ID: 2, 変更後データ: { 表示フラグ: 1, 本文: 'object で来た本文' } },
+      ],
+    })
+
+    const { items } = await fetchAnnouncementHistory()
+
+    expect(items.map((item) => item.message)).toEqual(['文字列で来た本文', 'object で来た本文'])
   })
 
   it('[ANA-14] histories と total を持たない応答は空の一覧になる', async () => {

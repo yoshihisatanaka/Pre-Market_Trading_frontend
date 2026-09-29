@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import { supervisorOperator } from '../fixtures/currentOperator'
+import { currentOperatorFor, supervisorOperator } from '../fixtures/currentOperator'
 import { rolePermissions, withPermissionFlags } from '../fixtures/permissions'
 import { detailError, isSameTimestamp, nowTimestamp } from './_shared'
 
@@ -28,10 +28,12 @@ const PERMISSION_CONFLICT_DETAIL =
 
 export const permissionHandlers = [
   /*
-   * ログイン中の操作者。既定は管理責任者（権限マスタを編集できる）。
-   * 閲覧のみを見たいときは fixtures/currentOperator.js の viewerOperator に差し替える。
+   * ログイン中の操作者。実 API と同じく X-User-Code（.env の VITE_USER_CODE）で決まる。
+   * 知らないコードは管理責任者（権限マスタを編集できる）。切り替え先は fixtures/currentOperator.js の devOperators。
    */
-  http.get('*/api/auth/me', () => HttpResponse.json(supervisorOperator)),
+  http.get('*/api/auth/me', ({ request }) =>
+    HttpResponse.json(currentOperatorFor(request.headers.get('X-User-Code'))),
+  ),
 
   http.get('*/api/masters/permissions', () => HttpResponse.json({ roles: permissionRows })),
 

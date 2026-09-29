@@ -20,8 +20,8 @@ export const navSections = [
   },
   {
     label: '注文',
+    // 新規注文（/orders/new）はモックどおりサイドメニューに置かない。注文照会などの画面内から遷移する
     items: [
-      { label: '新規注文', to: '/orders/new', icon: 'plus' },
       { label: 'CSV一括注文', to: '/orders/csv/upload', icon: 'documentChart' },
       { label: '注文照会', to: '/orders/inquiry', icon: 'clipboard' },
       { label: 'Dream登録状況', to: '/orders/dream-status' },

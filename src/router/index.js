@@ -24,7 +24,14 @@ const routes = [
     meta: { title: 'UI カタログ' },
   },
   {
-    // path は navigation.js（サイドメニュー）の項目と一致させる
+    // path は navigation.js（サイドメニュー）の項目と一致させる。
+    // プレビュー（/orders/csv/preview）と受付完了（/orders/csv/complete）は処理と一緒に足す
+    path: '/orders/csv/upload',
+    name: 'order-csv-upload',
+    component: () => import('@/views/OrderCsvUploadView.vue'),
+    meta: { title: 'CSV一括注文' },
+  },
+  {
     path: '/orders/inquiry',
     name: 'order-inquiry',
     component: () => import('@/views/OrderInquiryListView.vue'),

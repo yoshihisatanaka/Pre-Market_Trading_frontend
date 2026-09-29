@@ -42,6 +42,7 @@ import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '../mocks/fixture
 import { executions } from '../mocks/fixtures/executions'
 import { orderInquiryRows } from '../mocks/fixtures/orderInquiry'
 import { dreamOrders, dreamStatusCodes } from '../mocks/fixtures/dreamStatus'
+import { orderCsvSpecResponse } from '../mocks/fixtures/orderCsv'
 import { fetchOrders } from './orders'
 import { fetchOrderInquiry } from './orderInquiry'
 import { fetchCodes } from './codes'
@@ -91,6 +92,7 @@ import { fetchMizuhoExecutions } from './mizuhoExecutions'
 import { fetchMizuhoClosingStatus } from './closing'
 import { fetchExecutions } from './executions'
 import { fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
+import { fetchOrderCsvSpec } from './orderCsv'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -337,6 +339,8 @@ const FIXTURES = [
   { name: 'orderInquiry', schema: 'OrderItemResponse', rows: orderInquiryRows },
   { name: 'dreamOrders', schema: 'DreamOrderItem', rows: dreamOrders },
   { name: 'dreamStatusCodes', schema: 'DreamStatusCodeItem', rows: dreamStatusCodes },
+  // レスポンス全体が対象。columns[] は items.$ref 経由で CsvColumnSpec として型検査される
+  { name: 'orderCsvSpec', schema: 'CsvHeaderSpecResponse', rows: [orderCsvSpecResponse] },
 ]
 
 function describeSchema(schema) {
@@ -380,9 +384,15 @@ function typeProblems(value, rawSchema, at) {
       if (!Array.isArray(value)) return mismatch()
       return value.flatMap((item, i) => typeProblems(item, schema.items, `${at}[${i}]`))
     case 'object':
-    case undefined:
       if (schema.properties) return objectProblems(value, schema, at)
       return typeof value === 'object' && value !== null ? [] : mismatch()
+    case undefined:
+      /*
+       * 型の宣言が無い。properties があれば object として見るが、無ければ何でもよい
+       * （CsvColumnSpec.example は `{ title }` だけで、列ごとに string / integer / number が来る）。
+       */
+      if (schema.properties) return objectProblems(value, schema, at)
+      return []
     default:
       return []
   }
@@ -679,6 +689,7 @@ const PROBES = [
       }),
   },
   { name: 'fetchDreamStatusCodes', run: () => fetchDreamStatusCodes() },
+  { name: 'fetchOrderCsvSpec', run: () => fetchOrderCsvSpec() },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

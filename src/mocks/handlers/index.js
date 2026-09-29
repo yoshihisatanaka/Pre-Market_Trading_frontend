@@ -19,6 +19,7 @@ import { mizuhoExecutionHandlers } from './mizuhoExecutions'
 import { closingHandlers } from './closing'
 import { executionHandlers } from './executions'
 import { dreamStatusHandlers } from './dreamStatus'
+import { orderCsvHandlers } from './orderCsv'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -34,13 +35,14 @@ import { dreamStatusHandlers } from './dreamStatus'
  *    vitest.setup.js の afterEach で resetMockState() を呼ぶ
  *  - 共通のヘルパ（エラー応答の形・日付の検査・楽観的ロックの照合）は _shared.js
  *
- * 例外は海外休場日・受注不可日・スライス基準の 3 つ。
+ * 例外は下に並べたパス（海外休場日・受注不可日・スライス基準・市場ステータス・CSV一括注文の列仕様）。
  * 実 API は実装済みだが、単体テストと E2E がこの handlers を共用しているのでハンドラは残し、
  * **実 API と同じ形**に寄せてある。
  *   /masters/market-holidays … 日本語キー / integer の日付 / 降順 / エラーは { detail } / 論理削除
  *   /masters/blackout-dates  … 同上
  *   /masters/hard-limits     … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
  *   /market-status           … 日本語キー / 空白入りキー / 日付を「今日」へずらして返す
+ *   /orders/csv-spec         … CSV一括注文の全 22 列の仕様（CsvHeaderSpecResponse そのまま）
  * マスタ系のパスは 2026-09-15 の OpenAPI 取り込みで /masters/ 配下へ移った。
  * 実 API に当てて動かすときは環境変数 VITE_ENABLE_MSW を false にする（README「バックエンドとの連携」）。
  */
@@ -112,4 +114,5 @@ export const handlers = [
   ...closingHandlers,
   ...executionHandlers,
   ...dreamStatusHandlers,
+  ...orderCsvHandlers,
 ]

@@ -14,3 +14,5 @@
 | FDZ-06 | `accept=".csv"` を渡す | マウントする | ファイル入力の `accept` が `.csv` になる | 実装済 |
 | FDZ-07 | `hint` を渡す | マウントする | 補助文が表示される | 実装済 |
 | FDZ-08 | `v-model` に File を渡した状態 | `modelValue` を null に戻す | 隠しの input の `value` が空に戻る（同じファイルを選び直しても `change` が発火するように）。jsdom の file input は value を観測しづらいので、`value` の setter に渡された値で見る | 実装済 |
+| FDZ-09 | `icon` スロットに svg を渡す | マウントする | svg が `aria-hidden="true"` のラッパの中に、案内文より前に描かれる | 実装済 |
+| FDZ-10 | `icon` スロットを渡さない | マウントする | `aria-hidden` のラッパ自体が描かれず、領域の最初の子が案内文になる | 実装済 |

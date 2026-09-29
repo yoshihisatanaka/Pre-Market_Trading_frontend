@@ -132,7 +132,24 @@ const pageOffset = ref(50)
         accept=".csv"
         label="クリックまたはドラッグ＆ドロップでCSVを選択"
         hint="UTF-8 / Shift-JIS 対応 · .csv ファイル"
-      />
+      >
+        <!-- icon スロット。寸法は呼び出し側が決める（CSV一括注文と同じ 48px） -->
+        <template #icon>
+          <svg
+            class="catalog__drop-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            />
+          </svg>
+        </template>
+      </FileDropZone>
     </BaseCard>
 
     <BaseCard title="通知とチップ">
@@ -234,5 +251,10 @@ const pageOffset = ref(50)
 
 .catalog__w-120 {
   width: 120px;
+}
+
+.catalog__drop-icon {
+  width: 48px;
+  height: 48px;
 }
 </style>

@@ -73,4 +73,27 @@ describe('FileDropZone', () => {
 
     expect(assigned).toEqual([''])
   })
+
+  it('[FDZ-09] icon スロットを aria-hidden のラッパに入れて案内文の前に出す', () => {
+    const wrapper = mount(FileDropZone, {
+      slots: { icon: '<svg data-testid="drop-icon" viewBox="0 0 24 24"></svg>' },
+    })
+
+    const wrap = wrapper.find('[aria-hidden="true"]')
+    expect(wrap.exists()).toBe(true)
+    expect(wrap.find('[data-testid="drop-icon"]').exists()).toBe(true)
+    // 領域の最初の子がラッパで、そのあとに案内文が続く
+    const children = wrapper.element.children
+    expect(children[0]).toBe(wrap.element)
+    expect(children[1].textContent).toBe('クリックまたはドラッグ＆ドロップでファイルを選択')
+  })
+
+  it('[FDZ-10] icon スロットを渡さなければラッパを描かない', () => {
+    const wrapper = mount(FileDropZone)
+
+    expect(wrapper.find('[aria-hidden="true"]').exists()).toBe(false)
+    expect(wrapper.element.children[0].textContent).toBe(
+      'クリックまたはドラッグ＆ドロップでファイルを選択',
+    )
+  })
 })

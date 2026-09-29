@@ -31,6 +31,7 @@
 | 12 | **`/market-status` のセッションコードに enum 宣言が無い**: `現在のセッション`（`PRE` / `REGULAR` / `AFTER` / `BEFORE_OPEN` / `CLOSED`）と `MarketSessionItem.code` がどちらも素の `string`。値の体系は description の文章にしかないので、**綴りが変わっても `apiEnums.spec.js`（`*Enum` の写ししか見ない）でも契約テストの `KNOWN_GAPS`（型と項目名しか見ない）でも構造的に検知できない** | 共通レイアウト（ヘッダの市場ステータス・取引時間帯） | 0 | 表示の主判定を `JPN開始` / `JPN終了` の時刻比較に寄せ、この文字列への依存を異常系だけに留めた（`src/utils/marketStatus.js`）。未知の綴りが来ても `○ Closed` に落ちるだけで壊れない | 依頼中 | 2026-09-18 |
 | 16 | **発注再開に理由を残すか**: `ResumeRequest` に理由の項目が無く、履歴には「誰がいつ再開したか」しか残らない（停止理由は再開後も直前の値を保持する）。障害報告で再開の判断根拠を残す要件があるか | 障害管理（再開） | 0 | 再開のダイアログは理由を取らず、停止時の理由・日時・停止者を読み取り専用で見せる | 問合せ中 | 2026-09-24 |
 | 21 | **`limit` の無い一覧・履歴 4 本に `limit`（1〜200・既定 50）を足してほしい**: `GET /masters/blackout-dates`・`GET /customers`（注文画面用）・`GET /masters/customers/{account_id}/history`・`GET /masters/blackout-dates/{blackout_date_id}/history` は `offset` だけ。2026-09-25 実測で `?limit=2` は無視される（受注不可日は応答が `limit: 50`、`/customers` は 50 行）。他の一覧・履歴はすべて `limit` を持つ | 受注不可日マスタ（一覧）/ 新規注文（顧客検索） | 0 | 受注不可日は 50 件固定に合わせてある（`src/api/blackoutDates.js`・`src/stores/blackoutDates.js`）。**一覧の件数はフロントが決めて `limit` で送る方針に確定（2026-09-28）**。全画面の件数は `src/utils/pagination.js` の `DEFAULT_PAGE_SIZE` で変えるが、受注不可日だけはこれに従えず 50 のまま残る | 依頼中（2026-09-25 に一度取り下げ、2026-09-28 に再依頼。件数をフロント管理にしたため必要になった） | 2026-09-25 |
+| 23 | **操作ログの `操作区分` が一覧と絞り込みで食い違う**: 2026-09-29 実測で `GET /operations/activity-logs` の一覧は障害管理の `SUSPEND` / `RESUME`、お知らせ管理の `SHOW` / `HIDE` を返すが、同じ API に `?operation=SUSPEND` を送ると 400（`指定可能: CREATE, UPDATE, DELETE, BATCH`）になる。`ActivityLogItem.操作区分` の description も 4 種だけ。**発注停止・お知らせの行を操作区分で絞り込めない**。①区分の値の体系（この 4 種を増やすのか、`SUSPEND` などを `UPDATE` に寄せて返すのか）②増やすなら `operation` の指定可能値と `openapi.json` への反映、を回答してほしい。あわせて対象種別コードは `schedule_times` だけがアンダースコアで、他はハイフン区切り（`order-suspensions` など）。動作には影響しないが、揃えるならいまのうちに知りたい | 操作ログ（一覧・検索） | 0 | 画面の操作区分は 4 種のまま。知らない値はバッジに生の値（`SUSPEND` など）をそのまま出す（`src/utils/activityLogTypes.js` の `operationLabel`）。実 API E2E `ALR-02` は 4 種の区分で絞るので、この食い違いには当たらない（保留の理由は DB に 4 種の行が無いことで別件） | 依頼中 | 2026-09-29 |
 | 11 | **手数料優遇マスタの要件**: モック自体が「設定内容は要件整理中」 | 手数料優遇マスタ | 4.0 | 着手しない | 要件待ち | 2026-09-17 |
 
 ## 契約提案: コンファメーション CSV の取込（#1 ②）
@@ -131,7 +132,8 @@ Executions 2 / Calculations 1 / HoldingSearch 1 / MizuhoIntegration 4 / Batch 10
 
 - バックエンド担当者に渡す**依頼書**は本表から起こす: [backend-request-2026-09-25.md](backend-request-2026-09-25.md)
   （未解消の行だけを区分 A〜D に並べ替え、各項目に回答欄を付けた版。番号は本表と同じ）。
-  回答を受けたら本表の「状態」を更新し、依頼書は起票日付きで残す
+  回答を受けたら本表の「状態」を更新し、依頼書は起票日付きで残す。
+  2026-09-25 版以降の起票（#23）は [backend-request-2026-09-29.md](backend-request-2026-09-29.md) に分けた
 - 依頼 1〜4 は **fixture の生の形**（`src/mocks/fixtures/<画面>.js`）をそのまま「こういう応答を返してほしい」の提案として添える。
   フロントはその形に対して実装・単体・MSW E2E を先に埋め、バックエンドが後から同じ形で実装すれば `src/api/` の変換だけで済む
 - 依頼 1 の滞留注文抽出は (a) 新パス / (b) `GET /orders` の拡張 のどちらでもよい。(b) なら fixture は捨て、

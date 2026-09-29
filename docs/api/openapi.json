@@ -14951,6 +14951,474 @@
         }
       }
     },
+    "/operations/balance-transfers/validate": {
+      "post": {
+        "tags": [
+          "BalanceTransfers"
+        ],
+        "summary": "Validate Balance Transfers Endpoint",
+        "description": "当日入出庫反映の事前検証（DB 更新なし）\n\n「通常の移管入庫」「通常の移管出庫」から ダイレクト入庫日／出庫日＝基準日 かつ キャンセル系以外の行を抽出し、\n反映した場合の結果（対象・除外・上げ直しの有無）を返す。確認画面用。",
+        "operationId": "validate_balance_transfers_endpoint_operations_balance_transfers_validate_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_validate_balance_transfers_endpoint_operations_balance_transfers_validate_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceTransferImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Excel 不正・シート不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/balance-transfers/import": {
+      "post": {
+        "tags": [
+          "BalanceTransfers"
+        ],
+        "summary": "Import Balance Transfers Endpoint",
+        "description": "当日入出庫反映（Phase 52）\n\n- 対象行を `m_残高情報.残高` へ即時反映（入庫 +株数 / 出庫 -株数。初期残高は動かさない）\n- 行単位反映: 口座・銘柄がマスタに無い／株数不正／出庫で残高不足 の行は除外して `rows` に理由を返す\n- **同日 2 回目は前回取込を取り消して（差分の逆適用）再適用**（`上げ直し` に前回の取込IDと件数）\n- 履歴は `d_残高情報履歴` に `TRF_IN` / `TRF_OUT` / `TRF_CANCEL`",
+        "operationId": "import_balance_transfers_endpoint_operations_balance_transfers_import_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_balance_transfers_endpoint_operations_balance_transfers_import_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceTransferImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Excel 不正・シート不足・上げ直しの逆適用不可",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/balance-transfers": {
+      "get": {
+        "tags": [
+          "BalanceTransfers"
+        ],
+        "summary": "List Balance Transfers Endpoint",
+        "description": "入出庫取込の一覧",
+        "operationId": "list_balance_transfers_endpoint_operations_balance_transfers_get",
+        "parameters": [
+          {
+            "name": "base_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "基準日 (YYYYMMDD)。省略時は全件（新しい順）",
+              "title": "Base Date"
+            },
+            "description": "基準日 (YYYYMMDD)。省略時は全件（新しい順）"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceTransferListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/balance-transfers/{import_id}": {
+      "get": {
+        "tags": [
+          "BalanceTransfers"
+        ],
+        "summary": "Get Balance Transfer Endpoint",
+        "description": "入出庫取込の明細",
+        "operationId": "get_balance_transfer_endpoint_operations_balance_transfers__import_id__get",
+        "parameters": [
+          {
+            "name": "import_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Import Id"
+            }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceTransferDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/balance-transfers/{import_id}/cancel": {
+      "post": {
+        "tags": [
+          "BalanceTransfers"
+        ],
+        "summary": "Cancel Balance Transfer Endpoint",
+        "description": "入出庫取込の手動取消（反映した差分を逆適用して残高を戻す）",
+        "operationId": "cancel_balance_transfer_endpoint_operations_balance_transfers__import_id__cancel_post",
+        "parameters": [
+          {
+            "name": "import_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Import Id"
+            }
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceTransferCancelResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "取消済み・逆適用不可",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/market-status": {
       "get": {
         "tags": [
@@ -17563,6 +18031,214 @@
         }
       }
     },
+    "/batch/import-carryover": {
+      "post": {
+        "tags": [
+          "Batch"
+        ],
+        "summary": "Morning Batch Import Carryover Endpoint",
+        "description": "朝バッチ⑧: 繰越発注CSV取込 API（個別再実行用・Phase 51）\n\n別システムが出す繰越発注 CSV（IFA 向け一括発注の 22 列＋`メモ`＝`部店コード-元受注番号`）を取り込み、\n繰越注文（`注文種別=CARRYOVER`、処理状況 000）として登録する。全行 強制区分=1 で検証し、\n格下げできないエラーの行だけ除外して `errors` に返す（行単位登録）。ファイルが無ければ `skipped: true`。",
+        "operationId": "morning_batch_import_carryover_endpoint_batch_import_carryover_post",
+        "parameters": [
+          {
+            "name": "base_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "基準日 (YYYYMMDD形式)",
+              "title": "Base Date"
+            },
+            "description": "基準日 (YYYYMMDD形式)"
+          },
+          {
+            "name": "file_path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "繰越発注CSVの直接パス（省略時は受領フォルダの carryover_{基準日}*.csv を探索）",
+              "title": "File Path"
+            },
+            "description": "繰越発注CSVの直接パス（省略時は受領フォルダの carryover_{基準日}*.csv を探索）"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Morning Batch Import Carryover Endpoint Batch Import Carryover Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/batch/import-carryover/upload": {
+      "post": {
+        "tags": [
+          "Batch"
+        ],
+        "summary": "Morning Batch Import Carryover Upload Endpoint",
+        "description": "繰越発注CSVのアップロード取込 API（運用担当の手動投入用・Phase 51）。処理内容は `/batch/import-carryover` と同じ。",
+        "operationId": "morning_batch_import_carryover_upload_endpoint_batch_import_carryover_upload_post",
+        "parameters": [
+          {
+            "name": "base_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "基準日 (YYYYMMDD形式)",
+              "title": "Base Date"
+            },
+            "description": "基準日 (YYYYMMDD形式)"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_morning_batch_import_carryover_upload_endpoint_batch_import_carryover_upload_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Morning Batch Import Carryover Upload Endpoint Batch Import Carryover Upload Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/batch/status": {
       "get": {
         "tags": [
@@ -19345,6 +20021,388 @@
         "title": "BalanceAdjustmentValidationResponse",
         "description": "残高事前検証レスポンス"
       },
+      "BalanceTransferCancelResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "取込ID": {
+            "type": "integer",
+            "title": "取込Id"
+          },
+          "逆適用件数": {
+            "type": "integer",
+            "title": "逆適用件数"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "取込ID",
+          "逆適用件数",
+          "message"
+        ],
+        "title": "BalanceTransferCancelResponse"
+      },
+      "BalanceTransferDetailResponse": {
+        "properties": {
+          "import": {
+            "$ref": "#/components/schemas/BalanceTransferImportItem"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceTransferRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "import",
+          "rows"
+        ],
+        "title": "BalanceTransferDetailResponse"
+      },
+      "BalanceTransferImportItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "基準日": {
+            "type": "integer",
+            "title": "基準日"
+          },
+          "状態": {
+            "type": "string",
+            "title": "状態"
+          },
+          "ファイル名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "ファイル名"
+          },
+          "総件数": {
+            "type": "integer",
+            "title": "総件数"
+          },
+          "反映件数": {
+            "type": "integer",
+            "title": "反映件数"
+          },
+          "除外件数": {
+            "type": "integer",
+            "title": "除外件数"
+          },
+          "取消取込ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消取込Id"
+          },
+          "操作者": {
+            "type": "string",
+            "title": "操作者"
+          },
+          "作成日時": {
+            "type": "string",
+            "format": "date-time",
+            "title": "作成日時"
+          },
+          "取消者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消者"
+          },
+          "取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "基準日",
+          "状態",
+          "総件数",
+          "反映件数",
+          "除外件数",
+          "操作者",
+          "作成日時"
+        ],
+        "title": "BalanceTransferImportItem"
+      },
+      "BalanceTransferImportResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "除外行が無ければ true（反映済み分は除外があっても残る）"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "取込ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取込Id"
+          },
+          "基準日": {
+            "type": "integer",
+            "title": "基準日"
+          },
+          "読込行数": {
+            "type": "integer",
+            "title": "読込行数"
+          },
+          "対象件数": {
+            "type": "integer",
+            "title": "対象件数"
+          },
+          "反映件数": {
+            "type": "integer",
+            "title": "反映件数"
+          },
+          "除外件数": {
+            "type": "integer",
+            "title": "除外件数"
+          },
+          "上げ直し": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "上げ直し",
+            "description": "同日の前回取込を取り消した場合 {取消した取込ID, 逆適用件数}"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceTransferRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "dry_run",
+          "基準日",
+          "読込行数",
+          "対象件数",
+          "反映件数",
+          "除外件数",
+          "rows",
+          "message"
+        ],
+        "title": "BalanceTransferImportResponse",
+        "description": "入出庫反映（検証・反映）レスポンス"
+      },
+      "BalanceTransferListResponse": {
+        "properties": {
+          "imports": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceTransferImportItem"
+            },
+            "type": "array",
+            "title": "Imports"
+          }
+        },
+        "type": "object",
+        "required": [
+          "imports"
+        ],
+        "title": "BalanceTransferListResponse"
+      },
+      "BalanceTransferRow": {
+        "properties": {
+          "ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "行番号": {
+            "type": "integer",
+            "title": "行番号"
+          },
+          "シート": {
+            "type": "string",
+            "title": "シート",
+            "description": "IN:移管入庫 / OUT:移管出庫"
+          },
+          "口座番号": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "口座番号"
+          },
+          "部店コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店コード"
+          },
+          "銘柄コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄コード"
+          },
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          },
+          "特定預り区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "特定預り区分"
+          },
+          "株数": {
+            "type": "integer",
+            "title": "株数",
+            "description": "符号付き差分（入庫 +N / 出庫 -N）"
+          },
+          "残高ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "残高Id"
+          },
+          "変更前残高": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前残高"
+          },
+          "変更後残高": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後残高"
+          },
+          "状態": {
+            "type": "string",
+            "title": "状態",
+            "description": "APPLIED:反映 / EXCLUDED:除外 / REVERSED:逆適用済"
+          },
+          "メッセージ": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "メッセージ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "行番号",
+          "シート",
+          "株数",
+          "状態"
+        ],
+        "title": "BalanceTransferRow",
+        "description": "入出庫明細 1 行"
+      },
       "BannerResponse": {
         "properties": {
           "種別": {
@@ -19834,6 +20892,33 @@
         ],
         "title": "Body_import_balance_adjustments_csv_endpoint_masters_balance_adjustments_import_csv_post"
       },
+      "Body_import_balance_transfers_endpoint_operations_balance_transfers_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "入出庫管理.xlsx"
+          },
+          "base_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Date",
+            "description": "基準日 (YYYYMMDD)。省略時は m_基準日"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_balance_transfers_endpoint_operations_balance_transfers_import_post"
+      },
       "Body_import_blackout_dates_csv_endpoint_masters_blackout_dates_import_csv_post": {
         "properties": {
           "file": {
@@ -19992,6 +21077,48 @@
           "file"
         ],
         "title": "Body_import_symbols_csv_endpoint_masters_symbols_import_csv_post"
+      },
+      "Body_morning_batch_import_carryover_upload_endpoint_batch_import_carryover_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "繰越発注CSV（UTF-8 BOM / Shift-JIS）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_morning_batch_import_carryover_upload_endpoint_batch_import_carryover_upload_post"
+      },
+      "Body_validate_balance_transfers_endpoint_operations_balance_transfers_validate_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "入出庫管理.xlsx"
+          },
+          "base_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Date",
+            "description": "基準日 (YYYYMMDD)。省略時は m_基準日"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_validate_balance_transfers_endpoint_operations_balance_transfers_validate_post"
       },
       "Body_validate_bulk_orders_csv_endpoint_orders_validate_csv_post": {
         "properties": {
@@ -28022,6 +29149,18 @@
               }
             ],
             "title": "注文種別"
+          },
+          "繰越元注文ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "繰越元注文Id",
+            "description": "繰越注文（CARRYOVER）の元注文ID（Phase 51）"
           },
           "部店": {
             "type": "string",

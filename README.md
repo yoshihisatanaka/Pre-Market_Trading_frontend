@@ -36,6 +36,19 @@
 `extra_hosts: ["host.docker.internal:host-gateway"]` を入れてある）。
 別サーバのバックエンドを叩くときは `.env` の `VITE_PROXY_TARGET` にその URL を書く。
 
+### 操作者（権限）の切り替え
+
+ログイン機能が入るまでは、`.env` の `VITE_USER_CODE` が操作者になる（全リクエストの `X-User-Code` に載り、
+`GET /auth/me` もこの値で決まる）。書き換えて `docker compose restart frontend` → ブラウザを再読み込みすると、
+サイドメニューの区分と開ける画面がその操作者の権限に変わる。
+
+| 接続先 | 使えるコード |
+|---|---|
+| MSW | `admin`（管理責任者）/ `manager01`（管理者）/ `sales01`（営業員）/ `ifa01`（IFA）。それ以外は管理責任者 |
+| 実 API | 操作者マスタにあるコード。初期データは `SYSTEM` / `admin`（どちらも管理責任者）だけで、無いコードは権限なしになる |
+
+MSW 版の E2E は管理責任者を前提にしているので、回す前に `admin` へ戻す。詳細は `.env.example` のコメント。
+
 ## セットアップ
 
 ```powershell

@@ -9,6 +9,11 @@
  * **運用管理権限の無い利用者は noOperationOperator**（サイドメニューの「運用管理」区分が消え、
  * 運用管理の 4 画面は権限なしの画面に回される）。
  *
+ * **ブラウザで別の権限の見た目を確かめるときは .env の VITE_USER_CODE を書き換える。**
+ * /auth/me のハンドラは届いた X-User-Code を currentOperatorFor() に通すので、
+ * admin / manager01 / sales01 / ifa01 にするとその操作者が返る（反映には frontend の再起動が要る）。
+ * ログイン機能が入るまでのつなぎ。
+ *
  * ブラウザ(MSW worker)・単体テスト・E2E で共用する。
  */
 
@@ -35,7 +40,7 @@ export const salesOperator = {
   ロール名: '営業員',
   部店コード: '123',
   登録済: true,
-  権限: { order: true, master: false, operation: false, branch_all: false },
+  権限: { order: true, master: false, operation: false, branch_all: true },
   認可強制: false,
 }
 
@@ -64,4 +69,21 @@ export const viewerOperator = {
   登録済: true,
   権限: { order: true, master: true, operation: true, branch_all: true },
   認可強制: false,
+}
+
+/** .env の VITE_USER_CODE で選べる操作者（並びはロール ID の逆順。上ほど権限が強い） */
+export const devOperators = [supervisorOperator, viewerOperator, salesOperator, noOperationOperator]
+
+/**
+ * 社員コード（X-User-Code）から、/auth/me が返す操作者を引く。
+ *
+ * 知らないコード・未設定は管理責任者に倒す。既定の .env（実 API 向けのコード）や
+ * 単体テストの固定値（vitest.config.js の test-user）のままでも、今までどおり全画面が見えるようにするため。
+ * 実 API は操作者マスタに無いコードを未登録（権限なし）として返すので、ここは実 API と挙動が違う。
+ *
+ * @param {string|null|undefined} code 社員コード
+ * @returns {object} CurrentOperatorResponse の生の形
+ */
+export function currentOperatorFor(code) {
+  return devOperators.find((operator) => operator.操作者コード === code) ?? supervisorOperator
 }

@@ -136,7 +136,7 @@ describe('AppHeader', () => {
   it('[AHD-02] 遷移すると見出しが遷移先のタイトルに変わる', async () => {
     const { wrapper, router } = await mountAt('/')
 
-    await router.push('/masters/fx')
+    await router.push('/customers/search')
     await nextTick()
 
     expect(wrapper.find('h1').text()).toBe('ページが見つかりません')

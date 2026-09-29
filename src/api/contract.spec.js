@@ -8,6 +8,7 @@ import { canceledCorporateActions, corporateActions } from '../mocks/fixtures/ca
 import { blackoutDates, canceledBlackoutDates } from '../mocks/fixtures/blackoutDates'
 import { canceledMarketHolidays, marketHolidays } from '../mocks/fixtures/marketHolidays'
 import { sliceCriteriaSetting } from '../mocks/fixtures/sliceCriteria'
+import { canceledFxRates, fxRates } from '../mocks/fixtures/fxRates'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../mocks/fixtures/activityLogTargets'
 import { rolePermissions } from '../mocks/fixtures/permissions'
@@ -69,6 +70,13 @@ import {
   validateBlackoutDate,
 } from './blackoutDates'
 import { fetchSliceCriteria, updateSliceCriteria } from './sliceCriteria'
+import {
+  createFxRate,
+  fetchFxRate,
+  fetchLatestFxRate,
+  updateFxRate,
+  validateFxRate,
+} from './fxRates'
 import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
 import { fetchStalledOrders, importConfirmationCsv } from './stalledOrders'
 import { fetchPermissions, updateRolePermission } from './permissions'
@@ -294,6 +302,7 @@ const FIXTURES = [
     rows: [...marketHolidays, ...canceledMarketHolidays],
   },
   { name: 'sliceCriteria', schema: 'SliceSettingResponse', rows: [sliceCriteriaSetting] },
+  { name: 'fxRates', schema: 'FxItem', rows: [...fxRates, ...canceledFxRates] },
   { name: 'activityLogs', schema: 'ActivityLogItem', rows: activityLogs },
   { name: 'activityLogTargets', schema: 'ActivityLogTargetItem', rows: activityLogTargets },
   { name: 'permissions', schema: 'RolePermissionItem', rows: rolePermissions },
@@ -548,6 +557,24 @@ const PROBES = [
         note: '',
         updatedAt: '',
       }),
+  },
+  {
+    name: 'fetchLatestFxRate',
+    run: () => fetchLatestFxRate({ currencyCode: 'USD', targetDate: '2026-07-31' }),
+  },
+  { name: 'fetchFxRate', run: () => fetchFxRate('1') },
+  {
+    name: 'validateFxRate',
+    run: () => validateFxRate({ baseDate: '2026-07-31', currencyCode: 'USD', rate: 1, id: '1' }),
+  },
+  {
+    name: 'createFxRate',
+    run: () => createFxRate({ baseDate: '2031-01-01', currencyCode: 'USD', rate: 1 }),
+  },
+  {
+    name: 'updateFxRate',
+    run: () =>
+      updateFxRate({ id: '1', baseDate: '2026-07-25', currencyCode: 'USD', rate: 1, updatedAt: '' }),
   },
   {
     name: 'fetchActivityLogs',

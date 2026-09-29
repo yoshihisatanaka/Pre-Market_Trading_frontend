@@ -8,6 +8,7 @@ import { balanceAdjustmentHandlers, resetBalanceAdjustmentRows } from './balance
 import { marketHolidayHandlers, resetMarketHolidayRows } from './marketHolidays'
 import { blackoutDateHandlers, resetBlackoutDateRows } from './blackoutDates'
 import { sliceCriteriaHandlers, resetSliceCriteriaRow } from './sliceCriteria'
+import { fxRateHandlers, resetFxRateRows } from './fxRates'
 import { activityLogHandlers } from './activityLogs'
 import { permissionHandlers, resetPermissionRows } from './permissions'
 import { marketStatusHandlers } from './marketStatus'
@@ -41,6 +42,7 @@ import { orderCsvHandlers } from './orderCsv'
  *   /masters/market-holidays … 日本語キー / integer の日付 / 降順 / エラーは { detail } / 論理削除
  *   /masters/blackout-dates  … 同上
  *   /masters/hard-limits     … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
+ *   /masters/fx              … 日本語キー / integer の基準日 / 最新・詳細・事前検証・登録・変更だけ
  *   /market-status           … 日本語キー / 空白入りキー / 日付を「今日」へずらして返す
  *   /orders/csv-spec         … CSV一括注文の全 22 列の仕様（CsvHeaderSpecResponse そのまま）
  * マスタ系のパスは 2026-09-15 の OpenAPI 取り込みで /masters/ 配下へ移った。
@@ -77,6 +79,7 @@ export function resetMockState() {
   resetSymbolRows()
   resetBalanceAdjustmentRows()
   resetSliceCriteriaRow()
+  resetFxRateRows()
   resetPermissionRows()
   resetAnnouncementState()
   resetStalledOrderState()
@@ -102,6 +105,7 @@ export const handlers = [
   ...marketHolidayHandlers,
   ...blackoutDateHandlers,
   ...sliceCriteriaHandlers,
+  ...fxRateHandlers,
   ...activityLogHandlers,
   ...permissionHandlers,
   ...marketStatusHandlers,

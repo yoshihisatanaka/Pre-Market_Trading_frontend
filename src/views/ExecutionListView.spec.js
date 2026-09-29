@@ -331,18 +331,18 @@ describe('ExecutionListView', () => {
     expect(statValue(wrapper, 'executions-summary-partial')).toBe('—')
   })
 
-  it('[EXV-14] 約定単価は小数第 4 位、約定代金は第 2 位の $ 表記、約定日時は MM/DD HH:mm で出す', async () => {
+  it('[EXV-14] 約定単価は小数第 4 位、約定代金は第 2 位の「ドル」表記、約定日時は MM/DD HH:mm で出す', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     const first = rows(wrapper)[0]
 
     const price = cellText(first, COL.price)
-    expect(price).toMatch(/^\$[\d,]+\.\d{4}$/)
-    expect(Number(price.replace(/[$,]/g, ''))).toBeCloseTo(newest.約定単価, 4)
+    expect(price).toMatch(/^[\d,]+\.\d{4} ドル$/)
+    expect(Number(price.replace(/[, ドル]/g, ''))).toBeCloseTo(newest.約定単価, 4)
 
     const amount = cellText(first, COL.amountUsd)
-    expect(amount).toMatch(/^\$[\d,]+\.\d{2}$/)
+    expect(amount).toMatch(/^[\d,]+\.\d{2} ドル$/)
     expect(amount).toBe(formatUsd(newest.約定代金))
 
     const executedAt = cellText(first, COL.executedAt)

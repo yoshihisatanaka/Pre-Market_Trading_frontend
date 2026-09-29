@@ -142,16 +142,17 @@ const stats = computed(() => [
   { testid: 'executions-summary-partial', label: '一部出来', value: null, tone: 'partial' },
 ])
 
-/** 約定単価はモックどおり小数第 4 位まで出す（formatUsd は第 2 位まで） */
-const usdPrice = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
+/**
+ * 約定単価はモックどおり小数第 4 位まで出す（formatUsd は第 2 位まで）。
+ * 表記は全画面の金額と同じく「数字 + ドル」の後置
+ */
+const usdPrice = new Intl.NumberFormat('ja-JP', {
   minimumFractionDigits: 4,
   maximumFractionDigits: 4,
 })
 
 function priceLabel(value) {
-  return value === null ? '—' : usdPrice.format(value)
+  return value === null ? '—' : `${usdPrice.format(value)} ドル`
 }
 
 function statusLabel(row) {

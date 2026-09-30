@@ -36,8 +36,11 @@ const STATUS_NAMES = {
 const REGISTRATION_NAMES = { 0: '未登録', 1: '登録中', 2: '登録済', 8: '登録対象外', 9: '登録失敗' }
 const CANCEL_NAMES = { 0: '取消対象外', 1: '取消中', 2: '取消済', 9: '取消失敗' }
 
-/** STS変更で選べる遷移先（名前は画面のプルダウンにそのまま出る説明付きの文言） */
-const TRANSITIONS = {
+/**
+ * STS変更で選べる遷移先（名前は画面のプルダウンにそのまま出る説明付きの文言）。
+ * STS変更のハンドラも、遷移の可否と処理結果のメッセージにこれを使う。
+ */
+export const TRANSITIONS = {
   9: [
     { コード: '0', 名称: '未登録（Dream再送待ちへ戻す）' },
     { コード: '2', 名称: '登録済（Dream側で手入力済のため消し込む）' },
@@ -77,9 +80,30 @@ const SYMBOLS = {
 const branchName = (code) => branches.find((branch) => branch.code === code)?.name ?? null
 
 /**
- * 1 行を組み立てる。統合コード・名前・STS変更可・完了日時は、バックエンドと同じ規則で
- * 登録状況と取消状況から導く（手で書くと行ごとに食い違うため）。
+ * 登録状況・取消状況・各日時・処理状況から、導出する項目（統合コード・名前・STS変更可・
+ * 変更可能状況・完了日時）を埋め直した行を返す。規則はバックエンドの `enrich_dream_order` と同じ。
+ * STS変更のハンドラも、状況を書き換えた行をこれに通す（導出を 2 か所に書かない）。
  */
+export function withDerivedDreamFields(row) {
+  const registration = row.Dream登録状況
+  const cancel = row.Dream取消状況
+  const status = cancel === '0' ? registration : `C${cancel}`
+
+  return {
+    ...row,
+    Dream状況: status,
+    Dream状況名: STATUS_NAMES[status],
+    STS変更可: status in TRANSITIONS,
+    変更可能状況: TRANSITIONS[status] ?? [],
+    // 画面の「登録日時」列。取消フェーズなら取消日時、登録フェーズなら登録日時
+    Dream完了日時: cancel === '0' ? row.Dream登録日時 : row.Dream取消日時,
+    Dream登録状況名: REGISTRATION_NAMES[registration],
+    Dream取消状況名: CANCEL_NAMES[cancel],
+    処理状況名: PROCESS_NAMES[row.処理状況],
+  }
+}
+
+/** 1 行を組み立てる。導出する項目は withDerivedDreamFields が埋める（手で書くと行ごとに食い違うため） */
 function dreamOrder({
   id,
   registration,
@@ -97,14 +121,14 @@ function dreamOrder({
   process,
   createdAt,
 }) {
-  const status = cancel === '0' ? registration : `C${cancel}`
   const symbol = SYMBOLS[ticker]
 
-  return {
-    Dream状況: status,
-    Dream状況名: STATUS_NAMES[status],
-    STS変更可: status in TRANSITIONS,
-    変更可能状況: TRANSITIONS[status] ?? [],
+  // キーの並びは DreamOrderItem の宣言順。導出する項目は位置だけ取っておき、下で埋める
+  return withDerivedDreamFields({
+    Dream状況: null,
+    Dream状況名: null,
+    STS変更可: null,
+    変更可能状況: null,
     受注番号: receiptNumber,
     ID: id,
     部店: branch,
@@ -116,22 +140,21 @@ function dreamOrder({
     売買区分: side,
     売買区分名: SIDE_NAMES[side],
     数量: quantity,
-    // 画面の「登録日時」列。取消フェーズなら取消日時、登録フェーズなら登録日時
-    Dream完了日時: cancel === '0' ? registeredAt : canceledAt,
+    Dream完了日時: null,
     Dreamエラー内容: error,
     Dream登録状況: registration,
-    Dream登録状況名: REGISTRATION_NAMES[registration],
+    Dream登録状況名: null,
     Dream取消状況: cancel,
-    Dream取消状況名: CANCEL_NAMES[cancel],
+    Dream取消状況名: null,
     Dream登録日時: registeredAt,
     Dream取消日時: canceledAt,
     エラー内容: null,
     銘柄名: symbol.name,
     処理状況: process,
-    処理状況名: PROCESS_NAMES[process],
+    処理状況名: null,
     作成日時: createdAt,
     更新日時: createdAt,
-  }
+  })
 }
 
 /**

@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -26,6 +27,8 @@ const {
   statusOptions,
   statusCodesLoading,
   statusCodesError,
+  changing,
+  changeError,
 } = storeToRefs(store)
 
 // 検索のプルダウンの選択肢。コード一覧は画面を開くたびに変わるものではないので 1 回だけ取る
@@ -105,13 +108,17 @@ function sideLabel(row) {
 }
 
 /*
- * STS変更。行のプルダウンで遷移先を選ぶと確認ダイアログを開く（送信はまだ繋いでいない）。
+ * STS変更。行のプルダウンで遷移先を選ぶと確認ダイアログを開き、「変更する」で送信する。
  *
  * プルダウンは「いまの状況」を空値の先頭項目として見せ、遷移先だけを選択肢に並べる。
  * 選んだ値は statusChange に持ち、ダイアログを閉じたら空へ戻す。こうすると
  * キャンセルしたときにプルダウンの表示も「いまの状況」へ戻る（選んだまま残らない）。
+ *
+ * 成功したらダイアログを閉じ、サーバの処理結果を noticeMessage に出す（一覧はストアが読み直す）。
+ * 弾かれたとき（409 を含む）はダイアログを開いたまま、その中に理由を出す。
  */
 const statusChange = ref(null)
+const noticeMessage = ref('')
 
 function transitionOptions(row) {
   return row.statusTransitions.map((transition) => ({
@@ -126,11 +133,32 @@ function selectedTransition(row) {
 
 function openStatusChange(row, targetStatus) {
   if (!targetStatus) return
+  // 前回の失敗と成功をどちらも持ち込まない
+  store.clearChangeError()
+  noticeMessage.value = ''
   statusChange.value = { order: row, targetStatus }
 }
 
 function closeStatusChange() {
+  // 送信中は閉じない（ダイアログ側も閉じる操作を止めている）
+  if (changing.value) return
   statusChange.value = null
+  store.clearChangeError()
+}
+
+async function confirmStatusChange({ status, receiptNumber, reason }) {
+  const { order } = statusChange.value
+
+  await store.changeStatus(
+    { order, status, receiptNumber, reason },
+    {
+      onSuccess: (result) => {
+        statusChange.value = null
+        noticeMessage.value =
+          result.message || `注文ID #${order.id} のDream状況を変更しました。`
+      },
+    },
+  )
 }
 </script>
 
@@ -140,6 +168,10 @@ function closeStatusChange() {
     <p class="dream-status__description" data-testid="dream-status-description">
       定点RPA登録の処理状況を確認します。登録失敗・取消失敗の注文は STS を変更できます。
     </p>
+
+    <BaseAlert v-if="noticeMessage" variant="success" data-testid="dream-status-notice">
+      {{ noticeMessage }}
+    </BaseAlert>
 
     <MasterSearchCard
       testid-prefix="dream-status"
@@ -311,7 +343,10 @@ function closeStatusChange() {
       :open="statusChange !== null"
       :order="statusChange?.order ?? null"
       :target-status="statusChange?.targetStatus ?? ''"
+      :pending="changing"
+      :error="changeError"
       @close="closeStatusChange"
+      @confirm="confirmStatusChange"
     />
   </section>
 </template>

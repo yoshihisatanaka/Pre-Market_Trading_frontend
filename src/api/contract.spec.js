@@ -91,7 +91,7 @@ import {
 import { fetchMizuhoExecutions } from './mizuhoExecutions'
 import { fetchMizuhoClosingStatus } from './closing'
 import { fetchExecutions } from './executions'
-import { fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
+import { changeDreamStatus, fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
 import { fetchOrderCsvSpec } from './orderCsv'
 
 // シナリオ: docs/unit/api-contract.md
@@ -689,6 +689,10 @@ const PROBES = [
       }),
   },
   { name: 'fetchDreamStatusCodes', run: () => fetchDreamStatusCodes() },
+  {
+    name: 'changeDreamStatus',
+    run: () => changeDreamStatus({ id: '56', status: '0', updatedAt: '' }),
+  },
   { name: 'fetchOrderCsvSpec', run: () => fetchOrderCsvSpec() },
 ]
 

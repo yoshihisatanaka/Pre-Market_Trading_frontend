@@ -18,7 +18,7 @@ import { incidentHandlers, resetIncidentState } from './incidents'
 import { mizuhoExecutionHandlers } from './mizuhoExecutions'
 import { closingHandlers } from './closing'
 import { executionHandlers } from './executions'
-import { dreamStatusHandlers } from './dreamStatus'
+import { dreamStatusHandlers, resetDreamStatusState } from './dreamStatus'
 import { orderCsvHandlers } from './orderCsv'
 
 /*
@@ -81,6 +81,7 @@ export function resetMockState() {
   resetAnnouncementState()
   resetStalledOrderState()
   resetIncidentState()
+  resetDreamStatusState()
 }
 
 export const handlers = [

@@ -539,10 +539,10 @@
                   "type": "null"
                 }
               ],
-              "description": "処理状況コード",
+              "description": "処理状況コード（カンマ区切りで複数指定可。例: 101,003）",
               "title": "Status"
             },
-            "description": "処理状況コード"
+            "description": "処理状況コード（カンマ区切りで複数指定可。例: 101,003）"
           },
           {
             "name": "side",
@@ -888,10 +888,10 @@
                   "type": "null"
                 }
               ],
-              "description": "処理状況コード",
+              "description": "処理状況コード（カンマ区切りで複数指定可。例: 101,003）",
               "title": "Status"
             },
-            "description": "処理状況コード"
+            "description": "処理状況コード（カンマ区切りで複数指定可。例: 101,003）"
           },
           {
             "name": "side",
@@ -1334,6 +1334,18 @@
         "description": "IFA向けCSV一括注文事前検証API（確認画面プレビュー用・DB登録なし）\n\n- CSVヘッダー（全22項目）の網羅性チェック\n- 各行の既存注文検証（validate_order_data）の実走\n- 各行のCSV内容、エラー一覧、警告一覧、概算詳細を返却\n- 1件でもエラーがある場合は all_valid=false",
         "operationId": "validate_bulk_orders_csv_endpoint_orders_validate_csv_post",
         "parameters": [
+          {
+            "name": "duplicate_confirmed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "true: 全行を重複確認済みとして検証（重複注文チェックを警告に格下げ。Phase 58）",
+              "default": false,
+              "title": "Duplicate Confirmed"
+            },
+            "description": "true: 全行を重複確認済みとして検証（重複注文チェックを警告に格下げ。Phase 58）"
+          },
           {
             "name": "X-User-Code",
             "in": "header",
@@ -1997,7 +2009,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DreamCorrectResponse"
+                }
               }
             }
           },
@@ -2748,6 +2762,82 @@
             "description": "顧客名絞り込み"
           },
           {
+            "name": "handler_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "扱者コード（完全一致）",
+              "title": "Handler Code"
+            },
+            "description": "扱者コード（完全一致）"
+          },
+          {
+            "name": "restriction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 1,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "取引停止区分_全取引 (0: 通常, 1: 停止)",
+              "title": "Restriction"
+            },
+            "description": "取引停止区分_全取引 (0: 通常, 1: 停止)"
+          },
+          {
+            "name": "account_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[012]$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "口座区分 (0: 一般, 1: 自己, 2: 同業者)",
+              "title": "Account Type"
+            },
+            "description": "口座区分 (0: 一般, 1: 自己, 2: 同業者)"
+          },
+          {
+            "name": "corporate_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[01]$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "法人区分 (0: 個人, 1: 法人)",
+              "title": "Corporate Type"
+            },
+            "description": "法人区分 (0: 個人, 1: 法人)"
+          },
+          {
             "name": "include_deleted",
             "in": "query",
             "required": false,
@@ -3151,6 +3241,82 @@
               "title": "Customer Name"
             },
             "description": "顧客名絞り込み"
+          },
+          {
+            "name": "handler_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "扱者コード（完全一致）",
+              "title": "Handler Code"
+            },
+            "description": "扱者コード（完全一致）"
+          },
+          {
+            "name": "restriction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 1,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "取引停止区分_全取引 (0: 通常, 1: 停止)",
+              "title": "Restriction"
+            },
+            "description": "取引停止区分_全取引 (0: 通常, 1: 停止)"
+          },
+          {
+            "name": "account_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[012]$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "口座区分 (0: 一般, 1: 自己, 2: 同業者)",
+              "title": "Account Type"
+            },
+            "description": "口座区分 (0: 一般, 1: 自己, 2: 同業者)"
+          },
+          {
+            "name": "corporate_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[01]$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "法人区分 (0: 個人, 1: 法人)",
+              "title": "Corporate Type"
+            },
+            "description": "法人区分 (0: 個人, 1: 法人)"
           },
           {
             "name": "include_deleted",
@@ -3905,10 +4071,10 @@
                   "type": "null"
                 }
               ],
-              "description": "銘柄コード絞り込み",
+              "description": "銘柄コードまたはTicker（部分一致）",
               "title": "Symbol"
             },
-            "description": "銘柄コード絞り込み"
+            "description": "銘柄コードまたはTicker（部分一致）"
           },
           {
             "name": "ticker",
@@ -4166,6 +4332,226 @@
         }
       }
     },
+    "/masters/symbols/vwap-target/validate": {
+      "post": {
+        "tags": [
+          "MasterSymbols"
+        ],
+        "summary": "Validate Vwap Target Bulk Endpoint",
+        "description": "VWAP対象一括更新 事前確認API（dry-run）\n\n- `mode=set`: `VWAP対象区分`（0/1）へ一括設定する場合の対象件数・銘柄一覧を返す\n- `mode=reset`: 朝バッチ後の値（`初期VWAP対象区分`）へ戻す場合の対象件数・銘柄一覧を返す\n- `symbol_ids` 省略時は有効な全銘柄が候補。現在値が同じ銘柄は対象に含めない\n- 更新は行わない（件数確認方式。楽観ロックの更新日時比較は行わない）",
+        "operationId": "validate_vwap_target_bulk_endpoint_masters_symbols_vwap_target_validate_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VwapTargetBulkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VwapTargetBulkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (存在しない銘柄ID・値不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/symbols/vwap-target": {
+      "post": {
+        "tags": [
+          "MasterSymbols"
+        ],
+        "summary": "Update Vwap Target Bulk Endpoint",
+        "description": "VWAP対象一括更新API\n\n- 事前確認API と同じ入力で本実行する。1 トランザクションで全件更新（途中エラーは全件ロールバック）\n- 銘柄ごとに ユーザー操作フラグ=1・更新日時・更新者 を設定し、`d_銘柄情報履歴` へ操作区分 `VWAP_BULK` で記録\n- `初期VWAP対象区分` は変更しない（朝バッチ③のみが更新する）",
+        "operationId": "update_vwap_target_bulk_endpoint_masters_symbols_vwap_target_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VwapTargetBulkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VwapTargetBulkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (存在しない銘柄ID・値不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/masters/symbols": {
       "get": {
         "tags": [
@@ -4188,10 +4574,10 @@
                   "type": "null"
                 }
               ],
-              "description": "銘柄コード絞り込み",
+              "description": "銘柄コードまたはTicker（部分一致）",
               "title": "Symbol"
             },
-            "description": "銘柄コード絞り込み"
+            "description": "銘柄コードまたはTicker（部分一致）"
           },
           {
             "name": "ticker",
@@ -7184,6 +7570,311 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ScheduleTimeHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "検索条件不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/calculation-settings": {
+      "get": {
+        "tags": [
+          "Calculation Settings"
+        ],
+        "summary": "Get Calculation Setting Endpoint",
+        "description": "仮計算マスタ照会API（為替スプレッド・現地手数料率・取引所税率・消費税率・譲渡益税率・NISA為替上乗せ率）",
+        "operationId": "get_calculation_setting_endpoint_masters_calculation_settings_get",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalculationSettingItem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Calculation Settings"
+        ],
+        "summary": "Update Calculation Setting Endpoint",
+        "description": "仮計算マスタ更新API\n\n- 指定した項目だけ更新する（未指定は現在値を維持）\n- 変更が無ければ履歴を残さず現在値を返す。`更新日時` 指定で楽観ロック（競合時 409）\n- 変更は次回の仮計算（`POST /calculations`）から反映される",
+        "operationId": "update_calculation_setting_endpoint_masters_calculation_settings_put",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalculationSettingUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalculationSettingActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "値の範囲不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "楽観ロック競合",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/masters/calculation-settings/history": {
+      "get": {
+        "tags": [
+          "Calculation Settings"
+        ],
+        "summary": "Get Calculation Setting History Endpoint",
+        "description": "仮計算マスタ変更履歴照会API",
+        "operationId": "get_calculation_setting_history_endpoint_masters_calculation_settings_history_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "取得開始位置",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "取得開始位置"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalculationSettingHistoryResponse"
                 }
               }
             }
@@ -10736,6 +11427,42 @@
             "description": "顧客名または顧客名カナ検索"
           },
           {
+            "name": "symbol_name_ja",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "銘柄名（日本語）部分一致",
+              "title": "Symbol Name Ja"
+            },
+            "description": "銘柄名（日本語）部分一致"
+          },
+          {
+            "name": "symbol_name_en",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "銘柄名（英字）部分一致",
+              "title": "Symbol Name En"
+            },
+            "description": "銘柄名（英字）部分一致"
+          },
+          {
             "name": "include_deleted",
             "in": "query",
             "required": false,
@@ -11157,6 +11884,42 @@
               "title": "Customer Name"
             },
             "description": "顧客名または顧客名カナ検索"
+          },
+          {
+            "name": "symbol_name_ja",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "銘柄名（日本語）部分一致",
+              "title": "Symbol Name Ja"
+            },
+            "description": "銘柄名（日本語）部分一致"
+          },
+          {
+            "name": "symbol_name_en",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "銘柄名（英字）部分一致",
+              "title": "Symbol Name En"
+            },
+            "description": "銘柄名（英字）部分一致"
           },
           {
             "name": "include_deleted",
@@ -14226,7 +14989,7 @@
           "Calculations"
         ],
         "summary": "Calculate Endpoint",
-        "description": "仮計算（概算損益・受渡概算額試算）API（DB更新なし）\n\n- 現地約定金額 → 現地手数料(15bp) → 現地取引所税(売のみ) → 現地精算金額 → 為替換算で邦貨精算金額を算出\n- 口座の手数料優遇に `ベイシス` があればベイシス方式、なければ手数料パターン方式で国内手数料を算定\n- 消費税は外税として加算し、受渡概算額を円貨・外貨で返却\n- `特定預り区分` 指定時は残高明細の平均取得単価から概算損益（売却時）を算出",
+        "description": "仮計算（概算損益・受渡概算額試算）API（DB更新なし。計算式は doc/仮計算.xlsx 準拠）\n\n- 円貨・外貨の 2 系統で 現地約定金額 → 現地手数料・取引税・諸経費 → 現地精算金額 → 国内手数料 → 消費税 → 最終精算金額 を算出\n- 為替: 手入力があればそれ（スプレッド 0）、無ければ m_為替 の直近レート。円貨の約定為替は 売: 為替−スプレッド / 買: 為替＋スプレッド\n- 国内手数料: 手数料パターン（ハンド入力 > 優遇マスタ > デフォルト）の率・加算金・最低・最大と、掛目・BP（ハンド入力 > 優遇マスタ > 既定）で算定\n- ハンド入力（現地手数料①②・その他諸経費①②・現地取引税①②③・手数料パターン・掛目・BP・消費税不要区分・手数料下限/上限）は計算式より優先\n- `特定預り区分=1`（特定）: 譲渡益税為替レート・概算平均取得単価・概算譲渡損益・概算譲渡益税額・税引後受渡金額を返す（買は加重平均の再計算）\n- `特定預り区分=6`（成長投資枠）: NISA 取引年・NISA 計算用為替レート・NISA 使用予定額（買のみ）を返す\n- 計算パラメータは仮計算マスタ（`/masters/calculation-settings`）、源泉レートは為替マスタから取得",
         "operationId": "calculate_endpoint_calculations_post",
         "requestBody": {
           "content": {
@@ -17054,7 +17817,7 @@
           "MizuhoIntegration"
         ],
         "summary": "List Mizuho Orders Endpoint",
-        "description": "みずほ発注対象注文一覧取得 API\n\n- 抽出条件: 注文ルート='0' AND 処理状況='003' AND Dream登録状況='2'\n- ソート: 銘柄コード ASC, 部店 ASC, 口座番号 ASC, ID ASC",
+        "description": "みずほ発注対象注文一覧取得 API\n\n- 抽出条件: 注文ルート='0' AND 処理状況 IN ('000', '003') AND Dream登録状況='2'\n- ソート: 銘柄コード ASC, 部店 ASC, 口座番号 ASC, ID ASC",
         "operationId": "list_mizuho_orders_endpoint_mizuho_orders_get",
         "parameters": [
           {
@@ -17136,7 +17899,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MizuhoOrdersResponse"
+                }
               }
             }
           },
@@ -17312,7 +18077,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MizuhoConfirmationResponse"
+                }
               }
             }
           },
@@ -17390,7 +18157,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MizuhoConfirmationResponse"
+                }
               }
             }
           },
@@ -17489,9 +18258,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Morning Batch Run Endpoint Batch Morning Run Post"
+                  "$ref": "#/components/schemas/MorningBatchRunResponse"
                 }
               }
             }
@@ -17579,9 +18346,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Morning Batch Backup Endpoint Batch Backup Post"
+                  "$ref": "#/components/schemas/BackupResponse"
                 }
               }
             }
@@ -17687,9 +18452,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Morning Batch Import Fx Endpoint Batch Import Fx Post"
+                  "$ref": "#/components/schemas/MasterCsvImportResponse"
                 }
               }
             }
@@ -17795,9 +18558,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Morning Batch Import Symbols Endpoint Batch Import Symbols Post"
+                  "$ref": "#/components/schemas/MasterCsvImportResponse"
                 }
               }
             }
@@ -17903,9 +18664,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Morning Batch Import Customers Endpoint Batch Import Customers Post"
+                  "$ref": "#/components/schemas/MasterCsvImportResponse"
                 }
               }
             }
@@ -18011,9 +18770,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Morning Batch Import Initial Balance Endpoint Batch Import Initial Balance Post"
+                  "$ref": "#/components/schemas/InitialBalanceImportResponse"
                 }
               }
             }
@@ -18119,9 +18876,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Morning Batch Import Carryover Endpoint Batch Import Carryover Post"
+                  "$ref": "#/components/schemas/CarryoverImportResponse"
                 }
               }
             }
@@ -18219,9 +18974,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Morning Batch Import Carryover Upload Endpoint Batch Import Carryover Upload Post"
+                  "$ref": "#/components/schemas/CarryoverImportResponse"
                 }
               }
             }
@@ -18309,9 +19062,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Batch Status Endpoint Batch Status Get"
+                  "$ref": "#/components/schemas/BatchStatusResponse"
                 }
               }
             }
@@ -18399,9 +19150,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Expire Unfilled Orders Endpoint Batch Expire Unfilled Orders Post"
+                  "$ref": "#/components/schemas/ExpireUnfilledOrdersResponse"
                 }
               }
             }
@@ -18489,9 +19238,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Dream Batch Sync Endpoint Batch Dream Sync Post"
+                  "$ref": "#/components/schemas/DreamSyncResponse"
                 }
               }
             }
@@ -18597,9 +19344,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Mizuho Confirmation Sync Endpoint Batch Mizuho Confirmation Sync Post"
+                  "$ref": "#/components/schemas/MizuhoConfirmationSyncResponse"
                 }
               }
             }
@@ -18631,7 +19376,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MasterListResponse"
+                  "$ref": "#/components/schemas/BranchListResponse"
                 }
               }
             }
@@ -18709,7 +19454,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MasterListResponse"
+                  "$ref": "#/components/schemas/HandlerListResponse"
                 }
               }
             }
@@ -18733,7 +19478,7 @@
           "Masters"
         ],
         "summary": "Get All Codes Endpoint",
-        "description": "全コードマスタ一括取得API。",
+        "description": "全コードマスタ一括取得API（`{カテゴリ: {コード: 名称}}`。`投資方針` のみ `{法人区分: {コード: 名称}}`）。",
         "operationId": "get_all_codes_endpoint_codes_get",
         "responses": {
           "200": {
@@ -18741,9 +19486,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Get All Codes Endpoint Codes Get"
+                  "$ref": "#/components/schemas/CodesResponse"
                 }
               }
             }
@@ -18874,6 +19617,48 @@
             ],
             "title": "操作者",
             "description": "操作者コード"
+          },
+          "操作者名": {
+            "type": "string",
+            "title": "操作者名",
+            "description": "操作者の氏名（m_操作者）。操作者が未設定またはマスタに無い（BATCH 等）場合は「システム」",
+            "default": "システム"
+          },
+          "実行者区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "実行者区分",
+            "description": "操作者のロール名（m_操作者.ロールコード → m_ロール権限.ロール名）。解決できなければ null"
+          },
+          "対象機能": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "対象機能",
+            "description": "対象機能名（対象種別名と同じ）"
+          },
+          "操作内容": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作内容",
+            "description": "操作内容の表示文（例: 「銘柄情報を更新」。CREATE=登録 / UPDATE=更新 / DELETE=削除 / BATCH=一括処理 / VWAP_BULK=VWAP対象一括更新）"
           },
           "操作日時": {
             "anyOf": [
@@ -19198,30 +19983,42 @@
           },
           "変更前データ": {
             "anyOf": [
-              {},
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
               {
                 "type": "null"
               }
             ],
-            "title": "変更前データ"
+            "title": "変更前データ",
+            "description": "操作前の m_お知らせ 行全体（キー: ID, 表示フラグ, 本文, 更新者, 更新日時 など）"
           },
           "変更後データ": {
             "anyOf": [
-              {},
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
               {
                 "type": "null"
               }
             ],
-            "title": "変更後データ"
+            "title": "変更後データ",
+            "description": "操作後の m_お知らせ 行全体（キーは変更前データと同じ）"
           },
           "差分データ": {
             "anyOf": [
-              {},
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
               {
                 "type": "null"
               }
             ],
-            "title": "差分データ"
+            "title": "差分データ",
+            "description": "変更項目の差分 {\"表示フラグ\": {\"変更前\": 0/1, \"変更後\": 0/1}, \"本文\": {\"変更前\": 旧本文, \"変更後\": 新本文}}"
           },
           "操作日時": {
             "type": "string",
@@ -19419,6 +20216,63 @@
         ],
         "title": "AnnouncementUpdateRequest",
         "description": "お知らせ更新リクエスト（表示ON/OFFと本文）"
+      },
+      "BackupResponse": {
+        "properties": {
+          "batch_type": {
+            "type": "string",
+            "title": "Batch Type",
+            "description": "バッチ種別（BACKUP / FX / SYMBOL / CUSTOMER / INITIAL_BALANCE / EXPIRE_ORDERS / MIZUHO_CONFIRM / CARRYOVER_IMPORT）"
+          },
+          "batch_status": {
+            "type": "string",
+            "title": "Batch Status",
+            "description": "d_バッチ実行管理 の実行状態（2: 正常終了 / 9: 異常終了）"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "処理成否（CSV 取込系はエラー行があると false）"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "処理結果メッセージ"
+          },
+          "skipped": {
+            "type": "boolean",
+            "title": "Skipped",
+            "description": "skip_backup 指定でスキップした場合 true"
+          },
+          "backup_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup File",
+            "description": "作成したダンプファイルのパス（スキップ時は無し）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_type",
+          "batch_status",
+          "success",
+          "skipped"
+        ],
+        "title": "BackupResponse",
+        "description": "朝バッチ①: DB バックアップ"
       },
       "BalanceAdjustmentDetailResponse": {
         "properties": {
@@ -19723,6 +20577,18 @@
             ],
             "title": "銘柄名",
             "description": "銘柄名 (m_銘柄情報)"
+          },
+          "銘柄名_英字": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名 英字",
+            "description": "銘柄名（英字） (m_銘柄情報)"
           },
           "取消区分": {
             "type": "integer",
@@ -20476,6 +21342,162 @@
         "title": "BannerResponse",
         "description": "全画面ヘッダ用バナーレスポンス（発注停止とお知らせを統合判定）"
       },
+      "BatchExecutionItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "基準日": {
+            "type": "integer",
+            "title": "基準日"
+          },
+          "バッチ種別": {
+            "type": "string",
+            "title": "バッチ種別"
+          },
+          "実行状態": {
+            "type": "string",
+            "title": "実行状態",
+            "description": "0:未実行 1:実行中 2:正常終了 9:異常終了"
+          },
+          "開始日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "開始日時"
+          },
+          "終了日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "終了日時"
+          },
+          "実行者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "実行者"
+          },
+          "対象件数": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "対象件数"
+          },
+          "成功件数": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "成功件数"
+          },
+          "エラー件数": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "エラー件数"
+          },
+          "メッセージ": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "メッセージ"
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "基準日",
+          "バッチ種別",
+          "実行状態"
+        ],
+        "title": "BatchExecutionItem",
+        "description": "`d_バッチ実行管理` 1 行（日時は 'YYYY-MM-DD HH:MM:SS' 文字列に整形済）"
+      },
+      "BatchStatusResponse": {
+        "properties": {
+          "base_date": {
+            "type": "integer",
+            "title": "Base Date"
+          },
+          "morning_batch_completed": {
+            "type": "boolean",
+            "title": "Morning Batch Completed",
+            "description": "注文受付の前提となる必須バッチ（FX / SYMBOL / CUSTOMER / INITIAL_BALANCE）がすべて正常終了しているか"
+          },
+          "executions": {
+            "items": {
+              "$ref": "#/components/schemas/BatchExecutionItem"
+            },
+            "type": "array",
+            "title": "Executions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_date",
+          "morning_batch_completed"
+        ],
+        "title": "BatchStatusResponse",
+        "description": "バッチ実行状態照会"
+      },
       "BlackoutDateDetailResponse": {
         "properties": {
           "blackout_date": {
@@ -21173,6 +22195,50 @@
           "file"
         ],
         "title": "Body_validate_mizuho_confirmation_endpoint_mizuho_validate_confirmation_post"
+      },
+      "BranchItem": {
+        "properties": {
+          "部店コード": {
+            "type": "string",
+            "title": "部店コード",
+            "description": "部店コード（4桁）"
+          },
+          "部店名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店名",
+            "description": "部店名"
+          }
+        },
+        "type": "object",
+        "required": [
+          "部店コード"
+        ],
+        "title": "BranchItem",
+        "description": "部店マスタ 1 件（`m_部店`）"
+      },
+      "BranchListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BranchItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BranchListResponse",
+        "description": "部店マスタ取得APIのレスポンス（部店コード昇順）"
       },
       "BulkOrderCreateRequest": {
         "properties": {
@@ -21914,6 +22980,323 @@
         "title": "CAValidationResponse",
         "description": "CA事前検証レスポンス"
       },
+      "CalculationFeeParams": {
+        "properties": {
+          "手数料パターン": {
+            "type": "string",
+            "title": "手数料パターン",
+            "description": "適用した手数料パターン（空文字: デフォルト）"
+          },
+          "手数料パターン出所": {
+            "type": "string",
+            "title": "手数料パターン出所",
+            "description": "ハンド入力 / 優遇マスタ / 既定"
+          },
+          "適用金額帯": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "適用金額帯"
+          },
+          "国内手数料率": {
+            "type": "number",
+            "title": "国内手数料率",
+            "description": "%"
+          },
+          "手数料加算金額": {
+            "type": "number",
+            "title": "手数料加算金額"
+          },
+          "手数料最低金額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料最低金額"
+          },
+          "手数料最大金額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料最大金額"
+          },
+          "最低最大出所": {
+            "type": "string",
+            "title": "最低最大出所",
+            "description": "ハンド入力 / パターンマスタ"
+          },
+          "掛目": {
+            "type": "number",
+            "title": "掛目",
+            "description": "%"
+          },
+          "掛目出所": {
+            "type": "string",
+            "title": "掛目出所",
+            "description": "ハンド入力 / 優遇マスタ / 既定"
+          },
+          "BP": {
+            "type": "number",
+            "title": "Bp",
+            "description": "ベイシス（bp）。0 より大きいとベイシス方式"
+          },
+          "BP出所": {
+            "type": "string",
+            "title": "Bp出所",
+            "description": "ハンド入力 / 優遇マスタ / 既定"
+          },
+          "手数料優遇適用": {
+            "type": "boolean",
+            "title": "手数料優遇適用",
+            "description": "口座に手数料優遇マスタの行があるか"
+          },
+          "現地手数料出所": {
+            "type": "string",
+            "title": "現地手数料出所",
+            "description": "ハンド入力 / 計算"
+          },
+          "現地取引税出所": {
+            "type": "string",
+            "title": "現地取引税出所",
+            "description": "ハンド入力 / 計算"
+          }
+        },
+        "type": "object",
+        "required": [
+          "手数料パターン",
+          "手数料パターン出所",
+          "国内手数料率",
+          "手数料加算金額",
+          "最低最大出所",
+          "掛目",
+          "掛目出所",
+          "BP",
+          "BP出所",
+          "手数料優遇適用",
+          "現地手数料出所",
+          "現地取引税出所"
+        ],
+        "title": "CalculationFeeParams",
+        "description": "適用した国内手数料パラメータと出所"
+      },
+      "CalculationForeignBlock": {
+        "properties": {
+          "約定為替レート": {
+            "type": "number",
+            "title": "約定為替レート",
+            "description": "為替レート"
+          },
+          "現地約定金額": {
+            "type": "number",
+            "title": "現地約定金額",
+            "description": "売: ROUNDUP(数量 × 単価, 3) / 買: 数量 × 単価"
+          },
+          "現地手数料": {
+            "type": "number",
+            "title": "現地手数料",
+            "description": "ハンド入力①+②、無ければ 約定金額 × 現地手数料率（小数第3位四捨五入）"
+          },
+          "現地取引税": {
+            "type": "number",
+            "title": "現地取引税",
+            "description": "ハンド入力①+②+③、無ければ 売: 約定金額 × 取引所税率（小数第3位切上） / 買: 0"
+          },
+          "現地諸経費": {
+            "type": "number",
+            "title": "現地諸経費",
+            "description": "その他諸経費①+②"
+          },
+          "現地精算金額": {
+            "type": "number",
+            "title": "現地精算金額",
+            "description": "売: 約定 − 手数料 − 取引税 − 諸経費 / 買: 約定 ＋ 手数料 ＋ 取引税 ＋ 諸経費"
+          },
+          "国内手数料": {
+            "type": "number",
+            "title": "国内手数料",
+            "description": "ROUNDDOWN((BP>0 ? 精算×BP : 精算×率)×掛目, 2) + ROUNDDOWN(加算金 ÷ 為替 × 掛目, 2)"
+          },
+          "消費税": {
+            "type": "number",
+            "title": "消費税",
+            "description": "ROUNDDOWN(国内手数料 × 消費税率, 2)。消費税不要区分なら 0"
+          },
+          "最終精算金額": {
+            "type": "number",
+            "title": "最終精算金額",
+            "description": "売: 精算 − 国内手数料 − 消費税 / 買: 精算 ＋ 国内手数料 ＋ 消費税"
+          },
+          "NISA取引年": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa取引年",
+            "description": "成長投資枠のみ: 当年"
+          },
+          "NISA計算用為替レート": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa計算用為替レート",
+            "description": "成長投資枠・買のみ: ROUNDDOWN(為替 × (1 + NISA為替上乗せ率/100), 2)"
+          },
+          "NISA使用予定額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa使用予定額",
+            "description": "成長投資枠・買のみ: ROUNDDOWN(約定金額 × NISA計算用為替レート, 0)"
+          },
+          "譲渡益税為替レート": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "譲渡益税為替レート",
+            "description": "特定預りのみ: 源泉レート"
+          },
+          "概算平均取得単価": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "概算平均取得単価",
+            "description": "特定預りのみ: 売は残高の平均取得単価、買は加重平均（切捨）"
+          },
+          "概算譲渡損益": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "概算譲渡損益",
+            "description": "特定預り・売のみ"
+          },
+          "概算譲渡益税額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "概算譲渡益税額",
+            "description": "特定預り・売のみ: 損益 × (所得税率 + 住民税率)（各切捨、損益 <= 0 は 0）"
+          },
+          "税引後受渡金額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "税引後受渡金額",
+            "description": "特定預り・売のみ: 最終精算金額（税は引かない）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "約定為替レート",
+          "現地約定金額",
+          "現地手数料",
+          "現地取引税",
+          "現地諸経費",
+          "現地精算金額",
+          "国内手数料",
+          "消費税",
+          "最終精算金額"
+        ],
+        "title": "CalculationForeignBlock",
+        "description": "外貨（USD）側の算出値（Excel J 列）"
+      },
+      "CalculationParams": {
+        "properties": {
+          "現地手数料率_bp": {
+            "type": "number",
+            "title": "現地手数料率 Bp"
+          },
+          "取引所税率": {
+            "type": "number",
+            "title": "取引所税率"
+          },
+          "消費税率": {
+            "type": "number",
+            "title": "消費税率"
+          },
+          "消費税不要区分": {
+            "type": "boolean",
+            "title": "消費税不要区分"
+          },
+          "譲渡益所得税率": {
+            "type": "number",
+            "title": "譲渡益所得税率"
+          },
+          "譲渡益住民税率": {
+            "type": "number",
+            "title": "譲渡益住民税率"
+          },
+          "NISA為替上乗せ率": {
+            "type": "number",
+            "title": "Nisa為替上乗せ率"
+          }
+        },
+        "type": "object",
+        "required": [
+          "現地手数料率_bp",
+          "取引所税率",
+          "消費税率",
+          "消費税不要区分",
+          "譲渡益所得税率",
+          "譲渡益住民税率",
+          "NISA為替上乗せ率"
+        ],
+        "title": "CalculationParams",
+        "description": "仮計算マスタから適用した計算パラメータ"
+      },
       "CalculationRequest": {
         "properties": {
           "口座番号": {
@@ -21958,7 +23341,7 @@
               }
             ],
             "title": "特定預り区分",
-            "description": "残高明細の特定預り区分。指定時は平均取得単価から概算損益を算出する"
+            "description": "残高明細の特定預り区分（0: 非特定, 1: 特定, 6: 成長投資枠 等）。未指定は非特定。1 のとき譲渡損益・譲渡益税・税引後受渡金額、6 のとき NISA 取引年・使用予定額を返す"
           },
           "為替レート": {
             "anyOf": [
@@ -21971,7 +23354,175 @@
               }
             ],
             "title": "為替レート",
-            "description": "為替レート（手入力）。未指定時は m_為替 の直近有効レートを使用"
+            "description": "為替レート（手入力）。指定時はスプレッド 0。未指定時は m_為替 の直近有効レート＋仮計算マスタのスプレッド"
+          },
+          "現地手数料1": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "現地手数料1",
+            "description": "現地手数料(外貨)①"
+          },
+          "現地手数料2": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "現地手数料2",
+            "description": "現地手数料(外貨)②"
+          },
+          "その他諸経費1": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "その他諸経費1",
+            "description": "その他諸経費(外貨)①"
+          },
+          "その他諸経費2": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "その他諸経費2",
+            "description": "その他諸経費(外貨)②"
+          },
+          "現地取引税1": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "現地取引税1",
+            "description": "現地取引税(外貨)①"
+          },
+          "現地取引税2": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "現地取引税2",
+            "description": "現地取引税(外貨)②"
+          },
+          "現地取引税3": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "現地取引税3",
+            "description": "現地取引税(外貨)③"
+          },
+          "手数料パターン": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料パターン",
+            "description": "手数料パターン（ハンド入力）。指定時は優遇マスタより優先。空文字はデフォルトパターン"
+          },
+          "掛目": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "掛目",
+            "description": "掛目（%）。指定時は優遇マスタより優先"
+          },
+          "BP": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bp",
+            "description": "ベイシス（bp）。指定時は優遇マスタより優先。0 より大きいとベイシス方式"
+          },
+          "消費税不要区分": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "消費税不要区分",
+            "description": "true のとき消費税を円貨・外貨とも 0 にする"
+          },
+          "手数料下限": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料下限",
+            "description": "国内手数料の下限（円）。指定時はパターン行の最低金額より優先"
+          },
+          "手数料上限": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料上限",
+            "description": "国内手数料の上限（円）。指定時はパターン行の最高金額より優先"
           }
         },
         "type": "object",
@@ -21983,7 +23534,7 @@
           "単価"
         ],
         "title": "CalculationRequest",
-        "description": "仮計算（概算損益・受渡概算額試算）APIの入力モデル"
+        "description": "仮計算（概算損益・受渡概算額試算）APIの入力モデル（doc/仮計算.xlsx 準拠）"
       },
       "CalculationResponse": {
         "properties": {
@@ -22030,6 +23581,10 @@
             "title": "単価"
           },
           "特定預り区分": {
+            "type": "string",
+            "title": "特定預り区分"
+          },
+          "特定預り区分名": {
             "anyOf": [
               {
                 "type": "string"
@@ -22038,16 +23593,39 @@
                 "type": "null"
               }
             ],
-            "title": "特定預り区分"
+            "title": "特定預り区分名"
           },
           "為替レート": {
             "type": "number",
-            "title": "為替レート"
+            "title": "為替レート",
+            "description": "手入力または m_為替 の直近レート"
+          },
+          "スプレッド": {
+            "type": "number",
+            "title": "スプレッド",
+            "description": "仮計算マスタの為替スプレッド。為替手入力時は 0"
+          },
+          "源泉レート": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "源泉レート",
+            "description": "m_為替.源泉レート。未登録時は円貨の約定為替レートで代用"
           },
           "為替レート取得元": {
             "type": "string",
             "title": "為替レート取得元",
-            "description": "手入力 または m_為替"
+            "description": "ハンド入力 または m_為替"
+          },
+          "源泉レート取得元": {
+            "type": "string",
+            "title": "源泉レート取得元",
+            "description": "m_為替 または 代用（円貨約定為替レート）"
           },
           "為替基準日": {
             "anyOf": [
@@ -22059,109 +23637,6 @@
               }
             ],
             "title": "為替基準日"
-          },
-          "現地約定金額": {
-            "type": "number",
-            "title": "現地約定金額",
-            "description": "単価 × 株数 (USD)"
-          },
-          "現地手数料": {
-            "type": "number",
-            "title": "現地手数料",
-            "description": "現地約定金額 × 15bp (USD, 小数第3位四捨五入)"
-          },
-          "現地取引所税": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "現地取引所税",
-            "description": "現地約定金額 × 0.0000206 (USD, 小数第3位切上。売却時のみ)"
-          },
-          "現地精算金額": {
-            "type": "number",
-            "title": "現地精算金額",
-            "description": "売: 約定 − 手数料 − 税 / 買: 約定 ＋ 手数料 (USD)"
-          },
-          "邦貨精算金額": {
-            "type": "number",
-            "title": "邦貨精算金額",
-            "description": "現地精算金額 × 為替レート (円)。手数料算定の基準額"
-          },
-          "手数料方式": {
-            "type": "string",
-            "title": "手数料方式",
-            "description": "BASIS: ベイシス方式 / PATTERN: パターン方式"
-          },
-          "手数料パターン": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "手数料パターン",
-            "description": "適用した手数料パターン（空文字: デフォルト）"
-          },
-          "手数料優遇適用": {
-            "type": "boolean",
-            "title": "手数料優遇適用",
-            "description": "手数料優遇マスタの設定を適用したか"
-          },
-          "適用金額帯": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "適用金額帯",
-            "description": "パターン方式で該当した金額帯"
-          },
-          "税抜手数料": {
-            "type": "number",
-            "title": "税抜手数料",
-            "description": "国内手数料 (円・税抜)"
-          },
-          "消費税": {
-            "type": "number",
-            "title": "消費税",
-            "description": "消費税 (円・外税)"
-          },
-          "消費税率": {
-            "type": "number",
-            "title": "消費税率"
-          },
-          "手数料合計": {
-            "type": "number",
-            "title": "手数料合計",
-            "description": "税抜手数料 ＋ 消費税 (円)"
-          },
-          "受渡概算額_JPY": {
-            "type": "number",
-            "title": "受渡概算額 Jpy",
-            "description": "売: 邦貨精算金額 − 手数料合計 / 買: 邦貨精算金額 ＋ 手数料合計"
-          },
-          "受渡概算額_USD": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "受渡概算額 Usd",
-            "description": "受渡概算額の外貨換算"
           },
           "残高数量": {
             "anyOf": [
@@ -22183,42 +23658,26 @@
                 "type": "null"
               }
             ],
-            "title": "平均取得単価"
+            "title": "平均取得単価",
+            "description": "残高明細の平均取得単価（円）"
           },
-          "取得金額_JPY": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "取得金額 Jpy",
-            "description": "平均取得単価 × 数量 × 為替レート"
+          "ハンド入力": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "ハンド入力",
+            "description": "受け付けたハンド入力のエコー"
           },
-          "概算損益_JPY": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "概算損益 Jpy",
-            "description": "売却時のみ: 受渡概算額_JPY − 取得金額_JPY"
+          "手数料パラメータ": {
+            "$ref": "#/components/schemas/CalculationFeeParams"
           },
-          "概算損益_USD": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "概算損益 Usd"
+          "計算パラメータ": {
+            "$ref": "#/components/schemas/CalculationParams"
+          },
+          "外貨": {
+            "$ref": "#/components/schemas/CalculationForeignBlock"
+          },
+          "円貨": {
+            "$ref": "#/components/schemas/CalculationYenBlock"
           },
           "warnings": {
             "items": {
@@ -22235,22 +23694,706 @@
           "売買区分",
           "数量",
           "単価",
+          "特定預り区分",
           "為替レート",
+          "スプレッド",
           "為替レート取得元",
-          "現地約定金額",
-          "現地手数料",
-          "現地精算金額",
-          "邦貨精算金額",
-          "手数料方式",
-          "手数料優遇適用",
-          "税抜手数料",
-          "消費税",
-          "消費税率",
-          "手数料合計",
-          "受渡概算額_JPY"
+          "源泉レート取得元",
+          "手数料パラメータ",
+          "計算パラメータ",
+          "外貨",
+          "円貨"
         ],
         "title": "CalculationResponse",
-        "description": "仮計算APIのレスポンスモデル"
+        "description": "仮計算APIのレスポンスモデル（円貨・外貨の 2 系統）"
+      },
+      "CalculationSettingActionResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "calculation_setting": {
+            "$ref": "#/components/schemas/CalculationSettingItem"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "calculation_setting",
+          "message"
+        ],
+        "title": "CalculationSettingActionResponse"
+      },
+      "CalculationSettingHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "仮計算設定ID": {
+            "type": "integer",
+            "title": "仮計算設定Id"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分"
+          },
+          "操作区分名": {
+            "type": "string",
+            "title": "操作区分名"
+          },
+          "操作者": {
+            "type": "string",
+            "title": "操作者"
+          },
+          "変更前データ": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前データ"
+          },
+          "変更後データ": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後データ"
+          },
+          "差分データ": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "差分データ"
+          },
+          "操作日時": {
+            "type": "string",
+            "format": "date-time",
+            "title": "操作日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "仮計算設定ID",
+          "操作区分",
+          "操作区分名",
+          "操作者",
+          "操作日時"
+        ],
+        "title": "CalculationSettingHistoryItem"
+      },
+      "CalculationSettingHistoryResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "histories": {
+            "items": {
+              "$ref": "#/components/schemas/CalculationSettingHistoryItem"
+            },
+            "type": "array",
+            "title": "Histories"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "histories"
+        ],
+        "title": "CalculationSettingHistoryResponse"
+      },
+      "CalculationSettingItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "仮計算設定ID（単一行のため常に 1）"
+          },
+          "為替スプレッド": {
+            "type": "number",
+            "title": "為替スプレッド",
+            "description": "円貨約定為替レートの片道スプレッド（円）。売: 為替−spread / 買: 為替+spread"
+          },
+          "現地手数料率_bp": {
+            "type": "number",
+            "title": "現地手数料率 Bp",
+            "description": "現地手数料率（bp）。15 = 0.15%"
+          },
+          "取引所税率": {
+            "type": "number",
+            "title": "取引所税率",
+            "description": "現地取引所税率（売却時のみ）"
+          },
+          "消費税率": {
+            "type": "number",
+            "title": "消費税率",
+            "description": "国内手数料に係る消費税率（0.10 = 10%）"
+          },
+          "譲渡益所得税率": {
+            "type": "number",
+            "title": "譲渡益所得税率",
+            "description": "概算譲渡益税額の所得税率（復興特別所得税込。0.15315）"
+          },
+          "譲渡益住民税率": {
+            "type": "number",
+            "title": "譲渡益住民税率",
+            "description": "概算譲渡益税額の住民税率（0.05）"
+          },
+          "NISA為替上乗せ率": {
+            "type": "number",
+            "title": "Nisa為替上乗せ率",
+            "description": "NISA 計算用為替レート（外貨側）の上乗せ率（%）。適用為替 = ROUNDDOWN(為替 × (1 + 率/100), 2)"
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考"
+          },
+          "ユーザー操作フラグ": {
+            "type": "integer",
+            "title": "ユーザー操作フラグ",
+            "description": "1: 画面操作で更新済み",
+            "default": 0
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用の更新日時"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "為替スプレッド",
+          "現地手数料率_bp",
+          "取引所税率",
+          "消費税率",
+          "譲渡益所得税率",
+          "譲渡益住民税率",
+          "NISA為替上乗せ率"
+        ],
+        "title": "CalculationSettingItem",
+        "description": "仮計算マスタ（計算パラメータ・単一行）"
+      },
+      "CalculationSettingUpdateRequest": {
+        "properties": {
+          "為替スプレッド": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "為替スプレッド"
+          },
+          "現地手数料率_bp": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "現地手数料率 Bp"
+          },
+          "取引所税率": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引所税率"
+          },
+          "消費税率": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "消費税率"
+          },
+          "譲渡益所得税率": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "譲渡益所得税率"
+          },
+          "譲渡益住民税率": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "譲渡益住民税率"
+          },
+          "NISA為替上乗せ率": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa為替上乗せ率"
+          },
+          "備考": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "備考"
+          },
+          "実行者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "実行者",
+            "description": "操作者コード。未指定時は認証情報から解決"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用。取得時の更新日時を指定すると競合時に409を返す"
+          }
+        },
+        "type": "object",
+        "title": "CalculationSettingUpdateRequest",
+        "description": "仮計算マスタ更新リクエスト（指定した項目だけ更新）"
+      },
+      "CalculationYenBlock": {
+        "properties": {
+          "約定為替レート": {
+            "type": "number",
+            "title": "約定為替レート",
+            "description": "売: 為替 − スプレッド / 買: 為替 ＋ スプレッド"
+          },
+          "現地精算金額": {
+            "type": "number",
+            "title": "現地精算金額",
+            "description": "売: ROUNDUP(精算($) × ROUNDDOWN(約定為替, 3), 0) / 買: ROUNDDOWN(精算($) × 約定為替, 0)。手数料パターンの照合キー"
+          },
+          "国内手数料": {
+            "type": "number",
+            "title": "国内手数料",
+            "description": "ROUNDDOWN((BP>0 ? ROUNDDOWN(精算×BP) : ROUNDDOWN(精算×率+加算金)) × 掛目) → 最低/最大でクリップ"
+          },
+          "消費税": {
+            "type": "number",
+            "title": "消費税",
+            "description": "ROUNDDOWN(国内手数料 × 消費税率, 0)。消費税不要区分なら 0"
+          },
+          "最終精算金額": {
+            "type": "number",
+            "title": "最終精算金額",
+            "description": "売: 精算 − 国内手数料 − 消費税 / 買: 精算 ＋ 国内手数料 ＋ 消費税"
+          },
+          "NISA取引年": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa取引年",
+            "description": "成長投資枠のみ: 当年"
+          },
+          "NISA計算用為替レート": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa計算用為替レート",
+            "description": "成長投資枠・買のみ: 為替レート"
+          },
+          "NISA使用予定額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa使用予定額",
+            "description": "成長投資枠・買のみ: ROUNDDOWN(約定金額($) × 為替, 0)"
+          },
+          "譲渡益税為替レート": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "譲渡益税為替レート",
+            "description": "特定預りのみ: 為替レート"
+          },
+          "概算平均取得単価": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "概算平均取得単価",
+            "description": "特定預りのみ: 売は残高の平均取得単価、買は加重平均（切捨）"
+          },
+          "概算譲渡損益": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "概算譲渡損益",
+            "description": "特定預り・売のみ: 最終精算金額 − 平均取得単価 × 数量"
+          },
+          "概算譲渡益税額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "概算譲渡益税額",
+            "description": "特定預り・売のみ"
+          },
+          "税引後受渡金額": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "税引後受渡金額",
+            "description": "特定預り・売のみ: 最終精算金額 − 概算譲渡益税額"
+          }
+        },
+        "type": "object",
+        "required": [
+          "約定為替レート",
+          "現地精算金額",
+          "国内手数料",
+          "消費税",
+          "最終精算金額"
+        ],
+        "title": "CalculationYenBlock",
+        "description": "円貨側の算出値（Excel I 列）"
+      },
+      "CarryoverErrorItem": {
+        "properties": {
+          "line_number": {
+            "type": "integer",
+            "title": "Line Number"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "line_number",
+          "errors"
+        ],
+        "title": "CarryoverErrorItem",
+        "description": "繰越発注 CSV で除外した行（手入力で登録する）"
+      },
+      "CarryoverImportResponse": {
+        "properties": {
+          "batch_type": {
+            "type": "string",
+            "title": "Batch Type",
+            "description": "バッチ種別（BACKUP / FX / SYMBOL / CUSTOMER / INITIAL_BALANCE / EXPIRE_ORDERS / MIZUHO_CONFIRM / CARRYOVER_IMPORT）"
+          },
+          "batch_status": {
+            "type": "string",
+            "title": "Batch Status",
+            "description": "d_バッチ実行管理 の実行状態（2: 正常終了 / 9: 異常終了）"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "処理成否（CSV 取込系はエラー行があると false）"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "処理結果メッセージ"
+          },
+          "skipped": {
+            "type": "boolean",
+            "title": "Skipped"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count"
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count"
+          },
+          "registered": {
+            "items": {
+              "$ref": "#/components/schemas/CarryoverRegisteredItem"
+            },
+            "type": "array",
+            "title": "Registered"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/CarryoverWarningItem"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/CarryoverErrorItem"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "processed_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed File",
+            "description": "取り込んだファイル名（アップロード時は \"(upload)\"）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_type",
+          "batch_status",
+          "success",
+          "skipped",
+          "total_count",
+          "success_count",
+          "error_count"
+        ],
+        "title": "CarryoverImportResponse",
+        "description": "朝バッチ⑧: 繰越発注 CSV 取込（Phase 51）。ファイルが無い日は `skipped: true`（正常）"
+      },
+      "CarryoverRegisteredItem": {
+        "properties": {
+          "line_number": {
+            "type": "integer",
+            "title": "Line Number"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id",
+            "description": "登録した繰越注文ID"
+          },
+          "source_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Order Id",
+            "description": "繰越元注文ID（メモから解決できた場合）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "line_number",
+          "order_id"
+        ],
+        "title": "CarryoverRegisteredItem",
+        "description": "繰越発注 CSV で登録した行"
+      },
+      "CarryoverWarningItem": {
+        "properties": {
+          "line_number": {
+            "type": "integer",
+            "title": "Line Number"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "line_number",
+          "order_id",
+          "warnings"
+        ],
+        "title": "CarryoverWarningItem",
+        "description": "繰越発注 CSV で登録したが警告のある行"
       },
       "CashBalanceDetail": {
         "properties": {
@@ -22360,6 +24503,66 @@
         ],
         "title": "ClosingStatusResponse",
         "description": "締め状態照会/更新レスポンス"
+      },
+      "CodesResponse": {
+        "additionalProperties": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              }
+            ]
+          },
+          "type": "object"
+        },
+        "type": "object",
+        "title": "CodesResponse",
+        "description": "全コードマスタ（`app/config/codes.json`）。\n\n形は `{カテゴリ: {コード: 名称}}`。\n`投資方針` だけは法人区分で名称が変わるため `{法人区分: {コード: 名称}}` の 2 段構造\n（`\"0\"`: 個人、`\"1\"`: 法人）。",
+        "examples": [
+          {
+            "処理状況": {
+              "000": "未発注",
+              "003": "注文中",
+              "011": "全部出来",
+              "020": "不出来",
+              "034": "取消済"
+            },
+            "売買区分": {
+              "1": "売",
+              "3": "買"
+            },
+            "投資方針": {
+              "0": {
+                "1": "利回り・安定重視",
+                "2": "利回り・値上り益重視",
+                "9": "その他"
+              },
+              "1": {
+                "1": "政策投資",
+                "2": "資金運用",
+                "9": "その他"
+              }
+            },
+            "指成区分": {
+              "LO": "指値",
+              "MO": "成行"
+            },
+            "発注範囲": {
+              "01": "プレ",
+              "02": "プレ＋レギュラー",
+              "03": "レギュラー",
+              "04": "プレ＋レギュラー＋アフター",
+              "05": "レギュラー＋アフター",
+              "06": "アフター"
+            }
+          }
+        ]
       },
       "ComplianceRankEnum": {
         "type": "string",
@@ -22579,6 +24782,17 @@
           "row_number": {
             "type": "integer",
             "title": "Row Number"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
           },
           "valid": {
             "type": "boolean",
@@ -23759,6 +25973,382 @@
         "title": "CustomerResponse",
         "description": "口座マスタ単一操作レスポンス"
       },
+      "CustomerSearchItem": {
+        "properties": {
+          "部店コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店コード"
+          },
+          "扱者コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "扱者コード"
+          },
+          "扱者名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "扱者名"
+          },
+          "口座番号": {
+            "type": "integer",
+            "title": "口座番号"
+          },
+          "顧客名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名"
+          },
+          "顧客名カナ": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名カナ"
+          },
+          "法人区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "法人区分",
+            "description": "0:個人 / 1:法人"
+          },
+          "年齢": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "年齢"
+          },
+          "取引停止区分_全取引": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 全取引",
+            "description": "0:なし / 1:停止"
+          },
+          "取引停止区分_エクイティ商品取引_売買": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 売買"
+          },
+          "取引停止区分_リスク商品取引_売買": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 売買"
+          },
+          "取引停止区分_エクイティ商品取引_買": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 買"
+          },
+          "取引停止区分_リスク商品取引_買": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 買"
+          },
+          "投資方針": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "投資方針"
+          },
+          "コンプラランク": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "コンプラランク"
+          },
+          "円貨預り金": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "円貨預り金"
+          },
+          "外貨預り金": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "外貨預り金"
+          },
+          "NISA買付可能額_当年": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa買付可能額 当年"
+          },
+          "NISA買付可能額_翌年": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa買付可能額 翌年"
+          },
+          "取消区分": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消区分",
+            "description": "1: 削除済"
+          },
+          "ユーザー操作フラグ": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "ユーザー操作フラグ"
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時"
+          },
+          "更新者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新者"
+          },
+          "法人区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "法人区分名"
+          },
+          "取引停止区分_全取引名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 全取引名"
+          },
+          "取引停止区分_エクイティ商品取引_売買名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 売買名"
+          },
+          "取引停止区分_リスク商品取引_売買名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 売買名"
+          },
+          "取引停止区分_エクイティ商品取引_買名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 エクイティ商品取引 買名"
+          },
+          "取引停止区分_リスク商品取引_買名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引停止区分 リスク商品取引 買名"
+          },
+          "コンプラランク名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "コンプラランク名"
+          },
+          "投資方針名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "投資方針名",
+            "description": "法人区分に応じた投資方針の名称"
+          }
+        },
+        "type": "object",
+        "required": [
+          "口座番号"
+        ],
+        "title": "CustomerSearchItem",
+        "description": "顧客検索の 1 件（`m_口座情報` の検索列 + コード名称）。\n\n金額（円貨預り金・外貨預り金・NISA買付可能額）は DB の decimal をそのまま返すため\nJSON では文字列（例: \"1000000\"）になる。"
+      },
       "CustomerUpdateRequest": {
         "properties": {
           "部店コード": {
@@ -24489,6 +27079,62 @@
         ],
         "title": "DepositCategoryEnum"
       },
+      "DreamCorrectResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "success"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderRecord"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "補正後の注文（d_注文 全列）"
+          },
+          "created_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created File",
+            "description": "即時再送で出力した Dream 連携 JSON のパス（未送信時は null）"
+          },
+          "diff": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Diff",
+            "description": "補正した項目の差分（例: 部店: '001' -> '002'）"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "order_id",
+          "message"
+        ],
+        "title": "DreamCorrectResponse",
+        "description": "Dreamエラー注文属性補正 & 再送信APIのレスポンス（`dream_batch_service.correct_and_retry_dream_order`）"
+      },
       "DreamOrderCorrectionRequest": {
         "properties": {
           "部店": {
@@ -25062,6 +27708,151 @@
         "title": "DreamStatusTransitionItem",
         "description": "STS変更で選択可能な遷移先"
       },
+      "DreamSyncResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "success"
+          },
+          "base_date": {
+            "type": "integer",
+            "title": "Base Date"
+          },
+          "total_groups": {
+            "type": "integer",
+            "title": "Total Groups",
+            "description": "出力した注文グループ数"
+          },
+          "new_orders_count": {
+            "type": "integer",
+            "title": "New Orders Count",
+            "description": "送信中へ更新した新規注文数"
+          },
+          "cancel_orders_count": {
+            "type": "integer",
+            "title": "Cancel Orders Count",
+            "description": "送信中へ更新した取消注文数"
+          },
+          "claimed_order_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Claimed Order Ids"
+          },
+          "claimed_cancel_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Claimed Cancel Ids"
+          },
+          "created_files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Created Files",
+            "description": "出力した JSON ファイルのパス"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "base_date",
+          "total_groups",
+          "new_orders_count",
+          "cancel_orders_count",
+          "message"
+        ],
+        "title": "DreamSyncResponse",
+        "description": "IB 締後 Dream 連携一括実行（`dream_batch_service.process_dream_batch_sync`）"
+      },
+      "DuplicateOrderInfo": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "order_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Type"
+          },
+          "limit_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Price"
+          },
+          "received_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received Time"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "order_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id"
+        ],
+        "title": "DuplicateOrderInfo",
+        "description": "重複注文チェックで検出した当日の既存注文（Phase 58）"
+      },
       "EffectiveTimesResponse": {
         "properties": {
           "対象日": {
@@ -25593,6 +28384,51 @@
         ],
         "title": "ExecutionSummary",
         "description": "検索条件に合致する約定の集計（件数カード用）"
+      },
+      "ExpireUnfilledOrdersResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "success"
+          },
+          "base_date": {
+            "type": "integer",
+            "title": "Base Date",
+            "description": "基準日（YYYYMMDD）"
+          },
+          "total_found": {
+            "type": "integer",
+            "title": "Total Found",
+            "description": "抽出した対象注文数"
+          },
+          "expired_count": {
+            "type": "integer",
+            "title": "Expired Count",
+            "description": "不出来へ更新した件数"
+          },
+          "expired_order_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Expired Order Ids"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "base_date",
+          "total_found",
+          "expired_count",
+          "message"
+        ],
+        "title": "ExpireUnfilledOrdersResponse",
+        "description": "前日未約定 IB 注文の一括不出来（020）更新（`batch_service.process_expire_unfilled_ib_orders`）"
       },
       "FeePatternDetailResponse": {
         "properties": {
@@ -27321,6 +30157,18 @@
             "title": "為替レート",
             "description": "為替レート(円)"
           },
+          "源泉レート": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "源泉レート",
+            "description": "譲渡益税計算用の為替レート(円)。未設定は null"
+          },
           "取消区分": {
             "type": "integer",
             "title": "取消区分",
@@ -27477,6 +30325,19 @@
             "title": "為替レート",
             "description": "レート(円)（正の数）"
           },
+          "源泉レート": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "源泉レート",
+            "description": "譲渡益税計算用の為替レート(円)。仮計算の外貨側で使用（任意）"
+          },
           "更新日時": {
             "anyOf": [
               {
@@ -27580,6 +30441,66 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HandlerItem": {
+        "properties": {
+          "部店コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店コード",
+            "description": "部店コード（4桁）"
+          },
+          "扱者コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "扱者コード",
+            "description": "扱者コード（4桁）"
+          },
+          "扱者名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "扱者名",
+            "description": "扱者名"
+          }
+        },
+        "type": "object",
+        "title": "HandlerItem",
+        "description": "扱者マスタ 1 件（`m_扱者情報`）"
+      },
+      "HandlerListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HandlerItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "HandlerListResponse",
+        "description": "扱者マスタ取得APIのレスポンス（部店コード・扱者コード昇順）"
       },
       "HoldingItem": {
         "properties": {
@@ -27949,6 +30870,96 @@
         "title": "IbClosingResponse",
         "description": "IB 締め実行結果（Phase 50）"
       },
+      "InitialBalanceImportResponse": {
+        "properties": {
+          "batch_type": {
+            "type": "string",
+            "title": "Batch Type",
+            "description": "バッチ種別（BACKUP / FX / SYMBOL / CUSTOMER / INITIAL_BALANCE / EXPIRE_ORDERS / MIZUHO_CONFIRM / CARRYOVER_IMPORT）"
+          },
+          "batch_status": {
+            "type": "string",
+            "title": "Batch Status",
+            "description": "d_バッチ実行管理 の実行状態（2: 正常終了 / 9: 異常終了）"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "処理成否（CSV 取込系はエラー行があると false）"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "処理結果メッセージ"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count"
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/CsvImportErrorItem"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "processed_file": {
+            "type": "string",
+            "title": "Processed File"
+          },
+          "created_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created Count",
+            "description": "新規作成した残高明細数（成功時のみ）"
+          },
+          "updated_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated Count",
+            "description": "更新した残高明細数（成功時のみ）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_type",
+          "batch_status",
+          "success",
+          "total_count",
+          "success_count",
+          "error_count",
+          "processed_file"
+        ],
+        "title": "InitialBalanceImportResponse",
+        "description": "朝バッチ⑤: 日初残高取込"
+      },
       "LatestFxResponse": {
         "properties": {
           "ID": {
@@ -27970,6 +30981,18 @@
             "type": "number",
             "title": "為替レート",
             "description": "最新為替レート(円)"
+          },
+          "源泉レート": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "源泉レート",
+            "description": "譲渡益税計算用の為替レート(円)"
           }
         },
         "type": "object",
@@ -28519,11 +31542,20 @@
         "title": "MarketHolidayValidationResponse",
         "description": "海外休場日事前検証レスポンス"
       },
+      "MarketSessionCode": {
+        "type": "string",
+        "enum": [
+          "PRE",
+          "REGULAR",
+          "AFTER"
+        ],
+        "title": "MarketSessionCode",
+        "description": "セッションコード（`str` を継承しているため既存の文字列比較はそのまま成立する）"
+      },
       "MarketSessionItem": {
         "properties": {
           "code": {
-            "type": "string",
-            "title": "Code",
+            "$ref": "#/components/schemas/MarketSessionCode",
             "description": "セッションコード (PRE / REGULAR / AFTER)"
           },
           "name": {
@@ -28575,6 +31607,18 @@
         ],
         "title": "MarketSessionItem",
         "description": "市場セッション1件（プレ／レギュラー／アフター）"
+      },
+      "MarketState": {
+        "type": "string",
+        "enum": [
+          "PRE",
+          "REGULAR",
+          "AFTER",
+          "BEFORE_OPEN",
+          "CLOSED"
+        ],
+        "title": "MarketState",
+        "description": "現在のセッション／セッション外の状態コード"
       },
       "MarketStatusResponse": {
         "properties": {
@@ -28638,8 +31682,7 @@
             "description": "短縮取引の理由"
           },
           "現在のセッション": {
-            "type": "string",
-            "title": "現在のセッション",
+            "$ref": "#/components/schemas/MarketState",
             "description": "PRE / REGULAR / AFTER、セッション外は BEFORE_OPEN（開場前）/ CLOSED（終了後・休場）"
           },
           "現在のセッション名": {
@@ -28678,23 +31721,743 @@
         "title": "MarketStatusResponse",
         "description": "市場状況レスポンス（全画面上部のヘッダ表示用）"
       },
-      "MasterListResponse": {
+      "MasterCsvImportResponse": {
         "properties": {
-          "items": {
+          "batch_type": {
+            "type": "string",
+            "title": "Batch Type",
+            "description": "バッチ種別（BACKUP / FX / SYMBOL / CUSTOMER / INITIAL_BALANCE / EXPIRE_ORDERS / MIZUHO_CONFIRM / CARRYOVER_IMPORT）"
+          },
+          "batch_status": {
+            "type": "string",
+            "title": "Batch Status",
+            "description": "d_バッチ実行管理 の実行状態（2: 正常終了 / 9: 異常終了）"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "処理成否（CSV 取込系はエラー行があると false）"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "処理結果メッセージ"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "対象総件数"
+          },
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count",
+            "description": "登録/更新成功件数"
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count",
+            "description": "エラー件数"
+          },
+          "errors": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/CsvImportErrorItem"
             },
             "type": "array",
-            "title": "Items"
+            "title": "Errors",
+            "description": "エラー詳細一覧（全件ロールバック）"
+          },
+          "processed_file": {
+            "type": "string",
+            "title": "Processed File",
+            "description": "取り込んだファイル名"
           }
         },
         "type": "object",
         "required": [
-          "items"
+          "batch_type",
+          "batch_status",
+          "success",
+          "total_count",
+          "success_count",
+          "error_count",
+          "processed_file"
         ],
-        "title": "MasterListResponse",
-        "description": "マスタ取得APIのレスポンスモデル"
+        "title": "MasterCsvImportResponse",
+        "description": "朝バッチ②〜④: 為替／銘柄／顧客の CSV 取込（`CsvImportResponse` + `processed_file`）"
+      },
+      "MizuhoConfirmationDetail": {
+        "properties": {
+          "sheet": {
+            "type": "string",
+            "title": "Sheet",
+            "description": "シート名（US_B: 買 / US_S: 売）"
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "シート内の No（オーダーシートの連番）"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id",
+            "description": "突合した注文ID"
+          },
+          "受注番号": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注番号"
+          },
+          "銘柄コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄コード"
+          },
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          },
+          "数量": {
+            "type": "integer",
+            "title": "数量",
+            "description": "注文数量"
+          },
+          "約定数量": {
+            "type": "integer",
+            "title": "約定数量",
+            "description": "シートの ExecQty"
+          },
+          "約定単価": {
+            "type": "number",
+            "title": "約定単価",
+            "description": "シートの Exec Price"
+          },
+          "prev_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Status",
+            "description": "照合前の処理状況"
+          },
+          "next_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Status",
+            "description": "照合後の処理状況（011 全部出来 / 010 一部出来 / 020 不出来）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sheet",
+          "no",
+          "order_id",
+          "数量",
+          "約定数量",
+          "約定単価"
+        ],
+        "title": "MizuhoConfirmationDetail",
+        "description": "約定コンファメーション照合の明細 1 行"
+      },
+      "MizuhoConfirmationResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/MizuhoConfirmationSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message",
+          "summary"
+        ],
+        "title": "MizuhoConfirmationResponse",
+        "description": "約定コンファメーション取込／事前検証APIのレスポンス"
+      },
+      "MizuhoConfirmationSummary": {
+        "properties": {
+          "target_date": {
+            "type": "string",
+            "title": "Target Date",
+            "description": "対象受注日（YYYYMMDD）"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "description": "true なら DB 更新なし（事前検証）"
+          },
+          "total_rows": {
+            "type": "integer",
+            "title": "Total Rows",
+            "description": "シートの有効行数"
+          },
+          "filled_count": {
+            "type": "integer",
+            "title": "Filled Count",
+            "description": "全部出来（011）件数"
+          },
+          "partial_count": {
+            "type": "integer",
+            "title": "Partial Count",
+            "description": "一部出来（010）件数"
+          },
+          "unfilled_count": {
+            "type": "integer",
+            "title": "Unfilled Count",
+            "description": "不出来（020）件数"
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count",
+            "description": "対応する発注注文が無くスキップした件数"
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count",
+            "description": "No 不正等のエラー行数"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors",
+            "description": "エラー・スキップ理由の一覧"
+          },
+          "details": {
+            "items": {
+              "$ref": "#/components/schemas/MizuhoConfirmationDetail"
+            },
+            "type": "array",
+            "title": "Details",
+            "description": "照合明細"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_date",
+          "dry_run",
+          "total_rows",
+          "filled_count",
+          "partial_count",
+          "unfilled_count",
+          "skipped_count",
+          "error_count"
+        ],
+        "title": "MizuhoConfirmationSummary",
+        "description": "約定コンファメーション照合の処理結果サマリ（`process_mizuho_confirmation_excel` の返却）"
+      },
+      "MizuhoConfirmationSyncResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "processed_file": {
+            "type": "string",
+            "title": "Processed File",
+            "description": "照合に使ったファイル名"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/MizuhoConfirmationSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "processed_file",
+          "message",
+          "summary"
+        ],
+        "title": "MizuhoConfirmationSyncResponse",
+        "description": "朝バッチ: みずほ約定コンファメーション自動照合"
+      },
+      "MizuhoOrderItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "注文ID（d_注文.ID）"
+          },
+          "受注番号": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注番号",
+            "description": "Dream 受注番号（Dream 登録済のため通常は設定済）"
+          },
+          "部店": {
+            "type": "string",
+            "title": "部店"
+          },
+          "口座番号": {
+            "type": "integer",
+            "title": "口座番号"
+          },
+          "銘柄コード": {
+            "type": "string",
+            "title": "銘柄コード"
+          },
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker",
+            "description": "米国市場ティッカー（m_銘柄情報）"
+          },
+          "銘柄名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名",
+            "description": "銘柄名（m_銘柄情報）"
+          },
+          "売買区分": {
+            "type": "string",
+            "title": "売買区分",
+            "description": "1:売 / 3:買"
+          },
+          "数量": {
+            "type": "integer",
+            "title": "数量"
+          },
+          "指成区分": {
+            "type": "string",
+            "title": "指成区分",
+            "description": "LO:指値 / MO:成行"
+          },
+          "指値単価": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "指値単価"
+          },
+          "決済通貨区分": {
+            "type": "string",
+            "title": "決済通貨区分"
+          },
+          "有効期限": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "有効期限"
+          },
+          "受注日": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注日",
+            "description": "YYYYMMDD"
+          },
+          "受注時刻": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注時刻"
+          },
+          "処理状況": {
+            "type": "string",
+            "title": "処理状況",
+            "description": "000:未発注（未出力）/ 003:注文中（オーダーシート出力済）"
+          },
+          "注文ルート": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文ルート",
+            "description": "0 または 'みずほ'"
+          },
+          "メモ": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "メモ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "部店",
+          "口座番号",
+          "銘柄コード",
+          "売買区分",
+          "数量",
+          "指成区分",
+          "決済通貨区分",
+          "処理状況"
+        ],
+        "title": "MizuhoOrderItem",
+        "description": "みずほ発注対象注文 1 件（`d_注文` + `m_銘柄情報`。`mizuho_service.get_mizuho_orders` の列）"
+      },
+      "MizuhoOrdersResponse": {
+        "properties": {
+          "target_date": {
+            "type": "string",
+            "title": "Target Date",
+            "description": "対象日（YYYYMMDD。省略時は当日）"
+          },
+          "side": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Side",
+            "description": "指定した売買区分フィルタ（buy / sell / all）"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "件数"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/MizuhoOrderItem"
+            },
+            "type": "array",
+            "title": "Orders",
+            "description": "銘柄コード・部店・口座番号・ID 昇順"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_date",
+          "total"
+        ],
+        "title": "MizuhoOrdersResponse",
+        "description": "みずほ発注対象注文一覧のレスポンス"
+      },
+      "MorningBatchRunResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "success / error"
+          },
+          "base_date": {
+            "type": "integer",
+            "title": "Base Date",
+            "description": "基準日（YYYYMMDD）"
+          },
+          "aborted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aborted At",
+            "description": "中断したバッチ種別（error 時のみ）"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/MorningBatchStepResult"
+            },
+            "type": "array",
+            "title": "Steps",
+            "description": "実行したステップの結果（実行順）"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "base_date",
+          "message"
+        ],
+        "title": "MorningBatchRunResponse",
+        "description": "朝バッチ一括実行の結果"
+      },
+      "MorningBatchStepResult": {
+        "properties": {
+          "batch_type": {
+            "type": "string",
+            "title": "Batch Type",
+            "description": "バッチ種別（BACKUP / FX / SYMBOL / CUSTOMER / INITIAL_BALANCE / EXPIRE_ORDERS / MIZUHO_CONFIRM / CARRYOVER_IMPORT）"
+          },
+          "batch_status": {
+            "type": "string",
+            "title": "Batch Status",
+            "description": "d_バッチ実行管理 の実行状態（2: 正常終了 / 9: 異常終了）"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "処理成否（CSV 取込系はエラー行があると false）"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "処理結果メッセージ"
+          },
+          "skipped": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped"
+          },
+          "backup_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup File"
+          },
+          "total_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Count"
+          },
+          "success_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Count"
+          },
+          "error_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Count"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CsvImportErrorItem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CarryoverErrorItem"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors"
+          },
+          "processed_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed File"
+          },
+          "created_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created Count"
+          },
+          "updated_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated Count"
+          },
+          "registered": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CarryoverRegisteredItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered"
+          },
+          "warnings": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CarryoverWarningItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warnings"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpireUnfilledOrdersResponse"
+              },
+              {
+                "$ref": "#/components/schemas/MizuhoConfirmationSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail",
+            "description": "EXPIRE_ORDERS / MIZUHO_CONFIRM の委譲先の生の結果"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_type",
+          "batch_status",
+          "success"
+        ],
+        "title": "MorningBatchStepResult",
+        "description": "朝バッチ一括実行の各ステップ結果。\n\nステップにより返すキーが異なるため、全ステップの項目の和集合を任意項目として持つ\n（例外で中断したステップは batch_type / batch_status / success / message のみ）。"
       },
       "NisaContractEnum": {
         "type": "string",
@@ -28868,7 +32631,8 @@
                 "type": "null"
               }
             ],
-            "title": "実行者"
+            "title": "実行者",
+            "description": "操作者コード。未指定時は認証情報から解決"
           }
         },
         "type": "object",
@@ -29032,22 +32796,18 @@
       "OrderDetailResponse": {
         "properties": {
           "order": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Order"
+            "$ref": "#/components/schemas/OrderRecord"
           },
           "executions": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/OrderExecutionItem"
             },
             "type": "array",
             "title": "Executions"
           },
           "events": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/OrderEventItem"
             },
             "type": "array",
             "title": "Events"
@@ -29121,6 +32881,223 @@
         ],
         "title": "OrderErrorSummaryResponse",
         "description": "当日注文エラー件数サマリレスポンスモデル"
+      },
+      "OrderEventItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "注文ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文Id"
+          },
+          "イベント日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "イベント日時"
+          },
+          "イベント種別": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "イベント種別",
+            "description": "EXECUTION / EXPIRED / DREAM_SEND / MIZUHO_EXPORTED 等"
+          },
+          "前処理状況": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "前処理状況"
+          },
+          "後処理状況": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "後処理状況"
+          },
+          "内容": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "内容"
+          },
+          "実行者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "実行者"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID"
+        ],
+        "title": "OrderEventItem",
+        "description": "`d_注文イベント` 1 行（`order_event_repository.get_order_events` の列）"
+      },
+      "OrderExecutionItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "注文ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文Id"
+          },
+          "OrderID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orderid",
+            "description": "IB OrderID（みずほ約定は MZ_受注番号）"
+          },
+          "ExecID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execid",
+            "description": "IB Execution ID（みずほ約定は MZ-日付-B/S-No）"
+          },
+          "約定数量": {
+            "type": "integer",
+            "title": "約定数量"
+          },
+          "約定単価": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "約定単価"
+          },
+          "約定日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "約定日時"
+          },
+          "決済通貨区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "決済通貨区分"
+          },
+          "手数料": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料"
+          },
+          "手数料通貨": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "手数料通貨"
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "約定数量"
+        ],
+        "title": "OrderExecutionItem",
+        "description": "`d_約定` 1 行（`execution_repository.get_executions_by_order_id` の列）。\n\ndecimal 列（約定単価・手数料）は JSON では文字列になる。"
       },
       "OrderItemResponse": {
         "properties": {
@@ -29484,6 +33461,18 @@
             "title": "強制区分",
             "default": 0
           },
+          "重複確認区分": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "重複確認区分",
+            "default": 0
+          },
           "引合番号": {
             "anyOf": [
               {
@@ -29633,6 +33622,18 @@
               }
             ],
             "title": "売買区分名"
+          },
+          "発注範囲名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "発注範囲名",
+            "description": "発注範囲の表示名（01:プレ 02:プレ＋レギュラー 03:レギュラー 04:プレ＋レギュラー＋アフター 05:レギュラー＋アフター 06:アフター）"
           },
           "注文ルート名": {
             "anyOf": [
@@ -29914,6 +33915,515 @@
         ],
         "title": "OrderMethodEnum"
       },
+      "OrderRecord": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "元注文ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "元注文Id",
+            "description": "訂正・PARTIAL_FILL 等の家族の根となる注文ID"
+          },
+          "取消元注文ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消元注文Id",
+            "description": "PARTIAL_FILL 子注文の切り出し元（取消された脚の注文ID）"
+          },
+          "繰越元注文ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "繰越元注文Id",
+            "description": "繰越元の注文ID（注文種別=CARRYOVER のとき）"
+          },
+          "スライス親ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スライス親Id",
+            "description": "スライス親注文ID（SLICE_CHILD のとき）"
+          },
+          "注文種別": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文種別"
+          },
+          "部店": {
+            "type": "string",
+            "title": "部店"
+          },
+          "口座番号": {
+            "type": "integer",
+            "title": "口座番号"
+          },
+          "銘柄コード": {
+            "type": "string",
+            "title": "銘柄コード"
+          },
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker",
+            "description": "受注時点の米国市場ティッカー"
+          },
+          "売買区分": {
+            "type": "string",
+            "title": "売買区分",
+            "description": "1:売 / 3:買"
+          },
+          "数量": {
+            "type": "integer",
+            "title": "数量"
+          },
+          "指成区分": {
+            "type": "string",
+            "title": "指成区分",
+            "description": "LO:指値 / MO:成行"
+          },
+          "指値単価": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "指値単価"
+          },
+          "決済通貨区分": {
+            "type": "string",
+            "title": "決済通貨区分"
+          },
+          "証券受渡方法": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "証券受渡方法"
+          },
+          "預り売買区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "預り売買区分"
+          },
+          "取引": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取引"
+          },
+          "勧誘区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "勧誘区分"
+          },
+          "受注方法": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注方法"
+          },
+          "資金性格": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "資金性格"
+          },
+          "金銭受渡方法": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "金銭受渡方法"
+          },
+          "有効期限": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "有効期限"
+          },
+          "注文チャネル": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文チャネル"
+          },
+          "受注日": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注日"
+          },
+          "受注時刻": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注時刻"
+          },
+          "受注者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注者"
+          },
+          "VWAP区分": {
+            "type": "integer",
+            "title": "Vwap区分",
+            "description": "0=通常注文、1=VWAP注文",
+            "default": 0
+          },
+          "引合番号": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "引合番号",
+            "description": "VWAP引合番号（00001〜99999）"
+          },
+          "発注範囲": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "発注範囲",
+            "description": "01:プレ 02:プレ＋レギュラー 03:レギュラー 04:プレ＋レギュラー＋アフター 05:レギュラー＋アフター 06:アフター"
+          },
+          "注文ルート": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文ルート"
+          },
+          "発注可能日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "発注可能日時"
+          },
+          "実発注日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "実発注日時"
+          },
+          "受注番号": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注番号",
+            "description": "Dream 受注番号"
+          },
+          "処理状況": {
+            "type": "string",
+            "title": "処理状況"
+          },
+          "Dream登録状況": {
+            "type": "string",
+            "title": "Dream登録状況",
+            "description": "0=未登録、1=登録中、2=登録済、9=登録失敗",
+            "default": "0"
+          },
+          "Dream取消状況": {
+            "type": "string",
+            "title": "Dream取消状況",
+            "description": "0=取消対象外、1=取消中、2=取消済、9=取消失敗",
+            "default": "0"
+          },
+          "Dream登録日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream登録日時"
+          },
+          "Dream取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream取消日時"
+          },
+          "Dreamエラー内容": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dreamエラー内容"
+          },
+          "エラー内容": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "エラー内容",
+            "description": "IB・その他連携のエラー内容"
+          },
+          "OrderID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orderid"
+          },
+          "OrderRef": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orderref"
+          },
+          "強制区分": {
+            "type": "integer",
+            "title": "強制区分",
+            "default": 0
+          },
+          "重複確認区分": {
+            "type": "integer",
+            "title": "重複確認区分",
+            "description": "1: 重複注文を確認のうえ受付（Phase 58）",
+            "default": 0
+          },
+          "メモ": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "メモ"
+          },
+          "作成日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成日時"
+          },
+          "作成者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "作成者"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時"
+          },
+          "取消日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消日時"
+          },
+          "取消者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消者"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "部店",
+          "口座番号",
+          "銘柄コード",
+          "売買区分",
+          "数量",
+          "指成区分",
+          "決済通貨区分",
+          "処理状況"
+        ],
+        "title": "OrderRecord",
+        "description": "`d_注文` 1 行（全列。注文詳細・Dream 補正の `order`）。\n\ndecimal 列（指値単価）は DB の値をそのまま返すため JSON では文字列（例: \"150.0000\"）、\ndatetime 列は ISO 8601 文字列（例: \"2026-09-15T10:00:00\"）になる。"
+      },
       "OrderRequest": {
         "properties": {
           "元注文ID": {
@@ -30031,6 +34541,13 @@
           "強制区分": {
             "type": "integer",
             "title": "強制区分",
+            "default": 0
+          },
+          "重複確認区分": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "重複確認区分",
             "default": 0
           },
           "発注範囲": {
@@ -30157,7 +34674,7 @@
           "停止対象": {
             "type": "string",
             "title": "停止対象",
-            "description": "ALL:全体 / 注文ルートコード。既定は全体",
+            "description": "ALL:全体 / 注文ルートコード (0:みずほ 1:IB 2:VWAP)。既定は全体",
             "default": "ALL"
           },
           "実行者": {
@@ -30441,7 +34958,8 @@
                 "type": "null"
               }
             ],
-            "title": "実行者"
+            "title": "実行者",
+            "description": "操作者コード。未指定時は認証情報から解決"
           },
           "更新日時": {
             "anyOf": [
@@ -31362,7 +35880,7 @@
           "停止対象": {
             "type": "string",
             "title": "停止対象",
-            "description": "ALL:全体 / 注文ルートコード。既定は全体",
+            "description": "ALL:全体 / 注文ルートコード (0:みずほ 1:IB 2:VWAP)。既定は全体",
             "default": "ALL"
           },
           "停止理由": {
@@ -31465,33 +35983,42 @@
           },
           "変更前データ": {
             "anyOf": [
-              {},
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
               {
                 "type": "null"
               }
             ],
             "title": "変更前データ",
-            "description": "操作前のレコード内容"
+            "description": "操作前の m_発注停止 行全体（キー: 停止対象, 発注停止フラグ, 停止理由, 更新者, 更新日時 など）"
           },
           "変更後データ": {
             "anyOf": [
-              {},
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
               {
                 "type": "null"
               }
             ],
             "title": "変更後データ",
-            "description": "操作後のレコード内容"
+            "description": "操作後の m_発注停止 行全体（キーは変更前データと同じ）"
           },
           "差分データ": {
             "anyOf": [
-              {},
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
               {
                 "type": "null"
               }
             ],
             "title": "差分データ",
-            "description": "変更された項目の差分"
+            "description": "変更項目の差分 {\"発注停止フラグ\": {\"変更前\": 0/1, \"変更後\": 0/1}, \"停止理由\": 停止理由（再開時は null）}"
           },
           "操作日時": {
             "type": "string",
@@ -31598,7 +36125,7 @@
           "停止対象": {
             "type": "string",
             "title": "停止対象",
-            "description": "ALL:全体 / 注文ルートコード (0:みずほ 1:IB 2:VWAP 3:自己取引 4:OTC)"
+            "description": "ALL:全体 / 注文ルートコード (0:みずほ 1:IB（自己取引を含む） 2:VWAP)。OTC は全体停止のみ"
           },
           "停止対象名": {
             "type": "string",
@@ -31981,6 +36508,19 @@
             ],
             "title": "Vwap対象区分名",
             "description": "VWAP対象区分名称"
+          },
+          "初期VWAP対象区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "初期Vwap対象区分",
+            "description": "朝バッチ後のVWAP対象区分（一括更新の reset で戻す先）",
+            "default": "0"
           },
           "Pre区分": {
             "anyOf": [
@@ -32809,6 +37349,17 @@
             ],
             "title": "Stock Name"
           },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
           "order_route": {
             "anyOf": [
               {
@@ -32949,6 +37500,14 @@
               }
             ],
             "title": "Slice Distribution"
+          },
+          "duplicate_orders": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateOrderInfo"
+            },
+            "type": "array",
+            "title": "Duplicate Orders",
+            "default": []
           }
         },
         "type": "object",
@@ -32995,6 +37554,192 @@
         ],
         "title": "ValidationError"
       },
+      "VwapTargetBulkRequest": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "set",
+              "reset"
+            ],
+            "title": "Mode",
+            "description": "set: VWAP対象区分 の値へ一括設定 / reset: 初期VWAP対象区分（朝バッチ後の値）へ戻す"
+          },
+          "VWAP対象区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap対象区分",
+            "description": "mode=set のとき必須 (0:非対象, 1:対象)"
+          },
+          "symbol_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol Ids",
+            "description": "対象銘柄ID（行ID）の配列。省略時は有効な全銘柄"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "VwapTargetBulkRequest",
+        "description": "VWAP対象一括更新APIの入力モデル"
+      },
+      "VwapTargetBulkResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "成否フラグ"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "description": "true: 件数確認のみ（更新なし）"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "description": "set / reset"
+          },
+          "VWAP対象区分": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap対象区分",
+            "description": "mode=set のときの設定値"
+          },
+          "候補件数": {
+            "type": "integer",
+            "title": "候補件数",
+            "description": "絞り込み前の銘柄数（symbol_ids 指定数、または有効な全銘柄数）"
+          },
+          "対象件数": {
+            "type": "integer",
+            "title": "対象件数",
+            "description": "値が変わる銘柄数"
+          },
+          "更新件数": {
+            "type": "integer",
+            "title": "更新件数",
+            "description": "実際に更新した件数（dry_run 時は 0）"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/VwapTargetBulkSymbol"
+            },
+            "type": "array",
+            "title": "Symbols",
+            "description": "値が変わる銘柄の一覧"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "処理結果メッセージ"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "dry_run",
+          "mode",
+          "候補件数",
+          "対象件数",
+          "更新件数",
+          "message"
+        ],
+        "title": "VwapTargetBulkResponse",
+        "description": "VWAP対象一括更新レスポンス（validate／本実行 共通）"
+      },
+      "VwapTargetBulkSymbol": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id",
+            "description": "銘柄マスタID"
+          },
+          "銘柄コード": {
+            "type": "string",
+            "title": "銘柄コード",
+            "description": "銘柄コード"
+          },
+          "Ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker",
+            "description": "ティッカーコード"
+          },
+          "銘柄名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名",
+            "description": "銘柄名"
+          },
+          "変更前": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更前",
+            "description": "変更前の VWAP対象区分"
+          },
+          "変更後": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "変更後",
+            "description": "変更後の VWAP対象区分"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "銘柄コード"
+        ],
+        "title": "VwapTargetBulkSymbol",
+        "description": "VWAP対象一括更新の対象銘柄"
+      },
       "app__api__customer_models__CustomerListResponse": {
         "properties": {
           "total": {
@@ -33038,8 +37783,7 @@
           },
           "customers": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/CustomerSearchItem"
             },
             "type": "array",
             "title": "Customers"

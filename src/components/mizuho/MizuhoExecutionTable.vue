@@ -1,6 +1,7 @@
 <script setup>
 /**
  * みずほ注文締の約定一覧の表。列の並びは公開モック（/executions/mizuho-operations）のとおり。
+ * ただしモック末尾の「預託先」列は置かない（この一覧は預託先＝みずほに固定で、列の値が常に同じになる）。
  *
  * 行の形は src/api/mizuhoExecutions.js の MizuhoExecution。
  * 出す data-testid は無い。表そのものの testid は呼び出し側がフォールスルーで渡す。
@@ -29,7 +30,6 @@ const COLUMNS = [
   { key: 'executedAmountJpy', label: '約定金額(円)', numeric: true },
   { key: 'executedAt', label: '約定日時' },
   { key: 'fillStatus', label: '出来状況' },
-  { key: 'routeName', label: '預託先' },
 ]
 
 const sideLabels = { buy: '買', sell: '売' }
@@ -88,8 +88,6 @@ function fillStatusLabel(row) {
         {{ fillStatusLabel(row) }}
       </span>
     </template>
-
-    <template #cell-routeName="{ value }">{{ textOrDash(value) }}</template>
   </DataTable>
 </template>
 

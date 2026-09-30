@@ -49,6 +49,12 @@
   --color-sell-hover: #2c5282;
   --color-sell-strong: #3182ce;
 
+  /* みずほ注文締めカードの操作ボタン。モックの .mizuho-close-action / .mizuho-order-file-action */
+  --color-mizuho-close: #264d73;
+  --color-mizuho-close-hover: #1f405f;
+  --color-mizuho-order-file: #385d83;
+  --color-mizuho-order-file-hover: #2c4d70;
+
   /* サイドバー（濃色。上の面用トークンとは別系統で持つ） */
   --color-sidebar-bg: #182230;
   --color-sidebar-border: #2c3848;

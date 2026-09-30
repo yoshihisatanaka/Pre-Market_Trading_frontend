@@ -20,6 +20,8 @@ import { closingHandlers } from './closing'
 import { executionHandlers } from './executions'
 import { dreamStatusHandlers } from './dreamStatus'
 import { orderCsvHandlers } from './orderCsv'
+import { orderEntryHandlers, resetOrderEntryState } from './orderEntry'
+import { fxHandlers } from './fx'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -81,6 +83,7 @@ export function resetMockState() {
   resetAnnouncementState()
   resetStalledOrderState()
   resetIncidentState()
+  resetOrderEntryState()
 }
 
 export const handlers = [
@@ -115,4 +118,6 @@ export const handlers = [
   ...executionHandlers,
   ...dreamStatusHandlers,
   ...orderCsvHandlers,
+  ...orderEntryHandlers,
+  ...fxHandlers,
 ]

@@ -43,6 +43,8 @@ import { executions } from '../mocks/fixtures/executions'
 import { orderInquiryRows } from '../mocks/fixtures/orderInquiry'
 import { dreamOrders, dreamStatusCodes } from '../mocks/fixtures/dreamStatus'
 import { orderCsvSpecResponse } from '../mocks/fixtures/orderCsv'
+import { orderCreateExamples, orderValidationExamples } from '../mocks/fixtures/orderEntry'
+import { latestUsdFxRate } from '../mocks/fixtures/fx'
 import { fetchOrders } from './orders'
 import { fetchOrderInquiry } from './orderInquiry'
 import { fetchCodes } from './codes'
@@ -93,6 +95,8 @@ import { fetchMizuhoClosingStatus } from './closing'
 import { fetchExecutions } from './executions'
 import { fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
 import { fetchOrderCsvSpec } from './orderCsv'
+import { createOrder, validateOrder } from './orderEntry'
+import { fetchLatestFxRate } from './fx'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -341,6 +345,14 @@ const FIXTURES = [
   { name: 'dreamStatusCodes', schema: 'DreamStatusCodeItem', rows: dreamStatusCodes },
   // レスポンス全体が対象。columns[] は items.$ref 経由で CsvColumnSpec として型検査される
   { name: 'orderCsvSpec', schema: 'CsvHeaderSpecResponse', rows: [orderCsvSpecResponse] },
+  // 新規注文の応答はレスポンス全体が対象（MSW のハンドラが同じ形で組み立てて返す）
+  {
+    name: 'orderValidation',
+    schema: 'OrderValidationResponse',
+    rows: orderValidationExamples,
+  },
+  { name: 'orderCreate', schema: 'OrderCreateResponse', rows: orderCreateExamples },
+  { name: 'latestFxRate', schema: 'LatestFxResponse', rows: [latestUsdFxRate] },
 ]
 
 function describeSchema(schema) {
@@ -438,6 +450,34 @@ function fixtureProblems({ name, schema, rows }) {
 
 /* ---------- src/api/ が送るリクエスト ---------- */
 
+/** 新規注文の事前検証・登録に渡す 1 件（src/api/orderEntry.js の OrderInput。全項目を埋める） */
+const PROBE_ORDER = {
+  branchCode: '123',
+  accountNumber: '1230004',
+  symbolCode: 'S001',
+  side: '3',
+  quantity: 10,
+  orderType: 'LO',
+  limitPrice: 200,
+  executionScope: '03',
+  expiryDate: '2026-09-30',
+  settlementCurrency: '0',
+  depositCategory: '0',
+  securitiesDelivery: '500',
+  transactionType: '100',
+  solicitation: '1',
+  orderMethod: '3',
+  fundNature: '1',
+  orderChannel: 'EGY',
+  cashDelivery: '000',
+  vwap: false,
+  orderDate: '2026-09-29',
+  orderTime: '10:30',
+  orderPerson: '001',
+  forced: false,
+  createdBy: '001',
+}
+
 /**
  * src/api/ の関数を 1 つずつ呼び、MSW が捕まえたリクエストを控える。
  * 応答は見ない（404 / 409 / 422 で例外になっても、リクエストの形は既に出ている）。
@@ -489,7 +529,13 @@ const PROBES = [
   {
     name: 'fetchSymbols',
     run: () =>
-      fetchSymbols({ symbolCode: 'AAPL', regulation: '0', orderRoute: '0', vwapTarget: '0' }),
+      fetchSymbols({
+        symbolCode: 'AAPL',
+        ticker: 'AAPL',
+        regulation: '0',
+        orderRoute: '0',
+        vwapTarget: '0',
+      }),
   },
   {
     name: 'validateSymbol',
@@ -690,6 +736,9 @@ const PROBES = [
   },
   { name: 'fetchDreamStatusCodes', run: () => fetchDreamStatusCodes() },
   { name: 'fetchOrderCsvSpec', run: () => fetchOrderCsvSpec() },
+  { name: 'validateOrder', run: () => validateOrder(PROBE_ORDER) },
+  { name: 'createOrder', run: () => createOrder(PROBE_ORDER) },
+  { name: 'fetchLatestFxRate', run: () => fetchLatestFxRate({ currencyCode: 'USD' }) },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

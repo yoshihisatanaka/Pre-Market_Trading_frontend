@@ -48,6 +48,11 @@
   --color-sell: #2b6cb0;
   --color-sell-hover: #2c5282;
   --color-sell-strong: #3182ce;
+  /* 注文入力のフォームの面と区切り線。売買を選ぶと面ごと色が変わる（モックの .theme-buy / .theme-sell） */
+  --color-buy-bg: #fff8f8;
+  --color-buy-line: #fca5a5;
+  --color-sell-bg: #f8fbff;
+  --color-sell-line: #90cdf4;
 
   /* サイドバー（濃色。上の面用トークンとは別系統で持つ） */
   --color-sidebar-bg: #182230;

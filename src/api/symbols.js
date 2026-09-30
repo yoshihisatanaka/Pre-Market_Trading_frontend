@@ -69,10 +69,15 @@ import { apiClient } from './client'
  * 欄を 2 つに割るかはバックエンドの `symbol` が Ticker にも当たるか次第なので、
  * 確認が付くまでは従来どおり 1 つの欄・1 つのパラメータで通す。
  *
+ * `ticker` は新規注文のティッカー照会が使う（`?ticker=` は実 API で Ticker に当たることを
+ * 2026-09-25 に実測済み。docs/api/requests.md #19）。一致が完全か部分かは仕様に書かれていないので、
+ * 呼び出し側（stores/orderEntry.js）が Ticker の完全一致で 1 件に絞る。
+ *
  * @param {{
  *   limit?: number,
  *   offset?: number,
  *   symbolCode?: string,
+ *   ticker?: string,
  *   regulation?: string,
  *   orderRoute?: string,
  *   vwapTarget?: string,
@@ -86,6 +91,7 @@ export async function fetchSymbols({
   limit = 50,
   offset = 0,
   symbolCode = '',
+  ticker = '',
   regulation = '',
   orderRoute = '',
   vwapTarget = '',
@@ -96,6 +102,7 @@ export async function fetchSymbols({
       limit,
       offset,
       symbol: symbolCode || undefined,
+      ticker: ticker || undefined,
       restriction: regulation || undefined,
       route: orderRoute || undefined,
       vwap_target: vwapTarget || undefined,

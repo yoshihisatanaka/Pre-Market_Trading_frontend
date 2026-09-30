@@ -6,7 +6,7 @@ import { suspensionHistories, suspensionTargets } from '@/mocks/fixtures/inciden
 import { INCIDENT_HISTORY_PAGE_SIZE, useIncidentsStore } from './incidents'
 
 /*
- * 期待値はフィクスチャから導く（6 行 / 4 件を直接書かない）。
+ * 期待値はフィクスチャから導く（4 行 / 4 件を直接書かない）。
  * 停止・再開は既定モックの状態遷移（resetMockState で戻る）をそのまま使う。
  */
 const STATUS_PATH = '*/api/operations/order-suspensions'

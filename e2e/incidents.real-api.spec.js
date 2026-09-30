@@ -13,7 +13,7 @@ import { expect, test } from '@playwright/test'
  *   2. バックエンドの api を起動しておく
  *   docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test incidents.real-api
  *
- * IR-02 はローカル DB の発注停止マスタを実際に書き換える（自己取引 `3` を停止 → 再開）。
+ * IR-02 はローカル DB の発注停止マスタを実際に書き換える（VWAP `2` を停止 → 再開）。
  * 停止はバックエンド全体に効くので、他の実 API E2E と排他で流す。途中で落ちても
  * afterEach が API を直接叩いて再開に戻す。停止理由・日時・操作者と履歴 2 行は戻せないので、
  * ローカルの開発 DB 前提。
@@ -24,8 +24,9 @@ const PATH = '/operations/incidents'
 const STATUS_API = '/api/operations/order-suspensions'
 const RESUME_API = '/api/operations/order-suspensions/resume'
 
-// 操作するのは全体ではなく注文ルート 1 つ（影響を最小にする）
-const TARGET = '3'
+// 操作するのは全体ではなく注文ルート 1 つ（影響を最小にする）。
+// IB（1）は自己取引も含むので避け、VWAP を使う
+const TARGET = '2'
 
 // 誰が触ったかを実 DB に残す（更新系は X-User-Code が要る。src/api/client.js の暫定実装と同じ扱い）
 const USER_CODE = 'e2e'
@@ -106,7 +107,7 @@ test.describe('障害管理（実 API 接続）', () => {
   })
 
   test.afterEach(async () => {
-    // 途中で落ちても自己取引を停止のまま残さない。停止中なら最新の 更新日時 で再開する
+    // 途中で落ちても VWAP を停止のまま残さない。停止中なら最新の 更新日時 で再開する
     const status = await getStatus()
     const row = targetOf(status, TARGET)
     if (row['発注停止中'] !== true) return
@@ -149,7 +150,7 @@ test.describe('障害管理（実 API 接続）', () => {
     await expect(page.getByTestId('incidents-empty')).toHaveCount(0)
   })
 
-  test('[IR-02] 自己取引を停止して再開すると行・履歴・API が対で戻る', async ({ page }) => {
+  test('[IR-02] VWAP を停止して再開すると行・履歴・API が対で戻る', async ({ page }) => {
     const before = await getStatus()
     expect(
       before['全体停止中'],
@@ -158,7 +159,7 @@ test.describe('障害管理（実 API 接続）', () => {
     const initial = targetOf(before, TARGET)
     expect(
       initial['発注停止中'],
-      '自己取引が停止中のまま始まった（前回の後片付け漏れ）。再開してから流すこと',
+      'VWAP が停止中のまま始まった（前回の後片付け漏れ）。再開してから流すこと',
     ).toBe(false)
     const targetName = initial['停止対象名']
 

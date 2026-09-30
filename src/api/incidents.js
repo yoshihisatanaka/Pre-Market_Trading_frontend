@@ -7,8 +7,8 @@ import { apiClient } from './client'
  * ファイル名が incidents なのは画面の呼称に合わせたため（sliceCriteria.js → /masters/hard-limits と同じ）。
  * キーは日本語のまま返るので、その差はこの層だけで吸収し、外へは camelCase のアプリ内モデルで返す。
  *
- * 停止の単位は「停止対象」。ALL:全体 / 注文ルートコード（0:みずほ 1:IB 2:VWAP 3:自己取引 4:OTC）。
- * 全体停止はルート単位の停止に優先する。
+ * 停止の単位は「停止対象」。ALL:全体 / 注文ルートコード（0:みずほ 1:IB（自己取引を含む） 2:VWAP）。
+ * OTC はルート単位では止められず、全体停止のみ。全体停止はルート単位の停止に優先する。
  */
 
 const SUSPENSIONS_PATH = '/operations/order-suspensions'

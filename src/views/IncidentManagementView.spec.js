@@ -13,7 +13,7 @@ import IncidentManagementView from './IncidentManagementView.vue'
 /*
  * 画面テスト。実際の Pinia ストア + vue-router + MSW(node) を通し、
  * 4 状態の出し分け・停止対象の表・履歴・停止 / 再開の導線を検証する。
- * 期待値はフィクスチャから導く（6 行 / 4 件 / 停止対象名を直接書かない）。
+ * 期待値はフィクスチャから導く（4 行 / 4 件 / 停止対象名を直接書かない）。
  *
  * 「IB だけが停止中」「全体が停止中」は、マウント前に同じ Pinia のストアから停止を実行して作る
  * （モックの状態遷移をそのまま使う。view の spec から api 層は import できない）。

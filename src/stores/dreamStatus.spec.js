@@ -27,6 +27,22 @@ const idsOf = (store) => store.items.map((item) => item.id)
 const head = sorted[0]
 const withReceipt = sorted.find((row) => row.受注番号)
 
+const CHANGE_PATH = '*/api/orders/dream-status/:orderId'
+
+/** いま読み込んでいるページの、状況が 9（登録失敗）の最初の行 */
+const registrationErrorIn = (store) => store.items.find((item) => item.status === '9')
+
+/** 一覧の GET を数える（応答は既定ハンドラに任せる） */
+function countListRequests() {
+  const counter = { count: 0 }
+  server.use(
+    http.get(LIST_PATH, () => {
+      counter.count += 1
+    }),
+  )
+  return counter
+}
+
 function failList() {
   server.use(
     http.get(LIST_PATH, () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
@@ -238,11 +254,149 @@ describe('stores/dreamStatus', () => {
     expect(store.error).toBeNull()
   })
 
-  it('[DSS-17] 読むだけの一覧なので登録・更新・削除を公開しない', () => {
+  it('[DSS-17] 書き込みは STS変更だけを公開し、登録・更新・削除は公開しない', () => {
     const store = useDreamStatusStore()
+
+    expect(typeof store.changeStatus).toBe('function')
+    expect(typeof store.clearChangeError).toBe('function')
+    expect(store.changing).toBe(false)
+    expect(store.changeError).toBeNull()
 
     expect(store.create).toBeUndefined()
     expect(store.update).toBeUndefined()
     expect(store.remove).toBeUndefined()
+  })
+
+  it('[DSS-18] changeStatus は行の updatedAt を合札に送り、結果を返す', async () => {
+    let sentBody = null
+    server.use(
+      http.put(CHANGE_PATH, async ({ request }) => {
+        sentBody = await request.clone().json()
+      }),
+    )
+    const store = useDreamStatusStore()
+    await store.load()
+    const order = registrationErrorIn(store)
+
+    const result = await store.changeStatus({
+      order,
+      status: '0',
+      receiptNumber: '',
+      reason: '再送する',
+    })
+
+    expect(sentBody.更新日時).toBe(order.updatedAt)
+    expect(sentBody.変更後状況).toBe('0')
+    expect(result.order).toMatchObject({ id: order.id, status: '0' })
+    expect(result.message).toContain(`注文ID ${order.id} `)
+  })
+
+  it('[DSS-19] 成功するとページ位置を保ったまま読み直す', async () => {
+    const store = useDreamStatusStore()
+    await store.load({ offset: PAGE_SIZE })
+    const order = registrationErrorIn(store)
+    // 2 ページ目に登録失敗の行を持つフィクスチャでないと、このシナリオは意味を失う
+    expect(order).toBeDefined()
+
+    await store.changeStatus({ order, status: '0' })
+
+    expect(store.offset).toBe(PAGE_SIZE)
+    expect(idsOf(store)).toEqual(allIds.slice(PAGE_SIZE, PAGE_SIZE * 2))
+    expect(store.items.find((item) => item.id === order.id).status).toBe('0')
+  })
+
+  it('[DSS-20] 成功すると条件を保ったまま読み直し、外れた行は消える', async () => {
+    const before = idsMatching((row) => ['9', 'C9'].includes(row.Dream状況))
+    const store = useDreamStatusStore()
+    await store.load({ status: 'ERROR' })
+    const order = registrationErrorIn(store)
+
+    await store.changeStatus({ order, status: '0' })
+
+    expect(store.status).toBe('ERROR')
+    expect(store.total).toBe(before.length - 1)
+    expect(idsOf(store)).toEqual(before.filter((id) => id !== order.id))
+  })
+
+  it('[DSS-21] onSuccess は一覧を読み直す前に結果を受け取って呼ばれる', async () => {
+    const store = useDreamStatusStore()
+    await store.load()
+    const order = registrationErrorIn(store)
+    const seen = []
+
+    const result = await store.changeStatus(
+      { order, status: '0' },
+      {
+        onSuccess: (received) => {
+          seen.push({
+            received,
+            statusInList: store.items.find((item) => item.id === order.id).status,
+          })
+        },
+      },
+    )
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0].received).toBe(result)
+    // 呼ばれた時点では一覧はまだ変更前のまま
+    expect(seen[0].statusInList).toBe('9')
+    expect(store.items.find((item) => item.id === order.id).status).toBe('0')
+  })
+
+  it('[DSS-22] 409 で弾かれたら changeError に入れて null を返し、読み直さない', async () => {
+    const store = useDreamStatusStore()
+    await store.load()
+    const order = { ...registrationErrorIn(store), updatedAt: '2000-01-01T00:00:00' }
+    const itemsBefore = idsOf(store)
+    const listRequests = countListRequests()
+    let called = false
+
+    const result = await store.changeStatus(
+      { order, status: '0' },
+      {
+        onSuccess: () => {
+          called = true
+        },
+      },
+    )
+
+    expect(result).toBeNull()
+    expect(store.changeError?.status).toBe(409)
+    expect(store.changeError?.message).toContain(order.updatedAt)
+    expect(called).toBe(false)
+    expect(listRequests.count).toBe(0)
+    expect(idsOf(store)).toEqual(itemsBefore)
+  })
+
+  it('[DSS-23] 送信中は changing が立ち、一覧の loading は立たない', async () => {
+    const raw = dreamOrders.find((row) => row.Dream状況 === '9')
+    server.use(
+      http.put(CHANGE_PATH, async () => {
+        await delay(10)
+        return HttpResponse.json({ success: true, order: raw, message: '' })
+      }),
+    )
+    const store = useDreamStatusStore()
+    await store.load()
+    const order = registrationErrorIn(store)
+
+    const pending = store.changeStatus({ order, status: '0' })
+    expect(store.changing).toBe(true)
+    expect(store.loading).toBe(false)
+
+    await pending
+    expect(store.changing).toBe(false)
+  })
+
+  it('[DSS-24] clearChangeError で changeError が消える', async () => {
+    const store = useDreamStatusStore()
+    await store.load()
+    const order = { ...registrationErrorIn(store), updatedAt: '2000-01-01T00:00:00' }
+    await store.changeStatus({ order, status: '0' })
+    expect(store.changeError).not.toBeNull()
+
+    store.clearChangeError()
+
+    expect(store.changeError).toBeNull()
   })
 })

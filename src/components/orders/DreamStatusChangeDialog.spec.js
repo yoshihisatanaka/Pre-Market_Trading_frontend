@@ -123,14 +123,15 @@ describe('DreamStatusChangeDialog', () => {
     }
   })
 
-  it('[DSD-06] 変更理由の入力欄と送信が未接続である旨の案内を出す', () => {
-    const wrapper = mountDialog()
+  it('[DSD-06] 変更理由の入力欄を出し、エラーと未接続の案内は出さない', () => {
+    const wrapper = mountDialog({ error: null })
 
     expect(byTestid(wrapper, 'reason').exists()).toBe(true)
-    expect(byTestid(wrapper, 'pending').text()).toContain('まだ繋いでいません')
+    expect(byTestid(wrapper, 'error').exists()).toBe(false)
+    expect(byTestid(wrapper, 'pending').exists()).toBe(false)
   })
 
-  it('[DSD-07] 入力を済ませても「変更する」は押せない', async () => {
+  it('[DSD-07] 「変更する」で遷移先・受付番号・理由を confirm に載せる', async () => {
     const wrapper = mountDialog({ targetStatus: REGISTERED })
 
     await receiptInput(wrapper).setValue(RECEIPT)
@@ -138,7 +139,14 @@ describe('DreamStatusChangeDialog', () => {
 
     const submit = byTestid(wrapper, 'submit')
     expect(submit.text()).toBe('変更する')
-    expect(submit.attributes('disabled')).toBeDefined()
+    expect(submit.attributes('disabled')).toBeUndefined()
+
+    await submit.trigger('click')
+
+    expect(wrapper.emitted('confirm')).toEqual([
+      [{ status: REGISTERED, receiptNumber: RECEIPT, reason: REASON }],
+    ])
+    expect(wrapper.emitted('close')).toBeUndefined()
   })
 
   it('[DSD-08] 「キャンセル」で close を 1 回 emit する', async () => {
@@ -184,5 +192,83 @@ describe('DreamStatusChangeDialog', () => {
     const wrapper = mountDialog({ targetStatus: unknown })
 
     expect(summaryOf(wrapper).変更後).toBe(unknown)
+  })
+
+  it('[DSD-13] 受付番号欄が出ない遷移先では receiptNumber を空で送る', async () => {
+    for (const [order, targetStatus] of [
+      [FAILED, '0'],
+      [FAILED_WITH_RECEIPT, REGISTERED],
+    ]) {
+      const wrapper = mountDialog({ order, targetStatus })
+      expect(receiptInput(wrapper).exists()).toBe(false)
+
+      await byTestid(wrapper, 'reason').setValue(REASON)
+      await byTestid(wrapper, 'submit').trigger('click')
+
+      expect(wrapper.emitted('confirm')).toEqual([
+        [{ status: targetStatus, receiptNumber: '', reason: REASON }],
+      ])
+    }
+  })
+
+  it('[DSD-14] 受付番号が要るのに空なら欄にエラーを出して emit しない', async () => {
+    for (const input of ['', '   ']) {
+      const wrapper = mountDialog({ targetStatus: REGISTERED })
+      await receiptInput(wrapper).setValue(input)
+
+      await byTestid(wrapper, 'submit').trigger('click')
+
+      expect(byTestid(wrapper, 'receipt-number-field').text()).toContain(
+        'Dream受付番号を入力してください。',
+      )
+      expect(wrapper.emitted('confirm')).toBeUndefined()
+    }
+  })
+
+  it('[DSD-15] 送信中はボタンと入力を止め、主ボタンを「変更中…」にする', () => {
+    const wrapper = mountDialog({ targetStatus: REGISTERED, pending: true })
+
+    const submit = byTestid(wrapper, 'submit')
+    expect(submit.text()).toBe('変更中…')
+    expect(submit.attributes('disabled')).toBeDefined()
+    expect(byTestid(wrapper, 'cancel').attributes('disabled')).toBeDefined()
+    expect(receiptInput(wrapper).attributes('disabled')).toBeDefined()
+    expect(byTestid(wrapper, 'reason').attributes('disabled')).toBeDefined()
+  })
+
+  it('[DSD-16] 送信中は送信も閉じる操作も emit しない', async () => {
+    const wrapper = mountDialog({ pending: true })
+
+    await byTestid(wrapper, 'submit').trigger('click')
+    await byTestid(wrapper, 'cancel').trigger('click')
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await wrapper.find('[role="presentation"]').trigger('click')
+
+    expect(wrapper.emitted('confirm')).toBeUndefined()
+    expect(wrapper.emitted('close')).toBeUndefined()
+  })
+
+  it('[DSD-17] サーバに弾かれた理由をダイアログの先頭に出す', () => {
+    const message = '他のユーザーによって更新されています。'
+    const wrapper = mountDialog({ error: new Error(message) })
+
+    const error = byTestid(wrapper, 'error')
+    expect(error.text()).toContain(message)
+    // 先頭（対象の表より前）に出る
+    const dialog = byTestid(wrapper, 'dialog').element
+    expect(dialog.firstElementChild).toBe(error.element)
+  })
+
+  it('[DSD-18] 閉じて開き直すと受付番号欄のエラーが消える', async () => {
+    const wrapper = mountDialog({ targetStatus: REGISTERED })
+    await byTestid(wrapper, 'submit').trigger('click')
+    const field = () => byTestid(wrapper, 'receipt-number-field')
+    expect(field().text()).toContain('Dream受付番号を入力してください。')
+
+    await wrapper.setProps({ open: false })
+    await wrapper.setProps({ open: true })
+
+    expect(field().exists()).toBe(true)
+    expect(field().text()).not.toContain('Dream受付番号を入力してください。')
   })
 })

@@ -1,10 +1,16 @@
 import { expect, test } from '@playwright/test'
-import { dreamOrders, dreamStatusCodes } from '../src/mocks/fixtures/dreamStatus'
+import {
+  dreamOrders,
+  dreamStatusCodes,
+  withDerivedDreamFields,
+} from '../src/mocks/fixtures/dreamStatus'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/dream-status.md（タイトル先頭の [DS-nn] が対応 ID）
 // 定点RPA登録の処理状況を読む一覧。ページ位置と検索条件は URL クエリを正とするため、
-// URL と画面の同期と、状況の出し分け・エラー詳細のポップアップ・STS変更のダイアログ（送信前まで）をここで守る。
+// URL と画面の同期と、状況の出し分け・エラー詳細のポップアップ・STS変更（ダイアログから送信して
+// 一覧に反映されるまで）をここで守る。既定ハンドラの PUT は行を書き換えて保持するが、
+// 状態はページを開き直すと戻るのでテストごとに独立している。
 // mockApi() は固定の body を返すだけで offset や検索条件のクエリを解釈しない。
 // ページングと絞り込み（DS-04 / DS-11 / DS-12 / DS-15 / DS-16）はクエリを実際に処理する既定ハンドラで検証する。
 
@@ -89,6 +95,25 @@ async function openList(page, path = PATH) {
 
 function changeDialog(page) {
   return page.getByRole('dialog', { name: 'Dream状況を変更しますか？' })
+}
+
+const CHANGE_API = '*/api/orders/dream-status/:orderId'
+
+/** 変更後の行。既定ハンドラと同じ導出（withDerivedDreamFields）で状況名を引く */
+const changedTo = (order, fields) => withDerivedDreamFields({ ...order, ...fields })
+
+/** 既定ハンドラ（src/mocks/handlers/dreamStatus.js）が返す処理結果の文言 */
+const successMessage = (order, code) =>
+  `注文ID ${order.ID} のDream状況を「${transitionName(order, code)}」へ変更しました。`
+
+/** 行のプルダウンで遷移先を選び、ダイアログが開くのを待つ */
+async function chooseTransition(page, order, code) {
+  await rowOf(page, order)
+    .getByTestId('dream-status-change')
+    .selectOption({ label: transitionName(order, code) })
+  const dialog = changeDialog(page)
+  await expect(dialog).toBeVisible()
+  return dialog
 }
 
 test.describe('Dream登録状況', () => {
@@ -230,7 +255,7 @@ test.describe('Dream登録状況', () => {
 
     await expect(dialog.getByTestId('dream-status-change-receipt-number')).toBeVisible()
     await expect(dialog.getByTestId('dream-status-change-reason')).toBeVisible()
-    await expect(page.getByTestId('dream-status-change-submit')).toBeDisabled()
+    await expect(page.getByTestId('dream-status-change-submit')).toBeEnabled()
   })
 
   test('[DS-09] 「未登録」へ変えるときは受付番号欄が出ない', async ({ page }) => {
@@ -245,7 +270,7 @@ test.describe('Dream登録状況', () => {
     await expect(dialog).toBeVisible()
     await expect(dialog.getByTestId('dream-status-change-summary')).toContainText(target)
     await expect(dialog.getByTestId('dream-status-change-receipt-number')).toHaveCount(0)
-    await expect(page.getByTestId('dream-status-change-submit')).toBeDisabled()
+    await expect(page.getByTestId('dream-status-change-submit')).toBeEnabled()
   })
 
   test('[DS-10] 「キャンセル」でダイアログが閉じ、プルダウンがいまの状況に戻る', async ({
@@ -346,5 +371,124 @@ test.describe('Dream登録状況', () => {
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(cellOf(rowsOf(page).first(), '注文ID')).toHaveText(`#${firstRow.ID}`)
+  })
+
+  test('[DS-17] 登録失敗を「未登録」へ変更するとお知らせが出て、行が未登録・変更不可になる', async ({
+    page,
+  }) => {
+    const expected = changedTo(registrationFailed, { Dream登録状況: '0' })
+
+    await openList(page)
+    const dialog = await chooseTransition(page, registrationFailed, '0')
+    await dialog.getByTestId('dream-status-change-reason').fill('Dream 側で再送するため')
+    await page.getByTestId('dream-status-change-submit').click()
+
+    await expect(dialog).toBeHidden()
+    await expect(page.getByTestId('dream-status-notice')).toHaveText(
+      successMessage(registrationFailed, '0'),
+    )
+    const row = rowOf(page, registrationFailed)
+    await expect(cellOf(row, 'Dream登録状況')).toHaveText(expected.Dream状況名)
+    await expect(row.getByTestId('dream-status-locked')).toHaveText('変更不可')
+    await expect(row.getByTestId('dream-status-change')).toHaveCount(0)
+  })
+
+  test('[DS-18] 受付番号を入れて「登録済」へ変更すると、行が登録済になり受付番号が入る', async ({
+    page,
+  }) => {
+    const expected = changedTo(registrationFailed, { Dream登録状況: '2' })
+    const receiptNumber = 'DR-E2E-0001'
+
+    await openList(page)
+    const dialog = await chooseTransition(page, registrationFailed, '2')
+    await dialog.getByTestId('dream-status-change-receipt-number').fill(receiptNumber)
+    await page.getByTestId('dream-status-change-submit').click()
+
+    await expect(dialog).toBeHidden()
+    await expect(page.getByTestId('dream-status-notice')).toHaveText(
+      successMessage(registrationFailed, '2'),
+    )
+    const row = rowOf(page, registrationFailed)
+    await expect(cellOf(row, 'Dream登録状況')).toHaveText(expected.Dream状況名)
+    await expect(cellOf(row, 'Dream受付番号')).toHaveText(receiptNumber)
+    await expect(row.getByTestId('dream-status-locked')).toHaveText('変更不可')
+  })
+
+  test('[DS-19] 受付番号が空のまま「登録済」へ変えようとすると欄にエラーが出て送信しない', async ({
+    page,
+  }) => {
+    await openList(page)
+    const dialog = await chooseTransition(page, registrationFailed, '2')
+    await page.getByTestId('dream-status-change-submit').click()
+
+    await expect(dialog.getByTestId('dream-status-change-receipt-number-field')).toContainText(
+      'Dream受付番号を入力してください。',
+    )
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('dream-status-notice')).toHaveCount(0)
+    await expect(cellOf(rowOf(page, registrationFailed), 'Dream登録状況')).toHaveText(
+      registrationFailed.Dream状況名,
+    )
+  })
+
+  test('[DS-20] 取消失敗を「取消済」へ変更すると、行が取消済・変更不可になる', async ({ page }) => {
+    const expected = changedTo(cancelFailed, { Dream取消状況: '2' })
+
+    await openList(page)
+    const dialog = await chooseTransition(page, cancelFailed, 'C2')
+    await page.getByTestId('dream-status-change-submit').click()
+
+    await expect(dialog).toBeHidden()
+    await expect(page.getByTestId('dream-status-notice')).toHaveText(
+      successMessage(cancelFailed, 'C2'),
+    )
+    const row = rowOf(page, cancelFailed)
+    await expect(cellOf(row, 'Dream登録状況')).toHaveText(expected.Dream状況名)
+    await expect(row.getByTestId('dream-status-locked')).toHaveText('変更不可')
+    await expect(row.getByTestId('dream-status-change')).toHaveCount(0)
+  })
+
+  test('[DS-21] 変更が 409 で弾かれるとダイアログ内に理由が出て、キャンセルで閉じられる', async ({
+    page,
+  }) => {
+    const conflict =
+      '他のユーザーによって更新されています。最新の情報を取得してからやり直してください。'
+    await mockApi(page, [
+      { method: 'put', path: CHANGE_API, status: 409, body: { detail: conflict } },
+    ])
+
+    await openList(page)
+    const dialog = await chooseTransition(page, registrationFailed, '0')
+    await page.getByTestId('dream-status-change-submit').click()
+
+    await expect(dialog.getByTestId('dream-status-change-error')).toContainText(conflict)
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('dream-status-notice')).toHaveCount(0)
+    await expect(cellOf(rowOf(page, registrationFailed), 'Dream登録状況')).toHaveText(
+      registrationFailed.Dream状況名,
+    )
+
+    await page.getByTestId('dream-status-change-cancel').click()
+    await expect(dialog).toBeHidden()
+  })
+
+  test('[DS-22] 「エラー」で絞り込んだまま変更すると、件数が減り変更した行が表から消える', async ({
+    page,
+  }) => {
+    expect(errorOrders).toContainEqual(registrationFailed)
+
+    await openList(page, `${PATH}?dream_status=ERROR`)
+    await expect(rowsOf(page)).toHaveCount(errorOrders.length)
+
+    await chooseTransition(page, registrationFailed, '0')
+    await page.getByTestId('dream-status-change-submit').click()
+
+    await expect(page.getByTestId('dream-status-notice')).toBeVisible()
+    await expect(page).toHaveURL(/dream_status=ERROR/)
+    await expect(page.getByTestId('dream-status-count')).toHaveText(
+      `${errorOrders.length - 1} 件`,
+    )
+    await expect(rowsOf(page)).toHaveCount(errorOrders.length - 1)
+    await expect(rowOf(page, registrationFailed)).toHaveCount(0)
   })
 })

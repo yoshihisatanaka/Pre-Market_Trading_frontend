@@ -172,7 +172,14 @@
       "Bash(git commit *)",
       "Bash(bash scripts/worktree.sh remove fix/blackout-dates-id-key --docker-clean --delete-branch)",
       "Bash(git merge *)",
-      "Bash(bash scripts/worktree.sh remove test/ca-real-api-e2e --docker-clean --delete-branch)"
+      "Bash(bash scripts/worktree.sh remove test/ca-real-api-e2e --docker-clean --delete-branch)",
+      "Bash(git -C /c/Users/0036/worktrees/* status*)",
+      "Bash(git -C /c/Users/0036/worktrees/* diff*)",
+      "Bash(git -C /c/Users/0036/worktrees/* log*)",
+      "Bash(git -C /c/Users/0036/worktrees/* add *)",
+      "Bash(git -C /c/Users/0036/worktrees/* commit *)",
+      "PowerShell(docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test e2e/activity-logs.real-api.spec.js --grep \"\\\\[ALR-02\\\\]\" --reporter=line)",
+      "Bash(bash scripts/worktree.sh add chore/settings-allow-rules)"
     ],
     "deny": [
       "Read(**/.env)",

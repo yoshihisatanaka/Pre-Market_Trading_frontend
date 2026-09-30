@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
@@ -6,9 +6,26 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { executions } from '@/mocks/fixtures/executions'
+import {
+  noOperationOperator,
+  salesOperator,
+  supervisorOperator,
+  viewerOperator,
+} from '@/mocks/fixtures/currentOperator'
 import { EXECUTIONS_PAGE_SIZE } from '@/stores/executions'
+import { downloadBlob } from '@/utils/download'
 import { formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
 import ExecutionListView from './ExecutionListView.vue'
+
+/*
+ * jsdom は URL.createObjectURL を持たないので、ダウンロードは utils/download を差し替えて
+ * 「何を渡したか」だけを見る（リンクの組み立ては utils/download.spec.js が持つ）。
+ */
+vi.mock('@/utils/download', () => ({ downloadBlob: vi.fn(), downloadCsv: vi.fn() }))
+
+beforeEach(() => {
+  vi.mocked(downloadBlob).mockClear()
+})
 
 /*
  * 画面テスト。実際の Pinia ストア + vue-router + MSW(node) を通し、
@@ -74,20 +91,52 @@ const rowsHandler = (rows) =>
     }),
   )
 
-/** 既定ハンドラに当てたまま、届いた /executions のクエリを記録する */
+/** 既定ハンドラに当てたまま、届いた /executions と /executions/export-csv のクエリを記録する */
 let requests = []
+let exportRequests = []
 function listener({ request }) {
   const url = new URL(request.url)
   if (url.pathname === '/api/executions') requests.push(url.searchParams)
+  if (url.pathname === '/api/executions/export-csv') exportRequests.push(url.searchParams)
 }
 function recordRequests() {
   requests = []
+  exportRequests = []
   server.events.on('request:start', listener)
 }
 afterEach(() => {
   server.events.removeListener('request:start', listener)
   requests = []
+  exportRequests = []
 })
+
+const EXPORT_PATH = '*/api/executions/export-csv'
+
+/** /auth/me を指定の操作者（生の形）で返す */
+const meAs = (operator) => http.get('*/api/auth/me', () => HttpResponse.json(operator))
+
+/** /auth/me が 500 */
+const meFails = () =>
+  http.get('*/api/auth/me', () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }))
+
+/** 表の見出し（列名）の並び */
+const headers = (wrapper) =>
+  wrapper.find('[data-testid="executions-table"]').findAll('th').map((th) => th.text())
+
+const exportButton = (wrapper) => wrapper.find('[data-testid="executions-export"]')
+
+/**
+ * 呼ぶまで応答を返さない Promise の組。
+ *
+ * @returns {{ held: Promise<void>, release: () => void }}
+ */
+function hold() {
+  let release
+  const held = new Promise((resolve) => {
+    release = resolve
+  })
+  return { held, release }
+}
 
 const Page = { render: () => h('div') }
 
@@ -351,5 +400,175 @@ describe('ExecutionListView', () => {
     // 生の文字列（'YYYY-MM-DDTHH:MM:SS'）の月日・時分と一致する
     const raw = newest.約定日時
     expect(executedAt).toBe(`${raw.slice(5, 7)}/${raw.slice(8, 10)} ${raw.slice(11, 16)}`)
+  })
+
+  it('[EXV-15] 管理者・管理責任者には預託先の検索欄と列を出す', async () => {
+    for (const operator of [viewerOperator, supervisorOperator]) {
+      server.use(meAs(operator))
+      const { wrapper } = await mountView()
+      await settle()
+
+      expect(exists(wrapper, 'executions-route'), operator.ロールコード).toBe(true)
+      expect(headers(wrapper).at(-1), operator.ロールコード).toBe('預託先')
+      const first = rows(wrapper)[0]
+      expect(first.findAll('td').at(-1).text()).toBe(newest.注文ルート名)
+      wrapper.unmount()
+    }
+  })
+
+  it('[EXV-16] 預託先を見られないロールと /auth/me の失敗では欄も列も出さず、URL の route を使わない', async () => {
+    const cases = [
+      ['sales', meAs(salesOperator)],
+      ['ifa', meAs(noOperationOperator)],
+      ['500', meFails()],
+    ]
+    for (const [label, handler] of cases) {
+      server.use(handler)
+      recordRequests()
+      const { wrapper } = await mountView({ query: { route: '0' } })
+      await settle()
+      await settle()
+
+      expect(exists(wrapper, 'executions-route'), label).toBe(false)
+      expect(headers(wrapper), label).not.toContain('預託先')
+      expect(requests.length, label).toBeGreaterThan(0)
+      expect(
+        requests.every((params) => !params.has('route')),
+        label,
+      ).toBe(true)
+      // route で絞られず、全件が対象になる
+      expect(wrapper.find('[data-testid="executions-count"]').text(), label).toContain(
+        String(TOTAL),
+      )
+      server.events.removeListener('request:start', listener)
+      wrapper.unmount()
+    }
+  })
+
+  it('[EXV-17] 管理責任者が route 付きで開くとその条件で読み、欄にその預託先を出す', async () => {
+    const ROUTE = '0'
+
+    recordRequests()
+    const { wrapper } = await mountView({ query: { route: ROUTE } })
+    await settle()
+    await settle()
+
+    /*
+     * /auth/me が届く前の 1 回目は route なしで読み、ロールが分かった時点で route 付きで読み直す。
+     * 件数は見ない: route=0 の /executions は既定モックでは mizuhoExecutions のハンドラ
+     * （src/mocks/handlers/mizuhoExecutions.js）が先に応え、約定照会のフィクスチャとは別の行を返すため。
+     */
+    expect(requests.at(-1).get('route')).toBe(ROUTE)
+    expect(selectedLabel(wrapper, 'executions-route')).toBe('みずほ')
+    expect(exists(wrapper, 'executions-error')).toBe(false)
+  })
+
+  it('[EXV-18] CSV出力で URL の検索条件の CSV を取り、ファイル名と Blob を downloadBlob に渡す', async () => {
+    const SYMBOL = executions.find((row) => row.売買区分 === '1').Ticker
+    const FILENAME = 'executions_test.csv'
+    server.use(
+      http.get(
+        EXPORT_PATH,
+        () =>
+          new HttpResponse('﻿a\r\n', {
+            headers: {
+              'Content-Type': 'text/csv; charset=utf-8',
+              'Content-Disposition': `attachment; filename=${FILENAME}`,
+            },
+          }),
+      ),
+    )
+    recordRequests()
+    const { wrapper } = await mountView({ query: { side: 'sell', symbol: SYMBOL } })
+    await settle()
+
+    expect(exportButton(wrapper).element.disabled).toBe(false)
+    await exportButton(wrapper).trigger('click')
+    await settle()
+
+    expect(exportRequests).toHaveLength(1)
+    expect(exportRequests[0].get('side')).toBe('1')
+    expect(exportRequests[0].get('symbol')).toBe(SYMBOL)
+    expect(downloadBlob).toHaveBeenCalledTimes(1)
+    const [filename, blob] = vi.mocked(downloadBlob).mock.calls[0]
+    expect(filename).toBe(FILENAME)
+    expect(Object.prototype.toString.call(blob)).toBe('[object Blob]')
+  })
+
+  it('[EXV-19] 取得中・0 件・一覧のエラーでは CSV出力を押せない', async () => {
+    // 取得中
+    const { held, release } = hold()
+    server.use(
+      http.get('*/api/executions', async () => {
+        await held
+        return HttpResponse.json({ total: 0, executions: [] })
+      }),
+    )
+    const loading = await mountView()
+    await flushPromises()
+    expect(exists(loading.wrapper, 'executions-loading')).toBe(true)
+    expect(exportButton(loading.wrapper).element.disabled).toBe(true)
+    release()
+    await settle()
+    loading.wrapper.unmount()
+
+    // 0 件
+    server.use(rowsHandler([]))
+    const empty = await mountView()
+    await settle()
+    expect(exists(empty.wrapper, 'executions-empty')).toBe(true)
+    expect(exportButton(empty.wrapper).element.disabled).toBe(true)
+    empty.wrapper.unmount()
+
+    // 一覧のエラー
+    server.use(errorHandler())
+    const failed = await mountView()
+    await settle()
+    expect(exists(failed.wrapper, 'executions-error')).toBe(true)
+    expect(exportButton(failed.wrapper).element.disabled).toBe(true)
+  })
+
+  it('[EXV-20] CSV の取得に失敗したら理由を出し、一覧は残してダウンロードしない', async () => {
+    const EXPORT_ERROR = 'CSV の出力に失敗しました'
+    server.use(
+      http.get(EXPORT_PATH, () => HttpResponse.json({ detail: EXPORT_ERROR }, { status: 500 })),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+
+    await exportButton(wrapper).trigger('click')
+    // Blob で届いたエラー本文の読み直し（FileReader）はマイクロタスクより後に終わるので、出るまで待つ
+    await vi.waitFor(() => expect(exists(wrapper, 'executions-export-error')).toBe(true))
+
+    expect(wrapper.find('[data-testid="executions-export-error"]').text()).toContain(EXPORT_ERROR)
+    expect(exists(wrapper, 'executions-error')).toBe(false)
+    expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
+    expect(downloadBlob).not.toHaveBeenCalled()
+  })
+
+  it('[EXV-21] 出力中はラベルが「出力中…」になって押せず、終わると戻る', async () => {
+    const { held, release } = hold()
+    server.use(
+      http.get(EXPORT_PATH, async () => {
+        await held
+        return new HttpResponse('a\r\n', { headers: { 'Content-Type': 'text/csv' } })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    expect(exportButton(wrapper).text()).toBe('CSV出力')
+
+    await exportButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(exportButton(wrapper).text()).toBe('出力中…')
+    expect(exportButton(wrapper).element.disabled).toBe(true)
+
+    release()
+    await settle()
+
+    expect(exportButton(wrapper).text()).toBe('CSV出力')
+    expect(exportButton(wrapper).element.disabled).toBe(false)
+    expect(downloadBlob).toHaveBeenCalledTimes(1)
   })
 })

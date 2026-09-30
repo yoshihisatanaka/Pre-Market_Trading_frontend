@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { executions } from '@/mocks/fixtures/executions'
-import { fetchExecutions } from './executions'
+import { EXECUTIONS_CSV_FILENAME, exportExecutionsCsv, fetchExecutions } from './executions'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -50,9 +50,52 @@ function listener({ request }) {
   if (url.pathname === '/api/executions') lastRequest = { url, params: url.searchParams }
 }
 
+/** CSV 出力に最後に届いたリクエスト */
+let lastExportRequest = null
+
 afterEach(() => {
   server.events.removeListener('request:start', listener)
+  server.events.removeListener('request:start', exportListener)
+  lastExportRequest = null
 })
+
+/** 既定ハンドラに当てたまま、届いた /executions/export-csv のリクエストだけを記録する */
+function spyExport() {
+  server.events.on('request:start', exportListener)
+}
+
+function exportListener({ request }) {
+  const url = new URL(request.url)
+  if (url.pathname === '/api/executions/export-csv') {
+    lastExportRequest = { url, params: url.searchParams }
+  }
+}
+
+/**
+ * CSV 出力の応答を差し替える（本文は短い CSV、ヘッダは指定のもの）。
+ *
+ * @param {Record<string, string>} headers 応答ヘッダ
+ */
+function respondCsv(headers) {
+  server.use(
+    http.get(
+      '*/api/executions/export-csv',
+      () =>
+        new HttpResponse('a,b\r\n1,2\r\n', {
+          headers: { 'Content-Type': 'text/csv; charset=utf-8', ...headers },
+        }),
+    ),
+  )
+}
+
+/** jsdom の Blob をバイト列で読む（文字列で読むとデコード時に BOM が落ちる） */
+const readBytes = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(new Uint8Array(reader.result))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsArrayBuffer(blob)
+  })
 
 /** 指定の行だけを返す一覧の本文 */
 const listBody = (rows, summary) => ({
@@ -236,5 +279,114 @@ describe('api/executions', () => {
       totalAmountUsd: 0,
       totalFeeUsd: 0,
     })
+  })
+
+  it('[EXA-09] CSV 出力は一覧と同じクエリ名で送り、limit / offset は送らない', async () => {
+    spyExport()
+
+    await exportExecutionsCsv({
+      branchCode: newest.部店,
+      symbol: newest.Ticker,
+      side: 'buy',
+      status: newest.処理状況,
+      dateFrom: '2026-09-24',
+      dateTo: '2026-09-28',
+      route: newest.注文ルート,
+    })
+
+    expect(lastExportRequest.url.pathname).toBe('/api/executions/export-csv')
+    expect(lastExportRequest.params.get('branch_code')).toBe(newest.部店)
+    expect(lastExportRequest.params.get('symbol')).toBe(newest.Ticker)
+    expect(lastExportRequest.params.get('side')).toBe('3')
+    expect(lastExportRequest.params.get('status')).toBe(newest.処理状況)
+    expect(lastExportRequest.params.get('start_date')).toBe('2026-09-24')
+    expect(lastExportRequest.params.get('end_date')).toBe('2026-09-28')
+    expect(lastExportRequest.params.get('route')).toBe(newest.注文ルート)
+    // ページ位置は無い（条件に合う全件を落とす）
+    expect(lastExportRequest.params.has('limit')).toBe(false)
+    expect(lastExportRequest.params.has('offset')).toBe(false)
+  })
+
+  it('[EXA-10] CSV 出力でも空文字の条件と知らない売買区分は送らない', async () => {
+    spyExport()
+
+    await exportExecutionsCsv({
+      branchCode: '',
+      symbol: '',
+      side: 'x',
+      status: '',
+      dateFrom: '',
+      dateTo: '',
+      route: '',
+    })
+
+    expect([...lastExportRequest.params.keys()]).toEqual([])
+  })
+
+  it('[EXA-11] 本文は文字列にせず Blob のまま返り、条件に合う全件が入る', async () => {
+    const { blob } = await exportExecutionsCsv()
+
+    expect(Object.prototype.toString.call(blob)).toBe('[object Blob]')
+    const bytes = await readBytes(blob)
+
+    // 見出し 1 行 + 全件（一覧の既定 limit で切られない）
+    const lines = new TextDecoder().decode(bytes).split('\r\n').filter(Boolean)
+    expect(lines).toHaveLength(executions.length + 1)
+  })
+
+  it("[EXA-12] Content-Disposition の filename*=UTF-8'' を filename= より優先してデコードする", async () => {
+    const NAME = '約定一覧_20260929.csv'
+    respondCsv({
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(NAME)}; filename="fallback.csv"`,
+    })
+
+    const { filename } = await exportExecutionsCsv()
+
+    expect(filename).toBe(NAME)
+  })
+
+  it('[EXA-13] 引用符つきの filename="…" は中身をそのまま使う', async () => {
+    const NAME = 'executions 2026-09-29.csv'
+    respondCsv({ 'Content-Disposition': `attachment; filename="${NAME}"` })
+
+    const { filename } = await exportExecutionsCsv()
+
+    expect(filename).toBe(NAME)
+  })
+
+  it('[EXA-14] 引用符なしの filename=… はその値を使う', async () => {
+    const NAME = 'executions_20260929.csv'
+    expect(NAME).not.toBe(EXECUTIONS_CSV_FILENAME)
+    respondCsv({ 'Content-Disposition': `attachment; filename=${NAME}` })
+
+    const { filename } = await exportExecutionsCsv()
+
+    expect(filename).toBe(NAME)
+  })
+
+  it('[EXA-15] Content-Disposition が無ければ既定のファイル名にする', async () => {
+    respondCsv({})
+
+    const { filename } = await exportExecutionsCsv()
+
+    expect(filename).toBe(EXECUTIONS_CSV_FILENAME)
+  })
+
+  it('[EXA-16] filename* のエンコードが壊れていれば filename="…" の値を使う', async () => {
+    const NAME = 'fallback.csv'
+    respondCsv({
+      'Content-Disposition': `attachment; filename*=UTF-8''%E7%B4%; filename="${NAME}"`,
+    })
+
+    const { filename } = await exportExecutionsCsv()
+
+    expect(filename).toBe(NAME)
+  })
+
+  it('[EXA-17] 本文先頭の UTF-8 BOM がバイト列のまま残る', async () => {
+    const { blob } = await exportExecutionsCsv()
+
+    const bytes = await readBytes(blob)
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf])
   })
 })

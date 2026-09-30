@@ -112,6 +112,8 @@ order_id,confirmation_ref,confirmation_status,filled_quantity,average_price,conf
 **未実装画面のオペレーション**（未使用だが依頼対象ではない・参考。`GET /orders` を含む）:
 Orders 13 / DreamStatus 3 / Customers・Balances・Closing 5 / MasterFx 9 / MasterFeePatterns 9 / MasterFeePreferences 9 /
 Executions 2 / Calculations 1 / HoldingSearch 1 / MizuhoIntegration 4 / Batch 10 / Auth・MasterPermissions（users）3 / `/branches` `/handlers` 2。
+`POST /calculations` の `CalculationResponse` は 2026-09-30 の取り込みで `外貨` / `円貨` のブロック形式に確定した
+（旧 18 項目は削除）。フロントに使用箇所は無く、顧客詳細の仮計算タブはこの形で着手可能になった。
 
 ## 解消済み
 

@@ -74,6 +74,12 @@ const routes = [
     meta: { title: 'CAマスタ', requiredPermission: 'master' },
   },
   {
+    path: '/masters/fx',
+    name: 'fx-rate-master',
+    component: () => import('@/views/FxRateMasterView.vue'),
+    meta: { title: '為替マスタ', requiredPermission: 'master' },
+  },
+  {
     path: '/masters/hard-limits',
     name: 'slice-criteria-master',
     component: () => import('@/views/SliceCriteriaMasterView.vue'),

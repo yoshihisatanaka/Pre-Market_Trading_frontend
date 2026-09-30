@@ -4,7 +4,7 @@ import { noOperationOperator, salesOperator } from '../src/mocks/fixtures/curren
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/access-control.md（タイトル先頭の [AC-nn] が対応 ID）
-// meta.requiredPermission の付いたルート（運用管理の 4 画面 = AC-01〜04 / マスタメンテの 8 画面 = AC-05〜07）を、権限の無い利用者が URL で直接開いたときに
+// meta.requiredPermission の付いたルート（運用管理の 4 画面 = AC-01〜04 / マスタメンテの 9 画面 = AC-05〜07）を、権限の無い利用者が URL で直接開いたときに
 // 権限なしの画面（/forbidden）へ回されることと、権限があれば開けることを守る。
 // 各画面の中身はそれぞれのシナリオが見るので、ここでは「その画面の目印が出たか」だけを見る。
 // サイドメニューの区分の出し分けは e2e/layout.spec.js（LAY-16 / 17）が見る。
@@ -31,9 +31,9 @@ const SCREENS = operationSection.items.map((item) => ({
 }))
 
 /*
- * マスタメンテのうちルートのある 8 画面（AC-05〜07）。src/router/index.js の
+ * マスタメンテの 9 画面（AC-05〜07）。src/router/index.js の
  * requiredPermission: 'master' のルートと同じ。router は views を辿るので import せず再掲する。
- * メニューにあってルートの無い /masters/fx は「ページが見つかりません」に落ちるので含めない。
+ * 為替マスタ（/masters/fx）は 2026-09-29 にルートができたので足した。
  * 見出しはメニュー定義（navigation.js の「マスタメンテ」区分。meta.title と同じ文言）から取る。
  */
 const MASTER_ROUTE_PATHS = [
@@ -42,6 +42,7 @@ const MASTER_ROUTE_PATHS = [
   '/masters/market-holidays',
   '/masters/blackout-dates',
   '/masters/symbols',
+  '/masters/fx',
   '/masters/ca',
   '/masters/hard-limits',
   '/masters/balance-adjustments',
@@ -109,10 +110,10 @@ test.describe('アクセス制御', () => {
     }
   })
 
-  test('[AC-05] マスタ更新権限が無いとマスタメンテの 8 画面とも権限なしの画面へ回される', async ({
+  test('[AC-05] マスタ更新権限が無いとマスタメンテの 9 画面とも権限なしの画面へ回される', async ({
     page,
   }) => {
-    test.slow() // 8 画面を読み込み直すので既定の 30 秒では足りないことがある
+    test.slow() // 9 画面を読み込み直すので既定の 30 秒では足りないことがある
     // 再掲した path がメニューのマスタメンテ区分から外れていない（改名・移動に気づくため）
     for (const screen of MASTER_SCREENS) expect(screen.title).toBeTruthy()
     // フィクスチャがこのシナリオの前提（マスタ更新権限なし）を満たしている
@@ -149,7 +150,7 @@ test.describe('アクセス制御', () => {
     }
   })
 
-  test('[AC-07] 権限があればマスタメンテの 8 画面とも開ける', async ({ page }) => {
+  test('[AC-07] 権限があればマスタメンテの 9 画面とも開ける', async ({ page }) => {
     test.slow()
     for (const screen of MASTER_SCREENS) {
       await page.goto(screen.path)

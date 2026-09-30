@@ -76,7 +76,8 @@ async function submitUpdate() {
   // 送信ボタンは :pending で塞いであるが、入力欄での Enter でも submit は飛ぶ。二重送信はここで止める
   if (saving.value) return
 
-  rateInputError.value = rateInput.value.trim() ? '' : 'レートを入力してください。'
+  // type="number" の v-model は数値を返すことがある（空欄だけ ''）ので文字列に寄せてから見る
+  rateInputError.value = String(rateInput.value).trim() ? '' : 'レートを入力してください。'
   if (rateInputError.value) return
 
   const saved = await store.save({

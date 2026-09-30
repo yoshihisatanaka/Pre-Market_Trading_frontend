@@ -76,11 +76,6 @@ async function openUpdateWith(page, value) {
 // 現在レートの 4 状態、今日の行の有無による登録 / 変更の分岐、モーダルに出る拒否理由を守る。
 // dev サーバ側で MSW が起動しているため、既定ではフィクスチャの応答が返る。
 // モックの可変状態はページ単位なので、保存しても他のテストには持ち越さない。
-//
-// 保留中（test.fixme）: FX-05 / 06 / 08 / 09 / 10 / 13。数値を入れて「更新」を押すと、
-// 画面の submitUpdate が rateInput.value.trim() で TypeError になり、保存に進まない
-// （<input type="number"> の v-model は Vue が Number に変換して返すため。空欄は '' のままなので FX-07 は通る）。
-// 製品側の修正待ち（経緯は docs/e2e/fx-rates.md）。直ったら test.fixme を test に戻し、文書の状態を実装済にする。
 test.describe('為替マスタ', () => {
   test('[FX-01] 現在レートと基準日・最終更新が表示される', async ({ page }) => {
     await page.goto(PAGE_PATH)
@@ -127,7 +122,7 @@ test.describe('為替マスタ', () => {
     await expect(page.getByTestId('fx-update')).toBeEnabled()
   })
 
-  test.fixme('[FX-05] 今日の行が無いとき、更新すると今日の基準日で登録され現在値に反映される', async ({
+  test('[FX-05] 今日の行が無いとき、更新すると今日の基準日で登録され現在値に反映される', async ({
     page,
   }) => {
     await openAndWaitCurrent(page)
@@ -143,7 +138,7 @@ test.describe('為替マスタ', () => {
     await expect(page.getByTestId('fx-base-date')).toHaveText(todayJst())
   })
 
-  test.fixme('[FX-06] 今日の行があるとき、更新は変更として受理され現在値に反映される', async ({
+  test('[FX-06] 今日の行があるとき、更新は変更として受理され現在値に反映される', async ({
     page,
   }) => {
     // 登録（POST）を 500 にしておき、成功したなら変更（PUT）の経路を通ったと判る
@@ -181,7 +176,7 @@ test.describe('為替マスタ', () => {
     await expect(page.getByTestId('fx-rate')).toHaveText(rateText(latestRow.為替レート))
   })
 
-  test.fixme('[FX-08] 範囲外のレートは警告のあと「続行」で保存される', async ({ page }) => {
+  test('[FX-08] 範囲外のレートは警告のあと「続行」で保存される', async ({ page }) => {
     await openAndWaitCurrent(page)
 
     await openUpdateWith(page, '350')
@@ -200,7 +195,7 @@ test.describe('為替マスタ', () => {
     await expect(page.getByTestId('fx-rate')).toHaveText('350.00')
   })
 
-  test.fixme('[FX-09] 事前検証で不合格になると理由が出て保存されない', async ({ page }) => {
+  test('[FX-09] 事前検証で不合格になると理由が出て保存されない', async ({ page }) => {
     const reason = '基準日 20990101 の USD は既に登録されています'
     await mockApi(page, [
       {
@@ -220,7 +215,7 @@ test.describe('為替マスタ', () => {
     await expect(page.getByTestId('fx-rate')).toHaveText(rateText(latestRow.為替レート))
   })
 
-  test.fixme('[FX-10] 他の担当者が先に変更していると競合が出て現在値は変わらない', async ({ page }) => {
+  test('[FX-10] 他の担当者が先に変更していると競合が出て現在値は変わらない', async ({ page }) => {
     await mockApi(page, [
       ...todayRowOverrides(),
       {
@@ -263,7 +258,7 @@ test.describe('為替マスタ', () => {
     await expect(page.getByTestId('fx-current')).toBeVisible()
   })
 
-  test.fixme('[FX-13] 未登録の状態から今日のレートを登録すると現在値が表示される', async ({ page }) => {
+  test('[FX-13] 未登録の状態から今日のレートを登録すると現在値が表示される', async ({ page }) => {
     await mockApi(page, [EMPTY_LATEST])
     await page.goto(PAGE_PATH)
     await expect(page.getByTestId('fx-empty')).toBeVisible()

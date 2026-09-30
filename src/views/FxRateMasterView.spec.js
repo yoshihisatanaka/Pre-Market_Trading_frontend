@@ -114,12 +114,6 @@ async function submit(wrapper) {
   await settleSave()
 }
 
-/*
- * it.skip の 9 件（FXV-08〜15 / FXV-17）は製品コードの不具合待ち（シナリオ上は「保留」）。
- * 入力欄が type="number" なので Vue の v-model が入力値を Number に変換し、
- * FxRateMasterView.vue の submitUpdate の `rateInput.value.trim()` が TypeError になる
- * （入力を書き換えて送信すると事前検証まで進まない）。直ったら skip を外して「実装済」にする。
- */
 // シナリオ: docs/unit/views-fx-rate-master-view.md
 describe('FxRateMasterView', () => {
   beforeEach(() => {
@@ -219,7 +213,7 @@ describe('FxRateMasterView', () => {
     expect(validated).toBe(false)
   })
 
-  it.skip('[FXV-08] 今日の行が無いときは今日の基準日で登録され、完了の文言が出る', async () => {
+  it('[FXV-08] 今日の行が無いときは今日の基準日で登録され、完了の文言が出る', async () => {
     const wrapper = await mountView()
     await settle()
     await openUpdate(wrapper)
@@ -233,7 +227,7 @@ describe('FxRateMasterView', () => {
     expect(text(wrapper, 'fx-base-date')).toBe(AFTER_ALL_DATE)
   })
 
-  it.skip('[FXV-09] 今日の行があるときはその行が変更され、基準日は変わらない', async () => {
+  it('[FXV-09] 今日の行があるときはその行が変更され、基準日は変わらない', async () => {
     setToday(LATEST_DATE)
     const wrapper = await mountView()
     await settle()
@@ -248,7 +242,7 @@ describe('FxRateMasterView', () => {
     expect(text(wrapper, 'fx-base-date')).toBe(LATEST_DATE)
   })
 
-  it.skip('[FXV-10] 範囲外のレートは警告を出して保存せず、送信ボタンが「続行」になる', async () => {
+  it('[FXV-10] 範囲外のレートは警告を出して保存せず、送信ボタンが「続行」になる', async () => {
     const wrapper = await mountView()
     await settle()
     await openUpdate(wrapper)
@@ -262,7 +256,7 @@ describe('FxRateMasterView', () => {
     expect(text(wrapper, 'fx-rate')).toBe(shown(LATEST.為替レート))
   })
 
-  it.skip('[FXV-11] 警告のあとに「続行」を押すと保存されてモーダルが閉じる', async () => {
+  it('[FXV-11] 警告のあとに「続行」を押すと保存されてモーダルが閉じる', async () => {
     const wrapper = await mountView()
     await settle()
     await openUpdate(wrapper)
@@ -276,7 +270,7 @@ describe('FxRateMasterView', () => {
     expect(text(wrapper, 'fx-rate')).toBe(shown(OUT_OF_RANGE_RATE))
   })
 
-  it.skip('[FXV-12] 警告のあとに入力値を変えると警告が消え、送信ボタンが「更新」に戻る', async () => {
+  it('[FXV-12] 警告のあとに入力値を変えると警告が消え、送信ボタンが「更新」に戻る', async () => {
     const wrapper = await mountView()
     await settle()
     await openUpdate(wrapper)
@@ -291,7 +285,7 @@ describe('FxRateMasterView', () => {
     expect(text(wrapper, 'fx-update-submit')).toBe('更新')
   })
 
-  it.skip('[FXV-13] 事前検証が不合格なら理由をモーダル内に出し、開いたままにする', async () => {
+  it('[FXV-13] 事前検証が不合格なら理由をモーダル内に出し、開いたままにする', async () => {
     server.use(
       http.post(VALIDATE_PATH, () =>
         HttpResponse.json({ valid: false, errors: [REJECT_REASON], warnings: [] }),
@@ -309,7 +303,7 @@ describe('FxRateMasterView', () => {
     expect(exists(wrapper, 'fx-notice')).toBe(false)
   })
 
-  it.skip('[FXV-14] 変更が 409 のときはサーバの文言を出し、現在レートは変わらない', async () => {
+  it('[FXV-14] 変更が 409 のときはサーバの文言を出し、現在レートは変わらない', async () => {
     setToday(LATEST_DATE)
     server.use(
       http.put(LATEST_DETAIL_PATH, () =>
@@ -328,7 +322,7 @@ describe('FxRateMasterView', () => {
     expect(text(wrapper, 'fx-rate')).toBe(shown(LATEST.為替レート))
   })
 
-  it.skip('[FXV-15] 正の数でないレートは項目名付きの 422 の理由を出す', async () => {
+  it('[FXV-15] 正の数でないレートは項目名付きの 422 の理由を出す', async () => {
     const wrapper = await mountView()
     await settle()
     await openUpdate(wrapper)
@@ -355,7 +349,7 @@ describe('FxRateMasterView', () => {
     expect(text(wrapper, 'fx-rate')).toBe(shown(LATEST.為替レート))
   })
 
-  it.skip('[FXV-17] 未登録から今日のレートを登録すると空表示が消えて現在レートが出る', async () => {
+  it('[FXV-17] 未登録から今日のレートを登録すると空表示が消えて現在レートが出る', async () => {
     server.use(latestError(404, '有効な為替レートが存在しません'))
     const wrapper = await mountView()
     await settle()

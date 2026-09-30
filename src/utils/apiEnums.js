@@ -9,7 +9,7 @@
  *   3. サーバが行ごとに付けて返す `*名` フィールド（`CA種別名` / `口座区分名` …）
  *
  * export は 2 系統に分かれる。**spec に意味が書かれているかどうかで形が変わる。**
- *   - 意味付きの凍結オブジェクト … 参照元フィールドの description に意味がある（7 種）
+ *   - 意味付きの凍結オブジェクト … 参照元フィールドの description に意味がある（9 種）
  *   - `*_VALUES` の凍結配列 … 値だけが定義されていて意味の記載が無い（14 種）
  * 意味が分からないものにフロントが名前を付けると、それは仕様ではなく推測になる。
  * 形で区別しておけば、参照側が誤って推測を事実として扱うことがない。
@@ -51,6 +51,28 @@ export const CORPORATE_TYPE = Object.freeze({
 export const HOLIDAY_TYPE = Object.freeze({
   ALL_DAY: '0',
   SHORTENED: '1',
+})
+
+/**
+ * 市場セッション。`MarketSessionCode`。`MarketSessionItem.code` の「(PRE / REGULAR / AFTER)」と
+ * `name` の「(Pre-Market / Regular / After-Hours)」に準拠
+ */
+export const MARKET_SESSION_CODE = Object.freeze({
+  PRE: 'PRE',
+  REGULAR: 'REGULAR',
+  AFTER: 'AFTER',
+})
+
+/**
+ * 市場状態。`MarketState`。`MarketStatusResponse.現在のセッション` の
+ * 「PRE / REGULAR / AFTER、セッション外は BEFORE_OPEN（開場前）/ CLOSED（終了後・休場）」に準拠
+ */
+export const MARKET_STATE = Object.freeze({
+  PRE: 'PRE',
+  REGULAR: 'REGULAR',
+  AFTER: 'AFTER',
+  BEFORE_OPEN: 'BEFORE_OPEN',
+  CLOSED: 'CLOSED',
 })
 
 /** NISA契約区分。`CustomerItem.NISA契約` の「(0: 未契約, 1: 契約, 9: 解約済)」に準拠 */

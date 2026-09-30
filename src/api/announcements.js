@@ -8,7 +8,7 @@ import { apiClient } from './client'
  *   - プロパティ名が日本語（表示フラグ / 本文 / 更新日時 …）
  *   - 表示フラグは integer の 0 / 1。アプリ内は boolean
  *   - 本文は nullable。アプリ内は空文字に寄せる（textarea にそのまま流すため）
- *   - 履歴の 変更前データ / 変更後データ は型が宣言されていない（anyOf: [{}, null]）。実 API は JSON 文字列で返す
+ *   - 履歴の 変更前データ / 変更後データ は仕様では object だが、実 API は JSON 文字列で返していた（2026-09-29 実測）
  * 更新系は `X-User-Code` ヘッダで操作者が決まる。付与は client.js の interceptor が全 API 共通で行う。
  */
 
@@ -134,8 +134,9 @@ function toAnnouncementHistory(raw) {
 /**
  * 変更後データから本文を取り出す。
  *
- * 変更後データは openapi.json で型が宣言されていない（anyOf: [{}, null]）。
- * 実 API は行の写しを **JSON 文字列**で返す（2026-09-29 実測。docs/e2e/announcements-real-api.md）。
+ * 変更後データは 2026-09-30 の取り込みで object（または null）と宣言された。
+ * ただし 2026-09-29 の実測では実 API が行の写しを **JSON 文字列**で返していた
+ * （docs/e2e/announcements-real-api.md）。どちらが来ても読めるよう、
  * 文字列なら解釈してから、object ならそのまま `本文` を読む。
  * 形が違えば空文字にする（画面は「—」を出す。解除で本文が空になったときと同じ見た目）。
  */

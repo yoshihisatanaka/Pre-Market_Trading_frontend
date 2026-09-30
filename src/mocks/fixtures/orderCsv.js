@@ -395,8 +395,7 @@ export function orderCsvDetailsOf(order) {
 /**
  * 事前検証の行の customer_name。口座（部店＋口座番号）から引いた顧客名で、引けなければ null。
  *
- * **仕様に無い**（CsvOrderRowResult に追加予定。docs/api/requests.md #27）。
- * 契約テストの KNOWN_GAPS に載せてある。
+ * CsvOrderRowResult.customer_name（2026-09-30 の取り込みで仕様に入った。docs/api/requests.md #27）。
  */
 export function orderCsvCustomerNameOf(order) {
   const customer = customers.find(

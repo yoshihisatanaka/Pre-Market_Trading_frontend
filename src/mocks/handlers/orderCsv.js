@@ -130,7 +130,7 @@ function toInteger(value) {
  *
  * バックエンドと同じく、先に値の型を寄せ（口座番号・数量を数値に、部店を 3 桁に…）、
  * 寄せられなかった行は検証まで進めない（details は null、warnings は空）。
- * customer_name は仕様に無い提案の項目（fixtures/orderCsv.js の orderCsvCustomerNameOf）。
+ * customer_name は口座から引いた顧客名（fixtures/orderCsv.js の orderCsvCustomerNameOf）。
  */
 function validateRow(cells, rowNumber) {
   const accountNumber = toInteger(cells.口座番号)

@@ -403,7 +403,7 @@ headless なので**ブラウザ画面をリアルタイムには覗けない**�
   取り込みのたびに `src/api/` の送出名を突き合わせる。旧名は無視されるだけでエラーにならず、気づけない
 - **更新系は部分更新（`*UpdateRequest`）になった。** 本文に含めた項目だけが更新され、
   明示的に `null` を送ったときだけクリアされる。いまの `src/api/` は全項目を明示して送るので挙動は同じ
-- `enum` は 21 種定義済みで、値の写しは `src/utils/apiEnums.js`（`openapi.json` と突き合わせるテスト付き）。
+- `enum` は 23 種定義済み（2026-09-30 に市場セッション / 市場状態の 2 種が増えた）で、値の写しは `src/utils/apiEnums.js`（`openapi.json` と突き合わせるテスト付き）。
   ただし `/batch/*` 10 本・`/codes`・`/mizuho/*`・`GET /orders/{order_id}`・`/branches` / `/handlers`・
   `/customers`（注文画面用）は **レスポンスの中身が未定義のまま**（→ `.claude/skills/api-spec-sync/checklist.md`）。
   埋まるまでは `src/mocks/` の仮フィクスチャで進める

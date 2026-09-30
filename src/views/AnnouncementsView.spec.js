@@ -166,8 +166,8 @@ const fieldHint = (wrapper, input) => {
 const expectedCells = (raw) => [
   formatMonthDayTime(raw.操作日時),
   raw.操作区分名,
-  // フィクスチャは実 API と同じく JSON 文字列で持つ
-  JSON.parse(raw.変更後データ)?.本文 || '—',
+  // フィクスチャは仕様どおり object で持つ
+  raw.変更後データ?.本文 || '—',
   raw.操作者 || '—',
 ]
 

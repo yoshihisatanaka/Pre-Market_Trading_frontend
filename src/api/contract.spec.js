@@ -194,13 +194,14 @@ function findOperationByTemplate(method, template) {
  */
 const KNOWN_GAPS = [
   /*
-   * 操作ログは 2026-09-24 に ActivityLogItem の形へ張り替えた。残る 5 項目は画面モックにあった項目で、
-   * フィクスチャに契約提案として載せている（src/api/activityLogs.js は読まない）。
+   * 操作ログは 2026-09-24 に ActivityLogItem の形へ張り替えた。画面モックにあった 5 項目を
+   * フィクスチャに契約提案として載せていたが、操作者名 / 実行者区分 / 対象機能 / 操作内容 の 4 項目は
+   * 2026-09-30 の取り込みで仕様に入ったので外した。残るのは 結果 だけ（src/api/activityLogs.js は読まない）。
    */
   {
     kind: 'fixture',
     fixture: 'activityLogs',
-    keys: ['操作者名', '実行者区分', '対象機能', '操作内容', '結果'],
+    keys: ['結果'],
     reason:
       '画面モックにあった項目。ActivityLogItem に無いので画面には出さず、フィクスチャに契約提案として残している',
     request: '#1',
@@ -214,14 +215,10 @@ const KNOWN_GAPS = [
    * 権限マスタは 2026-09-25 に RolePermissionItem の形（日本語キー・4 権限）へ張り替えた。
    * 画面モック由来の英語キー・5 権限の食い違い（#4）は解消したので行を外した。
    */
-  {
-    kind: 'query',
-    method: 'GET',
-    template: '/masters/customers',
-    names: ['handler_code', 'restriction', 'account_type', 'corporate_type'],
-    reason: '画面モックにある検索条件。実 API は無視するので絞り込みが黙って効かない',
-    request: '#8',
-  },
+  /*
+   * 顧客マスタの検索クエリ（handler_code / restriction / account_type / corporate_type。#8）は
+   * 2026-09-30 の取り込みで仕様に入ったので行を外した。
+   */
   /*
    * 変更検証の対象を渡すクエリ（blackout_date_id / symbol_id / account_id …）は
    * 2026-09-18 の取り込みで全マスタに入った。先行実装の食い違いは解消したので行を外した。
@@ -263,33 +260,10 @@ const KNOWN_GAPS = [
     request: '#13',
   },
   /*
-   * CSV一括注文のプレビューに出す顧客名。事前検証の行（CsvOrderRowResult）にバックエンドが
-   * 追加する予定で、フィクスチャに先行して置いている（src/api/orderCsv.js が読む）。
-   * 仕様に入ったことを CON-07 が検知するのは、行を直に写した orderCsvValidateRows の行。
-   * 応答全体の 2 行（orderCsvValidate / orderCsvValidateWithErrors）は入れ子で CON-07 が見られないので、
-   * そのときに一緒に外す。
+   * CSV一括注文のプレビューに出す顧客名（CsvOrderRowResult.customer_name。#27）は
+   * 2026-09-30 の取り込みで仕様に入ったので、orderCsvValidateRows / orderCsvValidate /
+   * orderCsvValidateWithErrors の 3 行をまとめて外した。
    */
-  {
-    kind: 'fixture',
-    fixture: 'orderCsvValidateRows',
-    keys: ['customer_name'],
-    reason: 'プレビューの顧客名。CsvOrderRowResult に追加予定（バックエンド）',
-    request: '#27',
-  },
-  {
-    kind: 'fixture',
-    fixture: 'orderCsvValidate',
-    keys: ['customer_name'],
-    reason: '同上（rows[] の中。orderCsvValidateRows の行と一緒に外す）',
-    request: '#27',
-  },
-  {
-    kind: 'fixture',
-    fixture: 'orderCsvValidateWithErrors',
-    keys: ['customer_name'],
-    reason: '同上（rows[] の中。orderCsvValidateRows の行と一緒に外す）',
-    request: '#27',
-  },
 ]
 
 function knownQueryGap(op, name) {
@@ -408,7 +382,7 @@ const FIXTURES = [
     schema: 'CsvOrderValidateResponse',
     rows: [orderCsvValidateWithErrorsResponse],
   },
-  // 行だけを直に写したもの。仕様に無い customer_name を CON-07 が追えるようにする（KNOWN_GAPS #27）
+  // 行だけを直に写したもの。入れ子の rows[] の中の項目を CsvOrderRowResult と直に突き合わせる
   {
     name: 'orderCsvValidateRows',
     schema: 'CsvOrderRowResult',

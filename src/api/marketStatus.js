@@ -10,9 +10,9 @@ import { apiClient } from './client'
  *   - `基準日` は integer の YYYYMMDD（20260302）。アプリ内は 'YYYY-MM-DD'
  *   - `休場理由` / `短縮取引理由` は nullable。アプリ内は空文字に寄せる
  *   - `休場: true` のとき `sessions` は空配列
- *   - `現在のセッション` は **openapi に enum 宣言が無い素の string**
- *     （PRE / REGULAR / AFTER / BEFORE_OPEN / CLOSED。docs/api/requests.md #12）。
- *     表示の主判定は JPN開始 / JPN終了 に寄せ、この文字列への依存を異常系だけに留める
+ *   - `現在のセッション` は 2026-09-30 の取り込みで enum `MarketState` と宣言された
+ *     （PRE / REGULAR / AFTER / BEFORE_OPEN / CLOSED。写しは src/utils/apiEnums.js の MARKET_STATE）。
+ *     それでも表示の主判定は JPN開始 / JPN終了 に寄せ、この文字列への依存を異常系だけに留める
  *
  * `date` クエリ（判定対象日）は実装しない。ヘッダが欲しいのは常に「いま」= m_基準日 の基準日で、
  * 使わない引数は腐るため。必要になったら引数を足す。

@@ -101,9 +101,9 @@ export const suspensionTargets = [
  * 停止・再開の操作履歴。最新順（SuspensionHistoryResponse.histories の仕様どおり）。
  * 上の 全体 / IB の記録と対応している（古い方から IB 停止 → IB 再開 → 全体停止 → 全体再開）。
  *
- * 変更前データ / 変更後データ / 差分データ は openapi.json で型が any のまま。
- * 形はバックエンドに問い合わせ中（docs/api/requests.md）なので、ここでは操作前後のレコードの
- * 写しを置き、差分データは null にしておく。画面が読むのは 変更後データ の 停止理由 だけ。
+ * 変更前データ / 変更後データ / 差分データ は object（または null）。中身のキーは description にだけ
+ * 書かれている（docs/api/requests.md #15）。ここでは操作前後のレコードの写しを
+ * 2 項目に絞って置き、差分データは null にしておく。画面が読むのは 変更後データ の 停止理由 だけ。
  */
 export const suspensionHistories = [
   {

@@ -7,9 +7,9 @@
  * 古い順に「表示 → 本文変更 → 解除」を繰り返して作り、新しい順に並べて返す。
  * 最新の 1 件が現在のお知らせと食い違わないよう、現在値は履歴の末尾から組み立てる。
  *
- * 変更前データ / 変更後データ / 差分データ は openapi.json で型が宣言されていない
- * （anyOf: [{}, null]）。実 API は **JSON 文字列**で返す（2026-09-29 実測）ので、
- * { 表示フラグ, 本文 } の object を JSON.stringify して置く。
+ * 変更前データ / 変更後データ / 差分データ は 2026-09-30 の取り込みで object（または null）と
+ * 宣言されたので、{ 表示フラグ, 本文 } の object をそのまま置く。
+ * 2026-09-29 の実測では実 API が JSON 文字列で返していた（src/api/announcements.js は両方を読む）。
  * 実 API の中身は行の全項目（ID / 更新日時 …）の写しだが、画面が読むのは 本文 だけなので 2 項目に絞る。
  */
 
@@ -66,9 +66,9 @@ function buildHistories() {
       操作区分: operation,
       操作区分名: OPERATION_LABELS[operation],
       操作者: OPERATORS[index % OPERATORS.length],
-      変更前データ: JSON.stringify(state),
-      変更後データ: JSON.stringify(next),
-      差分データ: JSON.stringify(diff(state, next)),
+      変更前データ: state,
+      変更後データ: next,
+      差分データ: diff(state, next),
       操作日時: operatedAt(index),
     }
     state = next
@@ -82,7 +82,7 @@ function buildHistories() {
 export const announcementHistories = buildHistories()
 
 const latest = announcementHistories[0]
-const latestAfter = JSON.parse(latest.変更後データ)
+const latestAfter = latest.変更後データ
 
 /** 現在のお知らせ。AnnouncementItem（最新の履歴と同じ状態） */
 export const announcement = {

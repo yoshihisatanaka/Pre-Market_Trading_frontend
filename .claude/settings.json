@@ -167,8 +167,7 @@
       "Bash(git commit *)",
       "Bash(bash scripts/worktree.sh remove fix/blackout-dates-id-key --docker-clean --delete-branch)",
       "Bash(git merge *)",
-      "Bash(bash scripts/worktree.sh remove test/ca-real-api-e2e --docker-clean --delete-branch)",
-      "PowerShell(docker compose run --rm frontend npx vitest run src/views/StalledOrderListView.spec.js src/views/DreamStatusListView.spec.js src/views/SymbolListView.spec.js src/views/MizuhoOperationsView.spec.js src/stores/mizuhoExecutions.spec.js src/api/mizuhoExecutions.spec.js src/components/masters/MasterListCard.spec.js 2>&1)"
+      "Bash(bash scripts/worktree.sh remove test/ca-real-api-e2e --docker-clean --delete-branch)"
     ],
     "deny": [
       "Read(**/.env)",

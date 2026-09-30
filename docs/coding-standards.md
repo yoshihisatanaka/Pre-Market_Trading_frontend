@@ -186,6 +186,20 @@ docker compose run --rm frontend npm i <package>   # 依存追加もコンテナ
 
 コミット前に最低限 `lint` と `test:unit` を通すこと。
 
+単体テストは全件で 353 秒かかる（121 spec、2026-09-30 実測。spec ごとの MSW fixture 読み込みと
+jsdom 生成が固定費）。**worktree の日常は変更に関係する spec だけ**を回し、全件は
+main へマージする前と `/morning-check` に限る:
+
+```powershell
+bash scripts/test-unit.sh --lint                 # 変更ファイルの eslint + 変更に依存する spec（起動中の frontend に exec）
+bash scripts/test-unit.sh src/api/ca.spec.js     # spec を直接指定
+bash scripts/test-unit.sh --all                  # 全件（= npm run test:unit）
+docker compose run --rm frontend npm run verify  # マージ前の全件（lint / test:unit / check:scenarios）
+```
+
+`vitest.config.js` / `vitest.setup.js` / `src/mocks/handlers/index.js` など、関係する spec を静的に
+絞れないファイルが変更に含まれると、スクリプトが自動で全件に切り替える。
+
 作業ブランチの名前は [CLAUDE.md](../CLAUDE.md) の「Git ブランチ」節に従う。
 
 ---

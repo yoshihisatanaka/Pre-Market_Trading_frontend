@@ -14,12 +14,20 @@
    [docs/coding-standards.md](docs/coding-standards.md) の「8. Markdown の書きかた」。
 4. **実装前に [docs/coding-standards.md](docs/coding-standards.md) を読む。**
    別メンバによるコードレビューが無いため、規約違反はそのまま残る。
-5. コードを書き終えたら **必ず** 次を実行して通す（lint / test:unit / check:scenarios を **1 コンテナ**でまとめて流す）:
+5. コードを書き終えたら **必ず** 次を実行して通す（変更ファイルの lint と、変更に関係する spec だけを
+   **起動中の frontend コンテナに exec** して流す。Docker の起動 30 秒も、全件 6 分も待たない）:
+   ```powershell
+   bash scripts/test-unit.sh --lint
+   ```
+   **実行は実装が一通り終わってから 1 回。** 途中で lint や test:unit を単独で繰り返さない。
+   単体テストの**全件**（`npm run verify` = lint / test:unit / check:scenarios を 1 コンテナで）は
+   **main へマージする前と `/morning-check` の 1 回だけ**:
    ```powershell
    docker compose run --rm frontend npm run verify
    ```
-   **実行は実装が一通り終わってから 1 回。** 途中で lint や test:unit を単独で繰り返さない
-   （Docker の起動だけで毎回 30 秒かかる。3 コマンドに分けると起動が 3 回になる）。
+   全件は 121 spec で 353 秒かかり（2026-09-30 実測）、時間の大半は spec ごとの固定費
+   （MSW の fixture 読み込みと jsdom 生成）なので、**本数を絞る以外に速くする手が無い**。
+   `check:scenarios` だけは worktree でも `docker compose exec -T frontend npm run check:scenarios` で通す。
    lint はターン終了時の Stop フック（`.claude/hooks/lint-on-stop.sh`）でも自動実行され、失敗すると差し戻される。
    フックは **未コミットの `.js` / `.mjs` / `.vue` だけ**を対象にし、変更が無いターンでは Docker を起こさない。
    **unit / E2E は自動では走らない**。画面を追加・変更したら E2E も回す。

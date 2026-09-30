@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '../src/mocks/fixtures/closing'
 import { mizuhoExecutions } from '../src/mocks/fixtures/mizuhoExecutions'
@@ -7,7 +8,7 @@ import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/mizuho-operations.md（タイトル先頭の [MZ-nn] が対応 ID）
 // 締めカード（受付中 / 締め済）と確認ダイアログの出し分け、締め・締め解除・注文ファイル作成の実行と通知、
-// 件数カード、約定一覧の検索と URL の同期、および締め状態と約定一覧が互いに独立して 4 状態を出すことを守る。
+// 件数カード、約定一覧の検索と URL の同期、約定一覧の「CSV出力」（MZ-23〜25）、および締め状態と約定一覧が互いに独立して 4 状態を出すことを守る。
 // mockApi() は固定の body を返すだけで検索条件を解釈しない。絞り込み（MZ-09〜14）は
 // クエリを実際に処理する既定ハンドラ（src/mocks/handlers/mizuhoExecutions.js）で検証する。
 // 注文ファイルは締め済でないとモックも 400 を返すので、画面で締めてから作る（MZ-21 / MZ-22）。
@@ -19,6 +20,13 @@ const CLOSING_PATH = '*/api/closing/status'
 const CLOSE_PATH = '*/api/closing/mizuho'
 const EXECUTIONS_PATH = '*/api/executions'
 const EXPORT_PATH = '*/api/mizuho/export-orders'
+const EXECUTIONS_CSV_PATH = '*/api/executions/export-csv'
+
+// 約定一覧の CSV（MZ-23〜25）。書式は src/mocks/handlers/executions.js の toExecutionsCsvResponse
+// （ファイル名 executions.csv・先頭に BOM・改行は CRLF・データ行の先頭 2 列は 約定日時, 約定ID）
+const CSV_FILENAME = 'executions.csv'
+const BOM = '﻿'
+const csvLinePrefix = (row) => `${row.約定日時},${row.ID},`
 
 const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 const FORBIDDEN_ERROR = '操作権限がありません。'
@@ -107,6 +115,20 @@ function collectDownloads(page) {
   return downloads
 }
 
+/** 「約定一覧」の「CSV出力」を押してダウンロードを待ち、ファイル名と本文（BOM を含む生の文字列）を返す */
+async function downloadCsv(page) {
+  const [file] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('mizuho-executions-export').click(),
+  ])
+  return { name: file.suggestedFilename(), text: readFileSync(await file.path(), 'utf8') }
+}
+
+/** CSV の本文を行に分ける（BOM と末尾の空行を除く） */
+function csvLines(text) {
+  return text.replace(BOM, '').split('\r\n').filter(Boolean)
+}
+
 test.describe('みずほ注文締', () => {
   test('[MZ-01] サイドメニューから開くと締め状態と約定一覧が表示される', async ({ page }) => {
     await page.goto('/')
@@ -118,8 +140,9 @@ test.describe('みずほ注文締', () => {
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: 'みずほ注文締', exact: true })).toBeVisible()
-    // CSV 出力は置かない（約定照会の一覧に同じ出力がある）
-    await expect(page.getByRole('button', { name: 'CSV出力' })).toHaveCount(0)
+    // CSV 出力は「約定一覧」カードの見出しにだけ置く（画面ヘッダには出さない）
+    await expect(page.getByTestId('topbar-actions').getByRole('button')).toHaveCount(0)
+    await expect(page.getByTestId('mizuho-executions-export')).toHaveText('CSV出力')
 
     await expect(page.getByTestId('mizuho-closing-state')).toHaveText('受付中')
     await expect(page.getByTestId('mizuho-executions-count')).toHaveText(
@@ -469,5 +492,54 @@ test.describe('みずほ注文締', () => {
     await expect(page.getByTestId('mizuho-closing-dialog-error')).toHaveText(TEMPLATE_ERROR)
     await expect(dialogOf(page)).toBeVisible()
     expect(downloads).toHaveLength(0)
+  })
+
+  test('[MZ-23] 絞り込んだ一覧の「CSV出力」は同じ条件の行だけの CSV になる', async ({ page }) => {
+    expect(sellRows.length).toBeLessThan(mizuhoExecutions.length)
+
+    await page.goto(`${PATH}?side=1`)
+    await expect(page.getByTestId('mizuho-executions-count')).toHaveText(`${sellRows.length} 件`)
+
+    const file = await downloadCsv(page)
+
+    expect(file.name).toBe(CSV_FILENAME)
+    expect(file.text.startsWith(BOM)).toBe(true)
+    const [, ...data] = csvLines(file.text)
+    expect(data).toHaveLength(sellRows.length)
+    // 行の特定は先頭 2 列だけで行う（後ろの列は `"` で囲まれることがある）。並びは問わず集合で比べる
+    expect(data.map((line) => line.split(',').slice(0, 2).join(',') + ',').sort()).toEqual(
+      sellRows.map(csvLinePrefix).sort(),
+    )
+  })
+
+  test('[MZ-24] 0 件のときは「CSV出力」が押せない', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(mizuhoExecutions.length)
+    await expect(page.getByTestId('mizuho-executions-export')).toBeEnabled()
+
+    await page.getByTestId('mizuho-executions-branch-code').fill('999')
+    await submitSearch(page)
+
+    await expect(page.getByTestId('mizuho-executions-empty')).toBeVisible()
+    await expect(page.getByTestId('mizuho-executions-export')).toBeDisabled()
+  })
+
+  test('[MZ-25] CSV 出力が 500 なら理由が出て何も落ちず、一覧は残る', async ({ page }) => {
+    await mockApi(page, [
+      { path: EXECUTIONS_CSV_PATH, status: 500, body: { detail: SERVER_ERROR } },
+    ])
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(mizuhoExecutions.length)
+    const downloads = collectDownloads(page)
+
+    await page.getByTestId('mizuho-executions-export').click()
+
+    await expect(page.getByTestId('mizuho-executions-export-error')).toContainText(SERVER_ERROR)
+    expect(downloads).toHaveLength(0)
+    await expect(rowsOf(page)).toHaveCount(mizuhoExecutions.length)
+    await expect(page.getByTestId('mizuho-executions-count')).toHaveText(
+      `${mizuhoExecutions.length} 件`,
+    )
+    await expect(page.getByTestId('mizuho-executions-export')).toHaveText('CSV出力')
   })
 })

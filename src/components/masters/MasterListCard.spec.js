@@ -136,4 +136,26 @@ describe('MasterListCard', () => {
 
     expect(wrapper.emitted('update:offset')).toEqual([[LIMIT]])
   })
+
+  it('[MLC-14] actions スロットは 4 状態に関わらずヘッダに出て、件数のすぐ右に並ぶ', () => {
+    const slots = { ...ROW_SLOT, actions: '<button data-testid="card-action">CSV出力</button>' }
+    const states = [
+      { loading: true },
+      { error: new Error('取得に失敗しました') },
+      { isEmpty: true },
+      {},
+    ]
+
+    for (const state of states) {
+      const wrapper = mountCard(state, slots)
+
+      expect(wrapper.find('[data-testid="card-action"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="card-action"]').text()).toBe('CSV出力')
+    }
+
+    const wrapper = mountCard({}, slots)
+    expect(testid(wrapper, 'count').element.nextElementSibling).toBe(
+      wrapper.find('[data-testid="card-action"]').element,
+    )
+  })
 })

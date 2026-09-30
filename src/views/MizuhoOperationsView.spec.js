@@ -29,6 +29,7 @@ const EXECUTIONS_PATH = '*/api/executions'
 const STATUS_PATH = '*/api/closing/status'
 const CLOSE_PATH = '*/api/closing/mizuho'
 const EXPORT_PATH = '*/api/mizuho/export-orders'
+const EXECUTIONS_CSV_PATH = '*/api/executions/export-csv'
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 const FORBIDDEN_MESSAGE = '操作権限がありません。'
@@ -52,7 +53,7 @@ const unregisteredCount = (sideCode) =>
 
 const Page = { render: () => h('div') }
 
-async function mountView({ query = {} } = {}) {
+async function mountView({ query = {}, pinia = createPinia() } = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -64,7 +65,7 @@ async function mountView({ query = {} } = {}) {
 
   const wrapper = mount(MizuhoOperationsView, {
     global: {
-      plugins: [createPinia(), router],
+      plugins: [pinia, router],
       // teleport を stub して、ヘッダへ差し込むボタンとダイアログを wrapper 内に描画させる
       stubs: { teleport: true },
     },
@@ -87,6 +88,24 @@ const rows = (wrapper) =>
   find(wrapper, 'mizuho-executions-table').findAll('[data-testid="data-table-row"]')
 const isDialogOpen = (wrapper) => exists(wrapper, 'mizuho-closing-dialog')
 const downloadedFilenames = () => vi.mocked(downloadBlob).mock.calls.map(([filename]) => filename)
+const csvButton = (wrapper) => find(wrapper, 'mizuho-executions-export')
+
+/** 0 件の約定一覧 */
+const emptyExecutions = () =>
+  http.get(EXECUTIONS_PATH, () =>
+    HttpResponse.json({ total: 0, executions: [], summary: { 件数: 0, 買件数: 0, 売件数: 0 } }),
+  )
+
+/** CSV 出力に届いたクエリを記録し、既定のハンドラへ落とす */
+function recordCsvRequests() {
+  const requests = []
+  server.use(
+    http.get(EXECUTIONS_CSV_PATH, ({ request }) => {
+      requests.push(new URL(request.url).searchParams)
+    }),
+  )
+  return requests
+}
 
 /** 開いている確認ダイアログの主ボタンを押し、操作の応答が画面に反映されるまで待つ */
 async function submitDialog(wrapper) {
@@ -437,5 +456,131 @@ describe('MizuhoOperationsView', () => {
     expect(isDialogOpen(wrapper)).toBe(true)
     expect(downloadBlob).not.toHaveBeenCalled()
     expect(exists(wrapper, 'mizuho-operations-notice')).toBe(false)
+  })
+
+  it('[MZV-18] CSV出力で URL の検索条件（route=0）の CSV を取り、ファイル名と Blob を downloadBlob に渡す', async () => {
+    const SYMBOL = mizuhoExecutions.find((row) => row.売買区分 === SELL).Ticker
+    const FILENAME = 'mizuho_executions_test.csv'
+    const requests = []
+    server.use(
+      http.get(EXECUTIONS_CSV_PATH, ({ request }) => {
+        requests.push(new URL(request.url).searchParams)
+        return new HttpResponse('﻿a\r\n', {
+          headers: {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename=${FILENAME}`,
+          },
+        })
+      }),
+    )
+    const { wrapper } = await mountView({ query: { side: SELL, symbol: SYMBOL } })
+    await settle()
+
+    expect(csvButton(wrapper).text()).toBe('CSV出力')
+    expect(csvButton(wrapper).element.disabled).toBe(false)
+    await csvButton(wrapper).trigger('click')
+    await settle()
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0].get('route')).toBe('0')
+    expect(requests[0].get('side')).toBe(SELL)
+    expect(requests[0].get('symbol')).toBe(SYMBOL)
+    expect(downloadBlob).toHaveBeenCalledTimes(1)
+    const [filename, blob] = vi.mocked(downloadBlob).mock.calls[0]
+    expect(filename).toBe(FILENAME)
+    expect(Object.prototype.toString.call(blob)).toBe('[object Blob]')
+  })
+
+  it('[MZV-19] 取得中・0 件・一覧のエラーでは CSV出力が出ていても押せない', async () => {
+    // 取得中
+    const executions = gated(EXECUTIONS_PATH)
+    const loading = await mountView()
+    await flushPromises()
+    expect(exists(loading.wrapper, 'mizuho-executions-loading')).toBe(true)
+    expect(csvButton(loading.wrapper).exists()).toBe(true)
+    expect(csvButton(loading.wrapper).element.disabled).toBe(true)
+    await executions.release()
+    await settle()
+    loading.wrapper.unmount()
+    server.resetHandlers()
+
+    // 0 件
+    server.use(emptyExecutions())
+    const empty = await mountView()
+    await settle()
+    expect(exists(empty.wrapper, 'mizuho-executions-empty')).toBe(true)
+    expect(csvButton(empty.wrapper).element.disabled).toBe(true)
+    empty.wrapper.unmount()
+    server.resetHandlers()
+
+    // 一覧のエラー
+    server.use(executionsError())
+    const failed = await mountView()
+    await settle()
+    expect(exists(failed.wrapper, 'mizuho-executions-error')).toBe(true)
+    expect(csvButton(failed.wrapper).element.disabled).toBe(true)
+  })
+
+  it('[MZV-20] CSV の取得に失敗したら理由を出し、一覧は残してダウンロードしない', async () => {
+    const EXPORT_ERROR = 'CSV の出力に失敗しました'
+    server.use(
+      http.get(EXECUTIONS_CSV_PATH, () =>
+        HttpResponse.json({ detail: EXPORT_ERROR }, { status: 500 }),
+      ),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+
+    await csvButton(wrapper).trigger('click')
+    // arraybuffer で届いたエラー本文の読み直しが終わるまで待つ
+    await vi.waitFor(() => expect(exists(wrapper, 'mizuho-executions-export-error')).toBe(true))
+
+    expect(find(wrapper, 'mizuho-executions-export-error').text()).toContain(EXPORT_ERROR)
+    expect(exists(wrapper, 'mizuho-executions-error')).toBe(false)
+    expect(rows(wrapper)).toHaveLength(TOTAL)
+    expect(downloadBlob).not.toHaveBeenCalled()
+  })
+
+  it('[MZV-21] 出力中はラベルが「出力中…」になって押せず、終わると戻る', async () => {
+    const requests = recordCsvRequests()
+    const csv = gated(EXECUTIONS_CSV_PATH)
+    const { wrapper } = await mountView()
+    await settle()
+
+    await csvButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(csvButton(wrapper).text()).toBe('出力中…')
+    expect(csvButton(wrapper).element.disabled).toBe(true)
+
+    await csv.release()
+    await vi.waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1))
+    await settle()
+
+    expect(csvButton(wrapper).text()).toBe('CSV出力')
+    expect(csvButton(wrapper).element.disabled).toBe(false)
+    expect(requests).toHaveLength(1)
+  })
+
+  it('[MZV-22] 画面に入り直すと、前回の CSV 出力の失敗は出さない', async () => {
+    server.use(
+      http.get(EXECUTIONS_CSV_PATH, () =>
+        HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+      ),
+    )
+    const pinia = createPinia()
+    const first = await mountView({ pinia })
+    await settle()
+    await csvButton(first.wrapper).trigger('click')
+    await vi.waitFor(() =>
+      expect(exists(first.wrapper, 'mizuho-executions-export-error')).toBe(true),
+    )
+    first.wrapper.unmount()
+
+    const second = await mountView({ pinia })
+    await settle()
+
+    expect(exists(second.wrapper, 'mizuho-executions-export-error')).toBe(false)
+    expect(rows(second.wrapper)).toHaveLength(TOTAL)
   })
 })

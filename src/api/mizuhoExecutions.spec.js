@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { mizuhoExecutions } from '@/mocks/fixtures/mizuhoExecutions'
-import { fetchMizuhoExecutions } from './mizuhoExecutions'
+import { ApiError } from './client'
+import { EXECUTIONS_CSV_FILENAME } from './executions'
+import { exportMizuhoExecutionsCsv, fetchMizuhoExecutions } from './mizuhoExecutions'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -43,6 +45,51 @@ const listBody = (rows, summary) => ({
 })
 
 const emptySummary = { 件数: 0, 買件数: 0, 売件数: 0 }
+
+const EXPORT_PATH = '*/api/executions/export-csv'
+const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
+
+/** CSV 出力に最後に届いたクエリ */
+let lastExportParams = null
+
+afterEach(() => {
+  lastExportParams = null
+})
+
+/** 既定ハンドラの前に立ち、クエリだけ記録して既定ハンドラへ落とす */
+function recordExport() {
+  server.use(
+    http.get(EXPORT_PATH, ({ request }) => {
+      lastExportParams = new URL(request.url).searchParams
+    }),
+  )
+}
+
+/**
+ * CSV 出力の応答を差し替える（本文は短い CSV、ヘッダは指定のもの）。
+ *
+ * @param {Record<string, string>} headers 応答ヘッダ
+ */
+function respondCsv(headers) {
+  server.use(
+    http.get(
+      EXPORT_PATH,
+      () =>
+        new HttpResponse('a,b\r\n1,2\r\n', {
+          headers: { 'Content-Type': 'text/csv; charset=utf-8', ...headers },
+        }),
+    ),
+  )
+}
+
+/** jsdom の Blob を文字列で読む */
+const readText = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(new TextDecoder().decode(new Uint8Array(reader.result)))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsArrayBuffer(blob)
+  })
 
 // シナリオ: docs/unit/api-mizuho-executions.md
 describe('api/mizuhoExecutions', () => {
@@ -173,5 +220,72 @@ describe('api/mizuhoExecutions', () => {
     const { summary } = await fetchMizuhoExecutions()
 
     expect(summary).toEqual({ executionCount: 0, buyCount: 0, sellCount: 0 })
+  })
+
+  it('[MZE-11] CSV 出力は一覧と同じクエリに route=0 を載せ、limit / offset は送らない', async () => {
+    recordExport()
+
+    await exportMizuhoExecutionsCsv({
+      branchCode: head.部店,
+      symbol: head.Ticker,
+      side: '1',
+      fillStatus: 'filled',
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
+    })
+
+    expect(lastExportParams.get('route')).toBe('0')
+    expect(lastExportParams.get('branch_code')).toBe(head.部店)
+    expect(lastExportParams.get('symbol')).toBe(head.Ticker)
+    expect(lastExportParams.get('side')).toBe('1')
+    expect(lastExportParams.get('status')).toBe('011')
+    expect(lastExportParams.get('start_date')).toBe('2026-09-01')
+    expect(lastExportParams.get('end_date')).toBe('2026-09-30')
+    expect(lastExportParams.has('limit')).toBe(false)
+    expect(lastExportParams.has('offset')).toBe(false)
+  })
+
+  it('[MZE-12] 条件なしの CSV 出力は route=0 だけを送る', async () => {
+    recordExport()
+
+    await exportMizuhoExecutionsCsv()
+
+    expect([...lastExportParams.keys()]).toEqual(['route'])
+    expect(lastExportParams.get('route')).toBe('0')
+  })
+
+  it('[MZE-13] 本文は Blob で返り、みずほの約定の全件と応答のファイル名が入る', async () => {
+    const NAME = 'mizuho_executions_test.csv'
+    expect(NAME).not.toBe(EXECUTIONS_CSV_FILENAME)
+    // 本文は既定ハンドラ（みずほの全件。一覧の既定 limit で切られない）
+    const { blob } = await exportMizuhoExecutionsCsv()
+
+    expect(Object.prototype.toString.call(blob)).toBe('[object Blob]')
+    const lines = (await readText(blob)).split('\r\n').filter(Boolean)
+    expect(lines).toHaveLength(mizuhoExecutions.length + 1)
+
+    // ファイル名は既定名と見分けられる名前を返させて確かめる
+    respondCsv({ 'Content-Disposition': `attachment; filename=${NAME}` })
+    const { filename } = await exportMizuhoExecutionsCsv()
+    expect(filename).toBe(NAME)
+  })
+
+  it('[MZE-14] Content-Disposition が無ければ既定のファイル名にする', async () => {
+    respondCsv({})
+
+    const { filename } = await exportMizuhoExecutionsCsv()
+
+    expect(filename).toBe(EXECUTIONS_CSV_FILENAME)
+  })
+
+  it('[MZE-15] 500 なら detail を message に持つ ApiError で reject する', async () => {
+    server.use(
+      http.get(EXPORT_PATH, () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+    )
+
+    const error = await exportMizuhoExecutionsCsv().catch((reason) => reason)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.message).toBe(ERROR_MESSAGE)
   })
 })

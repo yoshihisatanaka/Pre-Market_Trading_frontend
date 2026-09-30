@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { mizuhoExecutions } from '../fixtures/mizuhoExecutions'
 import { toNonNegativeInt } from './_shared'
+import { toExecutionsCsvResponse } from './executions'
 
 /** 注文ルート（預託先）のみずほ。実 API は名称（'みずほ'）でも受け付ける */
 const MIZUHO_ROUTES = new Set(['0', 'みずほ'])
@@ -33,40 +34,15 @@ export const mizuhoExecutionHandlers = [
   /*
    * 約定一覧のうち、預託先＝みずほ（route=0）の問い合わせだけに応える。
    * それ以外（route なし・IB など）は何も返さず、次に一致するハンドラ
-   * （約定照会のモックができればそちら）か実 API へ流す。
-   *
-   * クエリ名は実 API と同じ。部店・売買区分・処理状況は完全一致、銘柄は銘柄コードか
-   * Ticker への完全一致（大文字小文字を区別しない）、約定日は日付部分での範囲。
+   * （約定照会のモック）か実 API へ流す。クエリ名は実 API と同じ（絞り込みは filterMizuhoExecutions）。
    */
   http.get('*/api/executions', ({ request }) => {
     const params = new URL(request.url).searchParams
     if (!MIZUHO_ROUTES.has(params.get('route') ?? '')) return
 
-    const branchCode = params.get('branch_code') ?? ''
-    const symbol = (params.get('symbol') ?? '').trim().toUpperCase()
-    const side = params.get('side') ?? ''
-    const status = params.get('status') ?? ''
-    const startDate = toIsoDate(params.get('start_date'))
-    const endDate = toIsoDate(params.get('end_date'))
-    const ascending = params.get('sort') === 'asc'
     const limit = toNonNegativeInt(params.get('limit'), EXECUTIONS_DEFAULT_LIMIT)
     const offset = toNonNegativeInt(params.get('offset'), 0)
-
-    const filtered = mizuhoExecutions
-      .filter((row) => {
-        const executedOn = (row.約定日時 ?? '').slice(0, 10)
-        return (
-          (!branchCode || row.部店 === branchCode) &&
-          (!symbol || row.銘柄コード === symbol || row.Ticker === symbol) &&
-          (!side || row.売買区分 === side) &&
-          (!status || row.処理状況 === status) &&
-          (!startDate || executedOn >= startDate) &&
-          (!endDate || executedOn <= endDate)
-        )
-      })
-      .sort((a, b) =>
-        ascending ? a.約定日時.localeCompare(b.約定日時) : b.約定日時.localeCompare(a.約定日時),
-      )
+    const filtered = sortByExecutedAt(filterMizuhoExecutions(params), params.get('sort') === 'asc')
 
     return HttpResponse.json({
       // total は絞り込み後・ページ切り出し前の件数。summary も同じ範囲で数える
@@ -77,4 +53,44 @@ export const mizuhoExecutionHandlers = [
       executions: filtered.slice(offset, offset + limit),
     })
   }),
+
+  // CSV 出力も route=0 だけを拾う。条件は一覧と同じで、並びは約定日時の昇順（約定照会のモックと同じ書式）
+  http.get('*/api/executions/export-csv', ({ request }) => {
+    const params = new URL(request.url).searchParams
+    if (!MIZUHO_ROUTES.has(params.get('route') ?? '')) return
+
+    return toExecutionsCsvResponse(sortByExecutedAt(filterMizuhoExecutions(params), true))
+  }),
 ]
+
+/*
+ * 検索条件（一覧と CSV 出力で共通のクエリ）に合う行を返す。
+ * 部店・売買区分・処理状況は完全一致、銘柄は銘柄コードか Ticker への完全一致
+ * （大文字小文字を区別しない）、約定日は日付部分での範囲。
+ */
+function filterMizuhoExecutions(params) {
+  const branchCode = params.get('branch_code') ?? ''
+  const symbol = (params.get('symbol') ?? '').trim().toUpperCase()
+  const side = params.get('side') ?? ''
+  const status = params.get('status') ?? ''
+  const startDate = toIsoDate(params.get('start_date'))
+  const endDate = toIsoDate(params.get('end_date'))
+
+  return mizuhoExecutions.filter((row) => {
+    const executedOn = (row.約定日時 ?? '').slice(0, 10)
+    return (
+      (!branchCode || row.部店 === branchCode) &&
+      (!symbol || row.銘柄コード === symbol || row.Ticker === symbol) &&
+      (!side || row.売買区分 === side) &&
+      (!status || row.処理状況 === status) &&
+      (!startDate || executedOn >= startDate) &&
+      (!endDate || executedOn <= endDate)
+    )
+  })
+}
+
+function sortByExecutedAt(rows, ascending) {
+  return [...rows].sort((a, b) =>
+    ascending ? a.約定日時.localeCompare(b.約定日時) : b.約定日時.localeCompare(a.約定日時),
+  )
+}

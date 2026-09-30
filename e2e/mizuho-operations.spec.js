@@ -62,7 +62,6 @@ const COLUMN_HEADERS = [
   '約定金額(円)',
   '約定日時',
   '出来状況',
-  '預託先',
 ]
 const SIDE_COLUMN = COLUMN_HEADERS.indexOf('売買')
 const AMOUNT_JPY_COLUMN = COLUMN_HEADERS.indexOf('約定金額(円)')

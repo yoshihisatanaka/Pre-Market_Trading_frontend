@@ -14,3 +14,4 @@ click された瞬間の要素の様子を記録する（jsdom は遷移を実�
 | DLU-02 | — | `downloadCsv` を呼ぶ | オブジェクト URL の元の Blob は type が `text/csv;charset=utf-8` で、中身が渡した本文そのもの | 実装済 |
 | DLU-03 | — | `downloadCsv` を呼ぶ | 呼び終えたあと `<a>` は文書から外れている | 実装済 |
 | DLU-04 | fake timers | `downloadCsv` を呼ぶ | その場では `revokeObjectURL` が呼ばれず、次のタスクでそのオブジェクト URL が破棄される | 実装済 |
+| DLU-05 | 任意の Blob を用意する | `downloadBlob(ファイル名, blob)` を呼ぶ | オブジェクト URL の元が渡した Blob そのもの（作り直さない）で、`download` 属性にファイル名、`href` にオブジェクト URL を持つ `<a>` が文書に置かれた状態で 1 回 click される | 実装済 |

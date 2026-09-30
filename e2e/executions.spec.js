@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
+import { salesOperator, viewerOperator } from '../src/mocks/fixtures/currentOperator'
 import { executions } from '../src/mocks/fixtures/executions'
 import { formatQuantity } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
@@ -6,6 +8,8 @@ import { mockApi } from './helpers/mockApi'
 // シナリオ: docs/e2e/executions.md（タイトル先頭の [EX-nn] が対応 ID）
 // 約定を検索して読むだけの画面。ページ位置と検索条件は URL クエリを正とするため、
 // URL と画面の同期と、一覧と同じ応答から出す件数カードをここで守る。
+// あわせて、ヘッダの「CSV出力」が一覧の条件で落ちること（EX-14〜17）と、
+// 預託先の欄・列がロールで出し分けられること（EX-18 / EX-19）を守る。
 // mockApi() は固定の body を返すだけで offset や検索条件のクエリを解釈しない。
 // ページングと絞り込み（EX-02〜EX-08 / EX-12 / EX-13）はクエリを実際に処理する既定ハンドラで検証する。
 
@@ -98,6 +102,78 @@ function statText(label, value) {
 async function search(page) {
   await page.getByTestId('executions-search-submit').click()
 }
+
+/*
+ * CSV 出力の期待値。src/mocks/handlers/executions.js の export-csv と同じ規則
+ * （約定日時の昇順・同時刻は ID の昇順、先頭に BOM、改行は CRLF）。
+ */
+const CSV_FILENAME = 'executions.csv'
+const BOM = '﻿'
+const CSV_HEADER = [
+  '約定日時',
+  '約定ID',
+  '注文ID',
+  '受注番号',
+  '部店',
+  '部店名',
+  '口座番号',
+  '顧客名',
+  '銘柄コード',
+  'Ticker',
+  '銘柄名',
+  '売買区分',
+  '売買区分名',
+  '注文ルート',
+  '預託先',
+  '処理状況',
+  '処理状況名',
+  '注文数量',
+  '伝票注文ID',
+  '伝票受注番号',
+  '指値単価',
+  '約定数量',
+  '約定単価',
+  '約定代金(USD)',
+  '手数料',
+  '手数料通貨',
+  '決済通貨区分',
+  'OrderID',
+  'ExecID',
+].join(',')
+
+const ascending = (rows) =>
+  [...rows].sort((a, b) => a.約定日時.localeCompare(b.約定日時) || a.ID - b.ID)
+
+/*
+ * データ行の先頭 2 列（約定日時, 約定ID）。どちらも `,` `"` を含まないので囲まれない。
+ * 後ろの列（顧客名・銘柄名など）は囲まれることがあるので、行の特定は先頭だけで行う。
+ */
+const csvLinePrefix = (row) => `${row.約定日時},${row.ID},`
+
+/** ボタンを押してダウンロードを待ち、ファイル名と本文（BOM を含む生の文字列）を返す */
+async function download(page) {
+  const [file] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('executions-export').click(),
+  ])
+  return { name: file.suggestedFilename(), text: readFileSync(await file.path(), 'utf8') }
+}
+
+/** BOM があれば除いて CRLF で割る。末尾の CRLF の後ろの空要素は落とす */
+function csvLines(text) {
+  const lines = (text.startsWith(BOM) ? text.slice(BOM.length) : text).split('\r\n')
+  expect(lines.at(-1)).toBe('')
+  return lines.slice(0, -1)
+}
+
+// 注文ルートのコード（'0' みずほ / '1' IB）。openapi.json の route の説明どおり
+const MIZUHO = '0'
+const IB = '1'
+// route=0 の一覧はみずほ注文締のモック（handlers/mizuhoExecutions.js）が先に応えるので、絞り込みは IB で見る
+const byIb = sorted.filter((row) => row.注文ルート === IB)
+
+/** 預託先を除いた列（見られないロールの見出し） */
+const COLUMNS_WITHOUT_ROUTE = COLUMNS.filter((column) => column !== '預託先')
 
 test.describe('約定照会', () => {
   test('[EX-01] サイドメニューから開くと一覧と件数が表示される', async ({ page }) => {
@@ -304,5 +380,100 @@ test.describe('約定照会', () => {
     await expect(rowsOf(page)).toHaveCount(bySellAndSymbol.length)
     await expect(columnOf(page, '銘柄')).toHaveText(Array(bySellAndSymbol.length).fill(SYMBOL))
     await expect(columnOf(page, '売買')).toHaveText(Array(bySellAndSymbol.length).fill('売'))
+  })
+
+  test('[EX-14] 「CSV出力」で全件の CSV が約定日時の昇順で保存される', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(page.getByTestId('executions-count')).toHaveText(`${TOTAL} 件`)
+
+    const file = await download(page)
+
+    expect(file.name).toBe(CSV_FILENAME)
+    // BOM はハンドラが付けるが、MSW の XHR 横取りで落ちるので見ない（EX-20 は保留。docs/e2e/executions.md）
+    const [header, ...data] = csvLines(file.text)
+    expect(header).toBe(CSV_HEADER)
+    expect(data).toHaveLength(TOTAL)
+    const expected = ascending(executions)
+    // 1 行目は最古の約定。以降も約定日時の昇順に並ぶ
+    expect(data[0].startsWith(csvLinePrefix(expected[0]))).toBe(true)
+    data.forEach((line, index) => {
+      expect(line.startsWith(csvLinePrefix(expected[index]))).toBe(true)
+    })
+  })
+
+  test('[EX-15] 絞り込んだ一覧の「CSV出力」は同じ条件の行だけになる', async ({ page }) => {
+    expect(bySymbol.length).toBeLessThan(TOTAL)
+
+    await page.goto(`${PATH}?symbol=${SYMBOL}`)
+    await expect(page.getByTestId('executions-count')).toHaveText(`${bySymbol.length} 件`)
+
+    const file = await download(page)
+
+    const [, ...data] = csvLines(file.text)
+    expect(data).toHaveLength(bySymbol.length)
+    // 一覧と同じ AAPL の約定が、約定日時の昇順で並ぶ
+    ascending(bySymbol).forEach((row, index) => {
+      expect(data[index].startsWith(csvLinePrefix(row))).toBe(true)
+    })
+  })
+
+  test('[EX-16] CSV 出力が失敗すると理由が出て、一覧は残る', async ({ page }) => {
+    await mockApi(page, [
+      { path: '*/api/executions/export-csv', status: 500, body: { detail: ERROR_MESSAGE } },
+    ])
+    const downloads = []
+    page.on('download', (file) => downloads.push(file))
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('executions-export').click()
+
+    const alert = page.getByTestId('executions-export-error')
+    await expect(alert).toContainText(ERROR_MESSAGE)
+    await expect(alert).toHaveAttribute('role', 'alert')
+    expect(downloads).toHaveLength(0)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('executions-count')).toHaveText(`${TOTAL} 件`)
+    await expect(page.getByTestId('executions-export')).toHaveText('CSV出力')
+  })
+
+  test('[EX-17] 0 件のときは「CSV出力」が押せない', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('executions-export')).toBeEnabled()
+
+    await page.getByTestId('executions-symbol').fill(NO_MATCH)
+    await search(page)
+
+    await expect(page.getByTestId('executions-empty')).toBeVisible()
+    await expect(page.getByTestId('executions-export')).toBeDisabled()
+  })
+
+  test('[EX-18] 営業員には預託先の欄と列が無く、URL の route も効かない', async ({ page }) => {
+    await mockApi(page, [{ path: '*/api/auth/me', body: salesOperator }])
+    await page.goto(`${PATH}?route=${MIZUHO}`)
+
+    await expect(page.getByTestId('executions-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('executions-route')).toHaveCount(0)
+    await expect(page.getByTestId('executions-table').locator('th')).toHaveText(
+      COLUMNS_WITHOUT_ROUTE,
+    )
+  })
+
+  test('[EX-19] 管理者には預託先の欄と列があり、URL の route で絞り込まれる', async ({ page }) => {
+    // 1 ページに収まり、全件より少ない（絞り込みが効いたと言える）
+    expect(byIb.length).toBeGreaterThan(0)
+    expect(byIb.length).toBeLessThan(Math.min(TOTAL, PAGE_SIZE + 1))
+
+    await mockApi(page, [{ path: '*/api/auth/me', body: viewerOperator }])
+    await page.goto(`${PATH}?route=${IB}`)
+
+    await expect(page.getByTestId('executions-route')).toHaveValue(IB)
+    await expect(page.getByTestId('executions-route').locator('option:checked')).toHaveText('IB')
+    await expect(page.getByTestId('executions-count')).toHaveText(`${byIb.length} 件`)
+    await expect(page.getByTestId('executions-table').locator('th')).toHaveText(COLUMNS)
+    await expect(columnOf(page, '預託先')).toHaveText(byIb.map((row) => row.注文ルート名))
   })
 })

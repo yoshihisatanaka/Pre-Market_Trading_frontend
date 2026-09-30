@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { executions } from '@/mocks/fixtures/executions'
+import { EXECUTIONS_CSV_FILENAME } from '@/api/executions'
 import { EXECUTIONS_PAGE_SIZE, useExecutionsStore } from './executions'
 
 /*
@@ -43,6 +44,26 @@ function slowBySide(waitFor) {
     }),
   )
 }
+
+const EXPORT_PATH = '*/api/executions/export-csv'
+
+const exportErrorHandler = () =>
+  http.get(EXPORT_PATH, () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }))
+
+/** 既定ハンドラに当てたまま、届いた /executions/export-csv のクエリを記録する */
+let exportRequests = []
+function exportListener({ request }) {
+  const url = new URL(request.url)
+  if (url.pathname === '/api/executions/export-csv') exportRequests.push(url.searchParams)
+}
+function recordExport() {
+  exportRequests = []
+  server.events.on('request:start', exportListener)
+}
+afterEach(() => {
+  server.events.removeListener('request:start', exportListener)
+  exportRequests = []
+})
 
 // シナリオ: docs/unit/stores-executions.md
 describe('stores/executions', () => {
@@ -136,5 +157,89 @@ describe('stores/executions', () => {
     const store = useExecutionsStore()
 
     expect(store.summary).toBeNull()
+  })
+
+  it('[EXS-08] 最後に読んだ条件で CSV を取り、ページ位置は送らない', async () => {
+    const SYMBOL = executions.find((row) => row.売買区分 === '1').Ticker
+    recordExport()
+    const store = useExecutionsStore()
+
+    await store.load({ side: 'sell', symbol: SYMBOL, offset: PAGE_SIZE })
+    const file = await store.exportCsv()
+
+    expect(exportRequests).toHaveLength(1)
+    expect(exportRequests[0].get('side')).toBe('1')
+    expect(exportRequests[0].get('symbol')).toBe(SYMBOL)
+    expect(exportRequests[0].has('limit')).toBe(false)
+    expect(exportRequests[0].has('offset')).toBe(false)
+    expect(Object.prototype.toString.call(file.blob)).toBe('[object Blob]')
+    expect(file.filename).toBe(EXECUTIONS_CSV_FILENAME)
+  })
+
+  it('[EXS-09] 読み直したあとは新しい条件で CSV を取る', async () => {
+    const SYMBOL = executions.find((row) => row.売買区分 === '1').Ticker
+    recordExport()
+    const store = useExecutionsStore()
+
+    await store.load({ side: 'sell', symbol: SYMBOL })
+    await store.load({ side: 'buy' })
+    await store.exportCsv()
+
+    expect(exportRequests).toHaveLength(1)
+    expect(exportRequests[0].get('side')).toBe('3')
+    expect(exportRequests[0].has('symbol')).toBe(false)
+  })
+
+  it('[EXS-10] CSV の取得に失敗したら null を返し、一覧の状態は変えない', async () => {
+    server.use(exportErrorHandler())
+    const store = useExecutionsStore()
+
+    await store.load()
+    const file = await store.exportCsv()
+
+    expect(file).toBeNull()
+    expect(store.exportError?.message).toBe(ERROR_MESSAGE)
+    expect(store.error).toBeNull()
+    expect(store.items).toHaveLength(PAGE_SIZE)
+    expect(store.exporting).toBe(false)
+  })
+
+  it('[EXS-11] 出力中は exporting が立ち、一覧の loading とは独立する', async () => {
+    let release
+    const held = new Promise((resolve) => {
+      release = resolve
+    })
+    server.use(
+      http.get(EXPORT_PATH, async () => {
+        await held
+        return new HttpResponse('a\r\n', { headers: { 'Content-Type': 'text/csv' } })
+      }),
+    )
+    const store = useExecutionsStore()
+    await store.load()
+
+    const pending = store.exportCsv()
+
+    expect(store.exporting).toBe(true)
+    expect(store.loading).toBe(false)
+
+    release()
+    await pending
+
+    expect(store.exporting).toBe(false)
+  })
+
+  it('[EXS-12] clearExportError で出力の失敗だけを消す', async () => {
+    server.use(exportErrorHandler())
+    const store = useExecutionsStore()
+    await store.load()
+    await store.exportCsv()
+    const itemsBefore = store.items
+
+    store.clearExportError()
+
+    expect(store.exportError).toBeNull()
+    expect(store.error).toBeNull()
+    expect(store.items).toBe(itemsBefore)
   })
 })

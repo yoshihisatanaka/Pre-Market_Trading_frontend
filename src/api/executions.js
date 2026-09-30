@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 
 /*
- * 約定照会（実 API `GET /executions`。成熟度 A）。
+ * 約定照会（実 API `GET /executions`（成熟度 A）と `GET /executions/export-csv`（成熟度 B））。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次の 5 点。
  *   - 主キーが integer の `ID`（約定ID）。アプリ内は文字列の `id`（src/api/symbols.js と同じ扱い）。
@@ -15,7 +15,8 @@ import { apiClient } from './client'
  *   - 約定金額（円）: ExecutionItem は USD の `約定代金` しか返さない。円貨の項目は持たない
  *   - 一部出来の件数: ExecutionSummary に無い（件数 / 注文件数 / 売件数 / 買件数 / 数量 / 代金 / 手数料のみ）
  *
- * いまは一覧の取得だけを持つ。CSV 出力（`GET /executions/export-csv`）は別途。
+ * CSV 出力は一覧と同じ検索条件を受け、本文をファイルのまま（Blob）返す。
+ * 列の並びと中身はバックエンドが決めるので、この層は変換しない。
  */
 
 /**
@@ -68,15 +69,13 @@ const SIDES = { 1: 'sell', 3: 'buy' }
 /** アプリ内の向き → 売買区分のコード（検索条件を送るとき） */
 const SIDE_CODES = { buy: '3', sell: '1' }
 
+/** 応答にファイル名が無いときの保存名（バックエンドが Content-Disposition に付ける名前と同じ） */
+export const EXECUTIONS_CSV_FILENAME = 'executions.csv'
+
 /**
- * 約定の一覧を取得する。
+ * 約定の検索条件（一覧と CSV 出力で共通）
  *
- * ページャーを持つ一覧なので `{ items, total }` に加えて、同じ条件での集計 `summary` を返す
- * （実 API が一覧と一緒に返すので、件数カードのために別の API を呼ばない）。
- *
- * @param {{
- *   limit?: number,
- *   offset?: number,
+ * @typedef {{
  *   branchCode?: string,
  *   symbol?: string,
  *   side?: string,
@@ -84,15 +83,61 @@ const SIDE_CODES = { buy: '3', sell: '1' }
  *   dateFrom?: string,
  *   dateTo?: string,
  *   route?: string,
- * }} [params]
- *   limit は 1..200（実 API の既定は 50）。symbol は銘柄コードまたは Ticker。
- *   side は 'buy' / 'sell'（それ以外は送らない）。status / route はコード値。
- *   dateFrom / dateTo は YYYY-MM-DD。空文字は「条件なし」としてリクエストに載せない
+ * }} ExecutionFilters
+ *   symbol は銘柄コードまたは Ticker。side は 'buy' / 'sell'（それ以外は送らない）。
+ *   status / route はコード値。dateFrom / dateTo は YYYY-MM-DD。
+ *   空文字は「条件なし」としてリクエストに載せない
+ */
+
+/**
+ * 約定の一覧を取得する。
+ *
+ * ページャーを持つ一覧なので `{ items, total }` に加えて、同じ条件での集計 `summary` を返す
+ * （実 API が一覧と一緒に返すので、件数カードのために別の API を呼ばない）。
+ *
+ * @param {{ limit?: number, offset?: number } & ExecutionFilters} [params]
+ *   limit は 1..200（実 API の既定は 50）。検索条件は ExecutionFilters
  * @returns {Promise<{ items: Execution[], total: number, summary: ExecutionSummary }>}
  */
-export async function fetchExecutions({
-  limit = 50,
-  offset = 0,
+export async function fetchExecutions({ limit = 50, offset = 0, ...filters } = {}) {
+  const { data } = await apiClient.get('/executions', {
+    params: { limit, offset, ...toSearchParams(filters) },
+  })
+
+  return {
+    items: (data?.executions ?? []).map(toExecution),
+    total: data?.total ?? 0,
+    summary: toSummary(data?.summary),
+  }
+}
+
+/**
+ * 検索条件に合う約定を CSV ファイルとして取得する。
+ *
+ * 実 API は一覧と同じ条件の全件（上限 10,000 件・約定日時の昇順）を UTF-8 BOM 付きで返す。
+ * 本文は文字列にせず Blob のまま返す（文字列にすると BOM が落ち、Excel で日本語が化ける）。
+ * ページ位置は無い（limit / offset は送らない）。
+ *
+ * @param {ExecutionFilters} [filters]
+ * @returns {Promise<{ blob: Blob, filename: string }>}
+ *   filename は応答の Content-Disposition から取る。取れなければ EXECUTIONS_CSV_FILENAME
+ */
+export async function exportExecutionsCsv(filters = {}) {
+  const response = await apiClient.get('/executions/export-csv', {
+    params: toSearchParams(filters),
+    responseType: 'blob',
+  })
+
+  return {
+    blob: response.data,
+    filename:
+      filenameFromDisposition(response.headers?.['content-disposition']) ||
+      EXECUTIONS_CSV_FILENAME,
+  }
+}
+
+/** ExecutionFilters → 実 API のクエリ。値が undefined のパラメータは axios が送らない */
+function toSearchParams({
   branchCode = '',
   symbol = '',
   side = '',
@@ -101,26 +146,39 @@ export async function fetchExecutions({
   dateTo = '',
   route = '',
 } = {}) {
-  const { data } = await apiClient.get('/executions', {
-    // クエリ名を知ってよいのはこの層だけ。値が undefined のパラメータは axios が送らない
-    params: {
-      limit,
-      offset,
-      branch_code: branchCode || undefined,
-      symbol: symbol || undefined,
-      side: SIDE_CODES[side],
-      status: status || undefined,
-      start_date: dateFrom || undefined,
-      end_date: dateTo || undefined,
-      route: route || undefined,
-    },
-  })
-
+  // クエリ名を知ってよいのはこの層だけ
   return {
-    items: (data?.executions ?? []).map(toExecution),
-    total: data?.total ?? 0,
-    summary: toSummary(data?.summary),
+    branch_code: branchCode || undefined,
+    symbol: symbol || undefined,
+    side: SIDE_CODES[side],
+    status: status || undefined,
+    start_date: dateFrom || undefined,
+    end_date: dateTo || undefined,
+    route: route || undefined,
   }
+}
+
+/**
+ * Content-Disposition からファイル名を取り出す。
+ * RFC 6266 の `filename*=UTF-8''…`（パーセントエンコード）を優先し、次に `filename="…"` / `filename=…`。
+ *
+ * @param {unknown} header
+ * @returns {string} 取り出せなければ空文字
+ */
+function filenameFromDisposition(header) {
+  if (typeof header !== 'string') return ''
+
+  const extended = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header)
+  if (extended) {
+    try {
+      return decodeURIComponent(extended[1].trim())
+    } catch {
+      // 壊れたエンコードは捨てて filename= の方を見る
+    }
+  }
+
+  const plain = /filename\s*=\s*(?:"([^"]*)"|([^;]+))/i.exec(header)
+  return (plain?.[1] ?? plain?.[2] ?? '').trim()
 }
 
 /** ExecutionItem → アプリ内モデル */

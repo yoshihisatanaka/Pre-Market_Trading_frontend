@@ -20,3 +20,8 @@ MSW の既定ハンドラ（`src/mocks/handlers/executions.js`）に当てて、
 | EXS-05 | 0 件の応答 | `load()` | `isEmpty` が true、`summary.count` が 0 | 実装済 |
 | EXS-06 | 1 回目の応答だけ遅らせる | `load({ side: 'buy' })` のあと待たずに `load({ side: 'sell' })` | 遅れて届いた 1 回目の集計で `summary` が上書きされず、2 回目（売り）の集計が残る | 実装済 |
 | EXS-07 | 1 度も読み込んでいない | ストアを作る | `summary` が null | 実装済 |
+| EXS-08 | 既定モック | `load({ side: 'sell', symbol, offset: EXECUTIONS_PAGE_SIZE })` のあと条件を変えずに `exportCsv()` | `GET /executions/export-csv` にその条件（`side=1` / `symbol`）が載り、`limit` / `offset` は載らない。戻り値は Blob と `EXECUTIONS_CSV_FILENAME` の `{ blob, filename }` | 実装済 |
+| EXS-09 | 既定モック | `load({ side: 'sell', symbol })` → `load({ side: 'buy' })` のあと `exportCsv()` | 2 回目の条件（`side=3`）で出力し、1 回目の `symbol` は載らない | 実装済 |
+| EXS-10 | `GET /executions/export-csv` が 500 | `load()` のあと `exportCsv()` | 戻り値が null、`exportError.message` に理由が入る。一覧の `error` は null のまま・`items` は残る | 実装済 |
+| EXS-11 | `export-csv` の応答を握ったまま | `load()` のあと `exportCsv()` を呼び、応答を返す | 応答待ちの間は `exporting` が true（一覧の `loading` は false のまま）、応答後は false に戻る | 実装済 |
+| EXS-12 | EXS-10 の状態 | `clearExportError()` | `exportError` が null になり、一覧（`items` / `error`）は変わらない | 実装済 |

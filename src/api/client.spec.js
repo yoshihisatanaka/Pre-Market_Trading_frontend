@@ -243,4 +243,42 @@ describe('api/client', () => {
     expect(error.name).toBe('ApiError')
     expect(error.cause?.response?.status).toBe(500)
   })
+
+  it('[CLA-17] ファイル取得（Blob）のエラー本文が JSON なら detail を取り出す', async () => {
+    respond({ detail: 'CSV の出力に失敗しました' }, 500)
+
+    const error = await captureError({ responseType: 'blob' })
+
+    expect(error.message).toBe('CSV の出力に失敗しました')
+    expect(error.status).toBe(500)
+  })
+
+  it('[CLA-18] ファイル取得（Blob）のエラー本文の message と code も取り出す', async () => {
+    respond({ message: '条件が多すぎます', code: 'TOO_MANY' }, 400)
+
+    const error = await captureError({ responseType: 'blob' })
+
+    expect(error.message).toBe('条件が多すぎます')
+    expect(error.status).toBe(400)
+    expect(error.code).toBe('TOO_MANY')
+  })
+
+  it('[CLA-19] ファイル取得（Blob）のエラー本文が JSON でなければ status 既定の文言にする', async () => {
+    server.use(
+      http.get(
+        URL_PATTERN,
+        () =>
+          new HttpResponse('Internal Server Error', {
+            status: 500,
+            headers: { 'Content-Type': 'text/plain' },
+          }),
+      ),
+    )
+
+    const error = await captureError({ responseType: 'blob' })
+
+    expect(error.message).toBe('サーバーでエラーが発生しました。')
+    expect(error.status).toBe(500)
+    expect(error.code).toBeNull()
+  })
 })

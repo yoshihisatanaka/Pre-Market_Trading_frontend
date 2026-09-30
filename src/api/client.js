@@ -39,12 +39,44 @@ apiClient.interceptors.request.use((config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => Promise.reject(normalizeError(error)),
+  async (error) => {
+    throw normalizeError(error, await blobBodyOf(error))
+  },
 )
 
-function normalizeError(error) {
+/**
+ * ファイルを落とす API（`responseType: 'blob'`）は、エラー応答の本文（`{ detail }` の JSON）も
+ * Blob で届く。そのままでは messageFrom が理由を読めないので、JSON として読み直す。
+ *
+ * @returns {Promise<unknown>} 読み直した本文。Blob でない・JSON でないときは undefined（元の本文を使う）
+ */
+async function blobBodyOf(error) {
+  const data = error?.response?.data
+  // 別の実行環境（jsdom と Node）の Blob でも見分けられるように、instanceof ではなくタグで判定する
+  if (Object.prototype.toString.call(data) !== '[object Blob]') return undefined
+
+  try {
+    return JSON.parse(await readText(data))
+  } catch {
+    return undefined
+  }
+}
+
+/** Blob を文字列で読む。text() を持たない実装（jsdom）は FileReader で読む */
+function readText(blob) {
+  if (typeof blob.text === 'function') return blob.text()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsText(blob)
+  })
+}
+
+function normalizeError(error, body) {
   if (error.response) {
-    const { status, data } = error.response
+    const { status } = error.response
+    const data = body ?? error.response.data
     return new ApiError(messageFrom(data) || defaultMessageFor(status), {
       status,
       code: data?.code ?? null,

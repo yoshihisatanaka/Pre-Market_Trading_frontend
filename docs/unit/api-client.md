@@ -34,3 +34,6 @@
 | CLA-14 | 応答が `timeout` より遅れる | 短い `timeout` を指定して GET する | `message` が `通信がタイムアウトしました。時間をおいて再度お試しください。`、`status` が `null`、`code` が `ECONNABORTED` | 実装済 |
 | CLA-15 | 応答が返らない（ネットワーク断） | GET する | `message` が `サーバーに接続できませんでした。`、`status` が `null` | 実装済 |
 | CLA-16 | API が 500 を返す | GET する | 投げられるのは `ApiError` で、`name` が `'ApiError'`、`Error` を継承し、`cause` に元の axios エラー（`response.status` が 500）が入る | 実装済 |
+| CLA-17 | `responseType: 'blob'` で GET し、API が 500 で `{ detail: '…' }`（JSON）を返す | GET する | エラー本文が Blob で届いても、`message` がその `detail` 文字列、`status` が 500 になる | 実装済 |
+| CLA-18 | `responseType: 'blob'` で GET し、API が 400 で `{ message: '…', code: 'X' }` を返す | GET する | `message` が本文の `message`、`code` が `'X'` になる | 実装済 |
+| CLA-19 | `responseType: 'blob'` で GET し、API が 500 で JSON でない本文（プレーンテキスト）を返す | GET する | `message` が `サーバーでエラーが発生しました。`（status 既定の文言）、`code` が `null` | 実装済 |

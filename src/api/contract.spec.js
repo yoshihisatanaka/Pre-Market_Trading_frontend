@@ -90,7 +90,7 @@ import {
 } from './incidents'
 import { fetchMizuhoExecutions } from './mizuhoExecutions'
 import { fetchMizuhoClosingStatus } from './closing'
-import { fetchExecutions } from './executions'
+import { exportExecutionsCsv, fetchExecutions } from './executions'
 import { fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
 import { fetchOrderCsvSpec } from './orderCsv'
 
@@ -666,6 +666,19 @@ const PROBES = [
     name: 'fetchExecutions',
     run: () =>
       fetchExecutions({
+        branchCode: '123',
+        symbol: 'AAPL',
+        side: 'buy',
+        status: '011',
+        dateFrom: '2026-09-01',
+        dateTo: '2026-09-30',
+        route: '1',
+      }),
+  },
+  {
+    name: 'exportExecutionsCsv',
+    run: () =>
+      exportExecutionsCsv({
         branchCode: '123',
         symbol: 'AAPL',
         side: 'buy',

@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -10,15 +11,15 @@ import FormField from '@/components/ui/FormField.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
+import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useExecutionsStore } from '@/stores/executions'
+import { downloadBlob } from '@/utils/download'
 import { formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
 
 /*
  * 約定照会。一部出来 / 全部出来 / 取消済（出来有）の約定を検索する（読むだけの一覧）。
- *
- * いまは UI だけで、次の処理は繋いでいない（TODO(処理実装) を残してある）:
- *   - CSV 出力（実 API は GET /executions/export-csv）
- *   - 預託先の出し分け。モックは管理者ロールにだけ預託先の条件と列を出すが、いまは常に出す
+ *   - ヘッダの「CSV出力」は、いま一覧に出ている検索条件で GET /executions/export-csv を落とす
+ *   - 預託先（検索条件の「預託先区分」と列の「預託先」）は管理者・管理責任者にだけ出す（GET /auth/me のロール）
  *
  * 画面モック（premarket-order-202609 の execution_management.html）からの意図的なずれ:
  *   - 約定金額は円ではなく USD の約定代金を出す（ExecutionItem が円貨の項目を持たない）
@@ -32,7 +33,25 @@ import { formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useExecutionsStore()
-const { items, total, limit, offset, loading, error, isEmpty, summary } = storeToRefs(store)
+const { items, total, limit, offset, loading, error, isEmpty, summary, exporting, exportError } =
+  storeToRefs(store)
+
+/*
+ * 預託先を見られるロール（値は /auth/me のロールコード）。
+ * 画面モックは manager と admin に出すが、admin は開発中用のロールなので、
+ * 実在する上位のロールである管理責任者（supervisor）に置き換えた。
+ *
+ * /auth/me を読み終える前と、読めなかったときは出さない（誤って出さない側に倒す。
+ * stores/currentOperator.js と同じ方針）。ensureLoaded は main.js が起動時に始めているので
+ * 通常は何もしない（ガードを通らない単体テストのための保険）。
+ */
+const ROUTE_VIEWER_ROLES = ['manager', 'supervisor']
+
+const currentOperator = useCurrentOperatorStore()
+currentOperator.ensureLoaded()
+const canViewRoute = computed(() =>
+  ROUTE_VIEWER_ROLES.includes(currentOperator.operator?.roleCode),
+)
 
 /** 売買区分。値はアプリ内の向きで、コードへの変換は api 層が行う */
 const SIDE_OPTIONS = [
@@ -72,8 +91,11 @@ const STATUS_DISPLAY = {
 
 const SIDE_LABELS = { buy: '買', sell: '売' }
 
-/** 列は画面モックの並びどおり（約定金額だけ USD に置き換えた。冒頭のコメント） */
-const columns = [
+/**
+ * 列は画面モックの並びどおり（約定金額だけ USD に置き換えた。冒頭のコメント）。
+ * 末尾の「預託先」は見られるロールのときだけ足す
+ */
+const BASE_COLUMNS = [
   { key: 'id', label: '約定ID' },
   { key: 'orderId', label: '注文ID' },
   { key: 'accountNumber', label: '口座番号', numeric: true },
@@ -86,14 +108,25 @@ const columns = [
   { key: 'amountUsd', label: '約定代金(USD)', numeric: true },
   { key: 'executedAt', label: '約定日時' },
   { key: 'status', label: '出来状況' },
-  // TODO(処理実装): 管理者ロールにだけ出す（GET /auth/me のロールで決める）
-  { key: 'routeName', label: '預託先' },
 ]
+
+const columns = computed(() => [
+  ...BASE_COLUMNS,
+  ...(canViewRoute.value ? [{ key: 'routeName', label: '預託先' }] : []),
+])
 
 /** 選択肢に無い値（手で書き換えられた URL クエリ）を空に落とす */
 function oneOf(options) {
   return (value) => (options.some((option) => option.value === value) ? value : '')
 }
+
+/*
+ * 預託先を見られない利用者は、URL に route が残っていても（ブックマーク・手書き）条件に使わない。
+ * 見えない条件で絞られると、件数が合わない理由を画面から辿れないため（CSV 出力も同じ条件を使う）。
+ * useListQuery の queryKey は computed なので、ここで読んだ canViewRoute の変化も追う。
+ * /auth/me が一覧より後に届いたときは、route を含めた条件で読み直される。
+ */
+const parseRoute = oneOf(ROUTE_OPTIONS)
 
 /*
  * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
@@ -108,7 +141,11 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
     { key: 'status', query: 'status', parse: oneOf(STATUS_OPTIONS) },
     { key: 'dateFrom', query: 'start_date' },
     { key: 'dateTo', query: 'end_date' },
-    { key: 'route', query: 'route', parse: oneOf(ROUTE_OPTIONS) },
+    {
+      key: 'route',
+      query: 'route',
+      parse: (value) => (canViewRoute.value ? parseRoute(value) : ''),
+    },
   ],
   load: (params) => store.load(params),
 })
@@ -163,8 +200,22 @@ function statusTone(row) {
   return STATUS_DISPLAY[row.status]?.tone ?? 'unknown'
 }
 
-function exportCsv() {
-  // TODO(処理実装): いまの検索条件（URL クエリ）を引き継いで GET /executions/export-csv を落とす
+/*
+ * CSV 出力。条件はいま一覧に出ているもの（ストアが最後に読んだ条件で、検索欄に入力しただけの値は使わない）。
+ * 取得中・エラー・0 件のときは押せない（一覧と食い違う条件で出る・出すものが無い）。
+ * 列と並びはバックエンドが決める（条件に合う全件。上限 10,000 件・約定日時の昇順）。
+ */
+const canExport = computed(
+  () => !loading.value && !error.value && !isEmpty.value && !exporting.value,
+)
+
+// ストアは画面を離れても残る。戻ってきたときに前回の出力の失敗を出し直さない
+store.clearExportError()
+
+async function exportCsv() {
+  const file = await store.exportCsv()
+  // 失敗の理由は exportError で出す
+  if (file) downloadBlob(file.filename, file.blob)
 }
 </script>
 
@@ -172,10 +223,21 @@ function exportCsv() {
   <section class="execution-list">
     <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
     <Teleport defer to="#topbar-actions">
-      <BaseButton variant="secondary" size="sm" data-testid="executions-export" @click="exportCsv">
-        CSV出力
+      <BaseButton
+        variant="secondary"
+        size="sm"
+        data-testid="executions-export"
+        :disabled="!canExport"
+        @click="exportCsv"
+      >
+        {{ exporting ? '出力中…' : 'CSV出力' }}
       </BaseButton>
     </Teleport>
+
+    <!-- CSV 出力の失敗。ボタンがヘッダにあるので画面の先頭に出す（一覧はそのまま残す） -->
+    <BaseAlert v-if="exportError" variant="error" data-testid="executions-export-error">
+      {{ exportError.message }}
+    </BaseAlert>
 
     <MasterSearchCard
       testid-prefix="executions"
@@ -233,8 +295,8 @@ function exportCsv() {
           data-testid="executions-date-to"
         />
       </FormField>
-      <!-- TODO(処理実装): 管理者ロールにだけ出す（列の「預託先」と同じ） -->
-      <FormField v-slot="{ field }" label="預託先区分">
+      <!-- 見られるロールのときだけ出す（列の「預託先」と同じ） -->
+      <FormField v-if="canViewRoute" v-slot="{ field }" label="預託先区分">
         <BaseSelect
           v-bind="field"
           v-model="inputs.route"

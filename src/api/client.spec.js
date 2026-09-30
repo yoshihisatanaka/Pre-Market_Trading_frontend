@@ -243,4 +243,22 @@ describe('api/client', () => {
     expect(error.name).toBe('ApiError')
     expect(error.cause?.response?.status).toBe(500)
   })
+
+  it('[CLA-17] ファイル用の要求でもエラー本文を JSON として読み、detail を使う', async () => {
+    respond({ detail: '注文ファイルは、みずほ注文締め後に作成してください。' }, 400)
+
+    const error = await captureError({ responseType: 'arraybuffer' })
+
+    expect(error.message).toBe('注文ファイルは、みずほ注文締め後に作成してください。')
+    expect(error.status).toBe(400)
+  })
+
+  it('[CLA-18] ファイル用の要求で JSON でない本文なら既定の文言に落とす', async () => {
+    server.use(http.get(URL_PATTERN, () => new HttpResponse('not json', { status: 400 })))
+
+    const error = await captureError({ responseType: 'arraybuffer' })
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.message).toBe('入力内容に誤りがあります。')
+  })
 })

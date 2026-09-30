@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import FormField from '@/components/ui/FormField.vue'
@@ -14,13 +14,16 @@ import MizuhoExecutionTable from '@/components/mizuho/MizuhoExecutionTable.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { useMizuhoClosingStore } from '@/stores/mizuhoClosing'
 import { useMizuhoExecutionsStore } from '@/stores/mizuhoExecutions'
+import { downloadBlob } from '@/utils/download'
 import { FILL_STATUS_OPTIONS } from '@/utils/fillStatusTypes'
 
 /*
- * みずほ注文締。公開モック（/executions/mizuho-operations）の UI/UX だけを先に置いた段階。
- *   - 締め状態（受付中 / 締め済）と約定一覧は MSW のモックまで通して 4 状態を出し分ける
- *   - 締め・締め解除・注文ファイル作成は確認ダイアログを開くところまで（主ボタンは押せない）
- *   - ヘッダの CSV 出力は押しても何も起きない（下の TODO）
+ * みずほ注文締（公開モック /executions/mizuho-operations）。
+ *   - 締めカード … 締め状態（受付中 / 締め済）を出し、締め・締め解除・注文ファイル作成を
+ *                  確認ダイアログ越しに行う。結果は画面上部の通知に出す
+ *   - 約定一覧   … 預託先＝みずほの約定を検索する
+ * 締め状態と約定一覧は取得が別で、4 状態もカードごとに出し分ける。
+ * 公開モックのヘッダ「CSV出力」は置かない（約定照会の一覧に同じ出力があるため）。
  */
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
@@ -34,6 +37,8 @@ const {
   loading: closingLoading,
   error: closingError,
   isEmpty: isClosingEmpty,
+  saving,
+  saveError,
 } = storeToRefs(closingStore)
 
 /** 売買区分。値は実 API の SideEnum（1:売 / 3:買）で、URL にもこのまま載る */
@@ -61,19 +66,111 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
   load: (params) => executionsStore.load(params),
 })
 
+/** 注文ファイルの売買区分（store の ORDER_FILE_SIDES の値）→ 通知に出す語 */
+const SIDE_LABELS = { buy: '買い', sell: '売り' }
+
 /** 確認ダイアログ。'close' / 'reopen' / 'order-file'。null なら閉じている */
 const dialogMode = ref(null)
 
-/*
- * TODO(処理実装): 約定一覧の CSV 出力（実 API `GET /executions/export-csv` に、
- *   route=0 といまの検索条件を載せる）。
- *
- * 公開モックは同じ CSV ボタンをヘッダと「約定一覧」カードの見出しの 2 か所に置いているが、
- * ここではヘッダの 1 つだけにした。MasterListCard の見出し右は件数の表示に使われていて
- * ボタンを差す口が無く、同じ出力のために共通部品へ口を開けるほどの差ではないため。
+/**
+ * 操作の結果の通知。null なら出さない。
+ * 文は 1 行ずつ lines に持つ（テンプレートで日本語を途中改行すると半角スペースが入るため、
+ * 文言は script 側で組み立てる）。
+ * @type {import('vue').Ref<{ variant: 'success'|'warning'|'error', lines: string[] }|null>}
  */
-function exportCsv() {
-  // TODO(処理実装): いまの検索条件でみずほの約定を CSV として出力する
+const notice = ref(null)
+
+function openDialog(mode) {
+  notice.value = null
+  closingStore.clearSaveError()
+  dialogMode.value = mode
+}
+
+function closeDialog() {
+  // 実行中に閉じると、結果（成功の知らせ・失敗の理由）の行き先が無くなる
+  if (saving.value) return
+  dialogMode.value = null
+  closingStore.clearSaveError()
+}
+
+async function confirmDialog() {
+  if (dialogMode.value === 'order-file') {
+    await confirmOrderFiles()
+    return
+  }
+
+  const reopening = dialogMode.value === 'reopen'
+  const result = reopening ? await closingStore.reopen() : await closingStore.close()
+  // 失敗時はダイアログを開いたまま、理由を saveError で出す（締め状態は変わっていない）
+  if (!result) return
+
+  dialogMode.value = null
+  notice.value = {
+    variant: 'success',
+    lines: [reopening ? 'みずほ注文締めを解除しました。' : 'みずほ注文を締めました。'],
+  }
+}
+
+/*
+ * 注文ファイルは買い → 売りの 2 冊を続けて作り、作れた分をすぐ落とす。
+ * 1 冊も作れなければ何も変わっていないので、ダイアログを開いたまま理由を出す。
+ * 1 冊だけ作れたときは、その分はサーバで発注済へ進んでいるので、ダイアログを閉じて
+ * 何が済んで何が残ったかを通知に出す（作り直しは同じ内容を返すので、もう一度押せば揃う）。
+ */
+async function confirmOrderFiles() {
+  const { files, failedSide } = await closingStore.createOrderFiles()
+  for (const file of files) downloadBlob(file.filename, file.blob)
+  if (files.length === 0) return
+
+  dialogMode.value = null
+  notice.value = failedSide
+    ? partialOrderFilesNotice(files, failedSide, saveError.value)
+    : orderFilesNotice(files)
+  // 途中で落ちた理由は通知に移した。次に開くダイアログへ持ち越さない
+  closingStore.clearSaveError()
+}
+
+/** 2 冊とも作れたときの通知。Dream 未登録で載せられなかった注文があれば注意として出す */
+function orderFilesNotice(files) {
+  const exported = files
+    .map((file) => `${SIDE_LABELS[file.side]} ${countText(file.exportedCount)} 件`)
+    .join('・')
+  const newlyExported = countText(sumCounts(files.map((file) => file.newlyExportedCount)))
+  const lines = [
+    `注文ファイルを作成しました（${exported}。うち今回発注済にした注文 ${newlyExported} 件）。`,
+  ]
+
+  const skipped = files.filter((file) => file.skippedCount > 0)
+  if (skipped.length === 0) return { variant: 'success', lines }
+
+  const skippedText = skipped
+    .map((file) => `${SIDE_LABELS[file.side]} ${file.skippedCount} 件`)
+    .join('・')
+  lines.push(`Dream 未登録のため載せていない注文があります（${skippedText}）。`)
+  return { variant: 'warning', lines }
+}
+
+/** 途中の 1 冊で失敗したときの通知 */
+function partialOrderFilesNotice(files, failedSide, error) {
+  const created = files.map((file) => SIDE_LABELS[file.side]).join('・')
+  return {
+    variant: 'error',
+    lines: [
+      `${created}の注文ファイルは作成しましたが、${SIDE_LABELS[failedSide]}の注文ファイルを作成できませんでした。`,
+      `理由: ${error?.message ?? '—'}`,
+      'もう一度「注文ファイル作成」を押すと、作成済みの分も同じ内容で作り直します。',
+    ],
+  }
+}
+
+/** 件数の表示。ヘッダが読めなかった（null）なら — */
+function countText(count) {
+  return count ?? '—'
+}
+
+/** 件数の合計。1 つでも読めなかったら合計も出さない（null） */
+function sumCounts(counts) {
+  return counts.includes(null) ? null : counts.reduce((sum, count) => sum + count, 0)
 }
 
 // 初回読み込み。onMounted に置くと最初の描画で一瞬「取得できませんでした」が出る
@@ -82,21 +179,24 @@ closingStore.load()
 
 <template>
   <section class="mizuho-operations">
-    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
-    <Teleport defer to="#topbar-actions">
-      <BaseButton variant="secondary" data-testid="mizuho-operations-export" @click="exportCsv">
-        CSV出力
-      </BaseButton>
-    </Teleport>
+    <!-- 見出しはヘッダが meta.title から出す。この画面はヘッダへ差し込む操作を持たない -->
+    <BaseAlert
+      v-if="notice"
+      :variant="notice.variant"
+      data-testid="mizuho-operations-notice"
+      class="mizuho-operations__notice"
+    >
+      <p v-for="line in notice.lines" :key="line">{{ line }}</p>
+    </BaseAlert>
 
     <MizuhoClosingPanel
       :status="closingStatus"
       :loading="closingLoading"
       :is-empty="isClosingEmpty"
       :error="closingError"
-      @close="dialogMode = 'close'"
-      @reopen="dialogMode = 'reopen'"
-      @create-order-file="dialogMode = 'order-file'"
+      @close="openDialog('close')"
+      @reopen="openDialog('reopen')"
+      @create-order-file="openDialog('order-file')"
       @reload="closingStore.load()"
     />
 
@@ -184,7 +284,10 @@ closingStore.load()
     <MizuhoClosingDialog
       :open="dialogMode !== null"
       :mode="dialogMode"
-      @close="dialogMode = null"
+      :pending="saving"
+      :error="saveError"
+      @close="closeDialog"
+      @confirm="confirmDialog"
     />
   </section>
 </template>
@@ -194,5 +297,10 @@ closingStore.load()
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+}
+
+/* 通知の文は行ごとに段落にしている。段落の既定の余白で帯が間延びしないよう詰める */
+.mizuho-operations__notice p {
+  margin: 0;
 }
 </style>

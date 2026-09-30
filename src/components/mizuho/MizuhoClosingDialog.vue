@@ -1,18 +1,19 @@
 <script setup>
 /**
- * みずほ注文締めの確認ダイアログ（締め / 締め解除 / 注文ファイル作成）。
+ * みずほ注文締めの確認ダイアログ（締め / 締め解除 / 注文ファイル作成）。確定を emit する。
  *
  * 開閉は呼び出し側が open で持ち、この部品は状態を持たない（IncidentControlDialog と同じ作法）。
  * 文言は mode ごとにこの部品が持つ。締めの文言は公開モックの confirm() のまま。
  * 注文ファイル作成は、実 API の副作用（載せた注文が発注済になり、以降は取消・訂正できない）を
  * 押す前に知らせるために確認を挟む（モックは確認なしで押せる）。
+ * 実 API は 1 回で 1 冊しか出さないので、1 回の確定で買い・売りの 2 冊を続けて作る（呼び出し側が行う）。
+ *
+ * サーバの拒否・通信障害は error prop をダイアログ先頭の BaseAlert に出す。
+ * 失敗してもダイアログは開いたまま（何も変わっていないので、そのまま押し直せる）。
+ * pending のあいだは閉じることもできない（結果の行き先が無くなるため）。
  *
  * 出す data-testid:
- *   mizuho-closing-dialog / -dialog-note / -dialog-cancel / -dialog-submit
- *
- * ⚠ 主ボタンは常に押せない。締め・締め解除・注文ファイル作成の処理が未実装のため
- *   （障害管理の最初の段と同じ。押せるのに何も起きないボタンにすると、次段で確実に嘘になる）。
- *   実装する段で disabled を外し、confirm イベントと pending / error props を足す。
+ *   mizuho-closing-dialog / -dialog-error / -dialog-cancel / -dialog-submit
  */
 import { computed } from 'vue'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
@@ -30,71 +31,99 @@ const props = defineProps({
     default: null,
     validator: (value) => value === null || ['close', 'reopen', 'order-file'].includes(value),
   },
+  /** 操作の実行中。true のあいだは閉じることもできない */
+  pending: {
+    type: Boolean,
+    default: false,
+  },
+  /** サーバの拒否・通信障害の理由（ApiError） */
+  error: {
+    type: Object,
+    default: null,
+  },
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'confirm'])
 
 const TEXTS = {
   close: {
     title: 'みずほ注文締めの確認',
     body: 'みずほ注文を締めます。よろしいですか？',
     submitLabel: '締める',
+    pendingLabel: '締めています…',
     submitVariant: 'primary',
   },
   reopen: {
     title: '締め解除の確認',
     body: 'みずほ注文の締めを解除し、受付中に戻します。よろしいですか？',
     submitLabel: '締めを解除する',
+    pendingLabel: '解除しています…',
     submitVariant: 'danger',
   },
   'order-file': {
     title: '注文ファイル作成の確認',
-    body: 'みずほの注文ファイルを作成します。ファイルに載せた注文は発注済になり、以降は取消・訂正できません。',
+    body: 'みずほの注文ファイル（買い・売りの 2 冊）を作成します。ファイルに載せた注文は発注済になり、以降は取消・訂正できません。',
     submitLabel: '作成する',
+    pendingLabel: '作成しています…',
     submitVariant: 'primary',
   },
 }
 
 const text = computed(() => TEXTS[props.mode] ?? null)
+
+const submitLabel = computed(() => {
+  if (!text.value) return '実行する'
+  return props.pending ? text.value.pendingLabel : text.value.submitLabel
+})
+
+function onClose() {
+  if (props.pending) return
+  emit('close')
+}
+
+function onSubmit() {
+  if (props.pending) return
+  emit('confirm')
+}
 </script>
 
 <template>
   <!-- 本文が短いので size="sm" -->
-  <BaseModal :open="open" :title="text?.title ?? '操作の確認'" size="sm" @close="emit('close')">
-    <div data-testid="mizuho-closing-dialog">
-      <p v-if="text">{{ text.body }}</p>
-
-      <BaseAlert
-        variant="warning"
-        data-testid="mizuho-closing-dialog-note"
-        class="mizuho-closing-dialog__note"
-      >
-        処理は次段で実装します。この確認では締め状態も注文も変わりません。
+  <BaseModal :open="open" :title="text?.title ?? '操作の確認'" size="sm" @close="onClose">
+    <div data-testid="mizuho-closing-dialog" class="mizuho-closing-dialog">
+      <BaseAlert v-if="error" variant="error" data-testid="mizuho-closing-dialog-error">
+        {{ error.message }}
       </BaseAlert>
+
+      <p v-if="text">{{ text.body }}</p>
     </div>
 
     <template #footer>
       <BaseButton
         variant="secondary"
         data-testid="mizuho-closing-dialog-cancel"
-        @click="emit('close')"
+        :disabled="pending"
+        @click="onClose"
       >
         キャンセル
       </BaseButton>
-      <!-- disabled は暫定。理由は上の JSDoc と mizuho-closing-dialog-note を参照 -->
       <BaseButton
         :variant="text?.submitVariant ?? 'primary'"
         data-testid="mizuho-closing-dialog-submit"
-        disabled
+        :disabled="pending"
+        :loading="pending"
+        @click="onSubmit"
       >
-        {{ text?.submitLabel ?? '実行する' }}
+        {{ submitLabel }}
       </BaseButton>
     </template>
   </BaseModal>
 </template>
 
 <style scoped>
-.mizuho-closing-dialog__note {
-  margin-top: var(--space-3);
+.mizuho-closing-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 </style>

@@ -7,6 +7,7 @@ import { permissionGuard } from './permissionGuard'
  * （permissionGuard）。運用管理の 4 画面は operation、**マスタメンテ（/masters/*）は全画面 master**
  * （2026-09-28 決定）。サイドメニューの区分の出し分け（navigation.js の requiredPermission）と
  * 必ず揃える。メニューだけ隠しても URL で入れてしまう（付け忘れは router/index.spec.js が検出する）。
+ * 注文の訂正・取消の 2 画面は order（メニューに載らない画面で、区分とは対応しない）。
  */
 const routes = [
   {
@@ -36,6 +37,23 @@ const routes = [
     name: 'order-inquiry',
     component: () => import('@/views/OrderInquiryListView.vue'),
     meta: { title: '注文照会' },
+  },
+  {
+    /*
+     * 注文照会の「訂正」「取消」から入る画面。サイドメニューには載せない。
+     * 発注権限（GET /auth/me の order。発注・取消・訂正）の無い利用者は開けない（画面モックの 403 相当）。
+     * :orderId は数字だけにする（/orders/new などが紛れ込まない）
+     */
+    path: '/orders/:orderId(\\d+)/amend',
+    name: 'order-amend',
+    component: () => import('@/views/OrderAmendView.vue'),
+    meta: { title: '外株注文訂正', requiredPermission: 'order' },
+  },
+  {
+    path: '/orders/:orderId(\\d+)/cancel',
+    name: 'order-cancel',
+    component: () => import('@/views/OrderCancelView.vue'),
+    meta: { title: '注文取消', requiredPermission: 'order' },
   },
   {
     path: '/masters/customers',

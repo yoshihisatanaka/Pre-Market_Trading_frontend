@@ -45,7 +45,7 @@ import { orderInquiryRows } from '../mocks/fixtures/orderInquiry'
 import { dreamOrders, dreamStatusCodes } from '../mocks/fixtures/dreamStatus'
 import { orderCsvSpecResponse } from '../mocks/fixtures/orderCsv'
 import { fetchOrders } from './orders'
-import { fetchOrderInquiry } from './orderInquiry'
+import { amendOrder, cancelOrder, fetchOrderDetail, fetchOrderInquiry } from './orderInquiry'
 import { fetchCodes } from './codes'
 import { fetchCustomers } from './customers'
 import {
@@ -465,6 +465,20 @@ const PROBES = [
         executionStatus: '注文中',
       }),
   },
+  { name: 'fetchOrderDetail', run: () => fetchOrderDetail('35') },
+  {
+    name: 'amendOrder',
+    run: () =>
+      amendOrder({
+        id: '36',
+        quantity: 30,
+        orderType: 'LO',
+        limitPrice: 144,
+        marketScope: '02',
+        reason: 'x',
+      }),
+  },
+  { name: 'cancelOrder', run: () => cancelOrder({ id: '36' }) },
   { name: 'fetchCodes', run: () => fetchCodes() },
   {
     name: 'fetchCustomers',

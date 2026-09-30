@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -9,18 +10,50 @@ import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import OrderInquiryTable from '@/components/orders/OrderInquiryTable.vue'
 import { useListQuery } from '@/composables/useListQuery'
+import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useOrderInquiryStore } from '@/stores/orderInquiry'
 
 /*
- * 注文照会（画面モック `order_inquiry.html`）。**いまは UI だけの段階**で、
- * 一覧は MSW のモックまで通して 4 状態を出し分けるが、訂正・取消・出来状況での絞り込みは
- * 処理をつないでいない（`TODO(処理実装)`）。
+ * 注文照会（画面モック `order_inquiry.html`）。一覧は読むだけで、訂正・取消は行の操作ボタンから
+ * 別画面（/orders/:orderId/amend・/orders/:orderId/cancel）へ移って行う（モックと同じ導線）。
+ * 戻ってくると useListQuery がマウント時に読み直すので、一覧は訂正・取消の結果を映す。
  */
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useOrderInquiryStore()
 const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(store)
 const router = useRouter()
+
+/*
+ * 発注権限（GET /auth/me の order。発注・取消・訂正）での出し分け。画面モックの can_order。
+ *   あり … ヘッダに「新規注文」、行に「訂正」「取消」
+ *   なし … ヘッダに「発注権限なし」、行に「閲覧のみ」
+ * この画面のルートは権限を要求しないので、ガードは /auth/me の読み込みを待たない。
+ * 読み終えるまではどちらとも決まらないので、ヘッダには何も出さない（「発注権限なし」がちらつかない）。
+ */
+const operator = useCurrentOperatorStore()
+operator.ensureLoaded()
+const canOrder = computed(() => operator.can('order'))
+const operatorPending = computed(() => !operator.operator && !operator.error)
+
+/*
+ * 出来状況の選択肢。並びと文言は画面モックのとおり。
+ * 値は URL クエリ（status）にそのまま載り、api 層が処理状況コードへ読み替えて送る
+ * （取消済は 034、注文エラーは 101 だけで絞る。理由は src/api/orderInquiry.js の EXECUTION_STATUS_CODES）。
+ */
+const executionStatusOptions = [
+  { value: '未出来', label: '未出来' },
+  { value: '注文中', label: '注文中' },
+  { value: '一部出来', label: '一部出来' },
+  { value: '全部出来', label: '全部出来' },
+  { value: '取消済', label: '取消済（出来有・無）' },
+  { value: '注文エラー', label: '注文エラー' },
+]
+
+/** 選択肢に無い値（手で書き換えられた URL クエリ）を空に落とす */
+function oneOf(options) {
+  return (value) => (options.some((option) => option.value === value) ? value : '')
+}
 
 /*
  * 検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
@@ -32,48 +65,29 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
     { key: 'branchCode', query: 'branch_code' },
     { key: 'accountNumber', query: 'account_number' },
     { key: 'symbol', query: 'symbol' },
-    { key: 'executionStatus', query: 'status' },
+    { key: 'executionStatus', query: 'status', parse: oneOf(executionStatusOptions) },
   ],
   load: (params) => store.load(params),
 })
 
 /*
- * 出来状況の選択肢。並びと文言は画面モックのとおり。
- * TODO(処理実装): 値を API の status（処理状況コード）へ対応づける。いまは URL に残るだけで、
- *   api 層が送らないので絞り込みは効かない（取消済は 032 / 034 の 2 コードにまたがる）
- */
-const executionStatusOptions = [
-  { value: '未出来', label: '未出来' },
-  { value: '注文中', label: '注文中' },
-  { value: '一部出来', label: '一部出来' },
-  { value: '全部出来', label: '全部出来' },
-  { value: '取消済', label: '取消済（出来有・無）' },
-  { value: '注文エラー', label: '注文エラー' },
-]
-
-/*
  * 新規注文の画面はまだ無い（/orders/new は NotFoundView に落ちる）。
  * モックの導線どおりに遷移だけ置いておく。
- * TODO(処理実装): 発注権限の無いロールには出さず「発注権限なし」と表示する（モックの can_order）
  */
 function goToNewOrder() {
   router.push('/orders/new')
 }
 
 /*
- * 訂正・取消は処理が未実装（UI だけ先に置く）。押しても何も起きない。
- * モックはどちらも別画面（/orders/{id}/amend・/orders/{id}/cancel）へ遷移する。
- *
- * TODO(処理実装): 訂正は POST /orders/{order_id}/amend（数量・指値単価・指成区分・発注範囲の 4 項目）、
- *   取消は POST /orders/{order_id}/cancel。どちらも group.latest.id に対して行い、
- *   済んだら store.reload() で一覧を引き直す
+ * 訂正・取消は、その元注文の最新の版（group.latest）に対して行う。
+ * 対象注文は移った先の画面が読み直すので、ここからは ID だけを渡す。
  */
-function amendOrder() {
-  // TODO(処理実装): 訂正の画面（またはダイアログ）を開く
+function amendOrder(group) {
+  router.push({ name: 'order-amend', params: { orderId: group.latest.id } })
 }
 
-function cancelOrder() {
-  // TODO(処理実装): 取消の確認を出して取消 API を呼ぶ
+function cancelOrder(group) {
+  router.push({ name: 'order-cancel', params: { orderId: group.latest.id } })
 }
 </script>
 
@@ -81,9 +95,19 @@ function cancelOrder() {
   <section class="order-inquiry">
     <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
     <Teleport defer to="#topbar-actions">
-      <BaseButton size="sm" data-testid="order-inquiry-new-order" @click="goToNewOrder">
-        新規注文
-      </BaseButton>
+      <template v-if="!operatorPending">
+        <BaseButton
+          v-if="canOrder"
+          size="sm"
+          data-testid="order-inquiry-new-order"
+          @click="goToNewOrder"
+        >
+          新規注文
+        </BaseButton>
+        <span v-else class="order-inquiry__no-permission" data-testid="order-inquiry-no-permission">
+          発注権限なし
+        </span>
+      </template>
     </Teleport>
 
     <!-- 画面の説明（モックのヘッダの副題）。4 状態や検索結果に関わらず常時出す -->
@@ -149,6 +173,7 @@ function cancelOrder() {
       <OrderInquiryTable
         data-testid="order-inquiry-table"
         :groups="items"
+        :can-order="canOrder"
         @amend="amendOrder"
         @cancel="cancelOrder"
       />
@@ -168,5 +193,11 @@ function cancelOrder() {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
+}
+
+/* ヘッダの「発注権限なし」。ボタンの位置に置くが、押せるものに見せない（モックの text-xs text-gray） */
+.order-inquiry__no-permission {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 </style>

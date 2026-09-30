@@ -1,16 +1,16 @@
-import { apiClient } from './client'
+import { ApiError, apiClient } from './client'
 
 /*
- * 注文照会（実 API `GET /orders`。`OrderListResponse` / `OrderItemResponse`）。
+ * 注文照会と、そこから入る訂正・取消（実 API `GET /orders` / `GET /orders/{order_id}` /
+ * `POST /orders/{order_id}/amend` / `POST /orders/{order_id}/cancel`）。
  *
  * 同じパスを縦串の参考実装（src/api/orders.js の fetchOrders・OrderListView）も叩いているが、
  * あちらは実仕様が来る前の仮の形（`items`）を読む。参考実装を退役させるときに向こうを消せば済むよう、
  * 実仕様の形を読むこの画面の層は別ファイルに分けてある。
  *
  * 成熟度 B（パスとスキーマはあるが、下に挙げる値の意味が仕様に書かれていない）。
- * **画面はいま UI だけの段階**で、検索・訂正・取消の処理は後日つなぐ（`TODO(処理実装)`）。
  *
- * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり:
+ * 一覧（GET /orders）について、バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり:
  *   - プロパティ名が日本語（ID / 部店 / 口座番号 / 銘柄コード / 表示状況名 …）
  *   - 一覧の配列名が `orders`、件数が `total`
  *   - 口座番号は integer で、クエリ名は `account_no`。アプリ内は文字列
@@ -19,16 +19,20 @@ import { apiClient } from './client'
  *   - 取消・訂正の可否は 処理状況 のコードで決まる（下の CANCELABLE / AMENDABLE）
  *   - 訂正と自動分割（スライス）は別々の行で返る。画面は元注文ごとの 1 行に畳んで出すので、
  *     この層で `元注文ID` を手がかりにまとめる（groupOrders）
+ *   - 出来状況の絞り込みは、画面の選択肢（未出来 / 注文中 …）を `status`（処理状況コード）へ
+ *     読み替えて送る（EXECUTION_STATUS_CODES）
  *
  * 仕様に書かれておらず、**推定で置いているもの**（処理をつなぐ前にバックエンドへ確かめる）:
  *   - `元注文ID` は訂正・分割の起点（最初の注文）を指す。訂正を重ねても孫ではなく起点を指す
  *   - `注文種別` が 'SLICE_CHILD' の行はスライス子注文（`集計対象` の説明にある値）。それ以外で
  *     `元注文ID` を持つ行は訂正注文とみなす（PARTIAL_FILL / VWAP_AGGREGATED の扱いは未確認）
  *   - ページングは行単位なので、1 つの訂正の連なりがページの境目で割れることがある
+ *   - 絞り込み（`status` も含む）も行単位なので、たとえば「取消済」で絞ると、訂正で取り消された
+ *     原注文の版だけが当たって行になることがある（最新の版の状況で絞る画面モックとは違う）
  *
  * 画面モックにあってこの API に無い項目（送信日時・自動分割の適用上限 / 適用理由 /
  * 5 営業日平均出来高 / 参照価格）はアプリ内モデルに持たせない（無いものを null として運ばない）。
- * 市場区分は `発注範囲` のコード（'01'〜'06'）しか来ず、名前との対応が仕様に無いのでコードのまま運ぶ。
+ * 市場区分は `発注範囲` のコード（'01'〜'06'）で運ぶ。名前は画面が src/utils/orderTypes.js で引く。
  */
 
 /**
@@ -62,6 +66,41 @@ import { apiClient } from './client'
  *   history は latest より前の版（古い順。先頭が原注文）、slices はスライス子注文（ID 順）。
  */
 
+/**
+ * 訂正・取消の画面が読む 1 注文（`GET /orders/{order_id}`）のアプリ内モデル。
+ *
+ * @typedef {{
+ *   id: string, branchCode: string, accountNumber: string, symbol: string,
+ *   side: 'buy'|'sell'|'', quantity: number|null, orderType: string, limitPrice: number|null,
+ *   marketScope: string, vwap: boolean, status: string, filledQuantity: number,
+ *   orderedAt: string, amendable: boolean, cancelable: boolean,
+ * }} OrderDetail
+ *   symbol は Ticker（無ければ銘柄コード）。status は処理状況コード（名前は画面が
+ *   src/utils/orderTypes.js で引く）。filledQuantity は約定の合計で、約定が無ければ 0。
+ *
+ * 一覧の OrderInquiryOrder より項目が少ないのは、実 API の `order` が d_注文 の行そのもの
+ * （バックエンドの get_order_detail は `SELECT * FROM d_注文`）で、一覧が付ける派生項目
+ * （顧客名 / 表示状況名 / 出来数量 / 有効残数量 / 約定代金）を持たないため。openapi の `order` は
+ * 型が付いていない（`additionalProperties: true`）ので、キーは実装から読んだ（docs/api/requests.md #3）。
+ */
+
+/**
+ * 訂正の結果。
+ *
+ * @typedef {{
+ *   mode: 'inPlace'|'cancelReplace'|'', originalOrderId: string, amendmentOrderId: string,
+ *   message: string, warnings: string[],
+ * }} AmendResult
+ *   inPlace は未発注の注文をその場で書き換えた、cancelReplace は原注文を取り消して訂正注文
+ *   （amendmentOrderId）を作った。message はサーバが決める文言で、画面はそのまま出す。
+ */
+
+/**
+ * 取消の結果。
+ *
+ * @typedef {{ orderId: string, message: string, warnings: string[] }} CancelResult
+ */
+
 /** 売買区分（SideEnum）→ アプリ内の向き */
 const SIDES = { 1: 'sell', 3: 'buy' }
 
@@ -71,11 +110,31 @@ const SLICE_CHILD = 'SLICE_CHILD'
 /*
  * 取消・訂正を受け付ける 処理状況。`POST /orders/{order_id}/cancel` と
  * `POST /orders/{order_id}/amend` の説明にある一覧の写し。
- *   取消 … 000 未発注 / 003 注文中 / 010 一部出来 / 131・133 取消失敗 / 101・103 発注失敗
+ *   取消 … 000 未発注 / 003 注文中 / 010 一部出来 / 131・133 取消失敗 / 101・103 発注失敗 /
+ *          141 訂正中断（amend の説明「取り下げは POST /orders/{訂正注文ID}/cancel」による）
  *   訂正 … 000 / 003 / 010（訂正待ち 040 の訂正注文はここに入らないので不可）
  */
-const CANCELABLE = new Set(['000', '003', '010', '131', '133', '101', '103'])
+const CANCELABLE = new Set(['000', '003', '010', '131', '133', '101', '103', '141'])
 const AMENDABLE = new Set(['000', '003', '010'])
+
+/*
+ * 出来状況（画面の選択肢）→ `status`（処理状況コード）。
+ * `status` はコードを 1 つしか受けない（2026-09-25 実測で `?status=101,003` は 400）ため、
+ * 2 つのコードにまたがる区分は片方だけで絞る。拾えないほうは docs/api/requests.md に依頼してある。
+ *   取消済   … 034（即時取消・発注失敗の取消）。032（IB取消済）は拾えない
+ *   注文エラー … 101（Dream発注失敗）。103（IB発注失敗）は拾えない
+ */
+const EXECUTION_STATUS_CODES = {
+  未出来: '000',
+  注文中: '003',
+  一部出来: '010',
+  全部出来: '011',
+  取消済: '034',
+  注文エラー: '101',
+}
+
+/** 訂正の結果の mode → アプリ内の名前 */
+const AMEND_MODES = { IN_PLACE: 'inPlace', CANCEL_REPLACE: 'cancelReplace' }
 
 /*
  * 出来状況の色分け。文言（表示状況名）はサーバが付けるが、色は処理状況のコードで決める
@@ -104,8 +163,8 @@ const STATUS_TONES = {
  *   branchCode?: string, accountNumber?: string, symbol?: string, executionStatus?: string,
  * }} [params]
  *   空文字は「条件なし」としてリクエストに載せない。
- *   executionStatus（出来状況）はまだ送らない。画面の選択肢（未出来 / 注文中 …）と
- *   `status`（処理状況コード）の対応が決まっていないため
+ *   executionStatus（出来状況）は画面の選択肢の値（未出来 / 注文中 …）で受け、`status` の
+ *   処理状況コードに読み替えて送る。知らない値は送らない（EXECUTION_STATUS_CODES）
  * @returns {Promise<{ items: OrderInquiryGroup[], total: number }>}
  */
 export async function fetchOrderInquiry({
@@ -114,6 +173,7 @@ export async function fetchOrderInquiry({
   branchCode = '',
   accountNumber = '',
   symbol = '',
+  executionStatus = '',
 } = {}) {
   const { data } = await apiClient.get('/orders', {
     // クエリ名を知ってよいのはこの層だけ。値が undefined のパラメータは axios が送らない
@@ -123,13 +183,93 @@ export async function fetchOrderInquiry({
       branch_code: branchCode || undefined,
       account_no: toAccountNo(accountNumber),
       symbol: symbol || undefined,
-      // TODO(処理実装): 出来状況 → status（処理状況コード）の対応を決めて送る
+      // hasOwn で引くのは、'toString' のような値で Object の組み込みを拾わないため
+      status: Object.hasOwn(EXECUTION_STATUS_CODES, executionStatus)
+        ? EXECUTION_STATUS_CODES[executionStatus]
+        : undefined,
     },
   })
 
   return {
     items: groupOrders(data?.orders ?? []),
     total: data?.total ?? 0,
+  }
+}
+
+/**
+ * 1 注文を読む（訂正・取消の画面の対象注文）。
+ *
+ * 一覧から行を受け渡さず、画面を開くたびにここで読み直す。URL を直接開いても表示でき、
+ * 一覧を開いてから時間が経って状況が変わっていても、いまの状況で訂正・取消の可否を出せる。
+ *
+ * @param {string} id 注文 ID
+ * @returns {Promise<OrderDetail>} 注文が無ければ 404 の ApiError
+ */
+export async function fetchOrderDetail(id) {
+  const { data } = await apiClient.get(`/orders/${encodeURIComponent(id)}`)
+  return toOrderDetail(data?.order, data?.executions)
+}
+
+/**
+ * 注文を訂正する（`POST /orders/{order_id}/amend`）。
+ *
+ * 更新は部分更新（サーバは本文に含めた項目だけを変える）。**渡した項目だけを本文に載せる**ので、
+ * 呼び出し側は変えた項目だけを渡す（変えていない項目まで送ると、サーバは変更として扱う）。
+ * 成行へ変えるときは limitPrice を渡さない（「成行(MO)へ変更する場合は不要」）。
+ *
+ * @param {{
+ *   id: string, quantity?: number, orderType?: 'LO'|'MO', limitPrice?: number,
+ *   marketScope?: string, reason?: string,
+ * }} params quantity は出来分を含む総数量。reason は空なら送らない
+ * @returns {Promise<AmendResult>} 受け付けられなければ ApiError（400 は理由付き）
+ */
+export async function amendOrder({ id, quantity, orderType, limitPrice, marketScope, reason }) {
+  // undefined の項目は JSON に出ない（＝送らない）
+  const { data } = await apiClient.post(`/orders/${encodeURIComponent(id)}/amend`, {
+    数量: quantity,
+    指成区分: orderType,
+    指値単価: limitPrice,
+    発注範囲: marketScope,
+    理由: reason || undefined,
+  })
+
+  if (data?.success !== true) {
+    throw new ApiError(data?.message || '注文を訂正できませんでした。')
+  }
+
+  return {
+    mode: AMEND_MODES[data.mode] ?? '',
+    originalOrderId: toIdString(data.original_order_id),
+    amendmentOrderId: toIdString(data.amendment_order_id),
+    message: data.message ?? '',
+    warnings: toStrings(data.warnings),
+  }
+}
+
+/**
+ * 注文を取り消す（`POST /orders/{order_id}/cancel`）。
+ *
+ * 本文（OrderCancelRequest）は任意で、何も載せない。
+ *   理由   … 取消に理由は持たせない（2026-09-29 決定。API からも削除される予定）
+ *   取消者 … 送らない（未指定時の既定は "user"。操作者から解決されるかは docs/api/requests.md で確認中）
+ *
+ * @param {{ id: string }} params
+ * @returns {Promise<CancelResult>} 受け付けられなければ ApiError（400 は理由付き）
+ */
+export async function cancelOrder({ id }) {
+  const { data } = await apiClient.post(`/orders/${encodeURIComponent(id)}/cancel`, {})
+
+  if (data?.success !== true) {
+    const reasons = toStrings(data?.errors)
+    throw new ApiError(
+      reasons.join(' / ') || data?.message || '注文を取り消せませんでした。',
+    )
+  }
+
+  return {
+    orderId: toIdString(data.order_id),
+    message: data.message ?? '',
+    warnings: toStrings(data.warnings),
   }
 }
 
@@ -165,6 +305,41 @@ function toOrder(raw) {
     orderedAt: toOrderedAt(raw?.受注日, raw?.受注時刻),
     cancelable: CANCELABLE.has(status),
     amendable: AMENDABLE.has(status),
+  }
+}
+
+/**
+ * 注文詳細の `order`（d_注文 の行）と `executions`（d_約定 の行）→ アプリ内モデル。
+ *
+ * d_注文 の列名は一覧の OrderItemResponse と同じ日本語名なので、読み方も toOrder に揃える。
+ * 違うのは次の 2 点。
+ *   - 出来数量の列が無いので、約定の `約定数量` を合計する
+ *   - `指値単価` は decimal(15,4) で、型の無い `order` を通ると数値の文字列（'410.0000'）で
+ *     来うる。数値と数値の文字列の両方を受ける
+ */
+function toOrderDetail(raw, executions) {
+  const status = raw?.処理状況 ?? ''
+  const filledQuantity = (Array.isArray(executions) ? executions : []).reduce(
+    (sum, execution) => sum + (toDecimalOrNull(execution?.約定数量) ?? 0),
+    0,
+  )
+
+  return {
+    id: toIdString(raw?.ID),
+    branchCode: raw?.部店 ?? '',
+    accountNumber: raw?.口座番号 == null ? '' : String(raw.口座番号),
+    symbol: raw?.Ticker || raw?.銘柄コード || '',
+    side: SIDES[raw?.売買区分] ?? '',
+    quantity: toDecimalOrNull(raw?.数量),
+    orderType: raw?.指成区分 ?? '',
+    limitPrice: toDecimalOrNull(raw?.指値単価),
+    marketScope: raw?.発注範囲 ?? '',
+    vwap: Number(raw?.VWAP区分) === 1,
+    status,
+    filledQuantity,
+    orderedAt: toOrderedAt(raw?.受注日, raw?.受注時刻),
+    amendable: AMENDABLE.has(status),
+    cancelable: CANCELABLE.has(status),
   }
 }
 
@@ -231,4 +406,20 @@ function toOrderedAt(date, time) {
 
 function toNumberOrNull(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/** toNumberOrNull に加えて、数値の文字列（decimal の直列化 '410.0000'）も数値にする */
+function toDecimalOrNull(value) {
+  if (typeof value === 'string' && value.trim() !== '') return toNumberOrNull(Number(value))
+  return toNumberOrNull(value)
+}
+
+/** integer の ID → 文字列。null / undefined は空文字（画面で「#」だけを出さない） */
+function toIdString(value) {
+  return value == null ? '' : String(value)
+}
+
+/** 文字列の配列だけを通す（warnings / errors。既定は [] だが nullable に備える） */
+function toStrings(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item) : []
 }

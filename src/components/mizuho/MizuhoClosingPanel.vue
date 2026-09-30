@@ -109,10 +109,9 @@ const cardClass = computed(() => ({
         </div>
 
         <div class="mizuho-closing__actions">
-          <!-- 押せるのは締め済のときだけ（モックどおり）。押せるときだけモックの色を塗る -->
+          <!-- 押せるのは締め済のときだけ（モックどおり） -->
           <BaseButton
-            :variant="closed ? 'primary' : 'secondary'"
-            :class="['mizuho-closing__action', { 'is-order-file': closed }]"
+            class="mizuho-closing__action is-mizuho"
             data-testid="mizuho-closing-order-file"
             :disabled="!closed"
             @click="emit('create-order-file')"
@@ -131,7 +130,7 @@ const cardClass = computed(() => ({
           </BaseButton>
           <BaseButton
             v-else
-            class="mizuho-closing__action is-close"
+            class="mizuho-closing__action is-mizuho"
             data-testid="mizuho-closing-close"
             @click="emit('close')"
           >
@@ -220,8 +219,9 @@ const cardClass = computed(() => ({
 
 /*
  * モックの大きな操作ボタン（幅 184px・高さ 44px・太字）。
- * 「みずほ注文締め」と押せるときの「注文ファイル作成」はモックの色で塗る（BaseButton の primary を上書き）。
- * 締め解除と押せない注文ファイル作成の色は BaseButton の variant に任せる
+ * 「みずほ注文締め」と「注文ファイル作成」はモックの色で塗る（BaseButton の primary を上書き）。
+ * 押せないときも BaseButton の半透明ではなく、モックの淡色面と灰色の文字で出す。
+ * 締め解除の色は BaseButton の variant に任せる
  */
 .mizuho-closing__action {
   min-width: 184px;
@@ -229,20 +229,19 @@ const cardClass = computed(() => ({
   font-weight: 700;
 }
 
-.mizuho-closing__action.is-close {
-  background-color: var(--color-mizuho-close);
+.mizuho-closing__action.is-mizuho {
+  background-color: var(--color-mizuho-action);
+  color: var(--color-mizuho-action-text);
 }
 
-.mizuho-closing__action.is-close:hover:not(:disabled) {
-  background-color: var(--color-mizuho-close-hover);
+.mizuho-closing__action.is-mizuho:hover:not(:disabled) {
+  background-color: var(--color-mizuho-action-hover);
 }
 
-.mizuho-closing__action.is-order-file {
-  background-color: var(--color-mizuho-order-file);
-}
-
-.mizuho-closing__action.is-order-file:hover:not(:disabled) {
-  background-color: var(--color-mizuho-order-file-hover);
+.mizuho-closing__action.is-mizuho:disabled {
+  background-color: var(--color-mizuho-action-disabled);
+  color: var(--color-mizuho-action-disabled-text);
+  opacity: 1;
 }
 
 .mizuho-closing__history {

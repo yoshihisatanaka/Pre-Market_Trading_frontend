@@ -34,6 +34,8 @@ const EXPORT_BY_SCHEMA = {
   AccountTypeEnum: 'ACCOUNT_TYPE',
   CorporateTypeEnum: 'CORPORATE_TYPE',
   HolidayTypeEnum: 'HOLIDAY_TYPE',
+  MarketSessionCode: 'MARKET_SESSION_CODE',
+  MarketState: 'MARKET_STATE',
   NisaContractEnum: 'NISA_CONTRACT',
   SpecificAccountTypeEnum: 'SPECIFIC_ACCOUNT_TYPE',
   SpecificDepositEnum: 'SPECIFIC_DEPOSIT',
@@ -85,8 +87,8 @@ describe('apiEnums', () => {
     const named = Object.values(EXPORT_BY_SCHEMA).filter(
       (exportName) => !Array.isArray(apiEnums[exportName]),
     )
-    // 意味が spec に書かれている 7 種。残りは値だけの配列で持つ
-    expect(named).toHaveLength(7)
+    // 意味が spec に書かれている 9 種。残りは値だけの配列で持つ
+    expect(named).toHaveLength(9)
 
     for (const exportName of named) {
       const values = Object.values(apiEnums[exportName])

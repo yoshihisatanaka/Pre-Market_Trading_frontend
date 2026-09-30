@@ -5,10 +5,10 @@ import { activityLogTargets } from './activityLogTargets'
  * ここに書くのは「バックエンドが返す生の形」（openapi.json の ActivityLogItem）であり、
  * アプリ内モデルではない。
  *
- * **各行の末尾 5 項目（操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果）は仕様に無い。**
- * 画面モックが出していた項目で、バックエンドに追加を依頼している（docs/api/requests.md #1）。
- * この 5 項目は**契約提案**としてここに書いてあり、src/api/activityLogs.js は読まない
- * （画面にも出さない）。契約テスト（src/api/contract.spec.js）は KNOWN_GAPS でこの 5 項目だけを
+ * 各行の末尾 5 項目（操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果）は画面モックが出していた項目で、
+ * **契約提案**としてここに書いた（docs/api/requests.md #1）。うち 4 項目は 2026-09-30 の取り込みで
+ * 仕様に入り、**仕様に無いのは 結果 だけ**になった。src/api/activityLogs.js はまだどれも読まない
+ * （画面にも出さない）。契約テスト（src/api/contract.spec.js）は KNOWN_GAPS で 結果 だけを
  * 許しているので、仕様に入った日に CON-07 が落ちて気づける。
  *
  * ページャーの動作確認には 1 ページ（50 件）を超えるデータが要るので、
@@ -264,11 +264,12 @@ function toActivityLogItem(row, index) {
     変更後データ: row.after,
     差分: diff,
     変更項目: Object.keys(diff),
-    // ---- ここから下は仕様に無い（契約提案。docs/api/requests.md #1） ----
+    // ---- ここから下は契約提案（docs/api/requests.md #1）。2026-09-30 に 結果 以外は仕様に入った ----
     操作者名: operator.name,
     実行者区分: operator.role,
     対象機能: typeName ?? row.type,
     操作内容: `${typeName ?? row.type}を${OPERATION_VERBS[row.operation]}`,
+    // 結果 だけはまだ仕様に無い
     結果: '成功',
   }
 }

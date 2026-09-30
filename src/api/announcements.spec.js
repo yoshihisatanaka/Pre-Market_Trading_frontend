@@ -77,8 +77,8 @@ const toHistory = (raw) => ({
   operation: raw.操作区分,
   operationLabel: raw.操作区分名,
   operator: raw.操作者,
-  // フィクスチャは実 API と同じく JSON 文字列で持つ
-  message: JSON.parse(raw.変更後データ)?.本文 ?? '',
+  // フィクスチャは仕様どおり object で持つ
+  message: raw.変更後データ?.本文 ?? '',
   operatedAt: raw.操作日時,
 })
 

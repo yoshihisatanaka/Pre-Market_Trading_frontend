@@ -11,9 +11,10 @@ import { apiClient } from './client'
  * 登録・更新・削除・一括処理にあたる。変更前後のレコード JSON と項目別の差分を持つ。
  *
  * 画面モック（https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）にある
- * 操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果 は仕様に無いので、ここでは扱わない。
- * 項目の追加はバックエンドに依頼中で（docs/api/requests.md #1）、提案する形は
- * src/mocks/fixtures/activityLogs.js に書いてある。仕様に入ったらここの変換に足す。
+ * 操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果 は、ここではまだ扱わない。
+ * 結果 以外の 4 項目は 2026-09-30 の取り込みで ActivityLogItem に入ったので、画面に出すときは
+ * ここの変換に足す。結果 はバックエンドに依頼中（docs/api/requests.md #1）で、提案する形は
+ * src/mocks/fixtures/activityLogs.js に書いてある。
  */
 
 /**

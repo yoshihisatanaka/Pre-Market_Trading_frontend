@@ -135,10 +135,10 @@ export const announcementHandlers = [
         操作区分: operation,
         操作区分名: OPERATION_LABELS[operation],
         操作者: operator,
-        // 実 API と同じく JSON 文字列で積む（フィクスチャと同じ形）
-        変更前データ: JSON.stringify(before),
-        変更後データ: JSON.stringify(after),
-        差分データ: JSON.stringify(diffOf(before, after)),
+        // 仕様どおり object で積む（フィクスチャと同じ形）
+        変更前データ: before,
+        変更後データ: after,
+        差分データ: diffOf(before, after),
         操作日時: operatedAt,
       },
       ...historyRows,

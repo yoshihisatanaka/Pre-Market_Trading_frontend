@@ -58,7 +58,7 @@ import { apiClient } from './client'
  *   rowNumber は CSV の行番号（ヘッダーが 1 行目なので、データは 2 から）。
  *   customerName / stockName はサーバが口座・銘柄から引いた名前（引けなければ空）。
  *   stockName は details（検証の詳細）の中にあり、値の変換に失敗した行は検証が走らないので空になる。
- *   **customerName は仕様に無い**（行の `customer_name` をバックエンドに追加予定。docs/api/requests.md #27）。
+ *   customerName は行の `customer_name`（2026-09-30 の取り込みで仕様に入った。docs/api/requests.md #27）。
  */
 
 /**

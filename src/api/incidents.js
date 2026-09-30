@@ -128,8 +128,8 @@ function toSuspensionHistory(raw) {
     operationName: raw['操作区分名'] ?? '',
     operator: raw['操作者'] ?? '',
     /*
-     * 停止理由は履歴の独立した項目に無く、変更後データ（型が any）の中にしかない。
-     * 形はバックエンドに問い合わせ中なので、読めなければ null に落とす
+     * 停止理由は履歴の独立した項目に無く、変更後データ（object。中身のキーは description にだけある）
+     * の中にしかない。読めなければ null に落とす
      */
     reason: raw['変更後データ']?.['停止理由'] ?? null,
     operatedAt: raw['操作日時'] ?? '',

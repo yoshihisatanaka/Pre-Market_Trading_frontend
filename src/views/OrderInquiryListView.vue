@@ -52,8 +52,8 @@ const executionStatusOptions = [
 ]
 
 /*
- * 新規注文の画面はまだ無い（/orders/new は NotFoundView に落ちる）。
- * モックの導線どおりに遷移だけ置いておく。
+ * 新規注文（/orders/new。views/OrderEntryView.vue）へ移る。
+ * 発注権限の無いロールでも移れる（移った先の画面が「発注権限なし」を出して送信を止める）。
  * TODO(処理実装): 発注権限の無いロールには出さず「発注権限なし」と表示する（モックの can_order）
  */
 function goToNewOrder() {

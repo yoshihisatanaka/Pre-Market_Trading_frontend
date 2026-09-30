@@ -35,6 +35,8 @@ export const symbolHandlers = [
    * （実 API の `symbol` が Ticker にも当たるかは未確認。当たらないなら検索欄を 2 つに分ける）。
    * **銘柄名では絞らない**（実 API は `name_ja` / `name_en` を別のパラメータに分けている）。
    * 区分 3 つは完全一致。
+   * `ticker`（新規注文のティッカー照会）は Ticker だけに当てる。一致の仕方は仕様に無いので
+   * `symbol` と同じ部分一致にしておく（完全一致への絞り込みは呼び出し側がする）。
    *
    * CSV 入出力と更新履歴（/masters/symbols/export-csv ほか）は画面が使わないのでモックしない。
    */
@@ -42,6 +44,7 @@ export const symbolHandlers = [
     const params = new URL(request.url).searchParams
     // DB 照合は大文字小文字を区別しないので、モックも大文字に寄せてから比べる
     const symbolCode = (params.get('symbol') ?? '').trim().toUpperCase()
+    const ticker = (params.get('ticker') ?? '').trim().toUpperCase()
     const regulation = params.get('restriction') ?? ''
     const orderRoute = params.get('route') ?? ''
     const vwapTarget = params.get('vwap_target') ?? ''
@@ -56,6 +59,7 @@ export const symbolHandlers = [
           (!symbolCode ||
             symbol.銘柄コード.toUpperCase().includes(symbolCode) ||
             symbol.Ticker.toUpperCase().includes(symbolCode)) &&
+          (!ticker || symbol.Ticker.toUpperCase().includes(ticker)) &&
           (!regulation || symbol.規制情報 === regulation) &&
           (!orderRoute || symbol.注文ルート === orderRoute) &&
           (!vwapTarget || symbol.VWAP対象区分 === vwapTarget),

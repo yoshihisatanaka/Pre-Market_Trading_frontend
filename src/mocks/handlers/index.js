@@ -22,6 +22,7 @@ import { mizuhoHandlers, resetMizuhoOrderState } from './mizuho'
 import { executionHandlers } from './executions'
 import { dreamStatusHandlers, resetDreamStatusState } from './dreamStatus'
 import { orderCsvHandlers } from './orderCsv'
+import { orderEntryHandlers, resetOrderEntryState } from './orderEntry'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -88,6 +89,7 @@ export function resetMockState() {
   resetClosingState()
   resetMizuhoOrderState()
   resetDreamStatusState()
+  resetOrderEntryState()
 }
 
 export const handlers = [
@@ -124,4 +126,5 @@ export const handlers = [
   ...executionHandlers,
   ...dreamStatusHandlers,
   ...orderCsvHandlers,
+  ...orderEntryHandlers,
 ]

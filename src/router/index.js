@@ -32,6 +32,13 @@ const routes = [
     meta: { title: 'CSV一括注文' },
   },
   {
+    // 入力 → 確認 → 完了は 1 つのルートの中で段階を切り替える（再読み込みで入力へ戻る）
+    path: '/orders/new',
+    name: 'order-new',
+    component: () => import('@/views/OrderEntryView.vue'),
+    meta: { title: '新規注文' },
+  },
+  {
     path: '/orders/inquiry',
     name: 'order-inquiry',
     component: () => import('@/views/OrderInquiryListView.vue'),

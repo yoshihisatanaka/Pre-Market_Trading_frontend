@@ -19,3 +19,8 @@
 | MZE-08 | 応答の `Ticker` が null | `fetchMizuhoExecutions()` | `symbol` が 銘柄コード になる | 実装済 |
 | MZE-09 | 応答の 約定単価 が null | `fetchMizuhoExecutions()` | `executedPrice` が `null` のまま（0 に潰さない） | 実装済 |
 | MZE-10 | 応答の `summary` が欠けている | `fetchMizuhoExecutions()` | `summary` が 件数 0（`executionCount` / `buyCount` / `sellCount` がすべて 0）になり、落ちない | 実装済 |
+| MZE-11 | 既定モック | `exportMizuhoExecutionsCsv({ branchCode, symbol, side: '1', fillStatus: 'filled', dateFrom, dateTo })` | `GET /executions/export-csv` に `route=0`・`branch_code`・`symbol`・`side=1`・`status=011`・`start_date`・`end_date` が載り、`limit` / `offset` は載らない | 実装済 |
+| MZE-12 | 既定モック | `exportMizuhoExecutionsCsv()`（条件なし） | クエリは `route=0` だけになる | 実装済 |
+| MZE-13 | 既定モック | `exportMizuhoExecutionsCsv()` | `blob` が Blob で、見出し 1 行 + みずほの約定の全件が入る。`filename` は応答の Content-Disposition の名前になる | 実装済 |
+| MZE-14 | `export-csv` の応答に Content-Disposition が無い | `exportMizuhoExecutionsCsv()` | `filename` が `EXECUTIONS_CSV_FILENAME` になる | 実装済 |
+| MZE-15 | `export-csv` が 500 | `exportMizuhoExecutionsCsv()` | 応答の `detail` を `message` に持つ `ApiError` で reject される | 実装済 |

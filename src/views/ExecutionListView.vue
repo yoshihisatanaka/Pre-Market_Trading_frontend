@@ -7,6 +7,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import DownloadIcon from '@/components/ui/DownloadIcon.vue'
 import FormField from '@/components/ui/FormField.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
@@ -230,6 +231,7 @@ async function exportCsv() {
         :disabled="!canExport"
         @click="exportCsv"
       >
+        <DownloadIcon />
         {{ exporting ? '出力中…' : 'CSV出力' }}
       </BaseButton>
     </Teleport>

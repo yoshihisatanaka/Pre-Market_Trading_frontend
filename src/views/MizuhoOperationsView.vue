@@ -1,8 +1,10 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import DownloadIcon from '@/components/ui/DownloadIcon.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import FormField from '@/components/ui/FormField.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
@@ -21,14 +23,15 @@ import { FILL_STATUS_OPTIONS } from '@/utils/fillStatusTypes'
  * みずほ注文締（公開モック /executions/mizuho-operations）。
  *   - 締めカード … 締め状態（受付中 / 締め済）を出し、締め・締め解除・注文ファイル作成を
  *                  確認ダイアログ越しに行う。結果は画面上部の通知に出す
- *   - 約定一覧   … 預託先＝みずほの約定を検索する
+ *   - 約定一覧   … 預託先＝みずほの約定を検索する。カードのヘッダの「CSV出力」で、
+ *                  いま一覧に出ている検索条件の約定を GET /executions/export-csv から落とす
  * 締め状態と約定一覧は取得が別で、4 状態もカードごとに出し分ける。
- * 公開モックのヘッダ「CSV出力」は置かない（約定照会の一覧に同じ出力があるため）。
+ * 公開モックは画面ヘッダにも同じ「CSV出力」を持つが、一覧カードの 1 つに寄せた（同じ操作が 2 つ並ぶため）。
  */
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const executionsStore = useMizuhoExecutionsStore()
-const { items, total, limit, offset, loading, error, isEmpty, summary } =
+const { items, total, limit, offset, loading, error, isEmpty, summary, exporting, exportError } =
   storeToRefs(executionsStore)
 
 const closingStore = useMizuhoClosingStore()
@@ -173,8 +176,25 @@ function sumCounts(counts) {
   return counts.includes(null) ? null : counts.reduce((sum, count) => sum + count, 0)
 }
 
+/*
+ * CSV 出力。条件はいま一覧に出ているもの（ストアが最後に読んだ条件で、検索欄に入力しただけの値は使わない）。
+ * 取得中・エラー・0 件のときは押せない（一覧と食い違う条件で出る・出すものが無い）。
+ * 列と並びはバックエンドが決める（条件に合う全件。上限 10,000 件・約定日時の昇順）。
+ */
+const canExport = computed(
+  () => !loading.value && !error.value && !isEmpty.value && !exporting.value,
+)
+
+async function exportCsv() {
+  const file = await executionsStore.exportCsv()
+  // 失敗の理由は exportError で出す
+  if (file) downloadBlob(file.filename, file.blob)
+}
+
 // 初回読み込み。onMounted に置くと最初の描画で一瞬「取得できませんでした」が出る
 closingStore.load()
+// ストアは画面を離れても残る。戻ってきたときに前回の出力の失敗を出し直さない
+executionsStore.clearExportError()
 </script>
 
 <template>
@@ -261,6 +281,11 @@ closingStore.load()
     <!-- 集計は一覧と同じ取得に載ってくる。取得中・失敗中は前回の値を見せない -->
     <MizuhoExecutionSummary :summary="loading || error ? null : summary" />
 
+    <!-- CSV 出力の失敗。ボタンのある一覧カードの直前に出す（一覧はそのまま残す） -->
+    <BaseAlert v-if="exportError" variant="error" data-testid="mizuho-executions-export-error">
+      {{ exportError.message }}
+    </BaseAlert>
+
     <MasterListCard
       testid-prefix="mizuho-executions"
       title="約定一覧"
@@ -274,6 +299,19 @@ closingStore.load()
       @reload="executionsStore.reload()"
       @update:offset="goToOffset"
     >
+      <template #actions>
+        <BaseButton
+          variant="secondary"
+          size="sm"
+          data-testid="mizuho-executions-export"
+          :disabled="!canExport"
+          @click="exportCsv"
+        >
+          <DownloadIcon />
+          {{ exporting ? '出力中…' : 'CSV出力' }}
+        </BaseButton>
+      </template>
+
       <MizuhoExecutionTable data-testid="mizuho-executions-table" :rows="items" />
     </MasterListCard>
 

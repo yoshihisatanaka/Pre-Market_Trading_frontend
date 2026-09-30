@@ -8,6 +8,9 @@
  * 既定スロットが描かれるのは「データあり」のときだけなので、
  * 呼び出し側は行が 0 件かどうかを気にしなくてよい。
  *
+ * actions スロットはヘッダ右端（件数の右）に出る。一覧に対する操作（CSV 出力など）を置く。
+ * 4 状態に関わらず出るので、押せる条件は呼び出し側が disabled で決める。
+ *
  * 出す data-testid（testidPrefix が 'market-holidays' なら market-holidays-count など）:
  *   {prefix}-count / {prefix}-loading / {prefix}-error / {prefix}-empty / {prefix}-pagination
  *   （{prefix}-pagination は paginated=false のとき出ない）
@@ -83,15 +86,19 @@ const emit = defineEmits(['reload', 'update:offset'])
 <template>
   <BaseCard :title="title" flush>
     <template #header-actions>
-      <!-- 「56 件」を 1 つのテキストとして読ませたいので、数字と単位を改行で分けない。
-           取得中は出さない（確定前の件数を出すと、前回の値が新しい結果に見える） -->
-      <span
-        v-if="!loading"
-        class="master-list-card__count"
-        :data-testid="`${testidPrefix}-count`"
-      >
-        {{ total }} {{ unit }}
-      </span>
+      <!-- 件数と操作を 1 つにまとめる（BaseCard のヘッダは両端揃えなので、分けると件数が中央へ寄る） -->
+      <div class="master-list-card__header-actions">
+        <!-- 「56 件」を 1 つのテキストとして読ませたいので、数字と単位を改行で分けない。
+             取得中は出さない（確定前の件数を出すと、前回の値が新しい結果に見える） -->
+        <span
+          v-if="!loading"
+          class="master-list-card__count"
+          :data-testid="`${testidPrefix}-count`"
+        >
+          {{ total }} {{ unit }}
+        </span>
+        <slot name="actions" />
+      </div>
     </template>
 
     <!-- ローディング / エラー / 空 / データあり の 4 状態 -->
@@ -133,6 +140,12 @@ const emit = defineEmits(['reload', 'update:offset'])
 </template>
 
 <style scoped>
+.master-list-card__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .master-list-card__count {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);

@@ -1,5 +1,7 @@
 import { SIDE_VALUES } from '@/utils/apiEnums'
 import { apiClient } from './client'
+import { EXECUTIONS_CSV_FILENAME } from './executions'
+import { toFileDownload } from './fileDownload'
 
 /*
  * みずほ注文締の約定一覧（実 API `GET /executions` を 預託先＝みずほ で絞ったもの）。
@@ -17,7 +19,9 @@ import { apiClient } from './client'
  *     約定の行は必ず出来を持つので、取消済の行はそのまま「取消済（出来有）」になる
  *   - 件数カードの集計が `summary`（ExecutionSummary）で同梱される
  *
- * 成熟度 A（パス・クエリ・レスポンスのスキーマが openapi.json にある）。
+ * CSV 出力は約定照会と同じ `GET /executions/export-csv` を、一覧と同じ条件（route=0 固定）で読む。
+ *
+ * 成熟度 A（パス・クエリ・レスポンスのスキーマが openapi.json にある。CSV 出力は B）。
  * ただし画面モックの次の 2 項目は仕様に無い:
  *   - 約定金額（円）… ExecutionItem は 約定代金（USD）しか返さない
  *   - 件数カードの「一部出来」… ExecutionSummary に一部出来の件数が無い
@@ -79,30 +83,66 @@ const STATUS_QUERY_BY_FILL_STATUS = {
  */
 
 /**
- * みずほの約定一覧を取得する。
+ * みずほの約定の検索条件（一覧と CSV 出力で共通）
  *
- * ページャーを持つ一覧なので、`{ items, total }` に件数カードの集計 `summary` を添えて返す。
- * 並びは約定日時の新しい順（実 API の sort の既定 desc。送らない）。
- *
- * @param {{
- *   limit?: number,
- *   offset?: number,
+ * @typedef {{
  *   branchCode?: string,
  *   symbol?: string,
  *   side?: string,
  *   fillStatus?: string,
  *   dateFrom?: string,
  *   dateTo?: string,
- * }} [params]
+ * }} MizuhoExecutionFilters
  *   side は売買区分コード（'1' / '3'）。知らない値は送らない。
  *   fillStatus は出来状況の区分（'filled' / 'partial' / 'canceled_filled'）。
  *   dateFrom / dateTo は YYYY-MM-DD（実 API はそのまま受け取る）。
  *   空文字は「条件なし」としてリクエストに載せない
+ */
+
+/**
+ * みずほの約定一覧を取得する。
+ *
+ * ページャーを持つ一覧なので、`{ items, total }` に件数カードの集計 `summary` を添えて返す。
+ * 並びは約定日時の新しい順（実 API の sort の既定 desc。送らない）。
+ *
+ * @param {{ limit?: number, offset?: number } & MizuhoExecutionFilters} [params]
  * @returns {Promise<{ items: MizuhoExecution[], total: number, summary: MizuhoExecutionSummary }>}
  */
-export async function fetchMizuhoExecutions({
-  limit = 50,
-  offset = 0,
+export async function fetchMizuhoExecutions({ limit = 50, offset = 0, ...filters } = {}) {
+  const { data } = await apiClient.get('/executions', {
+    params: { limit, offset, ...toSearchParams(filters) },
+  })
+
+  return {
+    items: (data?.executions ?? []).map(toMizuhoExecution),
+    total: data?.total ?? 0,
+    summary: toSummary(data?.summary),
+  }
+}
+
+/**
+ * 検索条件に合うみずほの約定を CSV ファイルとして取得する。
+ *
+ * 実 API は一覧と同じ条件の全件（上限 10,000 件・約定日時の昇順）を UTF-8 BOM 付きで返す。
+ * 本文はバイト列のまま Blob にする（理由は src/api/executions.js の exportExecutionsCsv と同じ）。
+ * ページ位置は無い（limit / offset は送らない）。
+ *
+ * @param {MizuhoExecutionFilters} [filters]
+ * @returns {Promise<import('./fileDownload').FileDownload>}
+ *   filename は応答の Content-Disposition から取る。取れなければ EXECUTIONS_CSV_FILENAME
+ */
+export async function exportMizuhoExecutionsCsv(filters = {}) {
+  // arraybuffer にする理由は client.js の decodeBinaryBody（エラー本文を同期で読むため）
+  const response = await apiClient.get('/executions/export-csv', {
+    params: toSearchParams(filters),
+    responseType: 'arraybuffer',
+  })
+
+  return toFileDownload(response, EXECUTIONS_CSV_FILENAME)
+}
+
+/** MizuhoExecutionFilters → 実 API のクエリ。値が undefined のパラメータは axios が送らない */
+function toSearchParams({
   branchCode = '',
   symbol = '',
   side = '',
@@ -110,25 +150,15 @@ export async function fetchMizuhoExecutions({
   dateFrom = '',
   dateTo = '',
 } = {}) {
-  const { data } = await apiClient.get('/executions', {
-    // クエリ名を知ってよいのはこの層だけ。値が undefined のパラメータは axios が送らない
-    params: {
-      limit,
-      offset,
-      route: MIZUHO_ROUTE,
-      branch_code: branchCode || undefined,
-      symbol: symbol.trim() || undefined,
-      side: SIDE_VALUES.includes(side) ? side : undefined,
-      status: STATUS_QUERY_BY_FILL_STATUS[fillStatus],
-      start_date: dateFrom || undefined,
-      end_date: dateTo || undefined,
-    },
-  })
-
+  // クエリ名を知ってよいのはこの層だけ
   return {
-    items: (data?.executions ?? []).map(toMizuhoExecution),
-    total: data?.total ?? 0,
-    summary: toSummary(data?.summary),
+    route: MIZUHO_ROUTE,
+    branch_code: branchCode || undefined,
+    symbol: symbol.trim() || undefined,
+    side: SIDE_VALUES.includes(side) ? side : undefined,
+    status: STATUS_QUERY_BY_FILL_STATUS[fillStatus],
+    start_date: dateFrom || undefined,
+    end_date: dateTo || undefined,
   }
 }
 

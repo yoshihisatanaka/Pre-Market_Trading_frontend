@@ -1,6 +1,7 @@
 import { shallowRef } from 'vue'
 import { defineStore } from 'pinia'
-import { fetchMizuhoExecutions } from '@/api/mizuhoExecutions'
+import { exportMizuhoExecutionsCsv, fetchMizuhoExecutions } from '@/api/mizuhoExecutions'
+import { useAsync } from '@/composables/useAsync'
 import { useCrudList } from '@/composables/useCrudList'
 import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
 
@@ -12,6 +13,8 @@ import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
  */
 export const MIZUHO_EXECUTIONS_PAGE_SIZE = DEFAULT_PAGE_SIZE
 
+const FILTER_KEYS = ['branchCode', 'symbol', 'side', 'fillStatus', 'dateFrom', 'dateTo']
+
 /**
  * みずほ注文締の約定一覧のストア。
  *
@@ -19,9 +22,11 @@ export const MIZUHO_EXECUTIONS_PAGE_SIZE = DEFAULT_PAGE_SIZE
  * 取得・競合防止の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
  * 1 件の形は src/api/mizuhoExecutions.js の JSDoc を参照。読むだけの一覧なので更新系は渡さない。
  *
- * useCrudList が公開しない件数カードの集計（summary）だけをここで足す。
- * 同じ応答に載ってくるので、一覧と同じく**最後に出した要求の結果だけ**を採る
+ * useCrudList が公開しない件数カードの集計（summary）と CSV 出力をここで足す。
+ * 集計は同じ応答に載ってくるので、一覧と同じく**最後に出した要求の結果だけ**を採る
  * （ページ送りの連打で、古い条件の集計が新しい一覧の上に残らないようにする）。
+ * CSV 出力は一覧と loading / error を分ける（stores/executions.js と同じ形）。
+ * ファイルを保存させる DOM の操作は画面が行う。
  */
 export const useMizuhoExecutionsStore = defineStore('mizuhoExecutions', () => {
   /** 件数カードの集計。まだ一度も取れていなければ null */
@@ -37,9 +42,31 @@ export const useMizuhoExecutionsStore = defineStore('mizuhoExecutions', () => {
 
   const list = useCrudList({
     pageSize: MIZUHO_EXECUTIONS_PAGE_SIZE,
-    filterKeys: ['branchCode', 'symbol', 'side', 'fillStatus', 'dateFrom', 'dateTo'],
+    filterKeys: FILTER_KEYS,
     fetchPage,
   })
 
-  return { ...list, summary }
+  const {
+    error: exportError,
+    loading: exporting,
+    execute: executeExport,
+  } = useAsync(exportMizuhoExecutionsCsv)
+
+  /**
+   * 最後に読み込んだ一覧と同じ検索条件で、みずほの約定を CSV として取得する。
+   *
+   * 条件は検索欄の入力ではなく load に渡された値（= URL クエリ）を使う。
+   * 入力しただけで検索していない条件が、画面に出ている一覧と食い違って出力されないようにするため。
+   *
+   * @returns {Promise<{ blob: Blob, filename: string }|null>} 失敗したら null（理由は exportError）
+   */
+  function exportCsv() {
+    return executeExport(Object.fromEntries(FILTER_KEYS.map((key) => [key, list[key].value])))
+  }
+
+  function clearExportError() {
+    exportError.value = null
+  }
+
+  return { ...list, summary, exporting, exportError, exportCsv, clearExportError }
 })

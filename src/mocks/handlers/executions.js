@@ -76,16 +76,24 @@ export const executionHandlers = [
   // 一覧と同じ条件の全件（上限つき・約定日時の昇順）を UTF-8 BOM 付きの CSV で返す
   http.get('*/api/executions/export-csv', ({ request }) => {
     const params = new URL(request.url).searchParams
-    const rows = sortByExecutedAt(filterExecutions(params), 'asc').slice(0, EXPORT_LIMIT)
-
-    return new HttpResponse(toCsv(rows), {
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename=${CSV_FILENAME}`,
-      },
-    })
+    return toExecutionsCsvResponse(sortByExecutedAt(filterExecutions(params), 'asc'))
   }),
 ]
+
+/**
+ * `export-csv` の応答（上限件数で切り、UTF-8 BOM 付きの CSV にする）。
+ * みずほ注文締のモック（handlers/mizuhoExecutions.js）も同じ書式で返すので公開する。
+ *
+ * @param {object[]} rows 生の ExecutionItem。並べ替えは呼び出し側で済ませておく
+ */
+export function toExecutionsCsvResponse(rows) {
+  return new HttpResponse(toCsv(rows.slice(0, EXPORT_LIMIT)), {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename=${CSV_FILENAME}`,
+    },
+  })
+}
 
 /** 検索条件（一覧と CSV 出力で共通のクエリ）に合う行を返す */
 function filterExecutions(params) {

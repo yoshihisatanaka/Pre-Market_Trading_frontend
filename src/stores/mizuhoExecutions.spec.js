@@ -3,7 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { mizuhoExecutions } from '@/mocks/fixtures/mizuhoExecutions'
-import { useMizuhoExecutionsStore } from './mizuhoExecutions'
+import { EXECUTIONS_CSV_FILENAME } from '@/api/executions'
+import { MIZUHO_EXECUTIONS_PAGE_SIZE, useMizuhoExecutionsStore } from './mizuhoExecutions'
 
 /*
  * 既定の MSW ハンドラ（src/mocks/handlers/mizuhoExecutions.js）に当てる。
@@ -28,6 +29,23 @@ const summaryOf = (predicate) => ({
 
 const all = () => true
 const idsIn = (store) => store.items.map((item) => item.id)
+
+const EXPORT_PATH = '*/api/executions/export-csv'
+const SELL_TICKER = mizuhoExecutions.find((row) => row.売買区分 === SELL).Ticker
+
+const exportErrorHandler = () =>
+  http.get(EXPORT_PATH, () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }))
+
+/** CSV 出力に届いたクエリを記録し、既定ハンドラへ落とすハンドラを立てる */
+function recordExport() {
+  const requests = []
+  server.use(
+    http.get(EXPORT_PATH, ({ request }) => {
+      requests.push(new URL(request.url).searchParams)
+    }),
+  )
+  return requests
+}
 
 /**
  * 売買区分ごとに応答を止められるハンドラ。release(side) を呼ぶまで返さない。
@@ -148,5 +166,89 @@ describe('stores/mizuhoExecutions', () => {
 
     expect(store.summary).toEqual(expected)
     expect(idsIn(store)).toEqual(idsOf((row) => row.売買区分 === BUY))
+  })
+
+  it('[MZS-07] 最後に読んだ条件で CSV を取り、route=0 を載せてページ位置は送らない', async () => {
+    const requests = recordExport()
+    const store = useMizuhoExecutionsStore()
+
+    await store.load({ side: SELL, symbol: SELL_TICKER, offset: MIZUHO_EXECUTIONS_PAGE_SIZE })
+    const file = await store.exportCsv()
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0].get('route')).toBe('0')
+    expect(requests[0].get('side')).toBe(SELL)
+    expect(requests[0].get('symbol')).toBe(SELL_TICKER)
+    expect(requests[0].has('limit')).toBe(false)
+    expect(requests[0].has('offset')).toBe(false)
+    expect(Object.prototype.toString.call(file.blob)).toBe('[object Blob]')
+    expect(file.filename).toBe(EXECUTIONS_CSV_FILENAME)
+  })
+
+  it('[MZS-08] 読み直したあとは新しい条件で CSV を取る', async () => {
+    const requests = recordExport()
+    const store = useMizuhoExecutionsStore()
+
+    await store.load({ side: SELL, symbol: SELL_TICKER })
+    await store.load({ side: BUY })
+    await store.exportCsv()
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0].get('side')).toBe(BUY)
+    expect(requests[0].has('symbol')).toBe(false)
+  })
+
+  it('[MZS-09] CSV の取得に失敗したら null を返し、exportError だけに理由が入る', async () => {
+    server.use(exportErrorHandler())
+    const store = useMizuhoExecutionsStore()
+    await store.load()
+
+    const file = await store.exportCsv()
+
+    expect(file).toBeNull()
+    expect(store.exportError?.message).toBe(ERROR_MESSAGE)
+    expect(store.error).toBeNull()
+    expect(store.items).toHaveLength(mizuhoExecutions.length)
+    expect(store.exporting).toBe(false)
+  })
+
+  it('[MZS-10] 出力中は exporting が立ち、一覧の loading とは独立する', async () => {
+    let release
+    const held = new Promise((resolve) => {
+      release = resolve
+    })
+    server.use(
+      http.get(EXPORT_PATH, async () => {
+        await held
+        return new HttpResponse('a\r\n', { headers: { 'Content-Type': 'text/csv' } })
+      }),
+    )
+    const store = useMizuhoExecutionsStore()
+    await store.load()
+
+    const pending = store.exportCsv()
+
+    expect(store.exporting).toBe(true)
+    expect(store.loading).toBe(false)
+
+    release()
+    await pending
+
+    expect(store.exporting).toBe(false)
+  })
+
+  it('[MZS-11] clearExportError で出力の失敗だけを消す', async () => {
+    server.use(exportErrorHandler())
+    const store = useMizuhoExecutionsStore()
+    await store.load()
+    await store.exportCsv()
+    expect(store.exportError).not.toBeNull()
+    const itemsBefore = store.items
+
+    store.clearExportError()
+
+    expect(store.exportError).toBeNull()
+    expect(store.error).toBeNull()
+    expect(store.items).toBe(itemsBefore)
   })
 })

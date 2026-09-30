@@ -18,8 +18,8 @@ export const ORDER_INQUIRY_PAGE_SIZE = DEFAULT_PAGE_SIZE
  * 取得・競合防止の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
  * 1 件の形は src/api/orderInquiry.js の JSDoc を参照。
  *
- * **いまは読むだけ。** 訂正・取消は別の API（`/orders/{order_id}/amend` / `cancel`）で、
- * 処理をつなぐときにここへ足す。
+ * **一覧は読むだけ。** 訂正・取消は別画面（/orders/:orderId/amend・cancel）で行い、
+ * そちらは stores/orderAction.js が持つ。一覧へ戻ると画面の load で読み直される。
  */
 export const useOrderInquiryStore = defineStore('orderInquiry', () =>
   useCrudList({

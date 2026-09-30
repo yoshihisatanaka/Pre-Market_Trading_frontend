@@ -8,11 +8,13 @@
  * この表は自前で描く（見た目は DataTable に揃えてある）。どの行を開いているかは
  * この部品の中だけの表示状態なので、ストアにも URL にも持たせない。
  *
- * 訂正・取消は押されたことを emit するだけで、処理は呼び出し側が持つ。
+ * 訂正・取消は押されたことを emit するだけで、処理（画面の遷移）は呼び出し側が持つ。
+ * 発注権限の無い利用者（canOrder が false）には、ボタンの代わりに「閲覧のみ」を出す（画面モックと同じ）。
  *
  * 出す data-testid:
  *   order-inquiry-row（元注文の行） / order-inquiry-history-toggle / order-inquiry-history-row /
- *   order-inquiry-split-toggle / order-inquiry-split-detail / order-inquiry-amend / order-inquiry-cancel
+ *   order-inquiry-split-toggle / order-inquiry-split-detail / order-inquiry-amend / order-inquiry-cancel /
+ *   order-inquiry-view-only
  *   表そのものの testid は呼び出し側がフォールスルーで渡す。
  */
 import { reactive } from 'vue'
@@ -26,6 +28,14 @@ defineProps({
   groups: {
     type: Array,
     required: true,
+  },
+  /**
+   * 発注権限（発注・取消・訂正）があるか。既定は false（権限が分からないうちは操作を出さない側に倒す。
+   * stores/currentOperator.js の can() と同じ方針）
+   */
+  canOrder: {
+    type: Boolean,
+    default: false,
   },
 })
 
@@ -127,7 +137,14 @@ function versionLabel(index) {
             <OrderInquiryCells :order="group.latest" />
 
             <td>
-              <div class="order-inquiry-table__actions">
+              <span
+                v-if="!canOrder"
+                class="order-inquiry-table__view-only"
+                data-testid="order-inquiry-view-only"
+              >
+                閲覧のみ
+              </span>
+              <div v-else class="order-inquiry-table__actions">
                 <BaseButton
                   v-if="group.latest.amendable"
                   variant="secondary"
@@ -301,6 +318,12 @@ function versionLabel(index) {
 .order-inquiry-table__actions {
   display: flex;
   gap: var(--space-1);
+}
+
+/* 発注権限が無いときの操作列。ボタンではないことが判るよう、控えめな文字で出す */
+.order-inquiry-table__view-only {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 
 /* 訂正履歴の行。ID を字下げして、元注文の行にぶら下がっていることを見せる */

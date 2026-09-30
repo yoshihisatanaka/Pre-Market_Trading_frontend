@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { orderListResponse } from '../fixtures/orders'
 import { orderInquiryFxRate, orderInquiryRows } from '../fixtures/orderInquiry'
-import { toNonNegativeInt } from './_shared'
+import { detailError, nowIsoTimestamp, toNonNegativeInt } from './_shared'
 
 /*
  * `GET /orders` は 2 つの画面が叩いている。
@@ -9,7 +9,94 @@ import { toNonNegativeInt } from './_shared'
  *   - 注文照会（`/orders/inquiry`）… 実仕様の `OrderListResponse`（`orders` / `total` …）を読む
  * 1 本のハンドラで両方の形を 1 つの応答に載せて返す（同じパスにハンドラを 2 本置くと先の 1 本しか効かない）。
  * 参考実装を退役させるときに `items` を外し、実 API に切り替えるときはこのハンドラごと消す。
+ *
+ * 注文照会から入る訂正・取消の画面のために、1 件の詳細（GET /orders/{order_id}）・訂正・取消も持つ。
+ * 訂正・取消は行を書き換えるので、行は可変状態にしてある（resetOrderInquiryRows で元に戻す）。
+ * 状況の遷移は実 API の説明（amend / cancel の description）どおり:
+ *   訂正 … 000 はその場で書き換え（IN_PLACE）。003 / 010 は原注文を 030（未取消）にし、
+ *          040（訂正待ち）の訂正注文を新しい ID で足す（CANCEL_REPLACE）。それ以外は 400
+ *   取消 … 000 / 101 / 103 は 034（取消済）。003 / 010 / 131 / 133 / 141 は 030（未取消）。それ以外は 400
  */
+
+/** 訂正を受け付ける処理状況（amend の description） */
+const AMENDABLE = ['000', '003', '010']
+/** その場で取消済にする処理状況と、取消依頼（030）にする処理状況（cancel の description） */
+const CANCEL_NOW = ['000', '101', '103']
+const CANCEL_REQUEST = ['003', '010', '131', '133', '141']
+
+/*
+ * 状況が変わった行に付ける名前。フィクスチャの表示名（画面モック寄り）に揃える。
+ * アプリ側の対応表（src/utils/orderTypes.js）は使わない（モックはアプリに依存させない。
+ * src/utils/apiEnums.js の冒頭と同じ方針）。
+ */
+const STATUS_NAMES = { '000': '未発注', '030': '未取消', '034': '取消済', '040': '訂正待ち' }
+const DISPLAY_NAMES = { '000': '未出来', '030': '取消中', '034': '取消済', '040': '訂正待ち' }
+
+/** d_注文 に列が無く、一覧（OrderItemResponse）だけが付ける派生項目。詳細の `order` からは落とす */
+const DERIVED_KEYS = [
+  '顧客名',
+  '部店名',
+  '売買区分名',
+  '注文ルート名',
+  '処理状況名',
+  '表示状況名',
+  '出来数量',
+  '取消数量',
+  '有効残数量',
+  '出来有無',
+  '集計対象',
+  '約定代金',
+  '約定代金_JPY',
+]
+
+let rows = structuredClone(orderInquiryRows)
+
+/** モックの注文をフィクスチャの内容に戻す（テスト間で訂正・取消の結果を持ち越さない） */
+export function resetOrderInquiryRows() {
+  rows = structuredClone(orderInquiryRows)
+}
+
+function findRow(orderId) {
+  return rows.find((row) => String(row.ID) === String(orderId))
+}
+
+/** 取消・訂正で状況を変える。取消済になったら残りの株数は取消数量へ移す（一覧の派生項目の定義どおり） */
+function setStatus(row, status) {
+  row.処理状況 = status
+  row.処理状況名 = STATUS_NAMES[status]
+  row.更新日時 = nowIsoTimestamp()
+  if (status === '034') {
+    row.取消数量 = row.数量 - row.出来数量
+    row.有効残数量 = 0
+    row.表示状況名 = row.出来数量 > 0 ? '取消済（出来有）' : '取消済'
+    row.集計対象 = false
+  } else {
+    row.表示状況名 = DISPLAY_NAMES[status]
+  }
+}
+
+/** 一覧の行 → 詳細の `order`（d_注文 の行の形。派生項目を持たない） */
+function toDetailOrder(row) {
+  return Object.fromEntries(Object.entries(row).filter(([key]) => !DERIVED_KEYS.includes(key)))
+}
+
+/** 一覧の行 → 詳細の `executions`（d_約定 の行）。出来数量ぶんを 1 件の約定にまとめて返す */
+function toExecutions(row) {
+  if (!row.出来数量) return []
+  return [
+    {
+      ID: row.ID * 100,
+      注文ID: row.ID,
+      OrderID: null,
+      ExecID: `MOCK-${row.ID}`,
+      約定数量: row.出来数量,
+      約定単価: row.約定代金 ? row.約定代金 / row.出来数量 : null,
+      約定日時: null,
+      決済通貨区分: '1',
+    },
+  ]
+}
+
 export const orderHandlers = [
   http.get('*/api/orders', ({ request }) => {
     const params = new URL(request.url).searchParams
@@ -29,7 +116,7 @@ export const orderHandlers = [
         (row.Ticker ?? '').toUpperCase().includes(symbol)) &&
       (!status || row.処理状況 === status)
 
-    const sorted = [...orderInquiryRows.filter(matches)].sort((a, b) =>
+    const sorted = [...rows.filter(matches)].sort((a, b) =>
       params.get('sort') === 'asc' ? a.ID - b.ID : b.ID - a.ID,
     )
 
@@ -44,5 +131,122 @@ export const orderHandlers = [
       summary: null,
       orders: sorted.slice(offset, offset + limit),
     })
+  }),
+
+  /*
+   * 1 件の詳細。同じ形のパス（/orders/csv-spec・/orders/dream-status など）も当たるので、
+   * 数字でない ID は何も返さずに後ろのハンドラへ流す（MSW は undefined を「次へ」と扱う）。
+   * 実 API の `order` は d_注文 の行そのもの（`SELECT *`）なので、一覧の派生項目を落として返す。
+   */
+  http.get('*/api/orders/:orderId', ({ params }) => {
+    if (!/^\d+$/.test(params.orderId)) return undefined
+
+    const row = findRow(params.orderId)
+    if (!row) return detailError(404, `指定された注文が存在しません: ID=${params.orderId}`)
+
+    return HttpResponse.json({ order: toDetailOrder(row), executions: toExecutions(row), events: [] })
+  }),
+
+  http.post('*/api/orders/:orderId/amend', async ({ params, request }) => {
+    const row = findRow(params.orderId)
+    if (!row) return detailError(404, `指定された注文が存在しません: ID=${params.orderId}`)
+    if (!AMENDABLE.includes(row.処理状況)) {
+      return detailError(400, `この注文は訂正できません（処理状況: ${row.処理状況}）`)
+    }
+
+    const body = (await request.json().catch(() => null)) ?? {}
+    const next = {
+      数量: body.数量 ?? row.数量,
+      指成区分: body.指成区分 ?? row.指成区分,
+      指値単価: body.指値単価 ?? row.指値単価,
+      発注範囲: body.発注範囲 ?? row.発注範囲,
+    }
+    // 成行へ変えたら単価は持たない
+    if (next.指成区分 === 'MO') next.指値単価 = null
+
+    const changed = Object.keys(next).some((key) => next[key] !== row[key])
+    if (!changed) return detailError(400, '変更項目がありません')
+    if (next.指成区分 === 'LO' && next.指値単価 == null) {
+      return detailError(400, '指値注文には指値単価が必要です')
+    }
+    if (next.数量 <= row.出来数量) {
+      return detailError(400, `訂正後の数量は出来数量（${row.出来数量}）より大きくしてください`)
+    }
+
+    // 未発注はその場で書き換える
+    if (row.処理状況 === '000') {
+      Object.assign(row, next, { 有効残数量: next.数量 - row.出来数量, 更新日時: nowIsoTimestamp() })
+      return HttpResponse.json({
+        success: true,
+        mode: 'IN_PLACE',
+        original_order_id: row.ID,
+        amendment_order_id: null,
+        status: row.処理状況,
+        message: `注文を訂正しました（注文ID: ${row.ID}）`,
+        warnings: [],
+      })
+    }
+
+    // 発注済みは原注文を取消依頼にし、訂正注文（040）を足す。元注文ID は起点の注文を指す
+    const amendmentId = Math.max(...rows.map((r) => r.ID)) + 1
+    const amendment = {
+      ...structuredClone(row),
+      ...next,
+      ID: amendmentId,
+      元注文ID: row.元注文ID ?? row.ID,
+      出来数量: 0,
+      取消数量: null,
+      有効残数量: next.数量 - row.出来数量,
+      出来有無: false,
+      集計対象: false,
+      約定代金: null,
+      約定代金_JPY: null,
+      エラー内容: null,
+    }
+    setStatus(amendment, '040')
+    setStatus(row, '030')
+    rows.push(amendment)
+
+    return HttpResponse.json({
+      success: true,
+      mode: 'CANCEL_REPLACE',
+      original_order_id: row.ID,
+      amendment_order_id: amendmentId,
+      status: '040',
+      message: `訂正注文を受け付けました（訂正注文ID: ${amendmentId}）`,
+      warnings: [],
+    })
+  }),
+
+  http.post('*/api/orders/:orderId/cancel', ({ params }) => {
+    const row = findRow(params.orderId)
+    // 実 API は取消の 404 を持たない（存在しない注文は ValueError → 400）
+    if (!row) return detailError(400, `指定された注文が存在しません: ID=${params.orderId}`)
+
+    if (CANCEL_NOW.includes(row.処理状況)) {
+      setStatus(row, '034')
+      return HttpResponse.json({
+        success: true,
+        order_id: row.ID,
+        status: '034',
+        message: `注文を取り消しました（注文ID: ${row.ID}）`,
+        errors: [],
+        warnings: [],
+      })
+    }
+
+    if (CANCEL_REQUEST.includes(row.処理状況)) {
+      setStatus(row, '030')
+      return HttpResponse.json({
+        success: true,
+        order_id: row.ID,
+        status: '030',
+        message: `取消依頼を受け付けました（注文ID: ${row.ID}）`,
+        errors: [],
+        warnings: [],
+      })
+    }
+
+    return detailError(400, `この注文は取消できません（処理状況: ${row.処理状況}）`)
   }),
 ]

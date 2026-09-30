@@ -9,7 +9,18 @@
  * @param {string} text CSV の本文（BOM を付けるのは utils/csv.js の責務）
  */
 export function downloadCsv(filename, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
+  downloadBlob(filename, new Blob([text], { type: 'text/csv;charset=utf-8' }))
+}
+
+/**
+ * Blob をファイルとしてダウンロードさせる。サーバから受け取ったファイル（CSV一括注文のテンプレート）を
+ * 中身に触らずそのまま保存させるときに使う（text に読み直すと BOM が落ちる）。
+ *
+ * @param {string} filename 保存するときのファイル名
+ * @param {Blob} blob ファイルの中身
+ */
+export function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob)
 
   const link = document.createElement('a')
   link.href = url

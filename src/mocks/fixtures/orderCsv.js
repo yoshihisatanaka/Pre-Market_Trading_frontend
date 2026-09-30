@@ -1,3 +1,6 @@
+import { customers } from './customers'
+import { symbols } from './symbols'
+
 /*
  * モックのレスポンス実体（CSV一括注文）。
  * ここに書くのは「バックエンドが返す生の形」であり、アプリ内モデルではない。
@@ -300,4 +303,177 @@ export const orderCsvColumns = [
 export const orderCsvSpecResponse = {
   total_columns: orderCsvColumns.length,
   columns: orderCsvColumns,
+}
+
+/** CSV のヘッダー行に並ぶ列名（index の順） */
+export const orderCsvColumnNames = [...orderCsvColumns]
+  .sort((a, b) => a.index - b.index)
+  .map((column) => column.name)
+
+const [firstCustomer, secondCustomer] = customers
+const [firstSymbol, secondSymbol] = symbols
+
+/*
+ * テンプレートのサンプル 3 行。バックエンドのテンプレートと同じく
+ * 「レギュラー買付・プレマーケット買付・レギュラー売付」の 3 パターンにしてある。
+ * 形は事前検証の応答の `rows[].data`（サーバが型を寄せたあと）で、口座と銘柄は
+ * 顧客マスタ・銘柄マスタのモックに在るものを使う（事前検証のモックが名前を引けるように）。
+ */
+const sampleOrder = {
+  部店: firstCustomer.部店コード,
+  口座番号: firstCustomer.口座番号,
+  銘柄コード: firstSymbol.銘柄コード,
+  売買区分: '3',
+  数量: 100,
+  指成区分: 'LO',
+  指値単価: 150,
+  決済通貨区分: '1',
+  証券受渡方法: '100',
+  預り売買区分: '0',
+  取引: '100',
+  勧誘区分: '1',
+  受注方法: '1',
+  資金性格: '1',
+  金銭受渡方法: '000',
+  有効期限: '20260826',
+  注文チャネル: 'EGY',
+  受注日: '20260826',
+  受注時刻: '090100',
+  受注者: '999',
+  VWAP区分: 0,
+  発注範囲: '03',
+}
+
+export const orderCsvSampleOrders = [
+  sampleOrder,
+  {
+    ...sampleOrder,
+    数量: 50,
+    指成区分: 'MO',
+    指値単価: null,
+    受注時刻: '083000',
+    発注範囲: '01',
+  },
+  {
+    ...sampleOrder,
+    部店: secondCustomer.部店コード,
+    口座番号: secondCustomer.口座番号,
+    銘柄コード: secondSymbol.銘柄コード,
+    売買区分: '1',
+    数量: 10,
+    指値単価: 155.5,
+    受注時刻: '090300',
+  },
+]
+
+const BOM = String.fromCharCode(0xfeff)
+
+/** 1 行を CSV の 1 行にする（null は空欄。値にカンマを含むものは置かない） */
+function toCsvLine(order) {
+  return orderCsvColumnNames.map((name) => (order[name] == null ? '' : String(order[name]))).join(',')
+}
+
+/**
+ * `GET /orders/csv-template` の本文。実 API と同じく UTF-8 の BOM 付き・CRLF 区切りで、
+ * ヘッダー 22 列＋サンプル 3 行。
+ */
+export const orderCsvTemplateText =
+  BOM + [orderCsvColumnNames.join(','), ...orderCsvSampleOrders.map(toCsvLine)].join('\r\n') + '\r\n'
+
+/** 実 API が Content-Disposition に付けるテンプレートのファイル名 */
+export const ORDER_CSV_TEMPLATE_FILENAME = 'bulk_orders_template.csv'
+
+/** 事前検証の details（ValidationDetails）。モックはサーバが銘柄から引く名前だけを置く */
+export function orderCsvDetailsOf(order) {
+  const symbol = symbols.find((item) => item.銘柄コード === order.銘柄コード)
+  return {
+    stock_code: order.銘柄コード,
+    stock_name: symbol?.銘柄名 ?? null,
+  }
+}
+
+/**
+ * 事前検証の行の customer_name。口座（部店＋口座番号）から引いた顧客名で、引けなければ null。
+ *
+ * **仕様に無い**（CsvOrderRowResult に追加予定。docs/api/requests.md #24）。
+ * 契約テストの KNOWN_GAPS に載せてある。
+ */
+export function orderCsvCustomerNameOf(order) {
+  const customer = customers.find(
+    (item) => item.部店コード === order.部店 && item.口座番号 === order.口座番号,
+  )
+  return customer?.顧客名 ?? null
+}
+
+/** `POST /orders/validate-csv` の応答の見本（テンプレートをそのまま取り込んだとき。全行 OK） */
+export const orderCsvValidateResponse = {
+  total_count: orderCsvSampleOrders.length,
+  valid_count: orderCsvSampleOrders.length,
+  invalid_count: 0,
+  all_valid: true,
+  has_error: false,
+  rows: orderCsvSampleOrders.map((order, index) => ({
+    row_number: index + 2,
+    valid: true,
+    data: order,
+    errors: [],
+    warnings: [],
+    details: orderCsvDetailsOf(order),
+    customer_name: orderCsvCustomerNameOf(order),
+  })),
+}
+
+/**
+ * 同じく、NG と警告が混ざるときの見本。
+ *   2 行目 … 正常。警告だけが付く
+ *   3 行目 … 指値なのに指値単価が無い（検証まで走るので details がある）
+ *   4 行目 … 口座番号が数値にならない（値の変換で止まるので details は null・warnings は空。顧客名も引けない）
+ */
+export const orderCsvValidateWithErrorsResponse = {
+  total_count: 3,
+  valid_count: 1,
+  invalid_count: 2,
+  all_valid: false,
+  has_error: true,
+  rows: [
+    {
+      row_number: 2,
+      valid: true,
+      data: { ...sampleOrder, 数量: 12000 },
+      errors: [],
+      warnings: ['数量が10,000株以上です。スライス発注の対象になる場合があります'],
+      details: orderCsvDetailsOf(sampleOrder),
+      customer_name: orderCsvCustomerNameOf(sampleOrder),
+    },
+    {
+      row_number: 3,
+      valid: false,
+      data: { ...sampleOrder, 指値単価: null },
+      errors: ['指成区分がLO（指値）の場合、指値単価は必須です'],
+      warnings: [],
+      details: orderCsvDetailsOf(sampleOrder),
+      customer_name: orderCsvCustomerNameOf(sampleOrder),
+    },
+    {
+      row_number: 4,
+      valid: false,
+      data: { ...sampleOrder, 口座番号: 0 },
+      errors: ['口座番号は整数で入力してください'],
+      warnings: [],
+      details: null,
+      customer_name: null,
+    },
+  ],
+}
+
+/** 一括受付のモックが採番する注文 ID の起点（連番で振る） */
+export const BULK_ORDER_FIRST_ID = 90001
+
+/** `POST /orders/bulk-create` の応答の見本（テンプレートの 3 行を受け付けたとき） */
+export const bulkOrderCreateResponse = {
+  success: true,
+  total_orders: orderCsvSampleOrders.length,
+  order_ids: orderCsvSampleOrders.map((_, index) => BULK_ORDER_FIRST_ID + index),
+  message: `${orderCsvSampleOrders.length}件の注文を一括受付しました`,
+  errors: [],
 }

@@ -79,6 +79,28 @@ export function formatMonthDayTime(isoString) {
   return monthDayTime.format(date)
 }
 
+/**
+ * 「YYYYMMDD」の日付を「08/26」の形に整形する（CSV一括注文の有効期限・受注日）。
+ *
+ * CSV に書かれた値をそのまま受けるので、8 桁の数字でなければ受け取った値を返す
+ * （検証で NG になった行でも、何が書いてあったかは見せる）。空なら '—'。
+ */
+export function formatCompactMonthDay(value) {
+  if (!value) return '—'
+  const match = /^\d{4}(\d{2})(\d{2})$/.exec(value)
+  return match ? `${match[1]}/${match[2]}` : value
+}
+
+/**
+ * 「HHMMSS」「HHMM」「HH:MM」「HH:MM:SS」の時刻を「09:01」の形に整形する（CSV一括注文の受注時刻）。
+ * どれにも当たらなければ受け取った値を返す。空なら '—'。
+ */
+export function formatCompactTime(value) {
+  if (!value) return '—'
+  const match = /^(\d{2}):?(\d{2})(?::?\d{2})?$/.exec(value)
+  return match ? `${match[1]}:${match[2]}` : value
+}
+
 /*
  * 全角空白。画面モックがコードと名称のあいだに置いている区切り。
  * ソースに直接書くと ESLint の no-irregular-whitespace に当たるので、コードポイントから作る。

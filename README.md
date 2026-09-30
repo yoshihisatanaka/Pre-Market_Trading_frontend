@@ -82,7 +82,8 @@ docker compose up frontend
 | 停止 | `docker compose down` |
 | Lint | `docker compose run --rm frontend npm run lint` |
 | 自動整形 | `docker compose run --rm frontend npm run format` |
-| 単体テスト | `docker compose run --rm frontend npm run test:unit` |
+| 単体テスト（全件） | `docker compose run --rm frontend npm run test:unit` |
+| 単体テスト（変更に関係する spec だけ） | `bash scripts/test-unit.sh --lint`（Git Bash。起動中の `frontend` に exec する。使い方は [docs/coding-standards.md](docs/coding-standards.md) の「7. コマンド」） |
 | E2E テスト | `docker compose run --rm e2e npx playwright test`（`frontend` は自動で起動する） |
 | E2E（トレース付き） | `docker compose run --rm e2e npm run test:e2e:trace` → 下記「トレースで『実行中』を巻き戻して見る」 |
 | E2E レポート閲覧 | 下記「E2E テスト結果の見かた」を参照 |

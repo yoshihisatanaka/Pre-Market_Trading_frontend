@@ -17,7 +17,7 @@
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
-| INS-01 | 既定モック | `load()` を呼ぶ | `status` に停止状態、`targets` に 6 行、`histories` に履歴 4 件が入り、`error` は null | 実装済 |
+| INS-01 | 既定モック | `load()` を呼ぶ | `status` に停止状態、`targets` に 4 行、`histories` に履歴 4 件が入り、`error` は null | 実装済 |
 | INS-02 | 停止状態の取得が 500 を返す | `load()` を呼ぶ | `error` が立ち、`status` は null のまま | 実装済 |
 | INS-03 | 履歴の取得が 500 を返す（停止状態は成功） | `load()` を呼ぶ | `error` が立ち、`status` も null のまま（取得は 1 回で、片方の失敗が全体の失敗になる） | 実装済 |
 | INS-04 | INS-02 の状態から API が回復する | `load()` を再度呼ぶ | `error` が null に戻り、`status` が入る | 実装済 |

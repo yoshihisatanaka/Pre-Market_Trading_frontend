@@ -235,7 +235,7 @@ test.describe('障害管理', () => {
     expect(dangerColor).not.toBe(normalColor)
   })
 
-  test('[IN-13] 停止対象の 6 行が並び、過去の停止理由が残っている', async ({ page }) => {
+  test('[IN-13] 停止対象の 4 行が並び、過去の停止理由が残っている', async ({ page }) => {
     await page.goto(PATH)
 
     const rows = targetRowsOf(page)

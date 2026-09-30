@@ -54,11 +54,15 @@
   --color-sell-bg: #f8fbff;
   --color-sell-line: #90cdf4;
 
-  /* みずほ注文締めカードの操作ボタン。モックの .mizuho-close-action / .mizuho-order-file-action */
-  --color-mizuho-close: #264d73;
-  --color-mizuho-close-hover: #1f405f;
-  --color-mizuho-order-file: #385d83;
-  --color-mizuho-order-file-hover: #2c4d70;
+  /*
+   * みずほ注文締めカードの操作ボタン（「みずほ注文締め」「注文ファイル作成」で共通）。
+   * モックの .mizuho-close-action / .mizuho-order-file-action。押せないときは淡色面に灰色の文字
+   */
+  --color-mizuho-action: #264d73;
+  --color-mizuho-action-hover: #1f405f;
+  --color-mizuho-action-text: #ffffff;
+  --color-mizuho-action-disabled: #e6ebf0;
+  --color-mizuho-action-disabled-text: #8b98a6;
 
   /* サイドバー（濃色。上の面用トークンとは別系統で持つ） */
   --color-sidebar-bg: #182230;

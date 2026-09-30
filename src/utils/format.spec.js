@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateTime, formatQuantity, formatUsd, formatUsdUnit } from './format'
+import {
+  formatCompactMonthDay,
+  formatCompactTime,
+  formatDateTime,
+  formatQuantity,
+  formatUsd,
+  formatUsdUnit,
+} from './format'
 
 /*
  * 表示用の整形。守るのは「空値は '—' でそろえる」ことと「0 を空値として扱わない」ことの 2 点。
@@ -71,5 +78,46 @@ describe('format', () => {
     expect(formatDateTime()).toBe('—')
     // Invalid Date を画面に出さない
     expect(formatDateTime('not-a-date')).toBe('—')
+  })
+
+  it('[FMT-12] YYYYMMDD を MM/DD に整形する', () => {
+    expect(formatCompactMonthDay('20260826')).toBe('08/26')
+  })
+
+  it('[FMT-13] 8 桁の数字でない日付は受け取った値のまま返す', () => {
+    for (const value of ['2026-08-26', '2026082']) {
+      expect(formatCompactMonthDay(value)).toBe(value)
+    }
+  })
+
+  it('[FMT-14] formatCompactMonthDay の空値は — になる', () => {
+    for (const blank of ['', null, undefined]) {
+      expect(formatCompactMonthDay(blank)).toBe('—')
+    }
+  })
+
+  it('[FMT-15] 4 つの時刻の書き方をどれも HH:MM に整形する', () => {
+    for (const value of ['090100', '0901', '09:01', '09:01:00']) {
+      expect(formatCompactTime(value)).toBe('09:01')
+    }
+  })
+
+  it('[FMT-16] どの形にも当たらない時刻は受け取った値のまま返す', () => {
+    for (const value of ['9:01', 'abc']) {
+      expect(formatCompactTime(value)).toBe(value)
+    }
+  })
+
+  it('[FMT-17] formatCompactTime の空値は — になる', () => {
+    for (const blank of ['', null, undefined]) {
+      expect(formatCompactTime(blank)).toBe('—')
+    }
+  })
+
+  it('[FMT-18] 区切りの混在した時刻も HH:MM に整形する', () => {
+    // 今の実装の挙動を固定する（区切りの有無を前後で揃えることまでは見ていない）
+    for (const value of ['09:0100', '0901:00']) {
+      expect(formatCompactTime(value)).toBe('09:01')
+    }
   })
 })

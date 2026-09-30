@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -8,10 +9,21 @@ import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FileDropZone from '@/components/ui/FileDropZone.vue'
 import { useOrderCsvStore } from '@/stores/orderCsv'
+import { downloadBlob } from '@/utils/download'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useOrderCsvStore()
-const { columns, columnsLoading, columnsError, isColumnsEmpty } = storeToRefs(store)
+const {
+  columns,
+  columnsLoading,
+  columnsError,
+  isColumnsEmpty,
+  templateLoading,
+  templateError,
+  validating,
+  validationError,
+} = storeToRefs(store)
+const router = useRouter()
 
 /** 取込む注文 CSV。選ぶまでは null */
 const csvFile = ref(null)
@@ -27,19 +39,24 @@ const FORMAT_COLUMNS = [
   { key: 'required', label: '必須' },
 ]
 
-/*
- * テンプレートDL と内容の確認（事前検証）は処理が未実装（UI だけ先に置く）。
- * 押しても何も起きない。
- */
-function downloadTemplate() {
-  // TODO(処理実装): `GET /orders/csv-template` の CSV を order_template.csv として保存させる
+/** サーバのテンプレートを、サーバが付けたファイル名のまま保存させる */
+async function downloadTemplate() {
+  const template = await store.downloadTemplate()
+  if (template) downloadBlob(template.filename, template.blob)
 }
 
-function confirmContents() {
-  // TODO(処理実装): csvFile を `POST /orders/validate-csv` に送り、結果をストアに置いて
-  //   プレビュー画面（/orders/csv/preview。処理と一緒に作る）へ進む。
-  //   送信中はボタンを押せなくし、失敗はこのカードに出す
+/*
+ * 事前検証してプレビューへ進む。行に NG があっても検証は成功なので進む（NG の中身はプレビューで見せる）。
+ * 進めないのはファイルそのものの不備（ヘッダーの列が足りない）と通信の失敗で、理由はこのカードに出す。
+ */
+async function confirmContents() {
+  if (!csvFile.value) return
+  const result = await store.validateFile(csvFile.value)
+  if (result) router.push({ name: 'order-csv-preview' })
 }
+
+// ストアは画面をまたいで残るので、前回の失敗を持ち越さない
+store.clearUploadErrors()
 
 // 初回読み込み。onMounted に置くと最初の描画で一瞬「空」が出る
 store.loadColumns()
@@ -53,6 +70,8 @@ store.loadColumns()
           variant="secondary"
           size="sm"
           data-testid="order-csv-template"
+          :loading="templateLoading"
+          :disabled="templateLoading"
           @click="downloadTemplate"
         >
           <svg
@@ -95,11 +114,30 @@ store.loadColumns()
         </template>
       </FileDropZone>
 
+      <BaseAlert
+        v-if="templateError"
+        variant="error"
+        class="order-csv-upload__alert"
+        data-testid="order-csv-template-error"
+      >
+        テンプレートをダウンロードできませんでした。{{ templateError.message }}
+      </BaseAlert>
+
+      <BaseAlert
+        v-if="validationError"
+        variant="error"
+        class="order-csv-upload__alert"
+        data-testid="order-csv-validate-error"
+      >
+        内容を確認できませんでした。{{ validationError.message }}
+      </BaseAlert>
+
       <div class="order-csv-upload__submit">
         <BaseButton
           class="order-csv-upload__confirm"
           data-testid="order-csv-confirm"
-          :disabled="!csvFile"
+          :loading="validating"
+          :disabled="!csvFile || validating"
           @click="confirmContents"
         >
           <svg
@@ -214,6 +252,10 @@ store.loadColumns()
 .order-csv-upload__drop-icon {
   width: 48px;
   height: 48px;
+}
+
+.order-csv-upload__alert {
+  margin-top: var(--space-4);
 }
 
 .order-csv-upload__submit {

@@ -25,8 +25,7 @@ const routes = [
     meta: { title: 'UI カタログ' },
   },
   {
-    // path は navigation.js（サイドメニュー）の項目と一致させる。
-    // プレビュー（/orders/csv/preview）と受付完了（/orders/csv/complete）は処理と一緒に足す
+    // path は navigation.js（サイドメニュー）の項目と一致させる
     path: '/orders/csv/upload',
     name: 'order-csv-upload',
     component: () => import('@/views/OrderCsvUploadView.vue'),
@@ -38,6 +37,20 @@ const routes = [
     name: 'order-new',
     component: () => import('@/views/OrderEntryView.vue'),
     meta: { title: '新規注文' },
+  },
+  {
+    // 取込み画面の「内容を確認する」の先。メニューには載せない（事前検証の結果はストアが持つ）
+    path: '/orders/csv/preview',
+    name: 'order-csv-preview',
+    component: () => import('@/views/OrderCsvPreviewView.vue'),
+    meta: { title: 'CSV取込みプレビュー' },
+  },
+  {
+    // プレビューの「N件を受付する」の先。メニューには載せない
+    path: '/orders/csv/complete',
+    name: 'order-csv-complete',
+    component: () => import('@/views/OrderCsvCompleteView.vue'),
+    meta: { title: 'CSV一括注文受付完了' },
   },
   {
     path: '/orders/inquiry',

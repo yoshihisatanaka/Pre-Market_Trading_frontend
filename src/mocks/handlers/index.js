@@ -38,7 +38,7 @@ import { orderEntryHandlers, resetOrderEntryState } from './orderEntry'
  *    vitest.setup.js の afterEach で resetMockState() を呼ぶ
  *  - 共通のヘルパ（エラー応答の形・日付の検査・楽観的ロックの照合）は _shared.js
  *
- * 例外は下に並べたパス（海外休場日・受注不可日・スライス基準・市場ステータス・CSV一括注文の列仕様）。
+ * 例外は下に並べたパス（海外休場日・受注不可日・スライス基準・市場ステータス・CSV一括注文）。
  * 実 API は実装済みだが、単体テストと E2E がこの handlers を共用しているのでハンドラは残し、
  * **実 API と同じ形**に寄せてある。
  *   /masters/market-holidays … 日本語キー / integer の日付 / 降順 / エラーは { detail } / 論理削除
@@ -47,6 +47,9 @@ import { orderEntryHandlers, resetOrderEntryState } from './orderEntry'
  *   /masters/fx              … 日本語キー / integer の基準日 / 最新・詳細・事前検証・登録・変更だけ
  *   /market-status           … 日本語キー / 空白入りキー / 日付を「今日」へずらして返す
  *   /orders/csv-spec         … CSV一括注文の全 22 列の仕様（CsvHeaderSpecResponse そのまま）
+ *   /orders/csv-template     … 同じくテンプレート（text/csv・BOM 付き・Content-Disposition 付き）
+ *   /orders/validate-csv     … 同じく事前検証。アップロードされた CSV を実際に読んで行ごとに判定する
+ *   /orders/bulk-create      … 同じく一括受付。送った並びで連番の注文 ID を返す（状態は持たない）
  * マスタ系のパスは 2026-09-15 の OpenAPI 取り込みで /masters/ 配下へ移った。
  * 実 API に当てて動かすときは環境変数 VITE_ENABLE_MSW を false にする（README「バックエンドとの連携」）。
  */

@@ -43,7 +43,12 @@ import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '../mocks/fixture
 import { executions } from '../mocks/fixtures/executions'
 import { orderInquiryRows } from '../mocks/fixtures/orderInquiry'
 import { dreamOrders, dreamStatusCodes } from '../mocks/fixtures/dreamStatus'
-import { orderCsvSpecResponse } from '../mocks/fixtures/orderCsv'
+import {
+  bulkOrderCreateResponse,
+  orderCsvSpecResponse,
+  orderCsvValidateResponse,
+  orderCsvValidateWithErrorsResponse,
+} from '../mocks/fixtures/orderCsv'
 import { orderCreateExamples, orderValidationExamples } from '../mocks/fixtures/orderEntry'
 import { fetchOrders } from './orders'
 import { amendOrder, cancelOrder, fetchOrderDetail, fetchOrderInquiry } from './orderInquiry'
@@ -102,7 +107,12 @@ import { closeMizuhoOrders, fetchMizuhoClosingStatus, reopenMizuhoOrders } from 
 import { exportMizuhoOrderSheet } from './mizuho'
 import { exportExecutionsCsv, fetchExecutions } from './executions'
 import { changeDreamStatus, fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
-import { fetchOrderCsvSpec } from './orderCsv'
+import {
+  bulkCreateOrders,
+  fetchOrderCsvSpec,
+  fetchOrderCsvTemplate,
+  validateOrderCsv,
+} from './orderCsv'
 import { createOrder, validateOrder } from './orderEntry'
 
 // シナリオ: docs/unit/api-contract.md
@@ -252,6 +262,34 @@ const KNOWN_GAPS = [
     reason: '画面モックの「銘柄名」検索。実 API は無視するので絞り込みが黙って効かない',
     request: '#13',
   },
+  /*
+   * CSV一括注文のプレビューに出す顧客名。事前検証の行（CsvOrderRowResult）にバックエンドが
+   * 追加する予定で、フィクスチャに先行して置いている（src/api/orderCsv.js が読む）。
+   * 仕様に入ったことを CON-07 が検知するのは、行を直に写した orderCsvValidateRows の行。
+   * 応答全体の 2 行（orderCsvValidate / orderCsvValidateWithErrors）は入れ子で CON-07 が見られないので、
+   * そのときに一緒に外す。
+   */
+  {
+    kind: 'fixture',
+    fixture: 'orderCsvValidateRows',
+    keys: ['customer_name'],
+    reason: 'プレビューの顧客名。CsvOrderRowResult に追加予定（バックエンド）',
+    request: '#27',
+  },
+  {
+    kind: 'fixture',
+    fixture: 'orderCsvValidate',
+    keys: ['customer_name'],
+    reason: '同上（rows[] の中。orderCsvValidateRows の行と一緒に外す）',
+    request: '#27',
+  },
+  {
+    kind: 'fixture',
+    fixture: 'orderCsvValidateWithErrors',
+    keys: ['customer_name'],
+    reason: '同上（rows[] の中。orderCsvValidateRows の行と一緒に外す）',
+    request: '#27',
+  },
 ]
 
 function knownQueryGap(op, name) {
@@ -360,6 +398,23 @@ const FIXTURES = [
     rows: orderValidationExamples,
   },
   { name: 'orderCreate', schema: 'OrderCreateResponse', rows: orderCreateExamples },
+  /*
+   * レスポンス全体が対象。rows[] は CsvOrderRowResult、rows[].details は ValidationDetails として型検査される。
+   * rows[].data は additionalProperties の object（中身の型は仕様に無い）なので項目名は見られない
+   */
+  { name: 'orderCsvValidate', schema: 'CsvOrderValidateResponse', rows: [orderCsvValidateResponse] },
+  {
+    name: 'orderCsvValidateWithErrors',
+    schema: 'CsvOrderValidateResponse',
+    rows: [orderCsvValidateWithErrorsResponse],
+  },
+  // 行だけを直に写したもの。仕様に無い customer_name を CON-07 が追えるようにする（KNOWN_GAPS #27）
+  {
+    name: 'orderCsvValidateRows',
+    schema: 'CsvOrderRowResult',
+    rows: [...orderCsvValidateResponse.rows, ...orderCsvValidateWithErrorsResponse.rows],
+  },
+  { name: 'bulkOrderCreate', schema: 'BulkOrderCreateResponse', rows: [bulkOrderCreateResponse] },
 ]
 
 function describeSchema(schema) {
@@ -798,6 +853,23 @@ const PROBES = [
   { name: 'fetchOrderCsvSpec', run: () => fetchOrderCsvSpec() },
   { name: 'validateOrder', run: () => validateOrder(PROBE_ORDER) },
   { name: 'createOrder', run: () => createOrder(PROBE_ORDER) },
+  { name: 'fetchOrderCsvTemplate', run: () => fetchOrderCsvTemplate() },
+  {
+    name: 'validateOrderCsv',
+    // importConfirmationCsv と同じ回避（jsdom の FormData は MSW(node) が Request に変換できない）
+    run: async () => {
+      const form = await new Response('', {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }).formData()
+      vi.stubGlobal('FormData', form.constructor)
+      try {
+        await validateOrderCsv(new NodeFile(['部店\r\n'], 'o.csv', { type: 'text/csv' }))
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    },
+  },
+  { name: 'bulkCreateOrders', run: () => bulkCreateOrders([], { createdBy: '001' }) },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

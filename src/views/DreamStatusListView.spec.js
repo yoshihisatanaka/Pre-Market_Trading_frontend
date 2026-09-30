@@ -5,7 +5,7 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { dreamOrders, dreamStatusCodes } from '@/mocks/fixtures/dreamStatus'
+import { TRANSITIONS, dreamOrders, dreamStatusCodes } from '@/mocks/fixtures/dreamStatus'
 import { DREAM_STATUS_PAGE_SIZE } from '@/stores/dreamStatus'
 import { formatDateTime, formatQuantity } from '@/utils/format'
 import DreamStatusListView from './DreamStatusListView.vue'
@@ -88,6 +88,33 @@ const optionsOf = (select) =>
     label: option.text(),
   }))
 const isShown = (element) => element.style.display !== 'none'
+
+const CHANGE_PATH = '*/api/orders/dream-status/:orderId'
+const RECEIPT = 'DR-20260929-9999'
+const REASON = 'Dream 側で確認済み'
+
+/** 遷移先の名前（プルダウンとサーバの処理結果に出る説明付きの文言） */
+const transitionName = (raw, code) =>
+  TRANSITIONS[raw.Dream状況].find((transition) => transition.コード === code).名称
+/** Dream状況コードの名前（コード一覧のフィクスチャから引く） */
+const statusName = (code) => dreamStatusCodes.find((status) => status.コード === code).名称
+
+/**
+ * 行のプルダウンで遷移先を選び、ダイアログに入力して「変更する」を押し、
+ * PUT → 一覧の読み直し → 再描画 までを待つ。
+ */
+async function changeRow(wrapper, raw, code, { receiptNumber = '', reason = REASON } = {}) {
+  await cellsFor(wrapper, raw.ID)
+    [COL.change].find('[data-testid="dream-status-change"]')
+    .setValue(code)
+  if (receiptNumber) {
+    await byTestid(wrapper, 'dream-status-change-receipt-number').setValue(receiptNumber)
+  }
+  await byTestid(wrapper, 'dream-status-change-reason').setValue(reason)
+  await byTestid(wrapper, 'dream-status-change-submit').trigger('click')
+  await settle()
+  await settle()
+}
 
 // シナリオ: docs/unit/views-dream-status-list-view.md
 describe('DreamStatusListView', () => {
@@ -420,5 +447,100 @@ describe('DreamStatusListView', () => {
       expect(exists(wrapper, 'dream-status-search')).toBe(true)
       wrapper.unmount()
     }
+  })
+
+  it('[DSV-22] 変更に成功するとダイアログが閉じ、お知らせと変更後の行が出る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    expect(exists(wrapper, 'dream-status-notice')).toBe(false)
+
+    await changeRow(wrapper, registrationError, '0')
+
+    expect(exists(wrapper, 'dream-status-change-dialog')).toBe(false)
+    expect(byTestid(wrapper, 'dream-status-notice').text()).toBe(
+      `注文ID ${registrationError.ID} のDream状況を「${transitionName(registrationError, '0')}」へ変更しました。`,
+    )
+    const cells = cellsFor(wrapper, registrationError.ID)
+    expect(cells[COL.status].text()).toBe(statusName('0'))
+    expect(cells[COL.change].find('[data-testid="dream-status-change"]').exists()).toBe(false)
+    expect(cells[COL.change].find('[data-testid="dream-status-locked"]').text()).toBe('変更不可')
+  })
+
+  it('[DSV-23] 受付番号を入れて登録済へ変えると、その行に受付番号が出る', async () => {
+    expect(registrationError.受注番号).toBeNull()
+    const { wrapper } = await mountView()
+    await settle()
+
+    await changeRow(wrapper, registrationError, '2', { receiptNumber: RECEIPT })
+
+    expect(exists(wrapper, 'dream-status-change-dialog')).toBe(false)
+    const cells = cellsFor(wrapper, registrationError.ID)
+    expect(cells[COL.receipt].text()).toBe(RECEIPT)
+    expect(cells[COL.status].text()).toBe(statusName('2'))
+  })
+
+  it('[DSV-24] 409 で弾かれたらダイアログの中に理由を出し、お知らせは出さない', async () => {
+    const conflict = '他のユーザーによって更新されています。最新の情報を取得してからやり直してください。'
+    server.use(
+      http.put(CHANGE_PATH, () => HttpResponse.json({ detail: conflict }, { status: 409 })),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+
+    await changeRow(wrapper, registrationError, '0')
+
+    expect(exists(wrapper, 'dream-status-change-dialog')).toBe(true)
+    expect(byTestid(wrapper, 'dream-status-change-error').text()).toContain(conflict)
+    expect(exists(wrapper, 'dream-status-notice')).toBe(false)
+    // Teleport をスタブしているのでトリガの中にポップアップ本文も入る。先頭の状況名だけを見る
+    expect(
+      cellsFor(wrapper, registrationError.ID)
+        [COL.status].find('[data-testid="dream-status-error-trigger"]')
+        .text()
+        .startsWith(registrationError.Dream状況名),
+    ).toBe(true)
+  })
+
+  it('[DSV-25] 絞り込み中に変更すると読み直しで条件から外れた行が消える', async () => {
+    const before = idsMatching((row) => ['9', 'C9'].includes(row.Dream状況))
+    const { wrapper, router } = await mountView({ query: { dream_status: 'ERROR' } })
+    await settle()
+    expect(idsOf(wrapper)).toEqual(before)
+
+    await changeRow(wrapper, registrationError, '0')
+
+    expect(router.currentRoute.value.query).toEqual({ dream_status: 'ERROR' })
+    expect(idsOf(wrapper)).toEqual(before.filter((id) => id !== `#${registrationError.ID}`))
+    expect(countText(wrapper).startsWith(`${before.length - 1} `)).toBe(true)
+  })
+
+  it('[DSV-26] 次の変更でダイアログを開くと前回のお知らせが消える', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    await changeRow(wrapper, registrationError, '0')
+    expect(exists(wrapper, 'dream-status-notice')).toBe(true)
+
+    await cellsFor(wrapper, cancelError.ID)
+      [COL.change].find('[data-testid="dream-status-change"]')
+      .setValue(cancelError.変更可能状況[0].コード)
+
+    expect(exists(wrapper, 'dream-status-change-dialog')).toBe(true)
+    expect(exists(wrapper, 'dream-status-notice')).toBe(false)
+  })
+
+  it('[DSV-27] サーバの処理結果が空なら既定の文言をお知らせに出す', async () => {
+    server.use(
+      http.put(CHANGE_PATH, () =>
+        HttpResponse.json({ success: true, order: registrationError, message: '' }),
+      ),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+
+    await changeRow(wrapper, registrationError, '0')
+
+    expect(byTestid(wrapper, 'dream-status-notice').text()).toBe(
+      `注文ID #${registrationError.ID} のDream状況を変更しました。`,
+    )
   })
 })

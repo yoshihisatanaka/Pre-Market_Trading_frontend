@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { dreamOrders, dreamStatusCodes } from '@/mocks/fixtures/dreamStatus'
+import { TRANSITIONS, dreamOrders, dreamStatusCodes } from '@/mocks/fixtures/dreamStatus'
 import { ApiError } from './client'
-import { fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
+import { changeDreamStatus, fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -36,6 +36,25 @@ function record(body, status = 200) {
 }
 
 const listBody = (rows) => ({ total: rows.length, limit: 50, offset: 0, orders: rows })
+
+const CHANGE_PATH = '*/api/orders/dream-status/:orderId'
+
+/** 最後に届いた STS変更のリクエスト */
+let lastPut = null
+
+afterEach(() => {
+  lastPut = null
+})
+
+/** STS変更のリクエストを記録して、行をそのまま返す（本文の形だけを見るため） */
+function recordPut(row) {
+  server.use(
+    http.put(CHANGE_PATH, async ({ request }) => {
+      lastPut = { url: new URL(request.url), body: await request.json() }
+      return HttpResponse.json({ success: true, order: row, message: '' })
+    }),
+  )
+}
 
 // フィクスチャから、観点ごとの代表行を取る
 const changeable = dreamOrders.find((row) => row.STS変更可 === true && row.受注番号 === null)
@@ -293,5 +312,78 @@ describe('api/dreamStatus', () => {
     )
 
     await expect(fetchDreamStatusCodes()).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('[DSA-18] STS変更は注文IDのパスに日本語キーの本文で PUT する', async () => {
+    recordPut(changeable)
+    const receiptNumber = 'DR-20260928-9999'
+    const reason = 'Dream 側で手入力済み'
+
+    await changeDreamStatus({
+      id: String(changeable.ID),
+      status: '2',
+      receiptNumber: `  ${receiptNumber} `,
+      reason: ` ${reason}  `,
+      updatedAt: changeable.更新日時,
+    })
+
+    expect(lastPut.url.pathname).toBe(`/api/orders/dream-status/${changeable.ID}`)
+    expect(lastPut.body).toEqual({
+      変更後状況: '2',
+      受注番号: receiptNumber,
+      理由: reason,
+      更新日時: changeable.更新日時,
+    })
+  })
+
+  it('[DSA-19] 受注番号と理由は空・空白だけ・省略のどれでも null で送る', async () => {
+    const base = { id: String(changeable.ID), status: '0', updatedAt: changeable.更新日時 }
+
+    for (const extra of [{ receiptNumber: '', reason: '' }, { receiptNumber: '   ', reason: ' ' }, {}]) {
+      recordPut(changeable)
+
+      await changeDreamStatus({ ...base, ...extra })
+
+      expect(lastPut.body).toHaveProperty('受注番号', null)
+      expect(lastPut.body).toHaveProperty('理由', null)
+    }
+  })
+
+  it('[DSA-20] 変更後の行をアプリ内モデルにし、サーバの処理結果を返す', async () => {
+    const target = TRANSITIONS[changeable.Dream状況].find((t) => t.コード === '0')
+
+    const { order, message } = await changeDreamStatus({
+      id: String(changeable.ID),
+      status: target.コード,
+      updatedAt: changeable.更新日時,
+    })
+
+    expect(order).toMatchObject({
+      id: String(changeable.ID),
+      status: '0',
+      statusName: dreamStatusCodes.find((status) => status.コード === '0').名称,
+      canChangeStatus: false,
+      statusTransitions: [],
+    })
+    expect(order.updatedAt).not.toBe('')
+    expect(order.updatedAt).not.toBe(changeable.更新日時)
+    expect(message).toBe(`注文ID ${changeable.ID} のDream状況を「${target.名称}」へ変更しました。`)
+  })
+
+  it('[DSA-21] 更新日時が食い違うと 409 の例外になり detail が message に入る', async () => {
+    const stale = '2000-01-01T00:00:00'
+    expect(stale).not.toBe(changeable.更新日時)
+
+    const error = await changeDreamStatus({
+      id: String(changeable.ID),
+      status: '0',
+      updatedAt: stale,
+    }).catch((e) => e)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.status).toBe(409)
+    // モックの detail は取得時と最新の更新日時を含む。それが message に運ばれていること
+    expect(error.message).toContain(stale)
+    expect(error.message).toContain(changeable.更新日時)
   })
 })

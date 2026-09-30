@@ -4,10 +4,7 @@ import { apiClient } from './client'
  * Dream登録状況（実 API `/orders/dream-status`。タグは DreamStatus）。
  *
  * 成熟度 B。一覧（`GET /orders/dream-status`）・状況コード一覧（`GET /orders/dream-status/statuses`）・
- * STS変更（`PUT /orders/dream-status/{order_id}`）の 3 本が仕様にある。
- * **いまは読む 2 本だけを持つ。** STS変更は画面の UI だけ先に置いていて、送信は別途入れる
- * （入れるときのパスキーは integer の `{order_id}` = 行の ID。本文は `変更後状況` / `受注番号` /
- * `理由` / `更新日時`）。
+ * STS変更（`PUT /orders/dream-status/{order_id}`）の 3 本が仕様にあり、3 本とも持つ。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり:
  *   - プロパティ名が日本語（Dream状況 / 受注番号 / 部店 / 口座番号 …）。一覧の配列名は `orders`
@@ -52,7 +49,7 @@ import { apiClient } from './client'
  *   statusTransitions はそのとき選べる遷移先（名前は「未登録（Dream再送待ちへ戻す）」のような説明付き）。
  *   errorMessage は Dream 連携のエラー内容（IB 由来の `エラー内容` は持たない）。
  *   completedAt は画面の「登録日時」列。未登録・登録中は空になる。
- *   updatedAt は STS変更の楽観的ロックの合札（送信を入れるときにそのまま送り返す）
+ *   updatedAt は STS変更の楽観的ロックの合札（changeDreamStatus がそのまま送り返す）
  */
 
 /**
@@ -133,6 +130,54 @@ export async function fetchDreamStatusCodes() {
     name: raw?.名称 ?? '',
     group: raw?.区分 ?? '',
   }))
+}
+
+/**
+ * 1 件の Dream状況を手動で変更する（STS変更）。
+ *
+ * 変えられるのは登録失敗（`9`）・取消失敗（`C9`）の行だけで、遷移先は行の statusTransitions の
+ * どれか（サーバが 400 で弾く）。「登録済（`2`）」へ変えるときは、受付番号が未設定なら
+ * receiptNumber が要る（無ければ 400）。
+ *
+ * updatedAt は一覧取得時の更新日時をそのまま送り返す楽観的ロックの合札で、
+ * サーバ側の現在値と違えば 409 で弾かれる（Dream 連携のバッチや他の利用者が先に更新していた場合）。
+ *
+ * @param {{
+ *   id: string,
+ *   status: string,
+ *   receiptNumber?: string,
+ *   reason?: string,
+ *   updatedAt: string,
+ * }} params
+ *   id は注文ID（実 API では integer）。status は遷移先の Dream状況コード。
+ *   receiptNumber と reason は前後の空白を落とし、空なら null で送る（どちらも任意項目）
+ * @returns {Promise<{ order: DreamOrder, message: string }>}
+ *   order は変更後の 1 件、message はサーバの処理結果（「注文ID 56 のDream状況を…へ変更しました。」）
+ */
+export async function changeDreamStatus({
+  id,
+  status,
+  receiptNumber = '',
+  reason = '',
+  updatedAt,
+}) {
+  const { data } = await apiClient.put(`/orders/dream-status/${encodeURIComponent(id)}`, {
+    変更後状況: status,
+    受注番号: toNullableText(receiptNumber),
+    理由: toNullableText(reason),
+    更新日時: updatedAt,
+  })
+
+  return {
+    order: toDreamOrder(data?.order),
+    message: data?.message ?? '',
+  }
+}
+
+/** 任意の文字列項目 → 本文の値。前後の空白を落とし、空なら null（未指定）にする */
+function toNullableText(value) {
+  const text = String(value ?? '').trim()
+  return text || null
 }
 
 /**

@@ -16,7 +16,8 @@ import { bannerHandlers } from './banner'
 import { stalledOrderHandlers, resetStalledOrderState } from './stalledOrders'
 import { incidentHandlers, resetIncidentState } from './incidents'
 import { mizuhoExecutionHandlers } from './mizuhoExecutions'
-import { closingHandlers } from './closing'
+import { closingHandlers, resetClosingState } from './closing'
+import { mizuhoHandlers, resetMizuhoOrderState } from './mizuho'
 import { executionHandlers } from './executions'
 import { dreamStatusHandlers } from './dreamStatus'
 import { orderCsvHandlers } from './orderCsv'
@@ -81,6 +82,8 @@ export function resetMockState() {
   resetAnnouncementState()
   resetStalledOrderState()
   resetIncidentState()
+  resetClosingState()
+  resetMizuhoOrderState()
 }
 
 export const handlers = [
@@ -112,6 +115,7 @@ export const handlers = [
   // みずほ（route=0）の問い合わせだけを先に拾い、それ以外は約定照会のモックへ流す
   ...mizuhoExecutionHandlers,
   ...closingHandlers,
+  ...mizuhoHandlers,
   ...executionHandlers,
   ...dreamStatusHandlers,
   ...orderCsvHandlers,

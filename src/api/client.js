@@ -29,11 +29,14 @@ export class ApiError extends Error {
  * 宣言だけで security がどのオペレーションにも付いておらず、実 API も未認証で 200 を返す。
  * そこで暫定的に .env の VITE_USER_CODE を全リクエストに載せる。
  * SSO が入ったらここをセッション由来の値に差し替える（呼び出し側は変えなくてよい）。
+ *
+ * 本文にも操作者を載せる API（みずほ注文締めの 実行者。サーバがヘッダから解決しない）は、
+ * api 層がこの値を読む。出所を 1 か所に保つため、ここから export する。
  */
-const userCode = import.meta.env.VITE_USER_CODE || ''
+export const USER_CODE = import.meta.env.VITE_USER_CODE || ''
 
 apiClient.interceptors.request.use((config) => {
-  if (userCode) config.headers['X-User-Code'] = userCode
+  if (USER_CODE) config.headers['X-User-Code'] = USER_CODE
   return config
 })
 
@@ -44,7 +47,8 @@ apiClient.interceptors.response.use(
 
 function normalizeError(error) {
   if (error.response) {
-    const { status, data } = error.response
+    const { status } = error.response
+    const data = decodeBinaryBody(error.response.data)
     return new ApiError(messageFrom(data) || defaultMessageFor(status), {
       status,
       code: data?.code ?? null,
@@ -58,6 +62,28 @@ function normalizeError(error) {
     })
   }
   return new ApiError('サーバーに接続できませんでした。', { code: error.code, cause: error })
+}
+
+/**
+ * ファイルを落とす要求（`responseType: 'arraybuffer'`）は、エラーの本文もバイト列で届く。
+ * JSON として読めればその形に戻し、下の messageFrom が理由を取り出せるようにする
+ * （読まないと 400 の理由が「入力内容に誤りがあります。」の既定文言に化ける）。
+ *
+ * Blob（`responseType: 'blob'`）にしないのは、読むのが非同期になり、jsdom 26 の Blob には
+ * text() も無いため。ArrayBuffer なら TextDecoder で同期に読める。
+ *
+ * @param {unknown} data レスポンス本文
+ * @returns {unknown} バイト列でなければそのまま。JSON として読めなければ null
+ */
+function decodeBinaryBody(data) {
+  // 実行環境（ブラウザ / jsdom）で ArrayBuffer の realm が違っても判定できるよう instanceof は使わない
+  if (Object.prototype.toString.call(data) !== '[object ArrayBuffer]') return data
+
+  try {
+    return JSON.parse(new TextDecoder().decode(data))
+  } catch {
+    return null
+  }
 }
 
 /**

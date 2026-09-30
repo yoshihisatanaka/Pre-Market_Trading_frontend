@@ -89,7 +89,8 @@ import {
   suspendOrders,
 } from './incidents'
 import { fetchMizuhoExecutions } from './mizuhoExecutions'
-import { fetchMizuhoClosingStatus } from './closing'
+import { closeMizuhoOrders, fetchMizuhoClosingStatus, reopenMizuhoOrders } from './closing'
+import { exportMizuhoOrderSheet } from './mizuho'
 import { fetchExecutions } from './executions'
 import { fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
 import { fetchOrderCsvSpec } from './orderCsv'
@@ -662,6 +663,10 @@ const PROBES = [
       }),
   },
   { name: 'fetchMizuhoClosingStatus', run: () => fetchMizuhoClosingStatus() },
+  { name: 'closeMizuhoOrders', run: () => closeMizuhoOrders() },
+  { name: 'reopenMizuhoOrders', run: () => reopenMizuhoOrders() },
+  // 応答は xlsx でスキーマが無いので、見るのはパスとクエリ名（side）だけ
+  { name: 'exportMizuhoOrderSheet', run: () => exportMizuhoOrderSheet({ side: 'sell' }) },
   {
     name: 'fetchExecutions',
     run: () =>

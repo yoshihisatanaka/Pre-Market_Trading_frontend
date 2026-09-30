@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { downloadCsv } from './download'
+import { downloadBlob, downloadCsv } from './download'
 
 /*
  * jsdom は URL.createObjectURL / revokeObjectURL を持たないので、テストの間だけ生やす。
@@ -90,6 +90,23 @@ describe('utils/download', () => {
     downloadCsv(FILENAME, TEXT)
 
     expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+    vi.runAllTimers()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(OBJECT_URL)
+  })
+
+  it('[DLU-05] downloadBlob は渡した Blob をそのまま保存させる', () => {
+    const blob = new Blob(['xlsx'], { type: 'application/octet-stream' })
+
+    downloadBlob('オーダーシート.xlsx', blob)
+
+    // 作り直さず、渡したものからオブジェクト URL を作る（type も中身も変えない）
+    expect(created).toEqual([blob])
+    expect(clicked).toHaveLength(1)
+    expect(clicked[0].download).toBe('オーダーシート.xlsx')
+    expect(clicked[0].href).toBe(OBJECT_URL)
+    expect(clicked[0].connected).toBe(true)
+    expect(clicked[0].element.isConnected).toBe(false)
+
     vi.runAllTimers()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith(OBJECT_URL)
   })

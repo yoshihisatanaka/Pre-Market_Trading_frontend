@@ -16,6 +16,9 @@
 `HTTPValidationError` の配列 `detail`）に加え、まだ実 API に切り替えていないマスタの
 モックが返す `{ message, code }` も受ける。3 形の優先順位もここで固定する。
 
+ファイルを落とす要求（`responseType: 'arraybuffer'`。みずほの注文ファイル）は、エラーの本文も
+バイト列で届く。JSON として読めれば上の 3 形と同じに扱う（CLA-17 / CLA-18）。
+
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
 | CLA-01 | 既定（`VITE_USER_CODE` は `test-user`） | `apiClient.get('/__client-test')` が成功する | リクエストヘッダに `X-User-Code: test-user` が載り、URL は `/api/__client-test`（baseURL が付く） | 実装済 |
@@ -34,3 +37,5 @@
 | CLA-14 | 応答が `timeout` より遅れる | 短い `timeout` を指定して GET する | `message` が `通信がタイムアウトしました。時間をおいて再度お試しください。`、`status` が `null`、`code` が `ECONNABORTED` | 実装済 |
 | CLA-15 | 応答が返らない（ネットワーク断） | GET する | `message` が `サーバーに接続できませんでした。`、`status` が `null` | 実装済 |
 | CLA-16 | API が 500 を返す | GET する | 投げられるのは `ApiError` で、`name` が `'ApiError'`、`Error` を継承し、`cause` に元の axios エラー（`response.status` が 500）が入る | 実装済 |
+| CLA-17 | API が 400 で `{ detail: '注文ファイルは、みずほ注文締め後に作成してください。' }` を返す | `responseType: 'arraybuffer'` で GET する | 本文がバイト列で届いても JSON として読み、`message` がその `detail`、`status` が 400 になる | 実装済 |
+| CLA-18 | API が 400 で JSON でない本文（`not json`）を返す | `responseType: 'arraybuffer'` で GET する | 読めない本文は捨て、`message` が既定の `入力内容に誤りがあります。` になる（例外で落ちない） | 実装済 |

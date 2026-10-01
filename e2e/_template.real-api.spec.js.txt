@@ -1,0 +1,106 @@
+import { expect, test } from '@playwright/test'
+import {
+  apiContext,
+  cleanupMarked,
+  fetchAll,
+  listHelpers,
+  marker,
+  skipUnlessRealApi,
+} from './helpers/realApi.js'
+
+/*
+ * 雛形（拡張子 .txt なので Playwright と ESLint の対象外）。
+ * コピーして e2e/〈kebab-name〉.real-api.spec.js にし、XXR / xxx / 〈…〉 を差し替える。
+ * シナリオの雛形は docs/e2e/_template-real-api.md。手本は market-holidays / ca の real-api spec。
+ *
+ * 〈画面名〉を「実 API に当てて」確かめる E2E。
+ * シナリオ: docs/e2e/〈kebab-name〉-real-api.md（タイトル先頭の [XXR-xx] が対応 ID）
+ *
+ * 〈kebab-name〉.spec.js（XX）とは目的が違う。XX は MSW のモックに当てて画面の挙動を
+ * 細かく固定する。こちらはフロントとバックエンドの噛み合わせだけを見るので、
+ * 期待値に**データの中身を書かない**（件数・値は実行時に画面か API から読む）。
+ *
+ * 既定では丸ごとスキップする。実 API に当てるときだけ次の 2 つをそろえて実行する。
+ *   1. 環境変数 VITE_ENABLE_MSW を false にして frontend を作り直す
+ *   2. バックエンドの api を起動しておく
+ *   docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test 〈kebab-name〉.real-api
+ *
+ * XXR-02 以降は実 DB に登録・削除を行う。ローカルの開発 DB 前提。
+ */
+
+const PATH = '/masters/xxx'
+// 実 API のパス（openapi.json）。画面の PATH とは /api の有無だけでなく綴りも違うことがある
+const API_PATH = '/api/masters/xxx'
+// 一覧の応答の配列キー（openapi.json の *ListResponse）
+const LIST_KEY = 'xxx_list'
+
+// src/stores/〈store〉.js の 〈PAGE_SIZE 定数〉 と同じ値。
+// ストアは import.meta を辿る api/client.js に依存しており Playwright からは import できない。
+const PAGE_SIZE = 50
+
+const { prefix: NOTE_MARKER, value: TEST_NOTE } = marker()
+
+const { openList, countOf, rowsOf, expectListConsistent } = listHelpers({
+  path: PATH,
+  testIdPrefix: 'xxx',
+})
+
+/** 目印付きの有効な行を消す（前回の残骸も含む）。パスキーは openapi.json に従う（ID か業務キーか） */
+function cleanupMarkedRows(api) {
+  return cleanupMarked(api, {
+    list: () => fetchAll(api, API_PATH, LIST_KEY, { include_deleted: true }),
+    isMarked: (row) => row.取消区分 === 0 && (row.備考 ?? '').startsWith(NOTE_MARKER),
+    deletePathOf: (row) => `${API_PATH}/${row.ID}`,
+  })
+}
+
+function addDialogOf(page) {
+  return page.getByRole('dialog', { name: '〈対象〉 新規追加' })
+}
+
+// 登録 → 編集 → 削除 は 1 本の流れなので順に実行する
+test.describe.configure({ mode: 'serial' })
+
+test.describe('〈画面名〉（実 API 接続）', () => {
+  skipUnlessRealApi(test)
+
+  test.beforeAll(async ({ playwright }) => {
+    const api = await apiContext(playwright)
+    await cleanupMarkedRows(api)
+    await api.dispose()
+  })
+
+  test.afterAll(async ({ playwright }) => {
+    // 試験用の行を有効なまま残さない
+    const api = await apiContext(playwright)
+    await cleanupMarkedRows(api)
+    await api.dispose()
+  })
+
+  test('[XXR-01] 実データで一覧が表示される', async ({ page }) => {
+    await openList(page)
+    await expectListConsistent(page, { pageSize: PAGE_SIZE })
+  })
+
+  test('[XXR-02] 新規追加が受理され、件数が 1 増える', async ({ page, playwright }) => {
+    await openList(page)
+    const before = await countOf(page)
+
+    await page.getByTestId('xxx-add').click()
+    await expect(addDialogOf(page)).toBeVisible()
+    // 〈必須項目を埋める。業務キーは未使用の値を beforeAll で選ぶ〉
+    await page.getByTestId('xxx-add-note').fill(TEST_NOTE)
+    await page.getByTestId('xxx-add-submit').click()
+
+    await expect(addDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('xxx-notice')).toContainText('を追加しました。')
+    await expect(page.getByTestId('xxx-count')).toHaveText(`${before + 1} 件`)
+    await expect(rowsOf(page).filter({ hasText: TEST_NOTE })).toHaveCount(1)
+
+    // API を直接引いても有効な行として存在する
+    const api = await apiContext(playwright)
+    const created = (await fetchAll(api, API_PATH, LIST_KEY)).find((row) => row.備考 === TEST_NOTE)
+    await api.dispose()
+    expect(created, '登録した行が実 API の一覧に無い').toBeTruthy()
+  })
+})

@@ -1,4 +1,14 @@
 import { expect, test } from '@playwright/test'
+import {
+  apiContext,
+  cleanupMarked,
+  fetchAll,
+  listHelpers,
+  logExchange,
+  marker,
+  skipUnlessRealApi,
+  toIsoDate,
+} from './helpers/realApi.js'
 
 /*
  * CAマスタを「実 API に当てて」確かめる E2E。
@@ -23,16 +33,12 @@ const PATH = '/masters/ca'
 // ストアは import.meta を辿る api/client.js に依存しており Playwright からは import できない。
 const PAGE_SIZE = 50
 
-// 実 API の limit の上限（GET /masters/ca の limit は 1〜200）
-const API_LIMIT_MAX = 200
-
 /*
- * 試験用の行の目印。CA には自然キーが無く POST は毎回 INSERT なので、後片付けはこの接頭辞で行を探す。
+ * 試験用の行の目印。CA には自然キーが無く POST は毎回 INSERT なので、後片付けは接頭辞で行を探す。
  * 編集（CAR-07 / CAR-08）でも接頭辞は保つこと（外すと後片付けから漏れる）。
+ * TEST_NOTE は実行ごとに一意な備考で、CAR-02 で登録した行の ID をこれで特定する。
  */
-const NOTE_MARKER = '実 API 接続確認（E2E が削除する）'
-// 実行ごとに一意な備考。CAR-02 で登録した行の ID をこれで特定する
-const TEST_NOTE = `${NOTE_MARKER} ${Date.now()}`
+const { prefix: NOTE_MARKER, value: TEST_NOTE } = marker()
 const EDITED_NOTE = `${TEST_NOTE}（変更後）`
 const ALT_NOTE = `${TEST_NOTE}（別経路）`
 const CONFLICT_NOTE = `${TEST_NOTE}（画面）`
@@ -50,37 +56,16 @@ const TEST_NUMERATOR = '2'
 // 銘柄マスタに無いはずの銘柄コード（CARequest の 銘柄コード は最大 14 文字）
 const UNKNOWN_STOCK_CODE = 'E2E-NOEXIST'
 
-// 誰が触ったかを実 DB に残す（実 API の更新系はこのヘッダが無いと弾かれる）
-const USER_CODE = 'e2e'
+const { settleList, openList, countOf, rowsOf } = listHelpers({ path: PATH, testIdPrefix: 'ca' })
 
 /** CAR-02 で借りる銘柄コード。beforeAll が既存の有効行から選ぶ */
 let stockCode = ''
 /** CAR-02 で登録した行の ID（実 API の採番）。CAR-06〜09 が使う */
 let createdId = 0
 
-function apiContext(playwright) {
-  return playwright.request.newContext({
-    baseURL: process.env.E2E_BASE_URL || 'http://frontend:5173',
-    extraHTTPHeaders: { 'X-User-Code': USER_CODE },
-  })
-}
-
 /** 実 API の CA を全件集める（limit の上限を超える分はページを送って取る） */
-async function fetchAllCa(api, { includeDeleted = false } = {}) {
-  const all = []
-  let offset = 0
-
-  for (;;) {
-    const res = await api.get('/api/masters/ca', {
-      params: { include_deleted: includeDeleted, limit: API_LIMIT_MAX, offset },
-    })
-    expect(res.ok(), '実 API から一覧を取得できない。api コンテナが動いているか確認する').toBe(true)
-
-    const { total, ca_list: items } = await res.json()
-    all.push(...items)
-    offset += items.length
-    if (items.length === 0 || offset >= total) return all
-  }
+function fetchAllCa(api, { includeDeleted = false } = {}) {
+  return fetchAll(api, '/api/masters/ca', 'ca_list', { include_deleted: includeDeleted })
 }
 
 /** ID から CAItem を引く（取消済みも含む）。無ければ null */
@@ -94,62 +79,12 @@ async function findCaById(api, id) {
  * 消した行の ID を返す（報告用）
  */
 async function cleanupMarkedRows(api) {
-  const all = await fetchAllCa(api, { includeDeleted: true })
-  const marked = all.filter((ca) => ca.取消区分 === 0 && (ca.備考 ?? '').startsWith(NOTE_MARKER))
-
-  for (const ca of marked) {
-    const res = await api.delete(`/api/masters/ca/${ca.ID}`)
-    expect(res.ok(), `試験用の行 ${ca.ID} を削除できない: ${res.status()} ${await res.text()}`).toBe(
-      true,
-    )
-  }
-  return marked.map((ca) => ca.ID)
-}
-
-/** 20350611 → '2035-06-11'（未設定は空文字。src/api/ca.js の toIsoDate と同じ規則） */
-function toIsoDate(value) {
-  const digits = String(value ?? '')
-  if (!/^\d{8}$/.test(digits)) return ''
-  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
-}
-
-/** 実 API を見ているかを確かめる。MSW はサービスワーカーで横取りするので、それで判別できる */
-async function assertRealApi(page) {
-  const mswActive = await page.evaluate(() => Boolean(navigator.serviceWorker?.controller))
-  expect(
-    mswActive,
-    'MSW が有効なままなので実 API を見ていない。VITE_ENABLE_MSW を false にして frontend を作り直すこと',
-  ).toBe(false)
-}
-
-/**
- * 取得が終わるのを待つ。
- *
- * 件数の表示（ca-count）は MasterListCard が取得中は出さない（v-if="!loading"）。
- * 値を読み取ってから比べる場面では、先にここを通すこと。
- */
-async function settleList(page) {
-  await expect(page.getByTestId('ca-loading')).toHaveCount(0)
-}
-
-/** 一覧を開いて、実 API に当たっていることまで確認する */
-async function openList(page, query = '') {
-  await page.goto(`${PATH}${query}`)
-  await settleList(page)
-  await expect(page.getByTestId('ca-count')).toBeVisible()
-  await assertRealApi(page)
-}
-
-/** 「N 件」の表示から件数を読む */
-async function countOf(page) {
-  await settleList(page)
-  const text = await page.getByTestId('ca-count').textContent()
-  return Number(text.replace(/[^0-9]/g, ''))
-}
-
-/** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
-function rowsOf(page) {
-  return page.getByTestId('ca-table').getByTestId('data-table-row')
+  const removed = await cleanupMarked(api, {
+    list: () => fetchAllCa(api, { includeDeleted: true }),
+    isMarked: (ca) => ca.取消区分 === 0 && (ca.備考 ?? '').startsWith(NOTE_MARKER),
+    deletePathOf: (ca) => `/api/masters/ca/${ca.ID}`,
+  })
+  return removed.map((ca) => ca.ID)
 }
 
 /** CAR-02 で登録した行（編集ボタンの testid が ID を持つので、それで絞る） */
@@ -172,26 +107,11 @@ function waitForPut(page) {
   )
 }
 
-/** PUT の本文・応答を標準出力に残す（実 API との食い違いを報告するための材料） */
-async function logExchange(label, res) {
-  const body = await res.text()
-  console.log(
-    `[${label}] ${res.request().method()} ${new URL(res.url()).pathname}\n` +
-      `  request : ${res.request().postData()}\n` +
-      `  status  : ${res.status()}\n` +
-      `  response: ${body}`,
-  )
-  return body
-}
-
 // 登録 → 絞り込み → 検証 → 編集 → 競合 → 削除 は 1 本の流れなので順に実行する
 test.describe.configure({ mode: 'serial' })
 
 test.describe('CAマスタ（実 API 接続）', () => {
-  test.skip(
-    process.env.E2E_REAL_API !== '1',
-    '実 API に当てるテスト。E2E_REAL_API=1 のときだけ実行する',
-  )
+  skipUnlessRealApi(test)
 
   test.beforeAll(async ({ playwright }) => {
     const api = await apiContext(playwright)

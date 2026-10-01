@@ -85,9 +85,11 @@ function historyRowsOf(page) {
 /**
  * 取得が終わるのを待つ。画面が描画される前はローディング表示も無いので、
  * 先に「データあり」の表が出るのを待ってからローディングの消滅を確かめる。
+ * 実 API では状態と履歴の 2 本を並列に引き、履歴は 1〜2 秒かかる（2026-10-01 実測）。
+ * Vite の変換が重なると既定の 5 秒を断続的に超えるので、初回描画だけ長めに待つ。
  */
 async function settleView(page) {
-  await expect(page.getByTestId('incidents-targets')).toBeVisible()
+  await expect(page.getByTestId('incidents-targets')).toBeVisible({ timeout: 20_000 })
   await expect(page.getByTestId('incidents-loading')).toHaveCount(0)
 }
 

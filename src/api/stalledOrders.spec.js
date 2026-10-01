@@ -74,8 +74,9 @@ async function caught(promise) {
 const csvFile = (text, name = 'confirmation.csv') => new NodeFile([text], name, { type: 'text/csv' })
 
 const MARKET_ORDER = stalledOrderErrors.find((row) => row.指成区分 === 'MO')
-const BUY_ROW = stalledOrderErrors.find((row) => row.売買区分 === '1')
-const SELL_ROW = stalledOrderErrors.find((row) => row.売買区分 === '3')
+// 売買区分はコードマスタどおり 3 買 / 1 売
+const BUY_ROW = stalledOrderErrors.find((row) => row.売買区分 === '3')
+const SELL_ROW = stalledOrderErrors.find((row) => row.売買区分 === '1')
 
 // シナリオ: docs/unit/api-stalled-orders.md
 describe('api/stalledOrders', () => {
@@ -111,7 +112,7 @@ describe('api/stalledOrders', () => {
     expect(orderErrors[0].accountNumber).toBe(String(stalledOrderErrors[0].口座番号))
   })
 
-  it('[SOA-04] 売買区分 1 / 3 が buy / sell になる', async () => {
+  it('[SOA-04] 売買区分 3 / 1 が buy / sell になる', async () => {
     const { orderErrors } = await fetchStalledOrders()
     const byId = (raw) => orderErrors.find((order) => order.id === String(raw.ID))
 

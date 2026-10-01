@@ -30,10 +30,10 @@ const CONFIRMATION_HEADER =
 
 /*
  * フィクスチャ（バックエンドの生の形）の 1 行 → 別システム発注 CSV の 1 行。
- * 対応は src/utils/stalledOrderCsv.js の toTwsOrderRow の仕様（売買区分 1/3 → BUY/SELL、
+ * 対応は src/utils/stalledOrderCsv.js の toTwsOrderRow の仕様（売買区分 1/3 → SELL/BUY、
  * 指成区分 MO/LO → MKT/LMT、成行は価格が空欄、執行条件は常に DAY）を再掲したもの。
  */
-const ACTIONS = { 1: 'BUY', 3: 'SELL' }
+const ACTIONS = { 1: 'SELL', 3: 'BUY' }
 const ORDER_TYPES = { MO: 'MKT', LO: 'LMT' }
 function twsOrderLine(raw) {
   const orderType = ORDER_TYPES[raw.指成区分]

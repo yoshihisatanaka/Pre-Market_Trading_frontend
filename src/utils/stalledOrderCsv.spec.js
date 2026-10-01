@@ -14,7 +14,7 @@ import {
  * 入力はアプリ内モデル（src/api/stalledOrders.js の StalledOrder）で、フィクスチャの値から組み立てる。
  */
 const CRLF = '\r\n'
-const SIDES = { 1: 'buy', 3: 'sell' }
+const SIDES = { 1: 'sell', 3: 'buy' }
 
 /** フィクスチャ（生の形）→ CSV が読む項目だけのアプリ内モデル */
 const toModel = (raw) => ({

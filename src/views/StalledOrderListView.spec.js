@@ -80,7 +80,7 @@ afterEach(() => {
 const BRANCH = '123'
 const branchErrors = stalledOrderErrors.filter((row) => row.部店 === BRANCH)
 const branchWorking = stalledWorkingOrders.filter((row) => row.部店 === BRANCH)
-const SIDE_LABELS = { 1: '買', 3: '売' }
+const SIDE_LABELS = { 1: '売', 3: '買' }
 const orderedAt = (row) => `${row.受注日}T${row.受注時刻}`
 const byOrderedAtDesc = (a, b) => orderedAt(b).localeCompare(orderedAt(a)) || b.ID - a.ID
 const hashIds = (rows) => rows.map((row) => `#${row.ID}`)

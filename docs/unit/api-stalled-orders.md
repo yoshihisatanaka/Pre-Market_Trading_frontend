@@ -24,7 +24,7 @@ jsdom の File を Node の FormData に積むとファイルではなく文字�
 | SOA-01 | 既定モック | `fetchStalledOrders()` を呼ぶ | `orderErrors` が 3 件、`workingOrders` が 2 件で返る | 実装済 |
 | SOA-02 | 既定モック | `fetchStalledOrders()` を呼ぶ | 日本語キーが camelCase になる（`部店` → `branchCode`、`銘柄コード` → `symbol`、`エラー内容` → `errorReason`） | 実装済 |
 | SOA-03 | 口座番号が integer の行 | `fetchStalledOrders()` を呼ぶ | `accountNumber` が文字列で返る | 実装済 |
-| SOA-04 | 売買区分が `'1'` / `'3'` の行 | `fetchStalledOrders()` を呼ぶ | `side` が `'buy'` / `'sell'` になる | 実装済 |
+| SOA-04 | 売買区分が `'3'` / `'1'` の行 | `fetchStalledOrders()` を呼ぶ | `side` が `'buy'` / `'sell'` になる（コードマスタの 3 買 / 1 売） | 実装済 |
 | SOA-05 | 売買区分が未知のコードの行 | `fetchStalledOrders()` を呼ぶ | `side` が空文字になる（買いに丸めない） | 実装済 |
 | SOA-06 | 成行（指成区分 `'MO'`・指値単価が null）の行 | `fetchStalledOrders()` を呼ぶ | `limitPrice` が null のまま返る（0 に寄せない） | 実装済 |
 | SOA-07 | 受注日と受注時刻を持つ行 | `fetchStalledOrders()` を呼ぶ | `orderedAt` が `'2026-09-16T10:22:00'` になる | 実装済 |

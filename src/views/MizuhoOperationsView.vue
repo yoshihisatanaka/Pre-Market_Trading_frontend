@@ -14,10 +14,10 @@ import MizuhoClosingPanel from '@/components/mizuho/MizuhoClosingPanel.vue'
 import MizuhoExecutionSummary from '@/components/mizuho/MizuhoExecutionSummary.vue'
 import MizuhoExecutionTable from '@/components/mizuho/MizuhoExecutionTable.vue'
 import { useListQuery } from '@/composables/useListQuery'
+import { useCodesStore } from '@/stores/codes'
 import { useMizuhoClosingStore } from '@/stores/mizuhoClosing'
 import { useMizuhoExecutionsStore } from '@/stores/mizuhoExecutions'
 import { downloadBlob } from '@/utils/download'
-import { FILL_STATUS_OPTIONS } from '@/utils/fillStatusTypes'
 
 /*
  * みずほ注文締（公開モック /executions/mizuho-operations）。
@@ -55,14 +55,21 @@ const SIDE_OPTIONS = [
  * URL 上のクエリ名（branch_code / side / status / date_from など）はこの filters 定義にだけ現れる。
  * バックエンドへ送る名前（start_date / end_date など）と route=0（みずほ）の固定は
  * src/api/mizuhoExecutions.js の中に閉じている。
- * status は出来状況の区分（filled / partial / canceled_filled）で、処理状況コードではない。
+ * status は出来状況の処理状況コードで、選択肢はコードマスタ `約定出来状況`（依頼中の契約提案。
+ * 約定照会と同じ）。App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で揃っている。
+ * 選択肢に無い値（手で書き換えられた URL）は条件なしに落とす（api 層はそのまま送るため）。
  */
+const codes = useCodesStore()
+const FILL_STATUS_OPTIONS = codes.optionsFor('約定出来状況')
+const parseFillStatus = (value) =>
+  FILL_STATUS_OPTIONS.some((option) => option.value === value) ? value : ''
+
 const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
   filters: [
     { key: 'branchCode', query: 'branch_code' },
     { key: 'symbol', query: 'symbol' },
     { key: 'side', query: 'side' },
-    { key: 'fillStatus', query: 'status' },
+    { key: 'fillStatus', query: 'status', parse: parseFillStatus },
     { key: 'dateFrom', query: 'date_from' },
     { key: 'dateTo', query: 'date_to' },
   ],

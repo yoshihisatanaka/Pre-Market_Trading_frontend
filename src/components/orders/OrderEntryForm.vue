@@ -30,8 +30,8 @@ import {
   SIDE,
   SIDE_OPTIONS,
   SOLICITATION_OPTIONS,
-  VWAP_OPTIONS,
 } from '@/utils/orderEntryOptions'
+import { useCodesStore } from '@/stores/codes'
 import {
   formatOrderDateInput,
   formatOrderTimeInput,
@@ -82,6 +82,13 @@ const emit = defineEmits(['submit'])
 const form = defineModel({ type: Object, required: true })
 
 const isLimit = computed(() => form.value.orderType === ORDER_TYPE.LIMIT)
+
+/*
+ * 注文種別（VWAP区分）の選択肢はコードマスタ `VWAP区分`（依頼中の契約提案）から。
+ * 読み込みは main.js が起動時に行い、App.vue は読み終えてから画面を描く。
+ */
+const codes = useCodesStore()
+const vwapOptions = computed(() => codes.optionsFor('VWAP区分'))
 
 const themeClass = computed(() => {
   if (form.value.side === SIDE.BUY) return 'is-buy'
@@ -395,7 +402,7 @@ function selectOrderType(value) {
         <FormField label="注文種別" layout="inline" :error="errors.vwap">
           <BaseSegmentedControl
             v-model="form.vwap"
-            :options="VWAP_OPTIONS"
+            :options="vwapOptions"
             class="order-entry-form__toggle"
             aria-label="注文種別"
             data-testid="order-entry-vwap"

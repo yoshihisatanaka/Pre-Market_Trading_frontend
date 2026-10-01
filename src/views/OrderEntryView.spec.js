@@ -13,6 +13,8 @@ import { fxRates } from '@/mocks/fixtures/fxRates'
 // GET /masters/fx/latest が返す行（基準日の昇順に並んだフィクスチャの末尾）
 const latestUsdFxRate = fxRates.at(-1)
 import { FIRST_ORDER_ID, orderMessages } from '@/mocks/fixtures/orderEntry'
+import { codeEntries } from '@/mocks/fixtures/codes'
+import { useCodesStore } from '@/stores/codes'
 import { EXPIRY_OPTION_COUNT } from '@/utils/orderEntryForm'
 import OrderEntryView from './OrderEntryView.vue'
 
@@ -42,8 +44,11 @@ async function mountView() {
     ],
   })
   await router.push(PATH)
+  // App.vue はコードマスタを読み終えてから画面を描く。それに合わせて先に読んでおく
+  const pinia = createPinia()
+  await useCodesStore(pinia).load()
   const wrapper = mount(OrderEntryView, {
-    global: { plugins: [createPinia(), router], stubs: { teleport: true } },
+    global: { plugins: [pinia, router], stubs: { teleport: true } },
   })
   return { wrapper, router }
 }
@@ -410,5 +415,18 @@ describe('OrderEntryView', () => {
     expect(byTestId(wrapper, 'order-entry-validate-error').text()).toContain(SERVER_ERROR)
     expect(byTestId(wrapper, 'order-entry-form').exists()).toBe(true)
     expect(byTestId(wrapper, 'order-entry-quantity').element.value).toBe('10')
+  })
+
+  it('[NOV-21] 注文種別の選択肢はコードマスタ VWAP区分 から来て、既定は 0（通常）', async () => {
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    const buttons = byTestId(wrapper, 'order-entry-vwap').findAll('button')
+    expect(
+      buttons.map((button) => ({ value: button.attributes('data-value'), label: button.text() })),
+    ).toEqual(codeEntries('VWAP区分').map(({ code, label }) => ({ value: code, label })))
+    expect(buttons.find((button) => button.attributes('data-selected') === 'true').text()).toBe(
+      '通常',
+    )
   })
 })

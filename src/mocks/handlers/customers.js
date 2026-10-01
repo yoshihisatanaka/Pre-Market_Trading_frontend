@@ -1,12 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import {
-  accountTypeCodes,
-  branches,
-  corporateTypeCodes,
-  investmentPolicyCodes,
-  restrictionCodes,
-  salesHandlers,
-} from '../fixtures/codes'
+import { branches, codeName, salesHandlers } from '../fixtures/codes'
 import {
   DOCUMENT_NAMES,
   SPECIFIC_ACCOUNT_NAMES,
@@ -302,20 +295,19 @@ function nextId() {
 
 /** 行のコードから表示名と年齢を付け直す（実 API の「自動算出項目の付与」） */
 function withNames(row) {
-  const nameOf = (codes, code) => codes.find((entry) => entry.code === code)?.label ?? null
   return {
     ...row,
     部店名: branches.find((branch) => branch.code === row.部店コード)?.name ?? null,
     扱者名: salesHandlers.find((handler) => handler.code === row.扱者コード)?.name ?? null,
-    法人区分名: nameOf(corporateTypeCodes, row.法人区分),
+    法人区分名: codeName('法人区分', row.法人区分),
     年齢: ageOf(row.生年月日),
     コンプラランク名: row.コンプラランク ?? null,
-    投資方針名: nameOf(investmentPolicyCodes, row.投資方針),
+    投資方針名: codeName('投資方針', row.投資方針, row.法人区分),
     VWAP書類受入名: DOCUMENT_NAMES[row.VWAP書類受入] ?? null,
     リスク外株書類受入名: DOCUMENT_NAMES[row.リスク外株書類受入] ?? null,
     外国証券同意書受入名: DOCUMENT_NAMES[row.外国証券同意書受入] ?? null,
     NISA契約名: { 0: '未契約', 1: '契約', 9: '解約済' }[row.NISA契約] ?? null,
-    取引停止区分_全取引名: nameOf(restrictionCodes, String(row.取引停止区分_全取引)),
+    取引停止区分_全取引名: codeName('取引停止区分_全取引', row.取引停止区分_全取引),
     取引停止区分_エクイティ商品取引_売買名:
       SUSPENSION_NAMES[row.取引停止区分_エクイティ商品取引_売買] ?? null,
     取引停止区分_リスク商品取引_売買名:
@@ -324,7 +316,7 @@ function withNames(row) {
       SUSPENSION_NAMES[row.取引停止区分_エクイティ商品取引_買] ?? null,
     取引停止区分_リスク商品取引_買名: SUSPENSION_NAMES[row.取引停止区分_リスク商品取引_買] ?? null,
     特定口座区分名: SPECIFIC_ACCOUNT_NAMES[row.特定口座区分] ?? null,
-    口座区分名: nameOf(accountTypeCodes, row.口座区分),
+    口座区分名: codeName('口座区分', row.口座区分),
     事故処理口座区分名: row.事故処理口座区分 === '1' ? '事故処理' : '通常',
   }
 }

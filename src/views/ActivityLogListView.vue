@@ -15,11 +15,10 @@ import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { useActivityLogTargetsStore } from '@/stores/activityLogTargets'
 import { useActivityLogsStore } from '@/stores/activityLogs'
+import { useCodesStore } from '@/stores/codes'
 import {
-  ACTIVITY_OPERATION_OPTIONS,
   ACTIVITY_SORT_OPTIONS,
   formatActivityAt,
-  isActivityOperation,
   isActivitySort,
   operationBadgeVariant,
   operationLabel,
@@ -48,6 +47,15 @@ const { options: targetOptions, error: targetsError } = storeToRefs(targetsStore
 
 // 対象種別の選択肢は一度取れたら使い回す（ストア側で未取得のときだけ読む）
 onMounted(() => targetsStore.ensureLoaded())
+
+/*
+ * 操作区分の選択肢はコードマスタ `操作区分`（依頼中の契約提案）から。
+ * App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で揃っていて、
+ * URL クエリの検査にもそのまま使える。一覧のバッジと名前は utils/activityLogTypes.js のまま。
+ */
+const codes = useCodesStore()
+const operationOptions = codes.optionsFor('操作区分')
+const isActivityOperation = (value) => operationOptions.some((option) => option.value === value)
 
 const columns = [
   { key: 'at', label: '操作日時' },
@@ -135,7 +143,7 @@ function closeDetail() {
         <BaseSelect
           v-bind="field"
           v-model="inputs.operation"
-          :options="ACTIVITY_OPERATION_OPTIONS"
+          :options="operationOptions"
           placeholder="-- 全て --"
           data-testid="activity-logs-operation"
         />

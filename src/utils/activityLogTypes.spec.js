@@ -3,7 +3,6 @@ import {
   ACTIVITY_OPERATION_OPTIONS,
   formatActivityAt,
   formatActivityValue,
-  isActivityOperation,
   isActivitySort,
   operationBadgeVariant,
   operationLabel,
@@ -42,15 +41,6 @@ describe('utils/activityLogTypes', () => {
   it('[ALU-04] 一括処理・未知の値・空文字は gray', () => {
     for (const value of ['BATCH', 'PURGE', '']) {
       expect(operationBadgeVariant(value)).toBe('gray')
-    }
-  })
-
-  it('[ALU-05] isActivityOperation は選択肢の値だけを通す', () => {
-    for (const { value } of ACTIVITY_OPERATION_OPTIONS) {
-      expect(isActivityOperation(value)).toBe(true)
-    }
-    for (const value of ['create', '', undefined, 'PURGE']) {
-      expect(isActivityOperation(value)).toBe(false)
     }
   })
 

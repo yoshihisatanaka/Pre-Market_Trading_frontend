@@ -10,6 +10,7 @@ import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import OrderInquiryTable from '@/components/orders/OrderInquiryTable.vue'
 import { useListQuery } from '@/composables/useListQuery'
+import { useCodesStore } from '@/stores/codes'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useOrderInquiryStore } from '@/stores/orderInquiry'
 
@@ -37,18 +38,12 @@ const canOrder = computed(() => operator.can('order'))
 const operatorPending = computed(() => !operator.operator && !operator.error)
 
 /*
- * 出来状況の選択肢。並びと文言は画面モックのとおり。
- * 値は URL クエリ（status）にそのまま載り、api 層が処理状況コードへ読み替えて送る
- * （取消済は 034、注文エラーは 101 だけで絞る。理由は src/api/orderInquiry.js の EXECUTION_STATUS_CODES）。
+ * 出来状況の選択肢はコードマスタ `注文照会出来状況`（依頼中の契約提案）から。値は処理状況コードで、
+ * URL クエリ（status）にも API の status にもそのまま載る。
+ * App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で選択肢は揃っている。
  */
-const executionStatusOptions = [
-  { value: '未出来', label: '未出来' },
-  { value: '注文中', label: '注文中' },
-  { value: '一部出来', label: '一部出来' },
-  { value: '全部出来', label: '全部出来' },
-  { value: '取消済', label: '取消済（出来有・無）' },
-  { value: '注文エラー', label: '注文エラー' },
-]
+const codes = useCodesStore()
+const executionStatusOptions = codes.optionsFor('注文照会出来状況')
 
 /** 選択肢に無い値（手で書き換えられた URL クエリ）を空に落とす */
 function oneOf(options) {

@@ -5,6 +5,7 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
+import { codeEntries } from '@/mocks/fixtures/codes'
 import { executions } from '@/mocks/fixtures/executions'
 import {
   noOperationOperator,
@@ -12,6 +13,7 @@ import {
   supervisorOperator,
   viewerOperator,
 } from '@/mocks/fixtures/currentOperator'
+import { useCodesStore } from '@/stores/codes'
 import { EXECUTIONS_PAGE_SIZE } from '@/stores/executions'
 import { downloadBlob } from '@/utils/download'
 import { formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
@@ -156,9 +158,13 @@ async function mountView({ query = {} } = {}) {
   })
   await router.push({ path: PATH, query })
 
+  // App.vue はコードマスタを読み終えてから画面を描く。それに合わせて先に読んでおく
+  const pinia = createPinia()
+  await useCodesStore(pinia).load()
+
   const wrapper = mount(ExecutionListView, {
     global: {
-      plugins: [createPinia(), router],
+      plugins: [pinia, router],
       // teleport を stub して、ヘッダへ差し込むボタンを wrapper 内に描画させる
       stubs: { teleport: true },
     },
@@ -570,5 +576,18 @@ describe('ExecutionListView', () => {
     expect(exportButton(wrapper).text()).toBe('CSV出力')
     expect(exportButton(wrapper).element.disabled).toBe(false)
     expect(downloadBlob).toHaveBeenCalledTimes(1)
+  })
+
+  it('[EXV-22] 出来状況の選択肢はコードマスタ 約定出来状況 から来る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    const options = wrapper
+      .findAll('[data-testid="executions-status"] option')
+      .map((option) => ({ value: option.element.value, label: option.text() }))
+    expect(options).toEqual([
+      { value: '', label: '-- 全て --' },
+      ...codeEntries('約定出来状況').map(({ code, label }) => ({ value: code, label })),
+    ])
   })
 })

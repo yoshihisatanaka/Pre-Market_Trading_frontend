@@ -8,7 +8,11 @@
  * 対象種別の選択肢は API（`/operations/activity-logs/targets`）から引くので、ここには持たない。
  */
 
-/** 操作区分。一覧のバッジと検索セレクトで使う。表示名は画面の言葉に訳したもの */
+/**
+ * 操作区分の表示名。一覧のバッジと詳細ダイアログで使う。表示名は画面の言葉に訳したもの。
+ * **検索セレクトの選択肢と URL クエリの検査はコードマスタ `操作区分`（依頼中の契約提案）から来る**
+ * （views/ActivityLogListView.vue）
+ */
 export const ACTIVITY_OPERATION_OPTIONS = [
   { value: 'CREATE', label: '登録' },
   { value: 'UPDATE', label: '更新' },
@@ -34,7 +38,6 @@ function memberOf(options) {
   return (value) => options.some((option) => option.value === value)
 }
 
-export const isActivityOperation = memberOf(ACTIVITY_OPERATION_OPTIONS)
 export const isActivitySort = memberOf(ACTIVITY_SORT_OPTIONS)
 
 /**

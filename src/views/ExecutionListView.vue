@@ -12,6 +12,7 @@ import FormField from '@/components/ui/FormField.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
+import { useCodesStore } from '@/stores/codes'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useExecutionsStore } from '@/stores/executions'
 import { downloadBlob } from '@/utils/download'
@@ -61,16 +62,14 @@ const SIDE_OPTIONS = [
 ]
 
 /*
- * 出来状況。値は処理状況コード（実 API の status にそのまま載る）。
- * 取消済は 032 / 034 の 2 つがあるが、status は 1 つのコードしか受けないので、
- * ひとまず即時取消・発注失敗の取消済（034）だけを選ばせる。
+ * 出来状況。選択肢はコードマスタ `約定出来状況`（依頼中の契約提案）から来て、値は処理状況コード
+ * （実 API の status にそのまま載る）。App.vue がコードマスタを読み終えてから画面を描くので、
+ * setup の時点で揃っている（URL クエリの検査にもそのまま使える）。
+ * 取消済は 032 / 034 の 2 つがあるが、status は 1 つのコードしか受けないので 034 だけで絞る。
  * TODO(処理実装): 032 も拾う指定のしかたをバックエンドに確認する
  */
-const STATUS_OPTIONS = [
-  { value: '011', label: '全部出来' },
-  { value: '010', label: '一部出来' },
-  { value: '034', label: '取消済（出来有）' },
-]
+const codes = useCodesStore()
+const STATUS_OPTIONS = codes.optionsFor('約定出来状況')
 
 /** 預託先区分。値は注文ルートのコード（0:みずほ / 1:IB） */
 const ROUTE_OPTIONS = [

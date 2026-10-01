@@ -17,5 +17,5 @@ MSW の既定ハンドラ（`src/mocks/handlers/orders.js`）に当てて、取�
 | OIS-02 | 既定モック | `load({ branchCode: '123' })` | `items` が 2 件（#38 / #41）、`total` が部店 123 の行数になり、`branchCode` に `'123'` が残る | 実装済 |
 | OIS-03 | `GET /orders` が 500 | `load()` | `error.message` に理由が入り、`items` は空、`loading` は false に戻る | 実装済 |
 | OIS-04 | 0 件の応答 | `load()` | `isEmpty` が true | 実装済 |
-| OIS-05 | 既定モック | `load({ executionStatus: '注文中' })` | `executionStatus` に `'注文中'` が残り、処理状況 003 の行だけに絞り込まれる（MSW が `status=003` を解釈する。#38 のまとまりの最新版 #42 と #34） | 実装済 |
+| OIS-05 | 既定モック | `load({ executionStatus: '003' })`（注文中） | `executionStatus` に `'003'` が残り、処理状況 003 の行だけに絞り込まれる（MSW が `status=003` を解釈する。#38 のまとまりの最新版 #42 と #34） | 実装済 |
 | OIS-06 | 既定モック | ストアを作る | `create` / `update` / `remove` を公開しない | 実装済 |

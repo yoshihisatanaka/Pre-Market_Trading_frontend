@@ -29,6 +29,7 @@ import {
  *   required     … 必須か
  *   options      … select の選択肢（固定。区分の意味が spec の description にあるもの）
  *   codes        … select の選択肢をコードマスタ（GET /codes）から引くときの名前
+ *   codesContext … 2 段のカテゴリ（投資方針）の 1 段目に使う、同じフォームの項目の key
  *   initial      … 新規追加で開いたときの値（未指定は ''）。区分は実 API の既定から始める
  *   lockedOnEdit … 編集で読み取り専用にする（業務キー。CustomerUpdateRequest に無い）
  *   min / max    … 数値の範囲。pattern / patternMessage … 文字列の書式
@@ -159,7 +160,9 @@ export const CUSTOMER_FIELD_GROUPS = [
         testid: 'investment-policy',
         label: '投資方針',
         control: 'select',
+        // 名称は法人区分で変わる（個人: 利回り・安定重視 … / 法人: 政策投資 …）
         codes: '投資方針',
+        codesContext: 'corporateType',
       },
       {
         key: 'specificAccountType',

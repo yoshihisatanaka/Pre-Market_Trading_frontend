@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
+import { formatDateTime } from '../src/utils/format'
 
 /*
- * 障害管理を「実 API に当てて」確かめる E2E（スモーク 2 本）。
+ * 障害管理を「実 API に当てて」確かめる E2E（スモーク 2 本 IR-01 / IR-02 と、網羅の IR-03〜IR-07）。
  * シナリオ: docs/e2e/incidents-real-api.md（タイトル先頭の [IR-xx] が対応 ID）
  *
  * incidents.spec.js（IN）とは目的が違う。IN は MSW のモックに当てて画面の挙動を
@@ -13,11 +14,18 @@ import { expect, test } from '@playwright/test'
  *   2. バックエンドの api を起動しておく
  *   docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test incidents.real-api
  *
- * IR-02 はローカル DB の発注停止マスタを実際に書き換える（VWAP `2` を停止 → 再開）。
+ * IR-02 / IR-06 / IR-07 はローカル DB の発注停止マスタを実際に書き換える（VWAP `2` を停止 → 再開）。
  * 停止はバックエンド全体に効くので、他の実 API E2E と排他で流す。途中で落ちても
- * afterEach が API を直接叩いて再開に戻す。停止理由・日時・操作者と履歴 2 行は戻せないので、
- * ローカルの開発 DB 前提。
+ * afterEach が API を直接叩いて再開に戻す。停止理由・日時・操作者と履歴（1 回の実行で 6 行）は
+ * 戻せないので、ローカルの開発 DB 前提。全体（ALL）は止めない（docs/e2e/incidents-real-api.md）。
  */
+
+const SUSPEND_API = '/api/operations/order-suspensions/suspend'
+const HISTORY_API = '/api/operations/order-suspensions/history'
+
+// src/stores/incidents.js の INCIDENT_HISTORY_PAGE_SIZE（= utils/pagination.js の DEFAULT_PAGE_SIZE）と同じ値。
+// ストアは import.meta.env を辿る api/client.js に依存しており Playwright からは import できない
+const HISTORY_PAGE_SIZE = 50
 
 const PATH = '/operations/incidents'
 
@@ -88,6 +96,66 @@ async function openView(page) {
   await page.goto(PATH)
   await settleView(page)
   await assertRealApi(page)
+}
+
+/* ここから IR-03 以降の部品 */
+
+/** 履歴 API の 1 ページ（画面と同じ limit） */
+async function getHistoryPage(offset) {
+  const res = await api.get(HISTORY_API, { params: { limit: HISTORY_PAGE_SIZE, offset } })
+  expect(res.ok(), `実 API から操作履歴を取得できない（${res.status()}）`).toBe(true)
+  return res.json()
+}
+
+/** 履歴 1 件が画面に出るはずの 4 列（変更日時 / 制御内容 / 停止理由 / 更新者） */
+function historyCellsOf(item) {
+  return [
+    formatDateTime(item['操作日時']),
+    `${item['停止対象名']}：${item['操作区分名']}`,
+    item['変更後データ']?.['停止理由'] ?? '—',
+    item['操作者'],
+  ]
+}
+
+function paginationOf(page) {
+  return page.getByTestId('incidents-history-pagination')
+}
+
+/** 件数表示（BasePagination の rangeLabel と同じ形） */
+function rangeText(total, first, last) {
+  return `${total} 件中 ${first}–${last} 件`
+}
+
+/** API を直接叩いて VWAP を止める / 戻す（画面を経由しない別経路の操作） */
+async function suspendViaApi(reason) {
+  const row = targetOf(await getStatus(), TARGET)
+  const res = await api.post(SUSPEND_API, {
+    data: { 停止対象: TARGET, 停止理由: reason, 更新日時: row['更新日時'] ?? null },
+  })
+  expect(res.ok(), `API での停止が失敗した: ${res.status()} ${await res.text()}`).toBe(true)
+}
+
+async function resumeViaApi() {
+  const row = targetOf(await getStatus(), TARGET)
+  const res = await api.post(RESUME_API, {
+    data: { 停止対象: TARGET, 更新日時: row['更新日時'] ?? null },
+  })
+  expect(res.ok(), `API での再開が失敗した: ${res.status()} ${await res.text()}`).toBe(true)
+}
+
+/** 書き込み系の前提（IR-02 と同じ）。全体が通常で VWAP も通常であること。VWAP の行を返す */
+async function expectRouteIdle() {
+  const status = await getStatus()
+  expect(
+    status['全体停止中'],
+    '全体（ALL）が停止中のため、ルートの操作は画面が塞ぐ。DB で全体を再開してから流すこと',
+  ).toBe(false)
+  const row = targetOf(status, TARGET)
+  expect(
+    row['発注停止中'],
+    'VWAP が停止中のまま始まった（前回の後片付け漏れ）。再開してから流すこと',
+  ).toBe(false)
+  return row
 }
 
 // IR-02 が実 DB の停止状態を書き換えるので、IR-01 と並走させない
@@ -198,5 +266,179 @@ test.describe('障害管理（実 API 接続）', () => {
     const after = targetOf(await getStatus(), TARGET)
     expect(after['発注停止中']).toBe(false)
     expect(after['停止理由']).toBe(reason)
+  })
+
+  test('[IR-03] 現在の運用状態と全体停止中の抑止が API のフラグどおりになる', async ({ page }) => {
+    await openView(page)
+
+    const status = await getStatus()
+    const targets = status.targets ?? []
+    const allSuspended = status['全体停止中'] === true
+    const state = page.getByTestId('incidents-state')
+
+    // 全体（ALL）はこの spec では止めない。止まっていたときだけ全体停止中の分岐を見る
+    if (allSuspended) {
+      await expect(state).toHaveText('全体停止中')
+    } else if (status['発注停止中'] === true) {
+      await expect(state).toContainText('一部停止中')
+      for (const code of status['停止中の対象'] ?? []) {
+        const name = targets.find((row) => row['停止対象'] === code)?.['停止対象名'] ?? code
+        await expect(state).toContainText(name)
+      }
+    } else {
+      await expect(state).toHaveText('通常運用')
+    }
+
+    await expect(page.getByTestId('incidents-locked')).toHaveCount(allSuspended ? 1 : 0)
+    for (const target of targets) {
+      const toggle = page.getByTestId(`incidents-target-${target['停止対象']}-action`)
+      if (allSuspended && target['停止対象'] !== 'ALL') {
+        await expect(toggle).toBeDisabled()
+      } else {
+        await expect(toggle).toBeEnabled()
+      }
+    }
+  })
+
+  test('[IR-04] 履歴の各列が API の操作履歴と一致する', async ({ page }) => {
+    await openView(page)
+
+    const body = await getHistoryPage(0)
+    const items = body.histories ?? []
+
+    if (body.total === 0) {
+      await expect(page.getByTestId('incidents-history-empty')).toHaveText(
+        '障害対応履歴はありません。',
+      )
+      await expect(paginationOf(page)).toHaveCount(0)
+      return
+    }
+
+    const rows = historyRowsOf(page)
+    await expect(rows).toHaveCount(items.length)
+    // 停止理由は 変更後データ（description にしかキーが無い object）から読んでいる。そこが噛み合っているかを見る
+    for (const [index, item] of items.entries()) {
+      await expect(rows.nth(index).getByRole('cell')).toHaveText(historyCellsOf(item))
+    }
+    await expect(paginationOf(page).getByTestId('pagination-range')).toHaveText(
+      rangeText(body.total, 1, Math.min(body.total, HISTORY_PAGE_SIZE)),
+    )
+  })
+
+  test('[IR-05] 履歴の 2 ページ目が API の offset=50 の応答と一致する', async ({ page }) => {
+    await openView(page)
+
+    const { total } = await getHistoryPage(0)
+    const pagination = paginationOf(page)
+
+    if (total <= HISTORY_PAGE_SIZE) {
+      test.info().annotations.push({
+        type: 'note',
+        description: `履歴が ${total} 件で 1 ページに収まるため、offset が実 API に効くかは確かめていない`,
+      })
+      await expect(pagination.getByTestId('pagination-page')).toHaveCount(0)
+      return
+    }
+
+    const secondButton = pagination.getByRole('button', { name: '2', exact: true })
+    await secondButton.click()
+
+    await expect(pagination.getByTestId('pagination-range')).toHaveText(
+      rangeText(total, HISTORY_PAGE_SIZE + 1, Math.min(total, HISTORY_PAGE_SIZE * 2)),
+    )
+    await expect(secondButton).toHaveAttribute('aria-current', 'page')
+
+    const second = await getHistoryPage(HISTORY_PAGE_SIZE)
+    const rows = historyRowsOf(page)
+    await expect(rows).toHaveCount(second.histories.length)
+    await expect(rows.first().getByRole('cell')).toHaveText(historyCellsOf(second.histories[0]))
+  })
+
+  test('[IR-06] 画面を開いたあとに別経路で更新されると、停止は 409 でダイアログに出る', async ({
+    page,
+  }) => {
+    const initial = await expectRouteIdle()
+    // 更新日時 が空だと画面は null を送り、競合の照合そのものが行われない。下ごしらえで埋める
+    if (initial['更新日時'] == null) {
+      await suspendViaApi(`E2E 下ごしらえ ${new Date().toISOString()}`)
+      await resumeViaApi()
+    }
+    const stale = targetOf(await getStatus(), TARGET)
+    const reason = `E2E 競合確認 ${new Date().toISOString()}`
+
+    await openView(page)
+
+    // 別経路で停止 → 再開。状態は通常のままだが、画面が持っている 更新日時 は古くなる
+    await suspendViaApi(`E2E 別経路 ${new Date().toISOString()}`)
+    await resumeViaApi()
+    const fresh = targetOf(await getStatus(), TARGET)
+    expect(
+      fresh['更新日時'],
+      '別経路の操作で 更新日時 が変わらなかった（精度が粗く同じ時刻に丸められた可能性）。競合が起きないので確かめられない',
+    ).not.toBe(stale['更新日時'])
+
+    await page.getByTestId(`incidents-target-${TARGET}-action`).click()
+    await page.getByTestId('incidents-control-reason').fill(reason)
+    const responsePromise = page.waitForResponse(
+      (res) =>
+        new URL(res.url()).pathname === SUSPEND_API && res.request().method() === 'POST',
+    )
+    await page.getByTestId('incidents-control-submit').click()
+    const res = await responsePromise
+    const body = await res.json().catch(() => null)
+
+    expect(res.status(), `停止 API の応答: ${JSON.stringify(body)}`).toBe(409)
+    const error = page.getByTestId('incidents-control-error')
+    if (typeof body?.detail === 'string') {
+      await expect(error).toHaveText(body.detail)
+    } else {
+      await expect(error).not.toBeEmpty()
+    }
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByTestId('incidents-control-reason')).toHaveValue(reason)
+    await expect(page.getByTestId('incidents-notice')).toHaveCount(0)
+
+    // 画面からの停止は入っていない
+    const after = targetOf(await getStatus(), TARGET)
+    expect(after['発注停止中']).toBe(false)
+    expect(after['停止理由']).not.toBe(reason)
+  })
+
+  test('[IR-07] 別経路で停止した VWAP の再開確認に停止時の記録が出て、再開できる', async ({
+    page,
+  }) => {
+    await expectRouteIdle()
+    // 実行ごとに違う理由にして、前回の理由が残っているだけの状態と区別する
+    const reason = `E2E 再開確認 ${new Date().toISOString()}`
+    await suspendViaApi(reason)
+    const suspended = targetOf(await getStatus(), TARGET)
+    const targetName = suspended['停止対象名']
+
+    await openView(page)
+    const toggle = page.getByTestId(`incidents-target-${TARGET}-action`)
+    const state = targetCardOf(page, TARGET).getByTestId('incidents-target-state')
+
+    await expect(toggle).toHaveAttribute('aria-checked', 'true')
+    await expect(state).toHaveText('停止中')
+    await expect(page.getByTestId('incidents-state')).toContainText(targetName)
+
+    await toggle.click()
+    await expect(
+      page.getByRole('dialog', { name: `${targetName}の発注を再開しますか？` }),
+    ).toBeVisible()
+    const summary = page.getByTestId('incidents-control-summary')
+    await expect(summary).toContainText(reason)
+    await expect(summary).toContainText(formatDateTime(suspended['停止日時']))
+    await expect(summary).toContainText(suspended['停止者'] ?? '—')
+    await expect(page.getByTestId('incidents-control-reason')).toHaveCount(0)
+
+    // 停止と再開を同じテストの中で対にする
+    await page.getByTestId('incidents-control-submit').click()
+
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByTestId('incidents-notice')).toBeVisible()
+    await expect(toggle).toHaveAttribute('aria-checked', 'false')
+    await expect(state).toHaveText('通常')
+    expect(targetOf(await getStatus(), TARGET)['発注停止中']).toBe(false)
   })
 })

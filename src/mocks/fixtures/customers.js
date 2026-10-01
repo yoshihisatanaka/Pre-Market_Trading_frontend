@@ -1,11 +1,4 @@
-import {
-  accountTypeCodes,
-  branches,
-  corporateTypeCodes,
-  investmentPolicyCodes,
-  restrictionCodes,
-  salesHandlers,
-} from './codes'
+import { branches, codeName, salesHandlers } from './codes'
 
 /*
  * モックのレスポンス実体（顧客マスタ）。
@@ -25,9 +18,6 @@ import {
  * 部店 4 × 顧客 14 = 56 件を作り、うち 12 件（部店ごとの 3 件）を
  * ユーザー操作フラグ=1（手動操作された行。一覧で色が付く）にしてある。
  */
-
-/** コード → 区分名。コードマスタの label がそのまま区分名になる */
-const nameOf = (codes, code) => codes.find((entry) => entry.code === code)?.label ?? null
 
 /** 書類受入の名前。CustomerItem の description「(0: 未受入, 1: 受入済)」 */
 export const DOCUMENT_NAMES = { 0: '未受入', 1: '受入済' }
@@ -270,7 +260,7 @@ function toAccountItem({ id, branch, handler, seq, profile, canceled = false }) 
     扱者コード: handler.code,
     扱者名: handler.name,
     法人区分: corporateType,
-    法人区分名: nameOf(corporateTypeCodes, corporateType),
+    法人区分名: codeName('法人区分', corporateType),
     顧客名: profile.name,
     顧客名カナ: profile.kana,
     生年月日: profile.birth,
@@ -279,7 +269,8 @@ function toAccountItem({ id, branch, handler, seq, profile, canceled = false }) 
     // コンプラランクはコードがそのまま名前（ComplianceRankEnum に名前の対応表が無い）
     コンプラランク名: profile.rank,
     投資方針: profile.policy,
-    投資方針名: nameOf(investmentPolicyCodes, profile.policy),
+    // 投資方針の名称は法人区分で変わる（コードマスタの 2 段のカテゴリ）
+    投資方針名: codeName('投資方針', profile.policy, corporateType),
     VWAP書類受入: vwapDocument,
     VWAP書類受入名: DOCUMENT_NAMES[vwapDocument],
     リスク外株書類受入: '1',
@@ -296,7 +287,7 @@ function toAccountItem({ id, branch, handler, seq, profile, canceled = false }) 
     外貨預り金: profile.cashUsd,
     // 取引停止区分だけ integer（法人区分や事故処理口座区分は文字列。実 API の型の差をそのまま持つ）
     取引停止区分_全取引: Number(restriction),
-    取引停止区分_全取引名: nameOf(restrictionCodes, restriction),
+    取引停止区分_全取引名: codeName('取引停止区分_全取引', restriction),
     // 商品別の停止は全取引に揃える（全取引が停止なら商品別もすべて停止）
     取引停止区分_エクイティ商品取引_売買: Number(restriction),
     取引停止区分_エクイティ商品取引_売買名: SUSPENSION_NAMES[restriction],
@@ -309,7 +300,7 @@ function toAccountItem({ id, branch, handler, seq, profile, canceled = false }) 
     特定口座区分: specificAccountType,
     特定口座区分名: SPECIFIC_ACCOUNT_NAMES[specificAccountType],
     口座区分: profile.accountType,
-    口座区分名: nameOf(accountTypeCodes, profile.accountType),
+    口座区分名: codeName('口座区分', profile.accountType),
     事故処理口座区分: accidentAccount,
     事故処理口座区分名: profile.accident ? '事故処理' : '通常',
     取消区分: canceled ? 1 : 0,

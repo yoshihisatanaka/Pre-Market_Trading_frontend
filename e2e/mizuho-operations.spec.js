@@ -295,7 +295,8 @@ test.describe('みずほ注文締', () => {
     await page.getByTestId('mizuho-executions-fill-status').selectOption({ label: '一部出来' })
     await submitSearch(page)
 
-    await expect(page).toHaveURL(/[?&]status=partial(&|$)/)
+    // 選択肢の値は処理状況コード（コードマスタ 約定出来状況。一部出来は 010）
+    await expect(page).toHaveURL(/[?&]status=010(&|$)/)
     await expect(page.getByTestId('mizuho-executions-count')).toHaveText(
       `${partialRows.length} 件`,
     )

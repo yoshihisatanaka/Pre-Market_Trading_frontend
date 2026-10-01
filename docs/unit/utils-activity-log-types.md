@@ -15,7 +15,6 @@
 | ALU-02 | 選択肢に無い値（`'PURGE'`） | 同上 | 値がそのまま返る（区分が増えても行が読める） | 実装済 |
 | ALU-03 | `'CREATE'` / `'UPDATE'` / `'DELETE'` | `operationBadgeVariant(value)` | それぞれ `success` / `info` / `warning` | 実装済 |
 | ALU-04 | `'BATCH'` / 未知の値 / 空文字 | 同上 | いずれも `gray` | 実装済 |
-| ALU-05 | 選択肢の全値 / 小文字・空文字・`undefined`・未知の値 | `isActivityOperation(value)` | 選択肢の値だけ true、それ以外は false | 実装済 |
 | ALU-06 | `''` / `'asc'` / `'desc'` / `'ASC'` / `undefined` | `isActivitySort(value)` | `''` と `'asc'` だけ true（既定の新しい順は空文字で表す） | 実装済 |
 | ALU-07 | ISO8601 の日時（`YYYY-MM-DDTHH:MM:SS`） | `formatActivityAt(value)` | `YYYY/MM/DD HH:MM:SS`（年から秒まで・ゼロ埋め） | 実装済 |
 | ALU-08 | 空文字 / `null` / `undefined` / 日時として読めない文字列 | 同上 | いずれも `—` | 実装済 |

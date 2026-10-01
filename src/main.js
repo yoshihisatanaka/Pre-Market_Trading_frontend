@@ -26,7 +26,9 @@ enableMocking()
     const app = createApp(App).use(pinia).use(router)
 
     /*
-     * コードマスタは全画面のプルダウンで使うので、起動時に一度だけ読み込む。
+     * コードマスタは全画面のプルダウンで使うので、起動時に一度だけ読み込む
+     * （/codes に加えて部店・扱者の /branches / /handlers も。中身は stores/codes.js）。
+     * 画面はここ以外で読み込まない。App.vue は読み終えるまで画面（RouterView）を描かない。
      *
      * mount より前に始めるのは、最初の描画の時点で AppLoadingOverlay を出すため
      * （useAsync は loading を最初の await より前に立てるので、同期で true になる）。

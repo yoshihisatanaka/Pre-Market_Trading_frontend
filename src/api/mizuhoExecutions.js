@@ -42,18 +42,6 @@ const FILL_STATUS_BY_CODE = {
 }
 
 /**
- * 出来状況の区分 → クエリに載せる 処理状況コード。
- *
- * TODO(処理実装): 「取消済（出来有）」に当たるコードが 1 つに決まらない
- *   （取消済は 032 / 034 の 2 つで、`status` は 1 コードしか受け取らない）。
- *   バックエンドに確認するまで送らない（その区分を選んでも絞り込まれない）。
- */
-const STATUS_QUERY_BY_FILL_STATUS = {
-  filled: '011',
-  partial: '010',
-}
-
-/**
  * 1 件のアプリ内モデル（このファイルの JSDoc で使う）
  *
  * @typedef {{
@@ -94,7 +82,10 @@ const STATUS_QUERY_BY_FILL_STATUS = {
  *   dateTo?: string,
  * }} MizuhoExecutionFilters
  *   side は売買区分コード（'1' / '3'）。知らない値は送らない。
- *   fillStatus は出来状況の区分（'filled' / 'partial' / 'canceled_filled'）。
+ *   fillStatus は出来状況の処理状況コード（コードマスタ `約定出来状況` のコード。'011' / '010' / '034'）で、
+ *   そのまま `status` に載せる。取消済は 032 / 034 の 2 つあるが `status` は 1 コードしか受けないので、
+ *   034 だけで絞る（約定照会と同じ。TODO(処理実装): 032 も拾う指定をバックエンドに確認する）。
+ *   行の fillStatus（'filled' など。画面の表示用の区分）とは値の体系が違う。
  *   dateFrom / dateTo は YYYY-MM-DD（実 API はそのまま受け取る）。
  *   空文字は「条件なし」としてリクエストに載せない
  */
@@ -156,7 +147,7 @@ function toSearchParams({
     branch_code: branchCode || undefined,
     symbol: symbol.trim() || undefined,
     side: SIDE_VALUES.includes(side) ? side : undefined,
-    status: STATUS_QUERY_BY_FILL_STATUS[fillStatus],
+    status: fillStatus || undefined,
     start_date: dateFrom || undefined,
     end_date: dateTo || undefined,
   }

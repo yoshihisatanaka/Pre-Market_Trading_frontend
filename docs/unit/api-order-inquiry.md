@@ -21,7 +21,7 @@ OIA-09〜11 を書き直す。
 | OIA-02 | 既定モック | `fetchOrderInquiry({ branchCode: '', symbol: '' })` | 空文字の条件はクエリに載せない（MSW が受けた URL にそのキーが無い）。`limit` / `offset` は常に載る | 実装済 |
 | OIA-03 | 既定モック | `fetchOrderInquiry({ branchCode: '123', accountNumber: '300001', symbol: 'AAPL' })` | `branch_code=123` / `account_no=300001` / `symbol=AAPL` で送られる | 実装済 |
 | OIA-04 | 既定モック | `fetchOrderInquiry({ accountNumber: '30-01' })` | 数字だけでない口座番号は `account_no` に載せない（422 を避ける） | 実装済 |
-| OIA-05 | 既定モック | `executionStatus` に 未出来 / 注文中 / 一部出来 / 全部出来 / 取消済 / 注文エラー を順に渡す | `status` クエリがそれぞれ `000` / `003` / `010` / `011` / `034` / `101` で送られる | 実装済 |
+| OIA-05 | 既定モック | `executionStatus` にコードマスタ `注文照会出来状況` のコード（`000` / `003` / `010` / `011` / `034` / `101`）を順に渡す | `status` クエリにそのコードがそのまま載る | 実装済 |
 | OIA-06 | 売買区分が `'1'` / `'3'` / `'9'` の行 | `fetchOrderInquiry()` | `side` がそれぞれ `'sell'` / `'buy'` / `''` になる | 実装済 |
 | OIA-07 | 受注日・受注時刻が `'2026-09-28'` + `'09:15:00'` / `'20260928'` + `'0915'` / 片方 `null` の行 | `fetchOrderInquiry()` | `orderedAt` が `'2026-09-28T09:15:00'` / `'2026-09-28T09:15:00'` / `''` になる | 実装済 |
 | OIA-08 | 成行（指値単価 `null`）・出来数量 `0`・約定代金 `null` の行 | `fetchOrderInquiry()` | `limitPrice` と `filledAmountUsd` は `null`、`filledQuantity` は `0` のまま（0 と未取得を区別する） | 実装済 |
@@ -30,7 +30,7 @@ OIA-09〜11 を書き直す。
 | OIA-11 | 子注文だけが返り、親の行が無い応答 | `fetchOrderInquiry()` | 子注文が 1 件ずつ独立した行（`history` / `slices` が空）になる | 実装済 |
 | OIA-12 | 処理状況が `'000'` / `'003'` / `'010'` / `'131'` / `'133'` / `'101'` / `'103'` / `'141'` / `'011'` / `'034'` / `'040'` の行 | `fetchOrderInquiry()` | `cancelable` は `'141'` までの 8 つで true・後の 3 つで false、`amendable` は `'000'` / `'003'` / `'010'` だけ true | 実装済 |
 | OIA-13 | 処理状況が `'010'` / `'101'` / `'034'` / `'002'` の行 | `fetchOrderInquiry()` | `statusTone` が `'partial'` / `'error'` / `'canceled'` / `''` になる | 実装済 |
-| OIA-14 | 既定モック | `fetchOrderInquiry({ executionStatus: '不明な値' })` / `'toString'` | 選択肢に無い値（Object の組み込み名を含む）は `status` クエリに載せない | 実装済 |
+| OIA-14 | 既定モック | `fetchOrderInquiry({ executionStatus: '' })` / 引数なし | `status` クエリを載せない（選択肢に無い値を落とすのは画面の役目。OIV-11） | 実装済 |
 | OIA-15 | 既定モック（#35 は一部出来） | `fetchOrderDetail('35')` | `GET /orders/35` を読み、`id` / 部店 / 口座番号（文字列）/ 銘柄 / `side` / 数量 / 指成区分 / 指値単価 / 発注範囲 / `vwap` / `status`（処理状況コード）/ `orderedAt` がフィクスチャの行から変換され、`filledQuantity` は約定の合計、`amendable` / `cancelable` は true になる | 実装済 |
 | OIA-16 | `Ticker` が `'BRK.B'`・`銘柄コード` が `'BRKB'` の行 / `Ticker` が空の行 | `fetchOrderDetail(id)` | `symbol` は `Ticker` を優先し、空なら `銘柄コード` になる | 実装済 |
 | OIA-17 | `executions` が 2 件（約定数量 30 と `'20'`）/ 空配列 / 項目なし | `fetchOrderDetail(id)` | `filledQuantity` がそれぞれ 50 / 0 / 0 になる | 実装済 |

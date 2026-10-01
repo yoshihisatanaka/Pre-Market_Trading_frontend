@@ -107,11 +107,11 @@ describe('stores/mizuhoExecutions', () => {
     expect(store.summary.buyCount).toBe(0)
   })
 
-  it('[MZS-03] 出来状況 partial で一部出来の行だけになる', async () => {
+  it('[MZS-03] 出来状況 010（一部出来）で一部出来の行だけになる', async () => {
     const isPartial = (row) => row.処理状況 === PARTIAL_CODE
     const store = useMizuhoExecutionsStore()
 
-    await store.load({ fillStatus: 'partial' })
+    await store.load({ fillStatus: PARTIAL_CODE })
 
     expect(idsIn(store)).toEqual(idsOf(isPartial))
     expect(store.items.length).toBeGreaterThan(0)

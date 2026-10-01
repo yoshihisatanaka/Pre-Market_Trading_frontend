@@ -19,8 +19,8 @@ import { ApiError, apiClient } from './client'
  *   - 取消・訂正の可否は 処理状況 のコードで決まる（下の CANCELABLE / AMENDABLE）
  *   - 訂正と自動分割（スライス）は別々の行で返る。画面は元注文ごとの 1 行に畳んで出すので、
  *     この層で `元注文ID` を手がかりにまとめる（groupOrders）
- *   - 出来状況の絞り込みは、画面の選択肢（未出来 / 注文中 …）を `status`（処理状況コード）へ
- *     読み替えて送る（EXECUTION_STATUS_CODES）
+ *   - 出来状況の絞り込みは、処理状況コードをそのまま `status` に載せる。選択肢は
+ *     コードマスタの `注文照会出来状況`（依頼中の契約提案。src/mocks/fixtures/codes.js）
  *
  * 仕様に書かれておらず、**推定で置いているもの**（処理をつなぐ前にバックエンドへ確かめる）:
  *   - `元注文ID` は訂正・分割の起点（最初の注文）を指す。訂正を重ねても孫ではなく起点を指す
@@ -117,22 +117,6 @@ const SLICE_CHILD = 'SLICE_CHILD'
 const CANCELABLE = new Set(['000', '003', '010', '131', '133', '101', '103', '141'])
 const AMENDABLE = new Set(['000', '003', '010'])
 
-/*
- * 出来状況（画面の選択肢）→ `status`（処理状況コード）。
- * `status` はコードを 1 つしか受けない（2026-09-25 実測で `?status=101,003` は 400）ため、
- * 2 つのコードにまたがる区分は片方だけで絞る。拾えないほうは docs/api/requests.md に依頼してある。
- *   取消済   … 034（即時取消・発注失敗の取消）。032（IB取消済）は拾えない
- *   注文エラー … 101（Dream発注失敗）。103（IB発注失敗）は拾えない
- */
-const EXECUTION_STATUS_CODES = {
-  未出来: '000',
-  注文中: '003',
-  一部出来: '010',
-  全部出来: '011',
-  取消済: '034',
-  注文エラー: '101',
-}
-
 /** 訂正の結果の mode → アプリ内の名前 */
 const AMEND_MODES = { IN_PLACE: 'inPlace', CANCEL_REPLACE: 'cancelReplace' }
 
@@ -163,8 +147,10 @@ const STATUS_TONES = {
  *   branchCode?: string, accountNumber?: string, symbol?: string, executionStatus?: string,
  * }} [params]
  *   空文字は「条件なし」としてリクエストに載せない。
- *   executionStatus（出来状況）は画面の選択肢の値（未出来 / 注文中 …）で受け、`status` の
- *   処理状況コードに読み替えて送る。知らない値は送らない（EXECUTION_STATUS_CODES）
+ *   executionStatus（出来状況）は処理状況コード（コードマスタ `注文照会出来状況` のコード）で受け、
+ *   そのまま `status` に載せる。`status` はコードを 1 つしか受けない（2026-09-25 実測で
+ *   `?status=101,003` は 400）ので、取消済は 034 だけ・注文エラーは 101 だけで絞る
+ *   （032 / 103 を拾えないことは docs/api/requests.md に依頼してある）
  * @returns {Promise<{ items: OrderInquiryGroup[], total: number }>}
  */
 export async function fetchOrderInquiry({
@@ -183,10 +169,7 @@ export async function fetchOrderInquiry({
       branch_code: branchCode || undefined,
       account_no: toAccountNo(accountNumber),
       symbol: symbol || undefined,
-      // hasOwn で引くのは、'toString' のような値で Object の組み込みを拾わないため
-      status: Object.hasOwn(EXECUTION_STATUS_CODES, executionStatus)
-        ? EXECUTION_STATUS_CODES[executionStatus]
-        : undefined,
+      status: executionStatus || undefined,
     },
   })
 

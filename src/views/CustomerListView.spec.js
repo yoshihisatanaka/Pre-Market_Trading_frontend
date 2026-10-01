@@ -5,7 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { codeMasters } from '@/mocks/fixtures/codes'
+import { codeEntries } from '@/mocks/fixtures/codes'
 import { canceledCustomers, customers } from '@/mocks/fixtures/customers'
 import { useCodesStore } from '@/stores/codes'
 import { CUSTOMERS_PAGE_SIZE } from '@/stores/customers'
@@ -175,11 +175,11 @@ const CANCELED_NUMBER = String(canceledCustomers[0].口座番号)
 /** 新規追加で埋める値。選択肢はコードマスタの先頭から取る */
 const NEW_CUSTOMER = {
   accountNumber: NEW_ACCOUNT_NUMBER,
-  branchCode: codeMasters.部店[0].code,
-  handlerCode: codeMasters.扱者[0].code,
+  branchCode: codeEntries('部店')[0].code,
+  handlerCode: codeEntries('扱者')[0].code,
   customerName: 'テスト 花子',
   customerNameKana: 'ﾃｽﾄ ﾊﾅｺ',
-  complianceRank: codeMasters.コンプラランク[0].code,
+  complianceRank: codeEntries('コンプラランク')[0].code,
   totalAssets: '0',
 }
 
@@ -453,7 +453,7 @@ describe('CustomerListView', () => {
 
     const expectedFor = (name, placeholder) => [
       { value: '', label: placeholder },
-      ...codeMasters[name].map(({ code, label }) => ({ value: code, label })),
+      ...codeEntries(name).map(({ code, label }) => ({ value: code, label })),
     ]
 
     expect(optionsOf(wrapper, 'customers-branch-code')).toEqual(

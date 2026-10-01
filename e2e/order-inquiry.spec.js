@@ -34,8 +34,9 @@ const allRowIds = expectedRowIds(orderInquiryRows)
 const withStatus = (code) => orderInquiryRows.filter((row) => row.処理状況 === code)
 
 /*
- * 出来状況の選択肢 → 送られる処理状況コード。src/api/orderInquiry.js の EXECUTION_STATUS_CODES と同じ
- * （api 層は Playwright から import できないので再掲する）。
+ * 出来状況（画面の名称）→ 処理状況コード。選択肢はコードマスタ 注文照会出来状況
+ * （src/mocks/fixtures/codes.js の契約提案）で、コードは URL の status と API の status にそのまま載る。
+ * 「取消済」だけは選択肢の名称が「取消済（出来有・無）」で、表の出来状況は「取消済」で始まる。
  */
 const EXECUTION_STATUS_CODES = {
   未出来: '000',
@@ -303,15 +304,16 @@ test.describe('注文照会', () => {
     page,
   }) => {
     const LABEL = '注文中'
-    const hits = withStatus(EXECUTION_STATUS_CODES[LABEL])
+    const CODE = EXECUTION_STATUS_CODES[LABEL]
+    const hits = withStatus(CODE)
     const ids = expectedRowIds(hits)
     await page.goto(INQUIRY_PATH)
     await expect(rowsOf(page)).toHaveCount(allRowIds.length)
 
-    await page.getByTestId('order-inquiry-status').selectOption(LABEL)
+    await page.getByTestId('order-inquiry-status').selectOption({ label: LABEL })
     await page.getByTestId('order-inquiry-search-submit').click()
 
-    await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe(LABEL)
+    await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe(CODE)
     await expect(page.getByTestId('order-inquiry-count')).toHaveText(`${hits.length} 件`)
     await expectRowIds(page, ids)
     for (const index of ids.keys()) {
@@ -319,15 +321,17 @@ test.describe('注文照会', () => {
     }
   })
 
-  test('[OI-17] ?status=一部出来 を開くと当たった子注文だけが自動分割に残る', async ({ page }) => {
-    const LABEL = '一部出来'
-    const hits = withStatus(EXECUTION_STATUS_CODES[LABEL])
+  test('[OI-17] ?status=010（一部出来）を開くと当たった子注文だけが自動分割に残る', async ({
+    page,
+  }) => {
+    const CODE = EXECUTION_STATUS_CODES.一部出来
+    const hits = withStatus(CODE)
     const ids = expectedRowIds(hits)
     expect(ids).toHaveLength(1)
     const hitSlices = hits.filter((row) => row.注文種別 === 'SLICE_CHILD')
-    await page.goto(`${INQUIRY_PATH}?status=${encodeURIComponent(LABEL)}`)
+    await page.goto(`${INQUIRY_PATH}?status=${CODE}`)
 
-    await expect(page.getByTestId('order-inquiry-status')).toHaveValue(LABEL)
+    await expect(page.getByTestId('order-inquiry-status')).toHaveValue(CODE)
     await expect(page.getByTestId('order-inquiry-count')).toHaveText(`${hits.length} 件`)
     await expectRowIds(page, ids)
     await expect(rowsOf(page).first().getByTestId('order-inquiry-split-toggle')).toHaveText(
@@ -335,11 +339,13 @@ test.describe('注文照会', () => {
     )
   })
 
-  test('[OI-18] ?status=取消済 を開くと取消済の行だけが元注文ごとにまとまる', async ({ page }) => {
-    const LABEL = '取消済'
-    const hits = withStatus(EXECUTION_STATUS_CODES[LABEL])
+  test('[OI-18] ?status=034（取消済）を開くと取消済の行だけが元注文ごとにまとまる', async ({
+    page,
+  }) => {
+    const CODE = EXECUTION_STATUS_CODES.取消済
+    const hits = withStatus(CODE)
     const ids = expectedRowIds(hits)
-    await page.goto(`${INQUIRY_PATH}?status=${encodeURIComponent(LABEL)}`)
+    await page.goto(`${INQUIRY_PATH}?status=${CODE}`)
 
     await expect(page.getByTestId('order-inquiry-count')).toHaveText(`${hits.length} 件`)
     await expectRowIds(page, ids)
@@ -355,24 +361,26 @@ test.describe('注文照会', () => {
     await expect(cellOf(row, '価格')).toHaveText(formatUsd(shown.指値単価))
   })
 
-  test('[OI-19] ?status=注文エラー を開くと注文エラーの行だけになる', async ({ page }) => {
+  test('[OI-19] ?status=101（注文エラー）を開くと注文エラーの行だけになる', async ({ page }) => {
     const LABEL = '注文エラー'
     const hits = withStatus(EXECUTION_STATUS_CODES[LABEL])
     const ids = expectedRowIds(hits)
-    await page.goto(`${INQUIRY_PATH}?status=${encodeURIComponent(LABEL)}`)
+    await page.goto(`${INQUIRY_PATH}?status=${EXECUTION_STATUS_CODES[LABEL]}`)
 
     await expect(page.getByTestId('order-inquiry-count')).toHaveText(`${hits.length} 件`)
     await expectRowIds(page, ids)
     await expect(cellOf(rowsOf(page).first(), '出来状況')).toHaveText(LABEL)
   })
 
-  test('[OI-20] ?status=未出来 を開くと親の当たらない子注文は単独の行になる', async ({ page }) => {
-    const LABEL = '未出来'
-    const hits = withStatus(EXECUTION_STATUS_CODES[LABEL])
+  test('[OI-20] ?status=000（未出来）を開くと親の当たらない子注文は単独の行になる', async ({
+    page,
+  }) => {
+    const CODE = EXECUTION_STATUS_CODES.未出来
+    const hits = withStatus(CODE)
     const ids = expectedRowIds(hits)
     // 前提: 子注文 #45 だけが当たるまとまり（親 #35 は一部出来）と、#30 の最新版 #36 が当たる
     expect(ids).toEqual([45, 30])
-    await page.goto(`${INQUIRY_PATH}?status=${encodeURIComponent(LABEL)}`)
+    await page.goto(`${INQUIRY_PATH}?status=${CODE}`)
 
     await expect(page.getByTestId('order-inquiry-count')).toHaveText(`${hits.length} 件`)
     await expectRowIds(page, ids)

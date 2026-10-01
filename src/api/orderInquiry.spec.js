@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
+import { codeEntries } from '@/mocks/fixtures/codes'
 import { orderInquiryRows } from '@/mocks/fixtures/orderInquiry'
 import { amendOrder, cancelOrder, fetchOrderDetail, fetchOrderInquiry } from './orderInquiry'
 
@@ -116,22 +117,17 @@ describe('api/orderInquiry', () => {
     expect(seen[0].has('account_no')).toBe(false)
   })
 
-  it('[OIA-05] 出来状況は処理状況コードに読み替えて status で送られる', async () => {
+  it('[OIA-05] 出来状況（処理状況コード）はそのまま status で送られる', async () => {
     const seen = recordList()
-    const cases = [
-      ['未出来', '000'],
-      ['注文中', '003'],
-      ['一部出来', '010'],
-      ['全部出来', '011'],
-      ['取消済', '034'],
-      ['注文エラー', '101'],
-    ]
+    // 選択肢はコードマスタ 注文照会出来状況（000 / 003 / 010 / 011 / 034 / 101）
+    const codes = codeEntries('注文照会出来状況').map(({ code }) => code)
 
-    for (const [executionStatus] of cases) {
+    for (const executionStatus of codes) {
       await fetchOrderInquiry({ executionStatus })
     }
 
-    expect(seen.map((params) => params.get('status'))).toEqual(cases.map(([, code]) => code))
+    expect(seen.map((params) => params.get('status'))).toEqual(codes)
+    expect(codes.length).toBeGreaterThan(0)
   })
 
   it('[OIA-06] 売買区分 1 / 3 / その他は sell / buy / 空文字になる', async () => {
@@ -230,12 +226,11 @@ describe('api/orderInquiry', () => {
     expect(items.map((group) => group.latest.statusTone)).toEqual(['partial', 'error', 'canceled', ''])
   })
 
-  it('[OIA-14] 選択肢に無い出来状況は status に載せない', async () => {
+  it('[OIA-14] 出来状況が空なら status を載せない', async () => {
     const seen = recordList()
 
-    await fetchOrderInquiry({ executionStatus: '不明な値' })
-    // Object の組み込み名も「選択肢に無い値」として扱う
-    await fetchOrderInquiry({ executionStatus: 'toString' })
+    await fetchOrderInquiry({ executionStatus: '' })
+    await fetchOrderInquiry()
 
     expect(seen[0].has('status')).toBe(false)
     expect(seen[1].has('status')).toBe(false)

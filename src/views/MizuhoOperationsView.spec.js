@@ -8,6 +8,8 @@ import { server } from '@/mocks/server'
 import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '@/mocks/fixtures/closing'
 import { mizuhoExecutions } from '@/mocks/fixtures/mizuhoExecutions'
 import { mizuhoOrders } from '@/mocks/fixtures/mizuhoOrders'
+import { codeEntries } from '@/mocks/fixtures/codes'
+import { useCodesStore } from '@/stores/codes'
 import { downloadBlob } from '@/utils/download'
 import MizuhoOperationsView from './MizuhoOperationsView.vue'
 
@@ -62,6 +64,9 @@ async function mountView({ query = {}, pinia = createPinia() } = {}) {
     ],
   })
   await router.push({ path: PATH, query })
+
+  // App.vue はコードマスタを読み終えてから画面を描く。それに合わせて先に読んでおく
+  await useCodesStore(pinia).load()
 
   const wrapper = mount(MizuhoOperationsView, {
     global: {
@@ -582,5 +587,18 @@ describe('MizuhoOperationsView', () => {
 
     expect(exists(second.wrapper, 'mizuho-executions-export-error')).toBe(false)
     expect(rows(second.wrapper)).toHaveLength(TOTAL)
+  })
+
+  it('[MZV-23] 出来状況の選択肢はコードマスタ 約定出来状況 から来て、値は処理状況コード', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    const options = wrapper
+      .findAll('[data-testid="mizuho-executions-fill-status"] option')
+      .map((option) => ({ value: option.element.value, label: option.text() }))
+    expect(options).toEqual([
+      { value: '', label: '-- 全て --' },
+      ...codeEntries('約定出来状況').map(({ code, label }) => ({ value: code, label })),
+    ])
   })
 })

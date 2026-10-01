@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { h, reactive } from 'vue'
 import { mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { buildExpiryOptions, createOrderForm } from '@/utils/orderEntryForm'
 import { ORDER_TYPE, SIDE } from '@/utils/orderEntryOptions'
 import OrderEntryForm from './OrderEntryForm.vue'
@@ -22,6 +23,9 @@ function mountForm({ props = {}, slots } = {}) {
       ...props,
     },
     slots,
+    // 注文種別の選択肢をコードマスタのストアから引くので Pinia を渡す（ここでは読み込まない。
+    // 選択肢の中身は views/OrderEntryView.spec.js の NOV-21 が見る）
+    global: { plugins: [createPinia()] },
   })
   return { wrapper, form }
 }

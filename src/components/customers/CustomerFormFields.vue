@@ -47,11 +47,14 @@ const form = defineModel({ type: Object, required: true })
 /*
  * コードマスタは main.js が起動時に読み込む。computed ではなく関数で引くのは、
  * 項目ごとにコードマスタ名が違うため（読み込みが終われば再描画で選択肢が埋まる）。
+ * codesContext を持つ項目（投資方針）は、同じフォームの別の項目（法人区分）の値で選択肢を切り替える。
  */
 const codes = useCodesStore()
 
 function optionsOf(field) {
-  return field.codes ? codes.optionsFor(field.codes) : (field.options ?? [])
+  if (!field.codes) return field.options ?? []
+  const context = field.codesContext ? form.value[field.codesContext] : undefined
+  return codes.optionsFor(field.codes, context)
 }
 
 /** 数値の入力欄に付ける inputmode。type="number" はスピナーと誤スクロールの増減が事故になるので使わない */

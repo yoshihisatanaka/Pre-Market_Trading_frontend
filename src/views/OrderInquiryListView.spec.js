@@ -6,7 +6,9 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { noOperationOperator } from '@/mocks/fixtures/currentOperator'
+import { codeEntries } from '@/mocks/fixtures/codes'
 import { orderInquiryRows } from '@/mocks/fixtures/orderInquiry'
+import { useCodesStore } from '@/stores/codes'
 import OrderInquiryListView from './OrderInquiryListView.vue'
 
 /*
@@ -55,9 +57,13 @@ async function mountView(query = {}) {
   })
   await router.push({ path: PATH, query })
 
+  // App.vue はコードマスタを読み終えてから画面を描く。それに合わせて先に読んでおく
+  const pinia = createPinia()
+  await useCodesStore(pinia).load()
+
   const wrapper = mount(OrderInquiryListView, {
     global: {
-      plugins: [createPinia(), router],
+      plugins: [pinia, router],
       // teleport を stub して、ヘッダへ差し込む操作を wrapper 内に描画させる
       stubs: { teleport: true },
     },
@@ -182,12 +188,14 @@ describe('OrderInquiryListView', () => {
     expect(rows(wrapper)).toHaveLength(2)
   })
 
-  it('[OIV-07] ?status=注文中 は選択に復元され status=003 で絞り込まれる', async () => {
+  it('[OIV-07] ?status=003 は選択（注文中）に復元され status=003 で絞り込まれる', async () => {
     const seen = recordListQueries()
-    const { wrapper } = await mountView({ status: '注文中' })
+    const { wrapper } = await mountView({ status: '003' })
     await settle()
 
-    expect(wrapper.find('[data-testid="order-inquiry-status"]').element.value).toBe('注文中')
+    const select = wrapper.find('[data-testid="order-inquiry-status"]')
+    expect(select.element.value).toBe('003')
+    expect(select.find('option:checked').text()).toBe('注文中')
     expect(seen.at(-1).get('status')).toBe('003')
     expect(rowIds(wrapper)).toEqual(groupIds(WORKING))
     expect(countText(wrapper)).toBe(`${WORKING.length} 件`)
@@ -275,5 +283,18 @@ describe('OrderInquiryListView', () => {
 
     expect(router.currentRoute.value.name).toBe('order-cancel')
     expect(router.currentRoute.value.params.orderId).toBe(AMENDED_LATEST)
+  })
+
+  it('[OIV-15] 出来状況の選択肢はコードマスタ 注文照会出来状況 から来る', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    const options = wrapper
+      .findAll('[data-testid="order-inquiry-status"] option')
+      .map((option) => ({ value: option.element.value, label: option.text() }))
+    expect(options).toEqual([
+      { value: '', label: '-- 全て --' },
+      ...codeEntries('注文照会出来状況').map(({ code, label }) => ({ value: code, label })),
+    ])
   })
 })

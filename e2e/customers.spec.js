@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { codeMasters } from '../src/mocks/fixtures/codes'
+import { codeEntries } from '../src/mocks/fixtures/codes'
 import { canceledCustomers, customers } from '../src/mocks/fixtures/customers'
 import { CUSTOMER_FIELDS } from '../src/utils/customerFields'
 import { formatJpyUnit, formatUsdUnit } from '../src/utils/format'
@@ -249,8 +249,8 @@ test.describe('顧客マスタ一覧', () => {
     for (const { testId, codeKey } of SELECTS) {
       const options = page.getByTestId(testId).locator('option')
       // 先頭は「すべて」相当の空選択肢
-      await expect(options).toHaveCount(codeMasters[codeKey].length + 1)
-      for (const { label } of codeMasters[codeKey]) {
+      await expect(options).toHaveCount(codeEntries(codeKey).length + 1)
+      for (const { label } of codeEntries(codeKey)) {
         await expect(options.filter({ hasText: label })).toHaveCount(1)
       }
     }

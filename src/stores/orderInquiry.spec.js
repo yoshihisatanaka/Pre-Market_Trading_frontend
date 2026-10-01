@@ -67,13 +67,13 @@ describe('useOrderInquiryStore', () => {
     expect(store.isEmpty).toBe(true)
   })
 
-  it('[OIS-05] 出来状況「注文中」で処理状況 003 の行だけに絞り込まれる', async () => {
+  it('[OIS-05] 出来状況 003（注文中）で処理状況 003 の行だけに絞り込まれる', async () => {
     const working = orderInquiryRows.filter((row) => row.処理状況 === '003')
     const store = useOrderInquiryStore()
 
-    await store.load({ executionStatus: '注文中' })
+    await store.load({ executionStatus: '003' })
 
-    expect(store.executionStatus).toBe('注文中')
+    expect(store.executionStatus).toBe('003')
     expect(store.total).toBe(working.length)
     expect(store.items.map((group) => group.latest.id)).toEqual(
       [...working].sort((a, b) => b.ID - a.ID).map((row) => String(row.ID)),

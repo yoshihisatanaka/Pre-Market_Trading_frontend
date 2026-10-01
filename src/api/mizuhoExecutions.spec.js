@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
+import { codeEntries } from '@/mocks/fixtures/codes'
 import { mizuhoExecutions } from '@/mocks/fixtures/mizuhoExecutions'
 import { ApiError } from './client'
 import { EXECUTIONS_CSV_FILENAME } from './executions'
@@ -148,15 +149,18 @@ describe('api/mizuhoExecutions', () => {
     }
   })
 
-  it('[MZE-05] 出来状況の区分を処理状況コードに直して送り、取消済（出来有）は送らない', async () => {
-    const sent = {}
-    for (const fillStatus of ['filled', 'partial', 'canceled_filled']) {
+  it('[MZE-05] 出来状況（処理状況コード）はそのまま status で送る', async () => {
+    const sent = []
+    // 選択肢はコードマスタ 約定出来状況（010 / 011 / 034）
+    const codes = codeEntries('約定出来状況').map(({ code }) => code)
+    for (const fillStatus of codes) {
       record(listBody([], emptySummary))
       await fetchMizuhoExecutions({ fillStatus })
-      sent[fillStatus] = lastParams.get('status')
+      sent.push(lastParams.get('status'))
     }
 
-    expect(sent).toEqual({ filled: '011', partial: '010', canceled_filled: null })
+    expect(sent).toEqual(codes)
+    expect(codes.length).toBeGreaterThan(0)
   })
 
   it('[MZE-06] 売買区分 3 / 1 / 未知 は buy / sell / 空文字 になる', async () => {
@@ -229,7 +233,7 @@ describe('api/mizuhoExecutions', () => {
       branchCode: head.部店,
       symbol: head.Ticker,
       side: '1',
-      fillStatus: 'filled',
+      fillStatus: '011',
       dateFrom: '2026-09-01',
       dateTo: '2026-09-30',
     })

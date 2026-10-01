@@ -2,6 +2,7 @@ import { File as NodeFile } from 'node:buffer'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import openapi from '../../docs/api/openapi.json'
 import { server } from '../mocks/server'
+import { branchListResponse, handlerListResponse } from '../mocks/fixtures/codes'
 import { canceledSymbols, symbols } from '../mocks/fixtures/symbols'
 import { canceledCustomers, customers } from '../mocks/fixtures/customers'
 import { canceledCorporateActions, corporateActions } from '../mocks/fixtures/ca'
@@ -52,7 +53,7 @@ import {
 import { orderCreateExamples, orderValidationExamples } from '../mocks/fixtures/orderEntry'
 import { fetchOrders } from './orders'
 import { amendOrder, cancelOrder, fetchOrderDetail, fetchOrderInquiry } from './orderInquiry'
-import { fetchCodes } from './codes'
+import { fetchBranches, fetchCodes, fetchHandlers } from './codes'
 import { fetchCustomers } from './customers'
 import {
   createCorporateAction,
@@ -303,6 +304,8 @@ function unexpectedFixtureProblems(fixture) {
 
 /** フィクスチャの生データと、それが写しているはずのスキーマ名 */
 const FIXTURES = [
+  { name: 'branches', schema: 'BranchItem', rows: branchListResponse.items },
+  { name: 'handlers', schema: 'HandlerItem', rows: handlerListResponse.items },
   { name: 'symbols', schema: 'SymbolItem', rows: [...symbols, ...canceledSymbols] },
   { name: 'customers', schema: 'CustomerItem', rows: [...customers, ...canceledCustomers] },
   { name: 'ca', schema: 'CAItem', rows: [...corporateActions, ...canceledCorporateActions] },
@@ -528,7 +531,7 @@ const PROBES = [
         branchCode: '123',
         accountNumber: '300001',
         symbol: 'AAPL',
-        executionStatus: '注文中',
+        executionStatus: '003',
       }),
   },
   { name: 'fetchOrderDetail', run: () => fetchOrderDetail('35') },
@@ -546,6 +549,8 @@ const PROBES = [
   },
   { name: 'cancelOrder', run: () => cancelOrder({ id: '36' }) },
   { name: 'fetchCodes', run: () => fetchCodes() },
+  { name: 'fetchBranches', run: () => fetchBranches() },
+  { name: 'fetchHandlers', run: () => fetchHandlers() },
   {
     name: 'fetchCustomers',
     run: () =>
@@ -770,7 +775,7 @@ const PROBES = [
         branchCode: '123',
         symbol: 'AAPL',
         side: '3',
-        fillStatus: 'filled',
+        fillStatus: '011',
         dateFrom: '2026-09-01',
         dateTo: '2026-09-30',
       }),

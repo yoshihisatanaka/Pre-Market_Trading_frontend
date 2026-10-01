@@ -7,7 +7,9 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { activityLogs } from '@/mocks/fixtures/activityLogs'
 import { activityLogTargets } from '@/mocks/fixtures/activityLogTargets'
+import { codeEntries } from '@/mocks/fixtures/codes'
 import { ACTIVITY_LOGS_PAGE_SIZE } from '@/stores/activityLogs'
+import { useCodesStore } from '@/stores/codes'
 import {
   ACTIVITY_OPERATION_OPTIONS,
   formatActivityAt,
@@ -80,9 +82,13 @@ async function mountView({ query = {} } = {}) {
   })
   await router.push({ path: PATH, query })
 
+  // App.vue はコードマスタを読み終えてから画面を描く。それに合わせて先に読んでおく
+  const pinia = createPinia()
+  await useCodesStore(pinia).load()
+
   const wrapper = mount(ActivityLogListView, {
     global: {
-      plugins: [createPinia(), router],
+      plugins: [pinia, router],
       // 詳細ダイアログの Teleport を wrapper 内に描画させる
       stubs: { teleport: true },
     },
@@ -346,7 +352,7 @@ describe('ActivityLogListView', () => {
     expect(shownIds(wrapper)).toEqual(firstPage.map(idOf))
   })
 
-  it('[ALV-14] 対象種別の選択肢は API から、操作区分は定数から来る', async () => {
+  it('[ALV-14] 対象種別の選択肢は API から、操作区分はコードマスタ 操作区分 から来る', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -356,7 +362,7 @@ describe('ActivityLogListView', () => {
     ])
     expect(optionsOf(wrapper, 'activity-logs-operation')).toEqual([
       { value: '', label: PLACEHOLDER },
-      ...ACTIVITY_OPERATION_OPTIONS,
+      ...codeEntries('操作区分').map(({ code, label }) => ({ value: code, label })),
     ])
   })
 

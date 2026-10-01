@@ -65,8 +65,6 @@ async function mountView() {
   const wrapper = mount(AnnouncementsView, {
     global: {
       plugins: [createPinia(), router],
-      // teleport を stub して、ヘッダへ差し込む「再読み込み」を wrapper 内に描画させる
-      stubs: { teleport: true },
     },
   })
   return { wrapper, router }
@@ -519,20 +517,5 @@ describe('AnnouncementsView', () => {
     await settle()
 
     expect(noticeText(wrapper)).toBe(UPDATED_MESSAGE)
-  })
-
-  it('[ANV-24] 「再読み込み」で通知が消え、最新の本文に洗い替わる', async () => {
-    const { wrapper } = await mountView()
-    await settle()
-    await submitForm(wrapper)
-    await settle()
-    expect(exists(wrapper, 'announcements-notice')).toBe(true)
-
-    await updateByOtherUser()
-    await find(wrapper, 'announcements-reload').trigger('click')
-    await settle()
-
-    expect(exists(wrapper, 'announcements-notice')).toBe(false)
-    expect(messageInput(wrapper).element.value).toBe(OTHER_USER_MESSAGE)
   })
 })

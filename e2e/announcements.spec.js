@@ -64,8 +64,6 @@ test.describe('お知らせ管理 表示', () => {
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: 'お知らせ管理', exact: true })).toBeVisible()
-    // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている
-    await expect(page.getByTestId('announcements-reload')).toBeVisible()
 
     await expect(page.getByTestId('announcements-status')).toContainText('通常運用')
     await expect(page.getByTestId('announcements-suspended')).toHaveCount(0)

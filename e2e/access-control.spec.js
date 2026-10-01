@@ -18,10 +18,10 @@ const SERVER_ERROR = 'サーバーでエラーが発生しました。'
  * marker はその画面にだけ出る data-testid（各画面の view のソースから）。
  */
 const MARKERS = {
-  '/operations/announcements': 'announcements-reload',
+  '/operations/announcements': 'announcements-status',
   '/operations/stalled-orders': 'stalled-orders-description',
   '/operations/activity-logs': 'activity-logs-description',
-  '/operations/incidents': 'incidents-reload',
+  '/operations/incidents': 'incidents-targets',
 }
 const operationSection = navSections.find((section) => section.label === '運用管理')
 const SCREENS = operationSection.items.map((item) => ({

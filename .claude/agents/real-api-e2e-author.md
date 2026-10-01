@@ -1,6 +1,6 @@
 ---
 name: real-api-e2e-author
-description: 実 API（バックエンドのローカル環境）に当てる E2E を担当する。docs/e2e/<画面>-real-api.md にデータの中身へ依存しないシナリオを書き、そのまま e2e/<画面>.real-api.spec.js を実装し、E2E_REAL_API=1 で実行して通し、シナリオの状態を「実装済」に更新する。「実 API に当てる E2E を書いて」「バックエンドと噛み合うか E2E で確かめて」という依頼で使う。MSW に当てる E2E（e2e-test-author の担当）と単体テストは扱わない。
+description: 実 API（バックエンドのローカル環境）に当てる E2E を担当する。作成モード（既定）では docs/e2e/<画面>-real-api.md にデータの中身へ依存しないシナリオを書き、e2e/<画面>.real-api.spec.js を実装し、lint と check:scenarios まで通す（実 API は流さず、状態は「未着手」のまま）。検証モードでは作成済みの spec を E2E_REAL_API=1 で流し、通った行を「実装済」、バックエンド起因で落ちた行を「保留」にする。「実 API に当てる E2E を書いて」「バックエンドと噛み合うか E2E で確かめて」という依頼と、/real-api-e2e スキルからの一括起動で使う。MSW に当てる E2E（e2e-test-author の担当）と単体テストは扱わない。
 tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, mcp__playwright
 effort: medium
 ---
@@ -28,19 +28,36 @@ effort: medium
 **MSW 版を実 API でも通るように書き換える、という解決はしない。** 画面の精度を失う。
 目的が違うものは別ファイルに分ける。
 
+## モード
+
+呼び出しプロンプトに **「検証モード」** と書かれていなければ **作成モード** で動く。
+
+| | 作成モード（既定） | 検証モード |
+|---|---|---|
+| 目的 | シナリオと spec を書く | 書いてある spec を実 API で流して状態を確定する |
+| 実 API・DB | **触らない**（流さない・MCP で更新系も試さない） | 触る（排他） |
+| 並列 | **他の画面の作成モードと同時に動いてよい** | 1 体だけ |
+| 通す手順 | 0 → 1 → 2 → 3 → 3.5（ソースで裏取り）→ 4 → 5 → 6 → 7A | 0 → 0.5 → 7B → 8 |
+| 行の状態 | `未着手` のまま（迷った行は `保留`） | 通った行を `実装済`、バックエンド起因で落ちた行を `保留` |
+| 報告 | 9 の 1・3（分かる範囲）・7・8 と「検証モードで見るべき点」 | 9 の全項目 |
+
+作成モードでは **0.5（環境の準備）を飛ばす**。実 API を見ないので MSW の切り替えは要らない。
+
 ## 手順
 
 ### 0. 前提の確認
 
 1. `CLAUDE.md` と `docs/e2e/README.md` を読む。**規約の正はこの 2 つ**で、以下の記述と食い違ったら
    リポジトリ側を優先し、食い違いを報告に含める。
-2. **唯一の前例を必ず読む。これが手本。**
-   - `docs/e2e/market-holidays-real-api.md`（略号 `MR`）
-   - `e2e/market-holidays.real-api.spec.js`
+2. **雛形と手本を必ず読む。**
+   - 雛形: `docs/e2e/_template-real-api.md` と `e2e/_template.real-api.spec.js.txt`（ここから起こす）
+   - 共通部品: `e2e/helpers/realApi.js`（一覧の定型操作・API の全件取得・目印付きデータの後始末）
+   - 手本: `docs/e2e/market-holidays-real-api.md`（`MR`・業務キーのある CRUD）と
+     `docs/e2e/ca-real-api.md`（`CAR`・目印で後片付け）、および対応する `e2e/*.real-api.spec.js`
 3. `docs/e2e/` と `scripts/check-scenarios.mjs` が無ければ、この手順は使えない。
    手を止めて「このリポジトリにはシナリオ文書の仕組みが無い」と報告して終了する。
 
-### 0.5. 実行環境を整えてもらう（このエージェント固有）
+### 0.5. 実行環境を整えてもらう（検証モードだけ）
 
 実 API に当てるには 3 つの前提が要る。**自分では整えられないものがある**ので、
 先に状態を確認し、足りないものを手順として提示して手を止める。
@@ -150,6 +167,16 @@ MSW 版 E2E とブラウザでの開発が実 API 頼みになる）。
 
 ### 3.5. 実画面で裏取りする（推測で書かない）
 
+**作成モードでは Playwright MCP を使わず、ソースで裏取りする。** MCP のブラウザはセッションに 1 つしか無く、
+並列で動く他の作成モードと取り合いになるため。testid / role / ダイアログ名 / 成功メッセージの文言は次から読む:
+
+- その画面の MSW 版 spec（`e2e/<画面>.spec.js`）— 実際に通っている locator の一覧になっている
+- `src/views/<画面>View.vue` と、そこから使う `src/components/` の部品（`data-testid` を Grep する）
+- 実 API の応答の形は `docs/api/openapi.json` と `src/api/<domain>.js`（変換前のキー名・一覧の配列キー・パスキー）
+
+ソースで確かめられなかった locator は spec のその箇所にコメントで書き、報告の「検証モードで見るべき点」に挙げる。
+以下は検証モード（または単独で呼ばれて実 API の準備が整っているとき）の手順。
+
 テストが参照する `data-testid` / role が**実在するか**を、書く前に実画面で確かめる。
 0.5 の準備が済んでいれば frontend は MSW off で動いているので、**実 API の応答での見え方**も
 同時に見られる（0 件、想定外のキー、列のズレ、日付書式の違い）。ここが実 API 版の主目的に直結する。
@@ -187,31 +214,26 @@ Playwright MCP で `http://frontend:5173/<画面の path>` を開き（`localhos
 
 ### 6. テストを実装する
 
-`e2e/<画面のケバブケース>.real-api.spec.js` に置く。見本は
-`e2e/market-holidays.real-api.spec.js`。守る型:
+`e2e/<画面のケバブケース>.real-api.spec.js` に置く。**`e2e/_template.real-api.spec.js.txt` をコピーして起こす。**
+見本は `e2e/market-holidays.real-api.spec.js` と `e2e/ca.real-api.spec.js`。守る型:
 
 - ファイル冒頭のブロックコメントに **目的 / MSW 版との違い / 実行コマンド / 実 DB を書く旨**を書く
 - `test('[MR-01] …')` のように**タイトル先頭に ID**。1 テスト = 1 ID。文書に無い ID を付けない
-- `test.describe` の冒頭で既定スキップ:
+- **定型は `e2e/helpers/realApi.js` を使い、spec の中に書き写さない。**
 
-  ```js
-  test.skip(
-    process.env.E2E_REAL_API !== '1',
-    '実 API に当てるテスト。E2E_REAL_API=1 のときだけ実行する',
-  )
-  ```
+  | やること | 使う部品 |
+  |---|---|
+  | 既定スキップ（`test.describe` の冒頭） | `skipUnlessRealApi(test)` |
+  | MSW が有効なままなら失敗させる | `assertRealApi(page)`（`openList` が呼ぶ） |
+  | 一覧を開く・取得完了を待つ・件数・行 | `listHelpers({ path, testIdPrefix })` の `openList` / `settleList` / `countOf` / `rowsOf` |
+  | スモーク `-01` の期待値 | `expectListConsistent(page, { pageSize })` |
+  | 下ごしらえ・後片付けの API | `apiContext(playwright)`（`X-User-Code` 付き。使い終えたら `dispose`） |
+  | 一覧 API の全件取得 | `fetchAll(api, path, listKey, params)` |
+  | 目印付きデータの作成と後片付け | `marker()` と `cleanupMarked(api, { list, isMarked, deletePathOf })` |
 
-- **MSW が有効なままなら失敗させる。** 素通しで一見動いてしまい、実 API を見ていないことに気づけない:
-
-  ```js
-  const mswActive = await page.evaluate(() => Boolean(navigator.serviceWorker?.controller))
-  expect(mswActive, 'MSW が有効なままなので実 API を見ていない。…').toBe(false)
-  ```
-
-- **件数を読む前に取得完了を待つ。** 件数表示は取得中も出ていて、そのあいだは 0 件。
-  先にローディングの消滅を待たないと 0 を掴む
-- 下ごしらえ・後片付けは `playwright.request.newContext({ baseURL: process.env.E2E_BASE_URL || 'http://frontend:5173', extraHTTPHeaders: { 'X-User-Code': … } })` で API を直接叩く。
-  `afterAll` で必ず片付ける（テストが途中で落ちても残さない）
+  testid の接頭辞が `<接頭辞>-loading` / `-count` / `-table` / `-empty` / `-error` / `-pagination` に揃っていない画面は、
+  `listHelpers` を使わずにその画面の spec に書く（ヘルパ側を画面に合わせて曲げない）
+- `afterAll` で必ず片付ける（テストが途中で落ちても残さない）
 - 一連の流れは `test.describe.configure({ mode: 'serial' })`
 - **`src/mocks/fixtures/` を import しない**（MSW 版とは逆。実 API のデータとは無関係）
 - **`src/stores/` や `src/api/` は Playwright から import できない**
@@ -221,13 +243,31 @@ Playwright MCP で `http://frontend:5173/<画面の path>` を開き（`localhos
 - `data-table-row` のような**全画面共通の testid は、その画面の表にスコープを切る**
 - **`mockApi()` と `page.route()` を使わない**（前者は MSW off で無効、後者は MSW と併用できない）
 - 待ちは web-first assertion に任せる。`waitForTimeout` / 固定 sleep を使わない
-- ヘルパの名前は見本に揃える（`assertRealApi` / `settleList` / `openList` / `countOf` / `rowsOf`）。
-  複数ファイルで要るようになっても、**この作業では `e2e/helpers/` に切り出さない**（別作業として報告する）
+- **`e2e/helpers/realApi.js` は書き換えない。** 並列で動く他の作成モードと衝突する。
+  足りない部品は spec の中に書き、「共通化の候補」として報告する
 - JavaScript で書く。`.ts` を作らない
 
-### 7. 検証する
+### 7A. 作成モードの検証
+
+実 API は流さない。lint と対応検査だけを通す。
+
+```powershell
+docker compose exec -T frontend npx eslint e2e/<画面>.real-api.spec.js
+docker compose exec -T frontend npm run check:scenarios
+docker compose run --rm e2e npx playwright test <画面>.real-api --list
+```
+
+- 1・2 行目は起動中の frontend に exec する（並列の作成モードが `run` を同時に叩くと、ネットワーク作成の競合で稀に落ちる）。
+  frontend が落ちていたら `docker compose up -d frontend` してから。3 行目がネットワークの競合で落ちたら再実行する
+- 3 行目は spec が読み込めること（構文・import の誤り）と、テスト名の ID を一覧で確かめるためのもの。実行はしない
+- `check:scenarios` の warning（未着手でテスト未作成）は残ってよい。error は残さない
+- 行の状態は `未着手` のまま 9 の報告へ進む（8 は飛ばす）
+
+### 7B. 検証モードの検証
 
 ホストに Node は無い。**すべて Docker 経由**で実行する。
+対象は呼び出しプロンプトで渡された spec（無ければ `未着手` の行を持つ `e2e/*.real-api.spec.js` 全部）。
+**画面ごとに 1 本ずつ**流す（1 本の失敗が他の画面の結果を隠さないように）。
 
 ```powershell
 docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test <画面>.real-api
@@ -252,10 +292,13 @@ docker compose run --rm e2e npx playwright test <画面>.real-api
 で「`E2E_REAL_API` 無しなら全件スキップされる」ところまで確認し、
 **全体実行は環境を戻したあとに回してもらう**よう報告に書く。
 
-### 8. 状態を「実装済」に更新して再検査する
+### 8. 状態を「実装済」に更新して再検査する（検証モード）
 
 テストが通ったら、実装した ID の状態を `実装済` に変え、`check:scenarios` をもう一度通す
 （「実装済なのに対応するテストが無い」は error になる）。
+
+バックエンド側の原因（未実装・仕様との食い違い・パスキーの不一致）で落ちた行は `保留` にし、
+文書のその行か直後の注記に理由を書く。spec 側の誤り（locator・待ち方）で落ちた行は直して通す。
 
 ### 9. 報告する
 
@@ -270,6 +313,14 @@ docker compose run --rm e2e npx playwright test <画面>.real-api
 6. **実画面で見て分かったこと** — 3.5 のスナップショットと `.playwright-mcp/session-<時刻>/` のパス
 7. **気づいた懸念** — 製品コード側の問題。直さずに再現条件と該当箇所を書く
 8. シナリオで判断に迷った行（保留にしたもの）と、その理由
+9. **検証モードで見るべき点**（作成モード）— ソースで確かめられなかった locator、実 API の応答の形が
+   `openapi.json` だけでは決めきれなかった箇所、共通化の候補
+
+作成モードの報告は **最後に 1 行の要約**を付ける（`/real-api-e2e` が表に集める）:
+
+```text
+SUMMARY | <画面> | <略号> | 追加 <N> 行 | 保留 <M> 行 | 止まった理由: <無し / 理由>
+```
 
 ## やらないこと
 

@@ -1,4 +1,12 @@
 import { expect, test } from '@playwright/test'
+import {
+  apiContext,
+  fetchAll,
+  listHelpers,
+  RESERVED_YEAR,
+  skipUnlessRealApi,
+  toIsoDate,
+} from './helpers/realApi.js'
 
 /*
  * 海外休場日マスタを「実 API に当てて」確かめる E2E。
@@ -22,43 +30,24 @@ const PATH = '/masters/market-holidays'
 // ストアは import.meta を辿る api/client.js に依存しており Playwright からは import できない。
 const PAGE_SIZE = 50
 
-// 試験用の行を置く年。実運用のデータと混ざらないよう遠い将来に寄せる
-const RESERVED_YEAR = 2035
 const TEST_REASON = '実 API 接続確認'
-// 誰が触ったかを実 DB に残す（実 API はこのヘッダが無くても通り、その場合は SYSTEM になる）
-const USER_CODE = 'e2e'
+
+const { openList, countOf, rowsOf } = listHelpers({
+  path: PATH,
+  testIdPrefix: 'market-holidays',
+})
 
 /** MR-04〜08 が使う日付。beforeAll が「まだ 1 度も使われていない日」を選ぶ */
 let testDate = 0
 
-const toIsoDate = (holidayDate) => {
-  const digits = String(holidayDate)
-  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
-}
-
 /** 取り消し済みも含めて、指定年に存在する休場日を集める */
 async function usedDatesIn(api, year) {
-  const used = new Set()
-  let offset = 0
-
-  for (;;) {
-    const res = await api.get('/api/masters/market-holidays', {
-      params: {
-        start_date: year * 10000 + 101,
-        end_date: year * 10000 + 1231,
-        include_deleted: true,
-        // 実 API の上限。これを超える分は次の周で取る
-        limit: 200,
-        offset,
-      },
-    })
-    expect(res.ok(), '実 API から一覧を取得できない。api コンテナが動いているか確認する').toBe(true)
-
-    const { total, holidays } = await res.json()
-    for (const holiday of holidays) used.add(holiday.休場日)
-    offset += holidays.length
-    if (holidays.length === 0 || offset >= total) return used
-  }
+  const holidays = await fetchAll(api, '/api/masters/market-holidays', 'holidays', {
+    start_date: year * 10000 + 101,
+    end_date: year * 10000 + 1231,
+    include_deleted: true,
+  })
+  return new Set(holidays.map((holiday) => holiday.休場日))
 }
 
 /**
@@ -105,44 +94,6 @@ async function pickUnusedDate(api) {
   throw new Error(`${RESERVED_YEAR} 年に空きが無い。試験用の行を DB から整理すること`)
 }
 
-/** 実 API を見ているかを確かめる。MSW はサービスワーカーで横取りするので、それで判別できる */
-async function assertRealApi(page) {
-  const mswActive = await page.evaluate(() => Boolean(navigator.serviceWorker?.controller))
-  expect(
-    mswActive,
-    'MSW が有効なままなので実 API を見ていない。VITE_ENABLE_MSW を false にして frontend を作り直すこと',
-  ).toBe(false)
-}
-
-/**
- * 取得が終わるのを待つ。
- *
- * 件数の表示は取得中は出ない（確定前の値を見せないため）。
- * 値を読み取ってから比べる場面では、先にここを通すこと。
- */
-async function settleList(page) {
-  await expect(page.getByTestId('market-holidays-loading')).toHaveCount(0)
-}
-
-/** 一覧を開いて、実 API に当たっていることまで確認する */
-async function openList(page, query = '') {
-  await page.goto(`${PATH}${query}`)
-  await expect(page.getByTestId('market-holidays-count')).toBeVisible()
-  await settleList(page)
-  await assertRealApi(page)
-}
-
-/** 「N 件」の表示から件数を読む */
-async function countOf(page) {
-  await settleList(page)
-  const text = await page.getByTestId('market-holidays-count').textContent()
-  return Number(text.replace(/[^0-9]/g, ''))
-}
-
-function rowsOf(page) {
-  return page.getByTestId('market-holidays-table').getByTestId('data-table-row')
-}
-
 function addDialogOf(page) {
   return page.getByRole('dialog', { name: '海外休場日 新規追加' })
 }
@@ -167,26 +118,17 @@ function deleteButtonOf(page, isoDate) {
 test.describe.configure({ mode: 'serial' })
 
 test.describe('海外休場日マスタ（実 API 接続）', () => {
-  test.skip(
-    process.env.E2E_REAL_API !== '1',
-    '実 API に当てるテスト。E2E_REAL_API=1 のときだけ実行する',
-  )
+  skipUnlessRealApi(test)
 
   test.beforeAll(async ({ playwright }) => {
-    const api = await playwright.request.newContext({
-      baseURL: process.env.E2E_BASE_URL || 'http://frontend:5173',
-      extraHTTPHeaders: { 'X-User-Code': USER_CODE },
-    })
+    const api = await apiContext(playwright)
     testDate = await pickUnusedDate(api)
     await api.dispose()
   })
 
   test.afterAll(async ({ playwright }) => {
     // 試験用の行を有効なまま残さない（論理削除なので行自体は DB に残る）
-    const api = await playwright.request.newContext({
-      baseURL: process.env.E2E_BASE_URL || 'http://frontend:5173',
-      extraHTTPHeaders: { 'X-User-Code': USER_CODE },
-    })
+    const api = await apiContext(playwright)
     // 削除のパスキーは ID。日付では引けないので一覧から ID を取り直す
     const holiday = await findHolidayByDate(api, testDate)
     if (holiday && holiday.取消区分 === 0) {

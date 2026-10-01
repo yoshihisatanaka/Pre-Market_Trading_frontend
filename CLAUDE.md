@@ -116,7 +116,12 @@ bash .claude/hooks/tests/guard-secret-paths.test.sh
 いずれも `src/` の製品コードは変更しない。`data-testid` の追加が必要な場合も
 手を止めて報告する（そこで直させない）。
 
-`real-api-e2e-author` だけは前提が 3 つある。**MSW を切る（`.env` の `VITE_ENABLE_MSW=false` に
+`real-api-e2e-author` は **作成モード（既定）と検証モード**に分かれる。作成モードはシナリオと spec を書いて
+lint と `check:scenarios` まで通すだけで実 API に触らないので、**画面ごとに並列で動かせる**。
+未完了の画面をまとめて書くときは **`/real-api-e2e` スキル**（worktree で実行）が対象の抽出・並列起動・集計まで行う。
+共通部品は `e2e/helpers/realApi.js`、雛形は `docs/e2e/_template-real-api.md` と `e2e/_template.real-api.spec.js.txt`。
+
+検証モード（実 API に当てて状態を `実装済` / `保留` に確定する）だけは前提が 3 つある。**MSW を切る（`.env` の `VITE_ENABLE_MSW=false` に
 して `docker compose up -d --force-recreate frontend`）・バックエンドの `api` を起動する・
 バックエンドの DB を排他で使う。** エージェントは `.env` を読み書きできない（deny ルールと guard
 フック）ので、呼ぶ前にユーザが整えるか、提示された手順に応じる。終わったら `.env` を戻して

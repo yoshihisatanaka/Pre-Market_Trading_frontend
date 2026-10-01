@@ -8,12 +8,13 @@ import { server } from '@/mocks/server'
 import { suspensionHistories, suspensionTargets } from '@/mocks/fixtures/incidents'
 import IncidentControlDialog from '@/components/incidents/IncidentControlDialog.vue'
 import { INCIDENT_HISTORY_PAGE_SIZE, useIncidentsStore } from '@/stores/incidents'
+import { formatDateTime } from '@/utils/format'
 import IncidentManagementView from './IncidentManagementView.vue'
 
 /*
  * 画面テスト。実際の Pinia ストア + vue-router + MSW(node) を通し、
- * 4 状態の出し分け・停止対象の表・履歴・停止 / 再開の導線を検証する。
- * 期待値はフィクスチャから導く（4 行 / 4 件 / 停止対象名を直接書かない）。
+ * 4 状態の出し分け・停止対象のカード・履歴・停止 / 再開の導線を検証する。
+ * 期待値はフィクスチャから導く（4 枚 / 4 件 / 停止対象名を直接書かない）。
  *
  * 「IB だけが停止中」「全体が停止中」は、マウント前に同じ Pinia のストアから停止を実行して作る
  * （モックの状態遷移をそのまま使う。view の spec から api 層は import できない）。
@@ -30,8 +31,17 @@ const nameOf = (code) => suspensionTargets.find((row) => row['停止対象'] ===
 
 const IB_CODE = '1'
 const REASON = 'IB回線障害'
-// 停止理由が null の通常の行（「—」の確認用）
-const NO_REASON_CODE = suspensionTargets.find((row) => row['停止理由'] === null)['停止対象']
+/*
+ * カードに出さない応答の項目（停止理由 / 停止日時 / 再開日時）。フィクスチャで値を持つ行から集める。
+ * 停止者 / 再開者 は操作者コードの数字だけなので、他の文言に紛れず見分けられる日時と理由で見る。
+ */
+const HIDDEN_VALUES = suspensionTargets.flatMap((row) =>
+  [
+    row['停止理由'],
+    row['停止日時'] && formatDateTime(row['停止日時']),
+    row['再開日時'] && formatDateTime(row['再開日時']),
+  ].filter(Boolean),
+)
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 const LEAD_TEXT = '障害発生時に、全体または注文ルート別に発注を停止・再開します。'
@@ -94,12 +104,16 @@ async function settle() {
 
 const find = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`)
 const exists = (wrapper, testid) => find(wrapper, testid).exists()
-const targetRows = (wrapper) =>
-  find(wrapper, 'incidents-targets').findAll('[data-testid="data-table-row"]')
+// 停止対象のカード（1 対象 = 1 枚）
+const targetCards = (wrapper) =>
+  find(wrapper, 'incidents-targets').findAll('[data-testid="incidents-target"]')
 const historyRows = (wrapper) =>
   find(wrapper, 'incidents-history').findAll('[data-testid="data-table-row"]')
-const rowOf = (wrapper, code) => targetRows(wrapper)[TARGET_CODES.indexOf(code)]
-// 行ごとの発注停止トグル（BaseSwitch。ON = 停止中）
+const cardOf = (wrapper, code) =>
+  find(wrapper, 'incidents-targets').find(`[data-testid="incidents-target"][data-target="${code}"]`)
+const cardState = (wrapper, code) =>
+  cardOf(wrapper, code).find('[data-testid="incidents-target-state"]').text()
+// カードごとの発注停止トグル（BaseSwitch。ON = 停止中）
 const actionOf = (wrapper, code) => find(wrapper, `incidents-target-${code}-action`)
 const isOn = (wrapper, code) => actionOf(wrapper, code).attributes('aria-checked') === 'true'
 const stateText = (wrapper) => find(wrapper, 'incidents-state').text()
@@ -167,7 +181,7 @@ const historyOperators = (wrapper) =>
 
 // シナリオ: docs/unit/views-incident-management-view.md
 describe('IncidentManagementView', () => {
-  it('[INV-01] 取得中は回転マークだけを出し、表も履歴も出さない', async () => {
+  it('[INV-01] 取得中は回転マークだけを出し、カードも履歴も出さない', async () => {
     const { wrapper } = await mountView()
 
     expect(exists(wrapper, 'incidents-loading')).toBe(true)
@@ -176,7 +190,7 @@ describe('IncidentManagementView', () => {
     await settle()
   })
 
-  it('[INV-02] 取得が 500 ならエラーと「再試行」を出し、表も履歴も出さない', async () => {
+  it('[INV-02] 取得が 500 ならエラーと「再試行」を出し、カードも履歴も出さない', async () => {
     server.use(errorHandler())
     const { wrapper } = await mountView()
     await settle()
@@ -189,7 +203,7 @@ describe('IncidentManagementView', () => {
     expect(exists(wrapper, 'incidents-history')).toBe(false)
   })
 
-  it('[INV-03] 回復後に「再試行」を押すとエラーが消え運用状態と表が出る', async () => {
+  it('[INV-03] 回復後に「再試行」を押すとエラーが消え運用状態とカードが出る', async () => {
     server.use(errorHandler({ once: true }))
     const { wrapper } = await mountView()
     await settle()
@@ -200,7 +214,7 @@ describe('IncidentManagementView', () => {
 
     expect(exists(wrapper, 'incidents-error')).toBe(false)
     expect(exists(wrapper, 'incidents-state')).toBe(true)
-    expect(targetRows(wrapper)).toHaveLength(TARGET_CODES.length)
+    expect(targetCards(wrapper)).toHaveLength(TARGET_CODES.length)
   })
 
   it('[INV-04] 停止状態が本文なしなら空状態の文言を出す', async () => {
@@ -212,13 +226,13 @@ describe('IncidentManagementView', () => {
     expect(exists(wrapper, 'incidents-targets')).toBe(false)
   })
 
-  it('[INV-05] 既定モックでは「通常運用」と停止対象の表を出す', async () => {
+  it('[INV-05] 既定モックでは「通常運用」と停止対象のカードを出す', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     expect(stateText(wrapper)).toBe('通常運用')
-    expect(targetRows(wrapper)).toHaveLength(TARGET_CODES.length)
-    targetRows(wrapper).forEach((row, index) => {
+    expect(targetCards(wrapper)).toHaveLength(TARGET_CODES.length)
+    targetCards(wrapper).forEach((row, index) => {
       expect(row.text()).toContain(nameOf(TARGET_CODES[index]))
     })
   })
@@ -235,7 +249,7 @@ describe('IncidentManagementView', () => {
     expect(failed.text()).toContain(LEAD_TEXT)
   })
 
-  it('[INV-07] 履歴 0 件は履歴の空文言だけを出し、表は残り画面の空状態にはしない', async () => {
+  it('[INV-07] 履歴 0 件は履歴の空文言だけを出し、カードは残り画面の空状態にはしない', async () => {
     server.use(
       http.get(HISTORY_PATH, () =>
         HttpResponse.json({ total: 0, limit: 50, offset: 0, histories: [] }),
@@ -246,7 +260,7 @@ describe('IncidentManagementView', () => {
 
     expect(exists(wrapper, 'incidents-history')).toBe(false)
     expect(find(wrapper, 'incidents-history-empty').text()).toBe(HISTORY_EMPTY_TEXT)
-    expect(targetRows(wrapper)).toHaveLength(TARGET_CODES.length)
+    expect(targetCards(wrapper)).toHaveLength(TARGET_CODES.length)
     expect(exists(wrapper, 'incidents-empty')).toBe(false)
   })
 
@@ -339,18 +353,19 @@ describe('IncidentManagementView', () => {
     )
   })
 
-  it('[INV-14] 停止中の行は「停止中」、通常の行は「通常」、停止理由が null の行は「—」', async () => {
+  it('[INV-14] 停止中のカードは「停止中」、通常は「通常」で、停止理由と日時はカードに出ない', async () => {
     const { wrapper } = await mountView(suspendIb)
     await settle()
 
-    expect(rowOf(wrapper, IB_CODE).text()).toContain('停止中')
+    expect(cardState(wrapper, IB_CODE)).toBe('停止中')
     TARGET_CODES.filter((code) => code !== IB_CODE).forEach((code) => {
-      const text = rowOf(wrapper, code).text()
-      expect(text).toContain('通常')
-      expect(text).not.toContain('停止中')
+      expect(cardState(wrapper, code)).toBe('通常')
     })
-    // 停止理由の列（3 列目）
-    expect(rowOf(wrapper, NO_REASON_CODE).findAll('td')[2].text()).toBe('—')
+    // 理由は障害対応履歴で見る。いま停止した理由も、フィクスチャに残る過去の理由・日時も出さない
+    const cardsText = find(wrapper, 'incidents-targets').text()
+    ;[REASON, ...HIDDEN_VALUES].forEach((value) => {
+      expect(cardsText).not.toContain(value)
+    })
   })
 
   it('[INV-15] 停止の確定でダイアログが閉じ、サーバの文言が成功通知に出る', async () => {
@@ -365,7 +380,7 @@ describe('IncidentManagementView', () => {
 
     expect(isDialogOpen(wrapper)).toBe(false)
     expect(find(wrapper, 'incidents-notice').text()).toBe(SUSPENDED_NOTICE)
-    expect(rowOf(wrapper, IB_CODE).text()).toContain('停止中')
+    expect(cardState(wrapper, IB_CODE)).toBe('停止中')
   })
 
   it('[INV-16] 停止が 400 ならダイアログは開いたままサーバの文言が渡り、成功通知は出ない', async () => {
@@ -461,7 +476,7 @@ describe('IncidentManagementView', () => {
 
     expect(isDialogOpen(wrapper)).toBe(false)
     expect(isOn(wrapper, IB_CODE)).toBe(false)
-    expect(rowOf(wrapper, IB_CODE).text()).not.toContain('停止中')
+    expect(cardState(wrapper, IB_CODE)).toBe('通常')
     expect(stateText(wrapper)).toBe('通常運用')
   })
 
@@ -504,7 +519,7 @@ describe('IncidentManagementView', () => {
     expect(currentPage(wrapper)).toBe('2')
   })
 
-  it('[INV-26] ページ送りが 500 なら履歴カード内にエラーと「再試行」を出し、停止対象の表は残る', async () => {
+  it('[INV-26] ページ送りが 500 なら履歴カード内にエラーと「再試行」を出し、停止対象のカードは残る', async () => {
     pagedHistories()
     const { wrapper } = await mountView()
     await settle()
@@ -519,7 +534,7 @@ describe('IncidentManagementView', () => {
     expect(historyError.find('button').text()).toBe('再試行')
     expect(exists(wrapper, 'incidents-history')).toBe(false)
     expect(pagination(wrapper).exists()).toBe(false)
-    expect(targetRows(wrapper)).toHaveLength(TARGET_CODES.length)
+    expect(targetCards(wrapper)).toHaveLength(TARGET_CODES.length)
     expect(exists(wrapper, 'incidents-error')).toBe(false)
   })
 

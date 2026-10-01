@@ -167,6 +167,7 @@ order_id,confirmation_ref,confirmation_status,filled_quantity,average_price,conf
 | スライス基準マスタ | `history` / `simulate` |
 | 権限マスタ | `PUT {role_code}` / `history`（#4 の形合わせ後に使う） |
 | 障害管理 | `history` の `target` / `offset`（直近 50 件固定） |
+| 為替マスタ（2026-10-02 追記） | `GET /masters/fx`（一覧）/ `DELETE {id}` / `{id}/history` / `export-csv` / `import-csv`。画面は現在レート 1 件のカードと更新モーダルだけで、一覧・履歴・CSV・削除の導線が無い。一覧と DELETE は実 API E2E（`FXR`）の `beforeAll` / `afterAll` が試験データの控えと後片付けにだけ使う。未着手の「源泉レートの表示・更新」も同じ 5 本（`latest` / `GET {id}` / `validate` / `POST` / `PUT {id}`）で賄う見込み（#34 の回答待ち） |
 
 **実装済み画面で送っていないクエリ**（既定に頼っている・画面に条件が無い）:
 
@@ -179,7 +180,7 @@ order_id,confirmation_ref,confirmation_status,filled_quantity,average_price,conf
 | `GET /operations/activity-logs` | `target_types` の複数指定 | セレクトが単一選択 |
 
 **未実装画面のオペレーション**（未使用だが依頼対象ではない・参考。`GET /orders` を含む）:
-Orders 13 / DreamStatus 3 / Customers・Balances・Closing 5 / MasterFx 9 / MasterFeePatterns 9 / MasterFeePreferences 9 /
+Orders 13 / DreamStatus 3 / Customers・Balances・Closing 5 / MasterFeePatterns 9 / MasterFeePreferences 9 /
 Executions 2 / Calculations 1 / HoldingSearch 1 / MizuhoIntegration 4 / Batch 10 / Auth・MasterPermissions（users）3 / `/branches` `/handlers` 2。
 `POST /calculations` の `CalculationResponse` は 2026-09-30 の取り込みで `外貨` / `円貨` のブロック形式に確定した
 （旧 18 項目は削除）。フロントに使用箇所は無く、顧客詳細の仮計算タブはこの形で着手可能になった。

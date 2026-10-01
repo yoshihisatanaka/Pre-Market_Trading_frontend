@@ -60,7 +60,7 @@ async function mountView() {
   const wrapper = mount(PermissionListView, {
     global: {
       plugins: [createPinia(), router],
-      // ヘッダへ差し込む「再読み込み」とモーダル（Teleport to="body"）を wrapper 内に描画させる
+      // モーダル（Teleport to="body"）を wrapper 内に描画させる
       stubs: { teleport: true },
     },
   })
@@ -355,22 +355,6 @@ describe('PermissionListView', () => {
     await settle()
 
     expect(editForm(wrapper).exists()).toBe(false)
-  })
-
-  it('[PMV-16] 再読み込みで通知が消え一覧を表示する', async () => {
-    const { wrapper } = await mountView()
-    await settle()
-    await openEdit(wrapper, EDIT_TARGET.role)
-    await checkbox(wrapper, 'canOrder').setValue(true)
-    await editSubmit(wrapper).trigger('click')
-    await settle()
-    expect(notice(wrapper).exists()).toBe(true)
-
-    await wrapper.find('[data-testid="permissions-reload"]').trigger('click')
-    await settle()
-
-    expect(notice(wrapper).exists()).toBe(false)
-    expect(rows(wrapper)).toHaveLength(TOTAL)
   })
 
   it('[PMV-17] 画面の注記は 4 状態のいずれでも表示される', async () => {

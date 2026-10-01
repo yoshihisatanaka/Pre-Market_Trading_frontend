@@ -107,7 +107,6 @@ test.describe('滞留注文抽出', () => {
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '滞留注文抽出', exact: true })).toBeVisible()
-    await expect(page.getByTestId('stalled-orders-reload')).toBeVisible()
     await expect(page.getByText('注文エラー（別システムで発注要）')).toBeVisible()
     await expect(page.getByText('注文中（コンファメーション取込後・未約定）')).toBeVisible()
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
@@ -231,17 +230,6 @@ test.describe('滞留注文抽出', () => {
 
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
     await expect(page.getByTestId('stalled-order-errors-loading')).toHaveCount(0)
-  })
-
-  test('[SO-10] 再読み込みしても絞り込みが保たれる', async ({ page }) => {
-    await page.goto(`${PATH}?branch_code=123`)
-    await expectCounts(page, branch123Errors.length, 0)
-
-    await page.getByTestId('stalled-orders-reload').click()
-
-    await expect(page).toHaveURL(/[?&]branch_code=123(&|$)/)
-    await expectCounts(page, branch123Errors.length, 0)
-    await expect(errorRows(page)).toHaveCount(branch123Errors.length)
   })
 
   test('[SO-13] 取込カードに操作可能のバッジと CSV の 3 ボタンが出る', async ({ page }) => {

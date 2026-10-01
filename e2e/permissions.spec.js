@@ -91,8 +91,6 @@ test.describe('権限マスタ', () => {
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '権限マスタ', exact: true })).toBeVisible()
-    // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている
-    await expect(page.getByTestId('permissions-reload')).toBeVisible()
 
     await expect(page.getByTestId('permissions-count')).toHaveText(`${rolePermissions.length} ロール`)
     const rows = rowsOf(page)
@@ -274,21 +272,6 @@ test.describe('権限マスタ', () => {
 
     const reopened = await openEdit(page, SALES)
     await expectChecks(reopened, SALES)
-  })
-
-  test('[PM-14] 保存後に再読み込みしても保存した値が残る', async ({ page }) => {
-    await page.goto(PATH)
-
-    const dialog = await openEdit(page, SALES)
-    await dialog.getByTestId(MASTER_UPDATE.checkbox).check()
-    await dialog.getByTestId('permissions-edit-submit').click()
-    await expect(page.getByTestId('permissions-notice')).toBeVisible()
-
-    await page.getByTestId('permissions-reload').click()
-
-    await expect(page.getByTestId('permissions-notice')).toHaveCount(0)
-    await expect(rowsOf(page)).toHaveCount(rolePermissions.length)
-    await expect(permissionCell(page, SALES, MASTER_UPDATE)).toHaveText('許可')
   })
 
   test('[PM-15] 一度も更新されていない行も保存できる', async ({ page }) => {

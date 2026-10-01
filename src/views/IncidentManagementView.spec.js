@@ -83,7 +83,7 @@ async function mountView(prepare) {
   const wrapper = mount(IncidentManagementView, {
     global: {
       plugins: [pinia, router],
-      // teleport を stub して、ヘッダへ差し込む「再読み込み」とダイアログを wrapper 内に描画させる
+      // teleport を stub して、ダイアログを wrapper 内に描画させる
       stubs: { teleport: true },
     },
   })
@@ -317,25 +317,6 @@ describe('IncidentManagementView', () => {
     expect(stateText(wrapper)).toBe(before)
   })
 
-  it('[INV-12] 「再読み込み」で取得がやり直され、運用状態が出たままになる', async () => {
-    let statusCalls = 0
-    server.use(
-      http.get(STATUS_PATH, () => {
-        statusCalls += 1
-        // 応答は返さず既定のハンドラへ落とす
-      }),
-    )
-    const { wrapper } = await mountView()
-    await settle()
-    expect(statusCalls).toBe(1)
-
-    await find(wrapper, 'incidents-reload').trigger('click')
-    await settle()
-
-    expect(statusCalls).toBe(2)
-    expect(stateText(wrapper)).toBe('通常運用')
-  })
-
   it('[INV-13] 履歴の列見出しが決まった順で並び、履歴の件数だけ行が出る', async () => {
     const { wrapper } = await mountView()
     await settle()
@@ -400,21 +381,6 @@ describe('IncidentManagementView', () => {
     expect(isDialogOpen(wrapper)).toBe(true)
     expect(dialog(wrapper).props('error').message).toBe(REJECT_MESSAGE)
     expect(find(wrapper, 'incidents-control-error').text()).toBe(REJECT_MESSAGE)
-    expect(exists(wrapper, 'incidents-notice')).toBe(false)
-  })
-
-  it('[INV-17] 成功通知は「再読み込み」で消える', async () => {
-    const { wrapper } = await mountView()
-    await settle()
-    await actionOf(wrapper, IB_CODE).trigger('click')
-    dialog(wrapper).vm.$emit('confirm', { reason: REASON })
-    await settle()
-    await settle()
-    expect(exists(wrapper, 'incidents-notice')).toBe(true)
-
-    await find(wrapper, 'incidents-reload').trigger('click')
-    await settle()
-
     expect(exists(wrapper, 'incidents-notice')).toBe(false)
   })
 
@@ -554,23 +520,6 @@ describe('IncidentManagementView', () => {
     expect(exists(wrapper, 'incidents-history-error')).toBe(false)
     expect(historyOperators(wrapper)).toEqual([operatorOf(PAGE)])
     expect(currentPage(wrapper)).toBe('2')
-  })
-
-  it('[INV-28] 2 ページ目で「再読み込み」しても同じページを読み直し、ページ位置を保つ', async () => {
-    const offsets = pagedHistories()
-    const { wrapper } = await mountView()
-    await settle()
-    await pageButton(wrapper, 2).trigger('click')
-    await settle()
-    const before = offsets.length
-
-    await find(wrapper, 'incidents-reload').trigger('click')
-    await settle()
-
-    expect(offsets.length).toBe(before + 1)
-    expect(offsets.at(-1)).toBe(PAGE)
-    expect(currentPage(wrapper)).toBe('2')
-    expect(historyOperators(wrapper)).toEqual([operatorOf(PAGE)])
   })
 
   it('[INV-29] ページ送りの応答待ちはページャーを押せず、応答後は押せる', async () => {

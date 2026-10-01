@@ -66,7 +66,7 @@ const HISTORY_COLUMNS = [
 const OPERATION_BADGE_VARIANTS = { SHOW: 'success', HIDE: 'gray', UPDATE: 'info' }
 
 /*
- * 入力欄は現在値が変わるたび（初回読み込み・再読み込み・保存成功）に洗い替える。
+ * 入力欄は現在値が変わるたび（初回読み込み・再試行・保存成功）に洗い替える。
  * 入力途中の値を握りっぱなしにしないので、保存後に画面と入力欄がずれない。
  */
 const enabledInput = ref(false)
@@ -141,18 +141,6 @@ bannerStore.load()
 
 <template>
   <section class="announcement">
-    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
-    <Teleport defer to="#topbar-actions">
-      <BaseButton
-        variant="secondary"
-        data-testid="announcements-reload"
-        :disabled="loading"
-        @click="reload"
-      >
-        再読み込み
-      </BaseButton>
-    </Teleport>
-
     <BaseAlert v-if="noticeMessage" variant="success" data-testid="announcements-notice">
       {{ noticeMessage }}
     </BaseAlert>

@@ -22,7 +22,6 @@ import { PERMISSION_ITEMS, permissionBadge } from '@/utils/permissionTypes'
  * 意図的なずれがある。
  *   - 権限の列は仕様（RolePermissionItem）の 4 つ。モックの「操作ログ閲覧」「管理者機能」は
  *     仕様に無いので出さない（docs/api/requests.md #4）
- *   - ヘッダに「再読み込み」を置く（既存のマスタ画面と揃える。エラー状態からの復帰導線も兼ねる）
  *   - 注記から「紙芝居モック」の暫定付与の説明を外す（実データを出すため）
  *   - 「閲覧のみ」への切替入口（モックの ?as_user= セレクタ）は作らない。操作者は
  *     /auth/me（SSO セッションか開発用の X-User-Code）で決まる
@@ -58,7 +57,7 @@ const editForm = ref({})
 
 const editTitle = computed(() => (editTarget.value ? `${editTarget.value.roleLabel}の権限設定` : ''))
 
-/** 保存の成功通知。次の編集を開くか再読み込みするまで出しておく */
+/** 保存の成功通知。次の編集を開くか再試行するまで出しておく */
 const noticeMessage = ref('')
 
 function openEdit(row) {
@@ -98,18 +97,6 @@ function reload() {
 
 <template>
   <section class="permission-list">
-    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
-    <Teleport defer to="#topbar-actions">
-      <BaseButton
-        variant="secondary"
-        data-testid="permissions-reload"
-        :disabled="loading"
-        @click="reload"
-      >
-        再読み込み
-      </BaseButton>
-    </Teleport>
-
     <!-- 画面の説明。4 状態に関わらず常時出す。見出しだけが編集可否で変わる -->
     <BaseAlert variant="info" data-testid="permissions-description">
       <strong>{{ canEdit ? '権限設定可能' : '閲覧のみ' }}</strong>

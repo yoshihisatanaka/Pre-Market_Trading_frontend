@@ -122,7 +122,7 @@ async function confirmControl({ reason }) {
   noticeMessage.value = result.message
 }
 
-// 再読み込みは見ている履歴のページを保つ（初回とエラーからの再試行も同じ入口）
+// エラーからの再試行は見ている履歴のページを保つ
 function reload() {
   noticeMessage.value = ''
   store.load(historyOffset.value)
@@ -134,17 +134,6 @@ store.load()
 
 <template>
   <section class="incident">
-    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
-    <Teleport defer to="#topbar-actions">
-      <BaseButton
-        variant="secondary"
-        data-testid="incidents-reload"
-        :disabled="loading"
-        @click="reload"
-      >
-        再読み込み
-      </BaseButton>
-    </Teleport>
 
     <BaseAlert v-if="noticeMessage" variant="success" data-testid="incidents-notice">
       {{ noticeMessage }}

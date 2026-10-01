@@ -8,8 +8,6 @@
 実際の Pinia ストア + vue-router + MSW(node) を通して、**一覧 2 本それぞれの 4 状態**と
 「検索条件は URL クエリが正」の単方向フローを守る。ページャは無い。
 
-`<Teleport>` を使うので、テストには `global: { stubs: { teleport: true } }` を付ける。
-
 CSV の出力とサンプル 2 種はサーバを通さず、画面が組み立ててダウンロードさせる
 （列と値の変換は `utils/stalledOrderCsv.js`、書式は `utils/csv.js`）。jsdom は `URL.createObjectURL` を
 持たないので、`@/utils/download` を `vi.mock` して `downloadCsv(ファイル名, 本文)` の引数を見る。
@@ -43,7 +41,6 @@ v-model（prop の型が jsdom の `File`）を通るため、jsdom の `File` �
 | SOV-08 | 両方 0 件を返す | マウントして応答を待つ | 2 つのカードにそれぞれの空の文言が出る | 実装済 |
 | SOV-09 | 既定モック（`/auth/me` は全権限ありの supervisorOperator） | マウントして応答を待つ | バッジ「操作可能」と CSV のボタン 3 つが出る | 実装済 |
 | SOV-10 | ファイルを選んでいない | マウントする | 「取込して注文照会へ反映」が押せない | 実装済 |
-| SOV-11 | 初回応答は 0 件、2 回目は既定モック | 「再読み込み」を click | 件数が 3 件 / 2 件に更新される | 実装済 |
 | SOV-12 | 既定モック | 「別システム発注CSVサンプル」を click | `downloadCsv` が `tws_upload_sample.csv` と `buildTwsOrderSampleCsv()` の本文で呼ばれる | 実装済 |
 | SOV-13 | 既定モック | 「コンファメーションCSVサンプル」を click | `downloadCsv` が `tws_confirmation_sample.csv` と `buildConfirmationSampleCsv()` の本文で呼ばれる | 実装済 |
 | SOV-14 | 既定モック | 「注文エラーをCSV出力」を click | `downloadCsv` が `tws_stalled_orders.csv` で 1 回呼ばれ、本文は発注 CSV のヘッダに続いて画面の注文エラーの行（注文 ID が画面の並びどおり）になる | 実装済 |

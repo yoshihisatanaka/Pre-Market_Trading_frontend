@@ -126,8 +126,6 @@ async function mountView(query = {}) {
   const wrapper = mount(StalledOrderListView, {
     global: {
       plugins: [createPinia(), router],
-      // teleport を stub して、ヘッダへ差し込むボタンを wrapper 内に描画させる
-      stubs: { teleport: true },
     },
   })
   return { wrapper, router }
@@ -335,19 +333,6 @@ describe('StalledOrderListView', () => {
     await settle()
 
     expect(isDisabled(wrapper, 'stalled-orders-confirmation-import')).toBe(true)
-  })
-
-  it('[SOV-11] 「再読み込み」で件数が更新される', async () => {
-    server.use(emptyHandler({ once: true }))
-    const { wrapper } = await mountView()
-    await settle()
-    expect(countText(wrapper, 'stalled-order-errors')).toBe('0 件')
-
-    await byTestId(wrapper, 'stalled-orders-reload').trigger('click')
-    await settle()
-
-    expect(countText(wrapper, 'stalled-order-errors')).toBe(`${stalledOrderErrors.length} 件`)
-    expect(countText(wrapper, 'stalled-working-orders')).toBe(`${stalledWorkingOrders.length} 件`)
   })
 
   it('[SOV-12] 「別システム発注CSVサンプル」でサンプルをダウンロードさせる', async () => {

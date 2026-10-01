@@ -497,12 +497,19 @@ async function installHistoryHandler(page, { total, failOnce = false }) {
   )
 }
 
-/** 履歴が PAGED_TOTAL 件ある状態で画面を開く（IN-26 の前提）。再読み込みでページ応答に取り直す */
+/**
+ * 履歴が PAGED_TOTAL 件ある状態で画面を開く（IN-26 の前提）。
+ * ハンドラはページ内の worker に足すので page.reload() では消える。サイドメニューで別画面へ移って戻り、
+ * 画面を作り直させてページ応答に取り直す
+ */
 async function openPaged(page) {
   await page.goto(PATH)
   await expect(historyRowsOf(page)).toHaveCount(suspensionHistories.length)
   await installHistoryHandler(page, { total: PAGED_TOTAL })
-  await page.getByTestId('incidents-reload').click()
+  const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+  await nav.getByRole('link', { name: 'お知らせ管理', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'お知らせ管理', exact: true })).toBeVisible()
+  await nav.getByRole('link', { name: '障害管理', exact: true }).click()
   await expect(paginationOf(page).getByTestId('pagination-range')).toHaveText(
     rangeText(PAGED_TOTAL, 1, PAGE_SIZE),
   )
@@ -523,7 +530,7 @@ async function expectFirstHistory(page, n) {
 
 // シナリオ: docs/e2e/incidents.md（タイトル先頭の [IN-nn] が対応 ID）
 // 障害対応履歴のページャー。件数表示とページ番号の出し分け、ページ送りで履歴だけが替わること、
-// ページ送りの失敗が履歴カードに閉じること、再読み込み・停止後のページ位置を守る。
+// ページ送りの失敗が履歴カードに閉じること、停止後のページ位置を守る。
 // 番号の畳み方や範囲外 offset の丸めは BasePagination の単体テスト側が担保する。
 test.describe('障害管理 履歴のページャー', () => {
   test('[IN-25] 1 ページに収まるときは件数表示だけでページ番号は出ない', async ({ page }) => {
@@ -613,24 +620,6 @@ test.describe('障害管理 履歴のページャー', () => {
     await expect(error).toHaveCount(0)
     await expect(paginationOf(page).getByTestId('pagination-range')).toHaveText(
       rangeText(PAGED_TOTAL, PAGE_SIZE + 1, PAGE_SIZE * 2),
-    )
-    await expectFirstHistory(page, PAGE_SIZE + 1)
-  })
-
-  test('[IN-31] ヘッダの「再読み込み」は見ている履歴のページを保つ', async ({ page }) => {
-    await openPaged(page)
-    await goToSecondPage(page)
-
-    await page.getByTestId('incidents-reload').click()
-
-    // 再読み込み中は画面全体がローディングになるので、表示が戻るのを待ってから見る
-    await expect(targetCardsOf(page)).toHaveCount(suspensionTargets.length)
-    await expect(paginationOf(page).getByTestId('pagination-range')).toHaveText(
-      rangeText(PAGED_TOTAL, PAGE_SIZE + 1, PAGE_SIZE * 2),
-    )
-    await expect(paginationOf(page).getByRole('button', { name: '2', exact: true })).toHaveAttribute(
-      'aria-current',
-      'page',
     )
     await expectFirstHistory(page, PAGE_SIZE + 1)
   })

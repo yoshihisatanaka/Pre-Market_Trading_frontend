@@ -200,6 +200,13 @@ docker compose run --rm frontend npm run verify  # マージ前の全件（lint 
 `vitest.config.js` / `vitest.setup.js` / `src/mocks/handlers/index.js` など、関係する spec を静的に
 絞れないファイルが変更に含まれると、スクリプトが自動で全件に切り替える。
 
+E2E(実API) の一括実装は本体から 1 本で回せる（worktree の用意 → frontend 起動 → その worktree の中で
+`claude -p "/real-api-e2e …"` を起動。コミットはしない）:
+
+```powershell
+bash scripts/real-api-e2e.sh 為替 顧客 -- --model opus --effort high
+```
+
 作業ブランチの名前は [CLAUDE.md](../CLAUDE.md) の「Git ブランチ」節に従う。
 
 ---

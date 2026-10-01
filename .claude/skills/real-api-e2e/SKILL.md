@@ -10,17 +10,23 @@ description: E2E(実API) が未完了の画面をまとめて実装する。docs
 
 ## 前提
 
-- **worktree のセッションで実行する。** エージェントはこのセッションのチェックアウトにファイルを書くので、
+- **手順 1〜5 は worktree のセッションで行う。** エージェントはこのセッションのチェックアウトにファイルを書くので、
   本体で回すと `main` に未コミットの変更が生える。`git rev-parse --show-toplevel` が本体
-  （`worktrees/` も `.claude/worktrees/` も含まない）なら手を止め、次を案内して終わる:
+  （`worktrees/` も `.claude/worktrees/` も含まない）なら、**手順 1〜5 を自分では回さず**、
+  ラッパーを Bash ツールで 1 回だけ実行する（`run_in_background: true`、`timeout` は上限の 7200000）:
 
   ```bash
-  bash scripts/worktree.sh add test/real-api-e2e-<MMDD>
+  bash scripts/real-api-e2e.sh 〈引数の画面名をそのまま〉
   ```
 
-  作った worktree を新しい VSCode ウィンドウで開き、そこで `/real-api-e2e` を打ち直す。
-  ヘッドレスなら、その worktree の中で `claude -p "/real-api-e2e" --permission-mode acceptEdits`
-  （`--permission-mode plan` では編集できずに止まる）
+  ラッパーは worktree（`test/real-api-e2e-<MMDD>`。冪等で再利用）を `scripts/worktree.sh add` で用意し、
+  その frontend を起動し、**その worktree の中で** `claude -p "/real-api-e2e 〈引数〉" --permission-mode acceptEdits`
+  を起動する。完了通知が来たら、内側の出力にある最終表（手順 5）と「次にやること」を**そのまま報告に転記**して終わる。
+  本体の cwd は変わらないので、このセッションから `docker compose` やファイル編集をしてはいけない。
+  ユーザが端末から打つときも同じ 1 本で足りる（PowerShell なら Git Bash を明示:
+  `& "C:\Program Files\Git\bin\bash.exe" scripts/real-api-e2e.sh 〈画面名…〉`。
+  `--model` / `--effort` など claude へのフラグは `--` の後ろに置く）。
+  内側は `--permission-mode acceptEdits` で起動される（`plan` では編集できずに止まる）
 - その worktree の frontend を起動しておく（`docker compose up -d frontend`）。作成モードの lint は起動中のコンテナに exec する
 - worktree のブランチに `e2e/helpers/realApi.js` と `docs/e2e/_template-real-api.md` が入っていること（無ければ `main` を取り込む）
 

@@ -117,18 +117,6 @@ async function importConfirmation() {
 
 <template>
   <section class="stalled-orders">
-    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
-    <Teleport defer to="#topbar-actions">
-      <BaseButton
-        variant="secondary"
-        data-testid="stalled-orders-reload"
-        :disabled="loading"
-        @click="store.reload()"
-      >
-        再読み込み
-      </BaseButton>
-    </Teleport>
-
     <!-- 画面の説明。4 状態や検索結果に関わらず常時出す -->
     <p class="stalled-orders__description" data-testid="stalled-orders-description">
       ブローカー・自システム障害時に、別システムでの手動発注とコンファメーション取込を管理する画面です。

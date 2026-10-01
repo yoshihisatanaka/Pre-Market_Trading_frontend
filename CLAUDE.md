@@ -119,6 +119,9 @@ bash .claude/hooks/tests/guard-secret-paths.test.sh
 `real-api-e2e-author` は **作成モード（既定）と検証モード**に分かれる。作成モードはシナリオと spec を書いて
 lint と `check:scenarios` まで通すだけで実 API に触らないので、**画面ごとに並列で動かせる**。
 未完了の画面をまとめて書くときは **`/real-api-e2e` スキル**（worktree で実行）が対象の抽出・並列起動・集計まで行う。
+本体から打つときは `bash scripts/real-api-e2e.sh <画面名…>` の 1 本で、worktree の用意 → frontend 起動 →
+その worktree の中で `claude -p "/real-api-e2e …"` の起動まで行う（本体で `/real-api-e2e` と打っても
+スキルがこれを呼ぶ）。
 共通部品は `e2e/helpers/realApi.js`、雛形は `docs/e2e/_template-real-api.md` と `e2e/_template.real-api.spec.js.txt`。
 
 検証モード（実 API に当てて状態を `実装済` / `保留` に確定する）だけは前提が 3 つある。**MSW を切る（`.env` の `VITE_ENABLE_MSW=false` に

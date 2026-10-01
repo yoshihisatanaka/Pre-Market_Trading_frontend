@@ -61,13 +61,13 @@ async function assertRealApi(page) {
   ).toBe(false)
 }
 
-/** 停止対象の表の行。data-table-row は全画面共通の名前なのでこの表にスコープを切る */
-function targetRowsOf(page) {
-  return page.getByTestId('incidents-targets').getByTestId('data-table-row')
+/** 停止対象のカード（1 対象 = 1 枚。サーバの並びのまま） */
+function targetCardsOf(page) {
+  return page.getByTestId('incidents-targets').getByTestId('incidents-target')
 }
 
-function targetRowOf(page, code) {
-  return targetRowsOf(page).filter({ has: page.getByTestId(`incidents-target-${code}-action`) })
+function targetCardOf(page, code) {
+  return targetCardsOf(page).filter({ has: page.getByTestId(`incidents-target-${code}-action`) })
 }
 
 function historyRowsOf(page) {
@@ -121,7 +121,7 @@ test.describe('障害管理（実 API 接続）', () => {
     await api?.dispose()
   })
 
-  test('[IR-01] 実データで停止対象の表が API の targets と一致する', async ({ page }) => {
+  test('[IR-01] 実データで停止対象のカードが API の targets と一致する', async ({ page }) => {
     await openView(page)
 
     const status = await getStatus()
@@ -129,17 +129,17 @@ test.describe('障害管理（実 API 接続）', () => {
     expect(targets.length, '実 API の targets が 0 件').toBeGreaterThan(0)
     expect(targets[0]['停止対象'], '先頭が全体（ALL）ではない').toBe('ALL')
 
-    const rows = targetRowsOf(page)
-    await expect(rows).toHaveCount(targets.length)
+    const cards = targetCardsOf(page)
+    await expect(cards).toHaveCount(targets.length)
 
     for (const [index, target] of targets.entries()) {
-      const row = rows.nth(index)
-      await expect(row.getByRole('cell').first()).toHaveText(target['停止対象名'])
-      await expect(row.getByTestId(`incidents-target-${target['停止対象']}-action`)).toHaveAttribute(
+      const card = cards.nth(index)
+      await expect(card.getByTestId('incidents-target-name')).toHaveText(target['停止対象名'])
+      await expect(card.getByTestId(`incidents-target-${target['停止対象']}-action`)).toHaveAttribute(
         'aria-checked',
         String(target['発注停止中'] === true),
       )
-      await expect(row.getByRole('cell').nth(1)).toHaveText(
+      await expect(card.getByTestId('incidents-target-state')).toHaveText(
         target['発注停止中'] === true ? '停止中' : '通常',
       )
     }
@@ -150,7 +150,7 @@ test.describe('障害管理（実 API 接続）', () => {
     await expect(page.getByTestId('incidents-empty')).toHaveCount(0)
   })
 
-  test('[IR-02] VWAP を停止して再開すると行・履歴・API が対で戻る', async ({ page }) => {
+  test('[IR-02] VWAP を停止して再開するとカード・履歴・API が対で戻る', async ({ page }) => {
     const before = await getStatus()
     expect(
       before['全体停止中'],
@@ -167,7 +167,8 @@ test.describe('障害管理（実 API 接続）', () => {
     const reason = `E2E 実 API 接続確認 ${new Date().toISOString()}`
 
     await openView(page)
-    const row = targetRowOf(page, TARGET)
+    const state = targetCardOf(page, TARGET).getByTestId('incidents-target-state')
+    const latestHistory = historyRowsOf(page).first()
     const toggle = page.getByTestId(`incidents-target-${TARGET}-action`)
 
     // 停止
@@ -178,11 +179,10 @@ test.describe('障害管理（実 API 接続）', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.getByTestId('incidents-notice')).toBeVisible()
     await expect(toggle).toHaveAttribute('aria-checked', 'true')
-    await expect(row.getByRole('cell').nth(1)).toHaveText('停止中')
-    await expect(row).toContainText(reason)
-    await expect(historyRowsOf(page).first().getByRole('cell').nth(1)).toHaveText(
-      `${targetName}：発注停止`,
-    )
+    await expect(state).toHaveText('停止中')
+    // 停止理由はカードに出さず、履歴の先頭行で見る
+    await expect(latestHistory.getByRole('cell').nth(1)).toHaveText(`${targetName}：発注停止`)
+    await expect(latestHistory).toContainText(reason)
 
     // 再開
     await toggle.click()
@@ -191,12 +191,8 @@ test.describe('障害管理（実 API 接続）', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.getByTestId('incidents-notice')).toBeVisible()
     await expect(toggle).toHaveAttribute('aria-checked', 'false')
-    await expect(row.getByRole('cell').nth(1)).toHaveText('通常')
-    // 再開後も直前の停止理由を保持する仕様
-    await expect(row).toContainText(reason)
-    await expect(historyRowsOf(page).first().getByRole('cell').nth(1)).toHaveText(
-      `${targetName}：発注再開`,
-    )
+    await expect(state).toHaveText('通常')
+    await expect(latestHistory.getByRole('cell').nth(1)).toHaveText(`${targetName}：発注再開`)
 
     // 画面の状態ではなく、サーバに届いているかを見る
     const after = targetOf(await getStatus(), TARGET)

@@ -50,13 +50,18 @@ function historyBody(histories) {
   return { total: histories.length, limit: 50, offset: 0, histories }
 }
 
-/** 停止対象の表の行。data-table-row は全画面共通の名前なのでこの表にスコープを切る */
-function targetRowsOf(page) {
-  return page.getByTestId('incidents-targets').getByTestId('data-table-row')
+/** 停止対象のカード（1 対象 = 1 枚。サーバの並びのまま） */
+function targetCardsOf(page) {
+  return page.getByTestId('incidents-targets').getByTestId('incidents-target')
 }
 
-function targetRowOf(page, target) {
-  return targetRowsOf(page).filter({ has: page.getByTestId(`incidents-target-${target}-action`) })
+function targetCardOf(page, target) {
+  return targetCardsOf(page).filter({ has: page.getByTestId(`incidents-target-${target}-action`) })
+}
+
+/** カードの状態の文言（通常 / 停止中） */
+function targetStateOf(page, target) {
+  return targetCardOf(page, target).getByTestId('incidents-target-state')
 }
 
 function historyRowsOf(page) {
@@ -171,7 +176,7 @@ test.describe('障害管理', () => {
     await expect(first).toContainText(latest.操作者)
   })
 
-  test('[IN-09] 操作履歴が 0 件でも停止対象の表は表示される', async ({ page }) => {
+  test('[IN-09] 操作履歴が 0 件でも停止対象のカードは表示される', async ({ page }) => {
     await mockApi(page, [{ path: HISTORY_PATH, body: historyBody([]) }])
     await page.goto(PATH)
 
@@ -179,7 +184,7 @@ test.describe('障害管理', () => {
       '障害対応履歴はありません。',
     )
     await expect(page.getByTestId('incidents-history')).toHaveCount(0)
-    await expect(targetRowsOf(page)).toHaveCount(suspensionTargets.length)
+    await expect(targetCardsOf(page)).toHaveCount(suspensionTargets.length)
   })
 
   test('[IN-10] 停止状態の取得が 500 だとエラーと再試行ボタンが出る', async ({ page }) => {
@@ -217,7 +222,7 @@ test.describe('障害管理', () => {
     await error.getByRole('button', { name: '再試行' }).click()
 
     await expect(page.getByTestId('incidents-state')).toHaveText('通常運用')
-    await expect(targetRowsOf(page)).toHaveCount(suspensionTargets.length)
+    await expect(targetCardsOf(page)).toHaveCount(suspensionTargets.length)
     await expect(error).toHaveCount(0)
   })
 
@@ -235,21 +240,21 @@ test.describe('障害管理', () => {
     expect(dangerColor).not.toBe(normalColor)
   })
 
-  test('[IN-13] 停止対象の 4 行が並び、過去の停止理由が残っている', async ({ page }) => {
+  test('[IN-13] 停止対象の 4 枚が並び、過去の停止理由はカードに出ない', async ({ page }) => {
     await page.goto(PATH)
 
-    const rows = targetRowsOf(page)
-    await expect(rows).toHaveCount(suspensionTargets.length)
+    const cards = targetCardsOf(page)
+    await expect(cards).toHaveCount(suspensionTargets.length)
 
     for (const [index, target] of suspensionTargets.entries()) {
-      const row = rows.nth(index)
-      await expect(row.getByRole('cell').first()).toHaveText(target.停止対象名)
-      await expect(row).toContainText('通常')
-      await expect(row).not.toContainText('停止中')
+      const card = cards.nth(index)
+      await expect(card.getByTestId('incidents-target-name')).toHaveText(target.停止対象名)
+      await expect(card.getByTestId('incidents-target-state')).toHaveText('通常')
     }
 
-    await expect(targetRowOf(page, 'ALL')).toContainText(allTarget.停止理由)
-    await expect(targetRowOf(page, '1')).toContainText(ibTarget.停止理由)
+    // 理由は障害対応履歴で見る。応答に残っている過去の理由はカードに出さない
+    await expect(targetCardOf(page, 'ALL')).not.toContainText(allTarget.停止理由)
+    await expect(targetCardOf(page, '1')).not.toContainText(ibTarget.停止理由)
   })
 
   test('[IN-14] IB と VWAP だけ停止中なら「一部停止中（IB, VWAP）」が出る', async ({ page }) => {
@@ -264,22 +269,21 @@ test.describe('障害管理', () => {
     await expect(page.getByTestId('incidents-state')).toHaveText(
       `一部停止中（${ibTarget.停止対象名}, ${vwapTarget.停止対象名}）`,
     )
-    await expect(targetRowOf(page, '1')).toContainText('停止中')
-    await expect(targetRowOf(page, '2')).toContainText('停止中')
-    await expect(targetRowOf(page, '0')).not.toContainText('停止中')
+    await expect(targetStateOf(page, '1')).toHaveText('停止中')
+    await expect(targetStateOf(page, '2')).toHaveText('停止中')
+    await expect(targetStateOf(page, '0')).toHaveText('通常')
   })
 
-  test('[IN-15] IB を停止すると通知が出て、行と運用状態が停止に変わる', async ({ page }) => {
+  test('[IN-15] IB を停止すると通知が出て、カードと運用状態が停止に変わる', async ({ page }) => {
     await page.goto(PATH)
 
     await suspendIb(page)
 
     await expect(dialogOf(page)).toHaveCount(0)
     await expect(switchOf(page, '1')).toHaveAttribute('aria-checked', 'true')
-    const ibRow = targetRowOf(page, '1')
-    await expect(ibRow).toContainText('停止中')
-    await expect(ibRow).toContainText(NEW_REASON)
-    await expect(ibRow).not.toContainText(ibTarget.停止理由)
+    await expect(targetStateOf(page, '1')).toHaveText('停止中')
+    // 入力した理由はカードに出さない（IN-16 の履歴で見る）
+    await expect(targetCardOf(page, '1')).not.toContainText(NEW_REASON)
     await expect(page.getByTestId('incidents-state')).toHaveText(
       `一部停止中（${ibTarget.停止対象名}）`,
     )
@@ -349,7 +353,7 @@ test.describe('障害管理', () => {
     )
   })
 
-  test('[IN-21] 停止中の IB を再開すると通常に戻り、停止理由は残る', async ({ page }) => {
+  test('[IN-21] 停止中の IB を再開すると通常に戻り、履歴が 2 行増える', async ({ page }) => {
     await page.goto(PATH)
     await suspendIb(page)
 
@@ -364,12 +368,7 @@ test.describe('障害管理', () => {
       `${ibTarget.停止対象名}の発注を再開しました。`,
     )
     await expect(switchOf(page, '1')).toHaveAttribute('aria-checked', 'false')
-    const ibRow = targetRowOf(page, '1')
-    await expect(ibRow).toContainText('通常')
-    await expect(ibRow).not.toContainText('停止中')
-    // 新しい理由は既定の理由の部分文字列なので、既定の理由が消えていることも見る
-    await expect(ibRow).toContainText(NEW_REASON)
-    await expect(ibRow).not.toContainText(ibTarget.停止理由)
+    await expect(targetStateOf(page, '1')).toHaveText('通常')
     await expect(page.getByTestId('incidents-state')).toHaveText('通常運用')
     await expect(historyRowsOf(page)).toHaveCount(suspensionHistories.length + 2)
   })
@@ -389,7 +388,7 @@ test.describe('障害管理', () => {
     await expect(page.getByTestId('incidents-control-reason')).toHaveCount(0)
   })
 
-  test('[IN-23] 全体停止中はルート行のトグルが押せず、注意書きが出る', async ({ page }) => {
+  test('[IN-23] 全体停止中はルートのカードのトグルが押せず、注意書きが出る', async ({ page }) => {
     await mockApi(page, [{ path: STATUS_PATH, body: statusBody(['ALL']) }])
     await page.goto(PATH)
 
@@ -417,7 +416,7 @@ test.describe('障害管理', () => {
 
     await expect(dialogOf(page)).toHaveCount(0)
     await expect(ibSwitch).toHaveAttribute('aria-checked', 'false')
-    await expect(targetRowOf(page, '1')).not.toContainText('停止中')
+    await expect(targetStateOf(page, '1')).toHaveText('通常')
   })
 })
 
@@ -554,7 +553,7 @@ test.describe('障害管理 履歴のページャー', () => {
     await expectFirstHistory(page, 1)
   })
 
-  test('[IN-27] ページ番号を押すと履歴だけが替わり、URL と停止対象の表はそのまま', async ({
+  test('[IN-27] ページ番号を押すと履歴だけが替わり、URL と停止対象のカードはそのまま', async ({
     page,
   }) => {
     await openPaged(page)
@@ -569,7 +568,7 @@ test.describe('障害管理 履歴のページャー', () => {
     await expect(historyRowsOf(page)).toHaveCount(PAGE_SIZE)
     await expectFirstHistory(page, PAGE_SIZE + 1)
     expect(page.url()).toBe(url)
-    await expect(targetRowsOf(page)).toHaveCount(suspensionTargets.length)
+    await expect(targetCardsOf(page)).toHaveCount(suspensionTargets.length)
   })
 
   test('[IN-28] 履歴が 0 件のときはページャーも出ない', async ({ page }) => {
@@ -582,7 +581,7 @@ test.describe('障害管理 履歴のページャー', () => {
     await expect(paginationOf(page)).toHaveCount(0)
   })
 
-  test('[IN-29] ページ送りに失敗すると履歴カードにエラーが出て、停止対象の表は残る', async ({
+  test('[IN-29] ページ送りに失敗すると履歴カードにエラーが出て、停止対象のカードは残る', async ({
     page,
   }) => {
     await openPaged(page)
@@ -596,9 +595,9 @@ test.describe('障害管理 履歴のページャー', () => {
     await expect(page.getByTestId('incidents-history')).toHaveCount(0)
     await expect(paginationOf(page)).toHaveCount(0)
 
-    // 画面全体のエラーではない。停止対象の表と操作は使えるまま
+    // 画面全体のエラーではない。停止対象のカードと操作は使えるまま
     await expect(page.getByTestId('incidents-error')).toHaveCount(0)
-    await expect(targetRowsOf(page)).toHaveCount(suspensionTargets.length)
+    await expect(targetCardsOf(page)).toHaveCount(suspensionTargets.length)
     await expect(switchOf(page, '1')).toBeEnabled()
   })
 
@@ -625,7 +624,7 @@ test.describe('障害管理 履歴のページャー', () => {
     await page.getByTestId('incidents-reload').click()
 
     // 再読み込み中は画面全体がローディングになるので、表示が戻るのを待ってから見る
-    await expect(targetRowsOf(page)).toHaveCount(suspensionTargets.length)
+    await expect(targetCardsOf(page)).toHaveCount(suspensionTargets.length)
     await expect(paginationOf(page).getByTestId('pagination-range')).toHaveText(
       rangeText(PAGED_TOTAL, PAGE_SIZE + 1, PAGE_SIZE * 2),
     )

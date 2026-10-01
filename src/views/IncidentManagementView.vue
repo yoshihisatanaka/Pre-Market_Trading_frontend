@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import IncidentControlDialog from '@/components/incidents/IncidentControlDialog.vue'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
-import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BasePagination from '@/components/ui/BasePagination.vue'
@@ -33,20 +32,25 @@ const {
 } = storeToRefs(store)
 
 /*
- * 停止対象の表。行は サーバの targets の並び（ALL が先頭）のまま出す。
+ * 停止対象はモック 08986d1 の .control-option と同じカードで、2 列に並べる。
+ * 並びはサーバの targets のまま（ALL が先頭）。
  * 公開モックの「IB送信制御 / 注文入力制御」の 2 区画は採らない（仕様の停止対象と軸が違い、
- * みずほ / VWAP の停止が画面に出なくなるため）。
- * モック 08986d1 のスライド式トグルは、この表の「発注停止」列に取り込む（ON = 停止中）。
+ * みずほ / VWAP の停止が画面に出なくなるため）。1 対象 = 1 カードにする。
  * 語はモックの「制御 / 解除」ではなく、API とサーバ文言に揃えて「停止 / 再開」にする。
+ *
+ * 応答の 停止理由 / 停止日時・停止者 / 再開日時・再開者 はカードに出さない。
+ * 理由は障害対応履歴の停止理由列で見る（再開の確認ダイアログだけは直前の停止を読み取り専用で出す）。
  */
-const TARGET_COLUMNS = [
-  { key: 'targetName', label: '停止対象' },
-  { key: 'suspended', label: '状態' },
-  { key: 'reason', label: '停止理由' },
-  { key: 'suspendedAt', label: '停止日時・停止者' },
-  { key: 'resumedAt', label: '再開日時・再開者' },
-  { key: 'action', label: '発注停止' },
-]
+
+/*
+ * カードの説明文。サーバは返さないので画面が持つ。
+ * ルートは対象名から組み立てる（未知の停止対象コードが来ても崩れないように）。
+ */
+const ALL_DESCRIPTION = '全ルートの発注を止め、注文の新規受付・取消も停止します。'
+
+function targetDescription(target) {
+  return target.target === 'ALL' ? ALL_DESCRIPTION : `${target.targetName}への発注だけを停止します。`
+}
 
 /*
  * 履歴はモックの 変更日時 / 制御内容 / 更新者 に、停止理由の列を足した 4 列。
@@ -68,11 +72,6 @@ const INTRO_TEXT =
   '停止中は注文の新規受付と取消、IB発注・Dream連携のバッチが止まります。受付済みの発注待ち注文は保留され、再開後に通常のバッチ周期で順次発注されます。'
 
 const summary = computed(() => summarizeSuspension(status.value))
-
-// 全体の行だけを強調する（全体停止はルート単位の停止に優先するため）
-function targetRowClass(row) {
-  return { 'is-all': row.target === 'ALL', 'is-suspended': row.suspended }
-}
 
 // 制御内容。モックの「IB送信制御：制御開始」と同じ形で、停止対象名と操作区分名をサーバの文言のまま繋ぐ
 function historyContent(row) {
@@ -173,7 +172,7 @@ store.load()
     </p>
 
     <template v-else>
-      <BaseCard title="障害時の運用制御" flush>
+      <BaseCard title="障害時の運用制御">
         <template #header-actions>
           <span :class="['incident__state', `is-${summary.tone}`]">
             <span class="incident__state-label">現在の運用状態</span>
@@ -194,43 +193,38 @@ store.load()
           全体停止中はルート別に停止・再開できません。全体を再開してから操作してください。
         </BaseAlert>
 
-        <DataTable
-          flat
-          data-testid="incidents-targets"
-          :columns="TARGET_COLUMNS"
-          :rows="targets"
-          :row-class="targetRowClass"
-        >
-          <template #cell-suspended="{ value }">
-            <BaseBadge :variant="value ? 'error' : 'success'">
-              {{ value ? '停止中' : '通常' }}
-            </BaseBadge>
-          </template>
-          <template #cell-reason="{ value }">{{ value ?? '—' }}</template>
-          <template #cell-suspendedAt="{ row }">
-            <template v-if="row.suspendedAt">
-              {{ formatDateTime(row.suspendedAt) }}
-              <span class="incident__operator">{{ row.suspendedBy }}</span>
-            </template>
-            <template v-else>—</template>
-          </template>
-          <template #cell-resumedAt="{ row }">
-            <template v-if="row.resumedAt">
-              {{ formatDateTime(row.resumedAt) }}
-              <span class="incident__operator">{{ row.resumedBy }}</span>
-            </template>
-            <template v-else>—</template>
-          </template>
-          <template #cell-action="{ row }">
-            <BaseSwitch
-              :model-value="row.suspended"
-              :label="`${row.targetName}の発注停止`"
-              :data-testid="`incidents-target-${row.target}-action`"
-              :disabled="isActionLocked(row)"
-              @toggle="openDialog(row)"
-            />
-          </template>
-        </DataTable>
+        <!-- 停止対象ごとのカード。全体のカードは見出しを太字にする（全体停止はルート単位の停止に優先するため） -->
+        <ul class="incident__controls" data-testid="incidents-targets">
+          <li
+            v-for="target in targets"
+            :key="target.target"
+            :class="[
+              'incident__control',
+              { 'is-all': target.target === 'ALL', 'is-suspended': target.suspended },
+            ]"
+            data-testid="incidents-target"
+            :data-target="target.target"
+          >
+            <div class="incident__control-head">
+              <div>
+                <h3 class="incident__control-name" data-testid="incidents-target-name">
+                  {{ target.targetName }}
+                </h3>
+                <p class="incident__control-desc">{{ targetDescription(target) }}</p>
+              </div>
+              <BaseSwitch
+                :model-value="target.suspended"
+                :label="`${target.targetName}の発注停止`"
+                :data-testid="`incidents-target-${target.target}-action`"
+                :disabled="isActionLocked(target)"
+                @toggle="openDialog(target)"
+              />
+            </div>
+            <span class="incident__control-state" data-testid="incidents-target-state">
+              {{ target.suspended ? '停止中' : '通常' }}
+            </span>
+          </li>
+        </ul>
       </BaseCard>
 
       <!-- 表を全幅で載せるときだけ flush。0 件やエラーの一行は本文余白の中に置きたいので付けない -->
@@ -354,30 +348,94 @@ store.load()
   color: var(--color-danger-text);
 }
 
-/* モックの .incident-intro 相当。表の上に敷く淡い面の説明 */
+/* モックの .incident-intro 相当。カードの上に置く淡い面の説明 */
 .incident__intro {
   padding: var(--space-3) var(--space-4);
   color: var(--color-text-muted);
   background-color: var(--color-surface-muted);
-  border-bottom: 1px solid var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   line-height: 1.65;
 }
 
-/* 表の上の注意。カードは flush なので本文余白を自前で持つ */
 .incident__locked {
-  margin: var(--space-3) var(--space-4) 0;
+  margin-top: var(--space-3);
 }
 
-/* 全体の行は表の先頭で太字にする。全体停止はルート単位の停止に優先するため */
-.incident :deep(tr.is-all td:first-child) {
+/* モックの .control-options 相当。停止対象のカードを 2 列に並べる */
+.incident__controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (max-width: 900px) {
+  .incident__controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* モックの .control-option 相当 */
+.incident__control {
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.incident__control.is-suspended {
+  border-color: var(--color-danger-border);
+}
+
+.incident__control-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.incident__control-name {
+  color: var(--color-text-heading);
+  font-size: var(--font-size-md);
+  font-weight: 500;
+}
+
+.incident__control.is-all .incident__control-name {
   font-weight: 600;
 }
 
-.incident__operator {
-  margin-left: var(--space-2);
+.incident__control-desc {
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+/* モックの .control-current 相当。● と文字で状態を出し、停止中は危険色にする */
+.incident__control-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.incident__control-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.incident__control.is-suspended .incident__control-state {
+  color: var(--color-danger-text);
 }
 
 .incident__history-empty {

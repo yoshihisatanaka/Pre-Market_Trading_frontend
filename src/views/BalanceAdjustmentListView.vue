@@ -18,11 +18,7 @@ import { useListQuery } from '@/composables/useListQuery'
 import { useBalanceAdjustmentsStore } from '@/stores/balanceAdjustments'
 import { useCodesStore } from '@/stores/codes'
 import { useCustomerOptionsStore } from '@/stores/customerOptions'
-import {
-  SPECIFIC_DEPOSIT_DEFAULT,
-  SPECIFIC_DEPOSIT_OPTIONS,
-  formatSpecificDeposit,
-} from '@/utils/balanceTypes'
+import { SPECIFIC_DEPOSIT } from '@/utils/apiEnums'
 import { formatMonthDayTime, formatQuantity, joinWide } from '@/utils/format'
 import { OPERATOR_CODE } from '@/utils/operator'
 
@@ -43,7 +39,8 @@ import { OPERATOR_CODE } from '@/utils/operator'
  * **列見出しの「口座区分」の中身は 特定預り区分。** 顧客マスタに出ている 口座区分
  * （一般 / 自己 / 同業者）とは別物で、同じ語が 2 つの意味で使われている。
  * 見出しは画面モックに合わせたもので、コード側の名前は API の項目名のまま
- * （`specificDeposit`）。経緯は src/utils/balanceTypes.js。
+ * （`specificDeposit`）。選択肢と表示名はコードマスタ（GET /codes）の `特定預り区分` から引く。
+ * 混ぜると事故るので、`口座区分` のカテゴリを引かないこと。
  */
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
@@ -112,9 +109,23 @@ function rowClass(row) {
   return row.userModified ? 'is-user-modified' : null
 }
 
-/** 口座区分セル。サーバが付けた名前を優先し、無ければフロントの対応表に落とす */
+/*
+ * 口座区分（特定預り区分）の選択肢。新規追加モーダルのプルダウンと、
+ * 名前の無い行・確認ステップの名前引きで共用する。
+ */
+const depositOptions = computed(() => codes.optionsFor('特定預り区分'))
+
+/** 新規追加モーダルの初期選択（画面モックは「特定」が初期値） */
+const DEPOSIT_DEFAULT = SPECIFIC_DEPOSIT.SPECIFIC
+
+/** 口座区分コード → 表示名。コードマスタに無い値・空値は '—'（他の列の空値表現とそろえる） */
+function depositNameOf(value) {
+  return depositOptions.value.find((option) => option.value === value)?.label ?? '—'
+}
+
+/** 口座区分セル。サーバが付けた名前を優先し、無ければコードマスタから引く */
 function depositLabel(row) {
-  return row.specificDepositName || formatSpecificDeposit(row.specificDeposit)
+  return row.specificDepositName || depositNameOf(row.specificDeposit)
 }
 
 /**
@@ -293,7 +304,7 @@ const addForm = ref(emptyAddForm())
 const addErrors = ref(emptyAddErrors())
 
 function emptyAddForm() {
-  return { customer: '', ticker: '', symbolName: '', specificDeposit: SPECIFIC_DEPOSIT_DEFAULT }
+  return { customer: '', ticker: '', symbolName: '', specificDeposit: DEPOSIT_DEFAULT }
 }
 
 function emptyAddErrors() {
@@ -429,7 +440,7 @@ const addSummary = computed(() => {
         addForm.value.symbolName.trim(),
       ),
     },
-    { label: '口座区分', value: formatSpecificDeposit(addForm.value.specificDeposit) },
+    { label: '口座区分', value: depositNameOf(addForm.value.specificDeposit) },
     { label: '補正前数量', value: '0株', numeric: true },
     { label: '加算数量', value: signedQuantity(addAdded.value), numeric: true },
     { label: '補正後数量', value: `${formatQuantity(addAfter.value)}株`, numeric: true },
@@ -758,7 +769,7 @@ const addSummary = computed(() => {
         <BaseSelect
           v-bind="field"
           v-model="addForm.specificDeposit"
-          :options="SPECIFIC_DEPOSIT_OPTIONS"
+          :options="depositOptions"
           data-testid="balance-adjustments-add-deposit"
         />
       </FormField>

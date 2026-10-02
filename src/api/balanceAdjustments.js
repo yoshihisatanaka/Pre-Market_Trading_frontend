@@ -217,7 +217,7 @@ function toBalanceAdjustment(raw) {
     /*
      * 表示名はサーバが付けて返す。`預り区分名` は `特定預り区分名` の別名で、
      * どちらか片方しか来ない可能性があるので両方見る
-     * （名前が無ければ画面が src/utils/balanceTypes.js の対応表に落とす）。
+     * （名前が無ければ画面がコードマスタ GET /codes の `特定預り区分` から引く）。
      */
     specificDepositName: raw?.特定預り区分名 ?? raw?.預り区分名 ?? '',
     // 取込時の元残高。手動追加分は null。0 と「値が無い」は別物なので潰さない

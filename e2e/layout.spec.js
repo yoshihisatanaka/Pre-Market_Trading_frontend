@@ -3,6 +3,7 @@ import { navItems, navSections } from '../src/components/layout/navigation'
 import { noOperationOperator, supervisorOperator } from '../src/mocks/fixtures/currentOperator'
 import { closedMarketStatusResponse } from '../src/mocks/fixtures/marketStatus'
 import { mockApi } from './helpers/mockApi'
+import { sectionToggle } from './helpers/sideMenu'
 
 // シナリオ: docs/e2e/layout.md（タイトル先頭の [LAY-xx] が対応 ID）
 // 画面固有の要素はここでは検証しない（各画面のシナリオで扱う）。
@@ -22,7 +23,9 @@ const UNIMPLEMENTED_LABEL = '預り検索'
 const UNIMPLEMENTED_PATH = navItems.find((item) => item.label === UNIMPLEMENTED_LABEL)?.to
 
 test.describe('共通レイアウト', () => {
-  test('[LAY-01] サイドメニューにシステム名とセクション、全リンクが表示される', async ({ page }) => {
+  test('[LAY-01] サイドメニューにシステム名とセクションが出て、既定で開く区分のリンクだけが見える', async ({
+    page,
+  }) => {
     await page.goto('/')
 
     await expect(page.getByText('米株発注システム')).toBeVisible()
@@ -31,10 +34,25 @@ test.describe('共通レイアウト', () => {
     for (const section of navSections) {
       await expect(nav.getByRole('heading', { name: section.label, exact: true })).toBeVisible()
     }
+    // 閉じた区分のリンクも DOM には在る（隠れているだけ）
+    await expect(nav.getByRole('link', { includeHidden: true })).toHaveCount(navItems.length)
 
-    await expect(nav.getByRole('link')).toHaveCount(navItems.length)
-    await expect(nav.getByRole('link', { name: '顧客検索', exact: true })).toBeVisible()
-    await expect(nav.getByRole('link', { name: '残高マスタ', exact: true })).toBeVisible()
+    // 既定の開閉が要件どおりであること自体も確かめる（defaultOpen の付け外しで黙って変わらないように）
+    expect(navSections.filter((s) => s.defaultOpen !== false).map((s) => s.label)).toEqual([
+      '顧客',
+      '注文・照会',
+    ])
+    for (const section of navSections) {
+      const open = section.defaultOpen !== false
+      await expect(sectionToggle(page, section.label)).toHaveAttribute(
+        'aria-expanded',
+        String(open),
+      )
+      for (const item of section.items) {
+        const link = nav.getByRole('link', { name: item.label, exact: true, includeHidden: true })
+        await (open ? expect(link).toBeVisible() : expect(link).toBeHidden())
+      }
+    }
   })
 
   test('[LAY-02] ヘッダに画面タイトルと市場ステータスが表示される', async ({ page }) => {
@@ -321,11 +339,52 @@ test.describe('共通レイアウト', () => {
     for (const section of masterSections) {
       await expect(nav.getByRole('heading', { name: section.label, exact: true })).toHaveCount(0)
       for (const item of section.items) {
-        await expect(nav.getByRole('link', { name: item.label, exact: true })).toHaveCount(0)
+        await expect(
+          nav.getByRole('link', { name: item.label, exact: true, includeHidden: true }),
+        ).toHaveCount(0)
       }
     }
-    await expect(nav.getByRole('link')).toHaveCount(
+    // 運用管理は既定で閉じているので、隠れたリンクも数える
+    await expect(nav.getByRole('link', { includeHidden: true })).toHaveCount(
       shownSections.flatMap((section) => section.items).length,
     )
+  })
+
+  /*
+   * 区分のアコーディオン。既定の開閉は LAY-01 が見る。
+   * 各画面の「サイドメニューから開く」テストは helpers/sideMenu.js の clickSideMenuLink() で区分を開いてから押す。
+   */
+  test('[LAY-19] 閉じた区分の見出しを click すると開き、もう一度 click すると閉じる', async ({
+    page,
+  }) => {
+    await page.goto('/')
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    const toggle = sectionToggle(page, 'マスタメンテ')
+    const link = nav.getByRole('link', { name: '銘柄マスタ', exact: true, includeHidden: true })
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(link).toBeHidden()
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(link).toBeVisible()
+    // 他の区分は巻き込まない
+    await expect(sectionToggle(page, '運用管理')).toHaveAttribute('aria-expanded', 'false')
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(link).toBeHidden()
+  })
+
+  test('[LAY-20] 閉じた区分の画面を直接開くとその区分が開いている', async ({ page }) => {
+    await page.goto('/masters/symbols')
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    await expect(sectionToggle(page, 'マスタメンテ')).toHaveAttribute('aria-expanded', 'true')
+    await expect(nav.getByRole('link', { name: '銘柄マスタ', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(sectionToggle(page, '運用管理')).toHaveAttribute('aria-expanded', 'false')
   })
 })

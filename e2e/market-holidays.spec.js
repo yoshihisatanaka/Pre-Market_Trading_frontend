@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { canceledMarketHolidays, marketHolidays } from '../src/mocks/fixtures/marketHolidays'
 import { mockApi } from './helpers/mockApi'
 
@@ -79,10 +80,7 @@ test.describe('海外休場日マスタ一覧', () => {
   test('[MH-01] サイドメニューから開くと一覧と件数が表示される', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: '海外休場日マスタ', exact: true })
-      .click()
+    await clickSideMenuLink(page, '海外休場日マスタ')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '海外休場日マスタ', exact: true })).toBeVisible()

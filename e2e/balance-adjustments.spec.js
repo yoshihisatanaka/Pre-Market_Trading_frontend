@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { balanceAdjustments } from '../src/mocks/fixtures/balanceAdjustments'
 import { customers } from '../src/mocks/fixtures/customers'
 import { mockApi } from './helpers/mockApi'
@@ -74,10 +75,7 @@ test.describe('残高マスタ 一覧・検索', () => {
   test('[BA-01] サイドメニューから開くと一覧と件数が表示される', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: '残高マスタ', exact: true })
-      .click()
+    await clickSideMenuLink(page, '残高マスタ')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '残高マスタ', exact: true })).toBeVisible()

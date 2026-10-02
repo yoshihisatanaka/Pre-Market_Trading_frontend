@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { symbols } from '../src/mocks/fixtures/symbols'
 import { formatQuantity, formatUsdUnit } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
@@ -131,10 +132,7 @@ test.describe('銘柄マスタ一覧', () => {
   test('[SM-01] サイドメニューから開くと一覧と件数が表示される', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: '銘柄マスタ', exact: true })
-      .click()
+    await clickSideMenuLink(page, '銘柄マスタ')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '銘柄マスタ', exact: true })).toBeVisible()

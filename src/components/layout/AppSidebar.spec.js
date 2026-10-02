@@ -71,6 +71,35 @@ const currentPageLabels = (wrapper) =>
 const headings = (wrapper) => wrapper.findAll('h2').map((el) => el.text())
 const hrefs = (wrapper) => wrapper.findAll('a').map((link) => link.attributes('href'))
 
+const sectionToggle = (wrapper, label) =>
+  wrapper.findAll('h2 button').find((button) => button.text() === label)
+const isExpanded = (wrapper, label) =>
+  sectionToggle(wrapper, label).attributes('aria-expanded') === 'true'
+/*
+ * 配下リンクの表示は、見出しボタンの aria-controls が指す入れ物の display（v-show）で見る。
+ * isVisible() は jsdom の getComputedStyle を辿るが、一度開いて閉じ直した後の display: none を拾わなかった。
+ */
+const linksShown = (wrapper, label) => {
+  const id = sectionToggle(wrapper, label).attributes('aria-controls')
+  return wrapper.find(`[id="${id}"]`).element.style.display !== 'none'
+}
+
+/** 区分ラベル → 開いているか（見出しボタンの aria-expanded と、配下リンクの表示が一致することも見る） */
+function openState(wrapper) {
+  return Object.fromEntries(
+    navSections.map((section) => {
+      const expanded = isExpanded(wrapper, section.label)
+      expect(linksShown(wrapper, section.label)).toBe(expanded)
+      return [section.label, expanded]
+    }),
+  )
+}
+
+/** navigation.js の defaultOpen から導いた初期の開閉 */
+const DEFAULT_OPEN = Object.fromEntries(
+  navSections.map((section) => [section.label, section.defaultOpen !== false]),
+)
+
 /** 指定の区分だけが並んでいること（見出しもリンクも定義順） */
 function expectSections(wrapper, sections) {
   expect(headings(wrapper)).toEqual(sections.map((s) => s.label))
@@ -184,5 +213,53 @@ describe('AppSidebar', () => {
     await flushPromises()
 
     expectSections(wrapper, navSections)
+  })
+
+  it('[ASB-12] 顧客と注文は開き、マスタメンテと運用管理は閉じた状態で始まる', async () => {
+    // 既定値が要件どおりであること自体も確かめる（defaultOpen の付け外しで黙って変わらないように）
+    expect(DEFAULT_OPEN).toEqual({
+      顧客: true,
+      '注文・照会': true,
+      マスタメンテ: false,
+      運用管理: false,
+    })
+
+    const { wrapper } = await mountAt('/')
+
+    expect(openState(wrapper)).toEqual(DEFAULT_OPEN)
+  })
+
+  it('[ASB-13] 閉じた区分の見出しを click すると開き、もう一度 click すると閉じる', async () => {
+    const { wrapper } = await mountAt('/')
+
+    await sectionToggle(wrapper, MASTER_SECTION.label).trigger('click')
+    expect(openState(wrapper)).toEqual({ ...DEFAULT_OPEN, [MASTER_SECTION.label]: true })
+
+    await sectionToggle(wrapper, MASTER_SECTION.label).trigger('click')
+    expect(openState(wrapper)).toEqual(DEFAULT_OPEN)
+  })
+
+  it('[ASB-14] 開いた区分の見出しを click すると閉じる', async () => {
+    const { wrapper } = await mountAt('/')
+
+    await sectionToggle(wrapper, '顧客').trigger('click')
+
+    expect(openState(wrapper)).toEqual({ ...DEFAULT_OPEN, 顧客: false })
+  })
+
+  it('[ASB-15] 現在のページを含む区分は既定で閉じる区分でも開いて始まる', async () => {
+    const { wrapper } = await mountAt('/masters/symbols')
+
+    expect(openState(wrapper)).toEqual({ ...DEFAULT_OPEN, [MASTER_SECTION.label]: true })
+    expect(currentPageLabels(wrapper)).toEqual(['銘柄マスタ'])
+  })
+
+  it('[ASB-16] 閉じた区分の配下のページへ遷移するとその区分が開く', async () => {
+    const { wrapper, router } = await mountAt('/')
+
+    await router.push('/operations/incidents/1')
+    await flushPromises()
+
+    expect(openState(wrapper)).toEqual({ ...DEFAULT_OPEN, [OPERATION_SECTION.label]: true })
   })
 })

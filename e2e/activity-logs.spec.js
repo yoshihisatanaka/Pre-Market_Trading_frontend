@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { activityLogs } from '../src/mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../src/mocks/fixtures/activityLogTargets'
 import { formatActivityAt } from '../src/utils/activityLogTypes'
@@ -90,10 +91,7 @@ test.describe('操作ログ一覧', () => {
   test('[AL-01] サイドメニューから開くと一覧と件数が表示される', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: '操作ログ', exact: true })
-      .click()
+    await clickSideMenuLink(page, '操作ログ')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '操作ログ', exact: true })).toBeVisible()

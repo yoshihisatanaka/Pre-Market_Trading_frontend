@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { suspensionHistories, suspensionTargets } from '../src/mocks/fixtures/incidents'
 import { formatDateTime } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
@@ -92,7 +93,7 @@ test.describe('障害管理', () => {
     await page.goto('/')
 
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
-    await nav.getByRole('link', { name: '障害管理', exact: true }).click()
+    await clickSideMenuLink(page, '障害管理')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '障害管理', exact: true })).toBeVisible()

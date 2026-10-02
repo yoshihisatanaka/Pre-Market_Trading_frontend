@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { blackoutDates } from '../src/mocks/fixtures/blackoutDates'
 import { mockApi } from './helpers/mockApi'
 
@@ -98,10 +99,7 @@ test.describe('受注不可日マスタ一覧', () => {
   test('[BD-01] サイドメニューから開くと一覧と件数が表示される', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: '受注不可日マスタ', exact: true })
-      .click()
+    await clickSideMenuLink(page, '受注不可日マスタ')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '受注不可日マスタ', exact: true })).toBeVisible()

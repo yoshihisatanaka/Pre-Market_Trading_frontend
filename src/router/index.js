@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import OrderListView from '@/views/OrderListView.vue'
 import { permissionGuard } from './permissionGuard'
+import { trackRouteLoading } from '@/composables/useRouteLoading'
 
 /*
  * meta.requiredPermission を付けたルートは、その権限（GET /auth/me の権限）が無いと開けない
@@ -229,6 +230,12 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
+
+/*
+ * 遷移の確定待ち（遅延 import のチャンク取得と、下の permissionGuard の /auth/me 待ち）を
+ * レイアウトに知らせる。ガードは登録順に直列で走るので、permissionGuard より前に差す。
+ */
+trackRouteLoading(router)
 
 router.beforeEach(permissionGuard)
 

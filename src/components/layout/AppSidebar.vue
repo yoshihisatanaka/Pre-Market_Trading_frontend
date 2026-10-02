@@ -144,6 +144,8 @@ watch(
             >
               <path :d="navIcons[item.icon]" />
             </svg>
+            <!-- アイコンの無い項目も同じ幅を空け、ラベルの頭を揃える -->
+            <span v-else class="sidebar__icon" aria-hidden="true" />
             {{ item.label }}
             <!-- 読み上げは AppLayout のバーに任せる（リンク名をラベルだけに保つ） -->
             <BaseSpinner
@@ -208,43 +210,68 @@ watch(
 }
 
 .sidebar__section {
-  margin: var(--space-4) 0 var(--space-2);
+  margin: var(--space-3) 0 var(--space-1);
   color: var(--color-sidebar-section);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+/* 2 区分目以降は上に区切り線を引き、畳んだ区分が続いても境目が分かるようにする */
+.sidebar__section:not(:first-child) {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-sidebar-divider);
 }
 
 .sidebar__section:first-child {
   margin-top: 0;
 }
 
-/* 見た目は従来の見出しのまま。ボタンの既定の装飾だけを外す */
+/* ボタンの既定の装飾を外し、押せる範囲を見出しの幅いっぱいに広げる */
 .sidebar__section-toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 0 var(--space-2);
+  padding: var(--space-2);
   border: 0;
+  border-radius: var(--radius-sm);
   background: none;
   color: inherit;
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .sidebar__section-toggle:hover {
+  background-color: var(--color-sidebar-hover);
   color: var(--color-sidebar-text-active);
 }
 
+.sidebar__section-toggle:focus-visible,
+.sidebar__link:focus-visible {
+  outline: 2px solid var(--color-sidebar-accent);
+  outline-offset: -2px;
+}
+
+/* 見出しの文字を主にするため、矢印は一段落とす */
 .sidebar__chevron {
   flex-shrink: 0;
   width: 12px;
   height: 12px;
-  transition: transform var(--sidebar-transition-duration) ease;
+  opacity: 0.7;
+  transition:
+    transform var(--sidebar-transition-duration) ease,
+    opacity 0.15s ease;
+}
+
+.sidebar__section-toggle:hover .sidebar__chevron {
+  opacity: 1;
 }
 
 /* 閉じているときは右向き（開くと下向きに戻る） */
@@ -266,11 +293,22 @@ watch(
     color 0.15s ease;
 }
 
+.sidebar__link + .sidebar__link {
+  margin-top: 2px;
+}
+
 .sidebar__link:hover,
-.sidebar__link.is-active,
 .sidebar__link.is-pending {
   background-color: var(--color-sidebar-hover);
   color: var(--color-sidebar-text-active);
+}
+
+/* 現在地は hover と別の面にし、左端のバーと太字で示す（バーは inset の影で描き、幅をずらさない） */
+.sidebar__link.is-active {
+  background-color: var(--color-sidebar-active-bg);
+  box-shadow: inset 3px 0 0 var(--color-sidebar-accent);
+  color: var(--color-sidebar-text-active);
+  font-weight: 600;
 }
 
 .sidebar__icon {

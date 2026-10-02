@@ -26,6 +26,42 @@ const routes = [
   },
   {
     // path は navigation.js（サイドメニュー）の項目と一致させる
+    path: '/customers/search',
+    name: 'customer-search',
+    component: () => import('@/views/CustomerSearchView.vue'),
+    meta: { title: '顧客検索' },
+  },
+  {
+    /*
+     * 顧客詳細。顧客検索の顧客名から入る画面で、サイドメニューには載せない。
+     * 親（CustomerDetailView）が顧客カードとタブを持ち、タブの中身を子ルートが描く。
+     * :customerId は顧客マスタの行 ID（数字だけにする。/customers/search と紛れない）。
+     * /customers/:customerId だけを開いたら外株預りへ回す。
+     * 見出しは 2 つのタブとも「顧客詳細」（どのタブかはタブの選択で示す）
+     */
+    path: '/customers/:customerId(\\d+)',
+    component: () => import('@/views/CustomerDetailView.vue'),
+    meta: { title: '顧客詳細' },
+    children: [
+      {
+        path: '',
+        name: 'customer-detail',
+        redirect: (to) => ({ name: 'customer-summary', params: to.params }),
+      },
+      {
+        path: 'summary',
+        name: 'customer-summary',
+        component: () => import('@/views/CustomerSummaryView.vue'),
+      },
+      {
+        path: 'orders',
+        name: 'customer-orders',
+        component: () => import('@/views/CustomerOrdersView.vue'),
+      },
+    ],
+  },
+  {
+    // path は navigation.js（サイドメニュー）の項目と一致させる
     path: '/orders/csv/upload',
     name: 'order-csv-upload',
     component: () => import('@/views/OrderCsvUploadView.vue'),

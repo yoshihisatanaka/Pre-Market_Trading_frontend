@@ -17,17 +17,17 @@ import { apiClient } from './client'
  * **新設の `/masters/customers`** へ移った。あわせてクエリ名が日本語から英語になり、
  * `limit`（1〜200・既定 50）を送れるようになった。
  *
- * **`handler_code`（扱者コード）は `/masters/customers` に無い。**
- * 旧 `/customers`（注文画面用の顧客検索）には今もあるが、マスタ一覧には移されなかった。
- * 取引停止区分・口座区分・法人区分と同じく、いまは MSW のモックだけが解釈する条件で、
- * 実 API に当てるとこの 4 つでは絞り込まれない。仕様追加を依頼する対象。
+ * 扱者コード・取引停止区分・口座区分・法人区分のクエリ（handler_code / restriction /
+ * account_type / corporate_type）は 2026-09-30 の取り込みで `/masters/customers` に入った
+ * （docs/api/requests.md #8。それまでは MSW のモックだけが解釈していた）。
  *
- * 一覧の取得・事前検証・登録・更新を持つ。**削除は実装しない**（2026-09-28 決定。
+ * 一覧の取得・1 件の取得・事前検証・登録・更新を持つ。**削除は実装しない**（2026-09-28 決定。
  * 実 API に DELETE はあるが画面から使わない）。CSV 入出力は別途。
  * 応答の行は `CustomerItem` スキーマ（日本語キー）。
  *
  * **顧客検索画面（サイドメニューの /customers/search）もこの fetchCustomers を使う**
  * （2026-09-28 決定。注文画面用の旧 `GET /customers` は使わない）。
+ * 顧客詳細（/customers/:customerId/summary ほか）は fetchCustomer で 1 件を読む。
  *
  * 登録・更新で送る項目は下の CUSTOMER_FIELDS が正（CustomerRequest の入力項目）。
  * **項目はこれから増える**（2026-09-28 時点で最終形の 3 分の 1 程度）。足すときは
@@ -140,9 +140,7 @@ const CUSTOMER_FIELDS = [
  *   corporateType?: string,
  * }} [params]
  *   customerName は顧客名・顧客名カナの両方に効く（実 API 側の仕様）。
- *   空文字は「条件なし」としてリクエストに載せない。
- *   handlerCode / restriction / accountType / corporateType は実 API では無視される
- *   （`/masters/customers` に対応するクエリが無い。モックだけが解釈する）
+ *   空文字は「条件なし」としてリクエストに載せない
  * @returns {Promise<{ items: Customer[], total: number }>} 口座番号の昇順
  */
 export async function fetchCustomers({
@@ -164,13 +162,7 @@ export async function fetchCustomers({
       branch_code: branchCode || undefined,
       account_no: toAccountNo(accountNumber),
       customer_name: customerName || undefined,
-      /*
-       * 以下 4 つは画面モックにある条件だが、`/masters/customers` のクエリには無い
-       * （FastAPI は知らないクエリを無視するので送っても害は無く、モックだけが解釈する）。
-       * 名前はサーバに追加を依頼したい綴りで書いておく。handler_code は
-       * 旧 `/customers`（注文画面用の顧客検索）が実際に持っているクエリ名。
-       * 追加されなければ検索カードから外す。
-       */
+      // 以下 4 つは 2026-09-30 の取り込みで仕様に入った（それまではモックだけが解釈していた）
       handler_code: handlerCode || undefined,
       restriction: restriction || undefined,
       account_type: accountType || undefined,
@@ -182,6 +174,21 @@ export async function fetchCustomers({
     items: (data.customers ?? []).map(toCustomer),
     total: data.total ?? 0,
   }
+}
+
+/**
+ * 顧客を 1 件読む（顧客詳細の顧客カード）。
+ *
+ * パスキーは `/masters/customers/{account_id}`（integer の行 ID）。一覧の行の id をそのまま渡す。
+ * 全店参照権限の無い操作者が他店の口座を指すと 403、行が無ければ 404 の ApiError になる
+ * （どちらも呼び出し側の error に入る）。
+ *
+ * @param {string} id 行 ID（Customer の id）
+ * @returns {Promise<Customer>}
+ */
+export async function fetchCustomer(id) {
+  const { data } = await apiClient.get(`/masters/customers/${encodeURIComponent(id)}`)
+  return toCustomer(data?.account)
 }
 
 /**

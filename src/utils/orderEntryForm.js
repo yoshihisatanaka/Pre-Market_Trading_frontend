@@ -101,21 +101,29 @@ function daysBetween(from, to) {
  * 受注日・受注時刻は開いた時点の日時、受注者はログイン中の社員コード（モックの初期表示）。
  * 期間指定は選択肢が決まってから画面が先頭（当日中）を入れるので、ここでは空。
  *
- * @param {{ now?: Date, orderPerson?: string, branchCode?: string, accountNumber?: string }} [options]
- *   branchCode / accountNumber は「同じ顧客で新規注文」で引き継ぐときに渡す
+ * @param {{
+ *   now?: Date, orderPerson?: string, branchCode?: string, accountNumber?: string,
+ *   ticker?: string, side?: string, depositCategory?: string,
+ * }} [options]
+ *   branchCode / accountNumber は「同じ顧客で新規注文」で引き継ぐときに渡す。
+ *   ticker / side / depositCategory は顧客詳細の預りの「買い」「売り」から引き継ぐときに渡す
+ *   （utils/orderEntryQuery.js の parseOrderEntryQuery の結果）。空なら既定のまま
  */
 export function createOrderForm({
   now = new Date(),
   orderPerson = '',
   branchCode = '',
   accountNumber = '',
+  ticker = '',
+  side = '',
+  depositCategory = '',
 } = {}) {
   return {
     branchCode,
     accountNumber,
-    ticker: '',
+    ticker,
     // 売買区分は既定を持たない（モックも未選択から始まる。押し間違いを防ぐため）
-    side: '',
+    side,
     quantity: '',
     limitPrice: '',
     expiryDate: '',
@@ -124,6 +132,8 @@ export function createOrderForm({
     orderPerson,
     forced: false,
     ...ORDER_FORM_DEFAULTS,
+    // 引き継いだ預り区分は既定より優先する
+    ...(depositCategory ? { depositCategory } : {}),
   }
 }
 

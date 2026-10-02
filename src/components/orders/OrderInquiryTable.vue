@@ -17,13 +17,13 @@
  *   order-inquiry-view-only
  *   表そのものの testid は呼び出し側がフォールスルーで渡す。
  */
-import { reactive } from 'vue'
+import { computed, reactive } from 'vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import OrderInquiryCells from '@/components/orders/OrderInquiryCells.vue'
 import { formatQuantity } from '@/utils/format'
 
-defineProps({
+const props = defineProps({
   /** 元注文ごとのまとまり（src/api/orderInquiry.js の OrderInquiryGroup）の配列 */
   groups: {
     type: Array,
@@ -37,9 +37,20 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  /**
+   * 部店・口座番号・顧客名の 3 列を出すか。顧客詳細の注文照会タブ（1 顧客に固定した一覧）は false
+   * （OrderInquiryCells の同名 prop と同じ）
+   */
+  showCustomer: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits(['amend', 'cancel'])
+
+/** 顧客を特定する 3 列（showCustomer が false のときに外す） */
+const CUSTOMER_COLUMN_KEYS = ['branchCode', 'accountNumber', 'customerName']
 
 /** 列の並びは画面モックのとおり。中ほどの 16 列は OrderInquiryCells が描く */
 const COLUMNS = [
@@ -62,6 +73,12 @@ const COLUMNS = [
   { key: 'orderedAt', label: '受注日時' },
   { key: 'actions', label: '操作' },
 ]
+
+const columns = computed(() =>
+  props.showCustomer
+    ? COLUMNS
+    : COLUMNS.filter((column) => !CUSTOMER_COLUMN_KEYS.includes(column.key)),
+)
 
 /*
  * 自動分割の明細の見出しにある 4 項目。一覧 API（OrderItemResponse）には値が無いので、
@@ -90,7 +107,7 @@ function versionLabel(index) {
     <table>
       <thead>
         <tr>
-          <th v-for="column in COLUMNS" :key="column.key" :class="{ 'is-numeric': column.numeric }">
+          <th v-for="column in columns" :key="column.key" :class="{ 'is-numeric': column.numeric }">
             {{ column.label }}
           </th>
         </tr>
@@ -134,7 +151,7 @@ function versionLabel(index) {
               </button>
             </td>
 
-            <OrderInquiryCells :order="group.latest" />
+            <OrderInquiryCells :order="group.latest" :show-customer="showCustomer" />
 
             <td>
               <span
@@ -173,7 +190,7 @@ function versionLabel(index) {
             class="order-inquiry-table__split-row"
             data-testid="order-inquiry-split-detail"
           >
-            <td :colspan="COLUMNS.length">
+            <td :colspan="columns.length">
               <div class="order-inquiry-table__split">
                 <p class="order-inquiry-table__split-title">
                   スライス基準による自動分割
@@ -225,7 +242,12 @@ function versionLabel(index) {
                 <span class="order-inquiry-table__history-mark" aria-hidden="true">↳</span>
                 <span class="numeric">#{{ order.id }}</span>
               </td>
-              <OrderInquiryCells :order="order" :version-label="versionLabel(index)" muted />
+              <OrderInquiryCells
+                :order="order"
+                :version-label="versionLabel(index)"
+                :show-customer="showCustomer"
+                muted
+              />
               <td />
             </tr>
           </template>

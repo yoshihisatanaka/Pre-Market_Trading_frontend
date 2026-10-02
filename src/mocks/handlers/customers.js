@@ -230,6 +230,20 @@ export const customerHandlers = [
   }),
 
   /*
+   * 1 件の取得（顧客詳細）。パスキーは行 ID。削除済みの行は 404 にする（一覧と同じく有効な行だけを見せる）。
+   * 同じ形のパス（/masters/customers/export-csv など。GET）も当たるので、数字でない ID は
+   * 何も返さずに後ろのハンドラ（無ければ実 API）へ流す（MSW は undefined を「次へ」と扱う）。
+   */
+  http.get('*/api/masters/customers/:id', ({ params }) => {
+    if (!/^\d+$/.test(params.id)) return undefined
+
+    const row = customerRows.find((customer) => customer.ID === Number(params.id))
+    if (!row || row.取消区分 !== 0) return detailError(404, '指定された口座情報が存在しません')
+
+    return HttpResponse.json({ account: row })
+  }),
+
+  /*
    * 更新（部分更新）。本文に含めた項目だけを変え、null は「クリア」。口座番号は変えられない
    * （CustomerUpdateRequest に無い。送られても捨てる）。
    * 検査の順序は銘柄マスタと同じ「対象が居るか(404) → 値の妥当性(400) → 盤面が古くないか(409)」。

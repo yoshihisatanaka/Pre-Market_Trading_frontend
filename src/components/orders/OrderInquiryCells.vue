@@ -1,6 +1,7 @@
 <script setup>
 /**
- * 注文照会の表の 1 注文ぶんのセル（部店 〜 受注日時の 16 列）。
+ * 注文照会の表の 1 注文ぶんのセル（部店 〜 受注日時の 16 列。showCustomer が false なら
+ * 部店・口座番号・顧客名を除く 13 列）。
  *
  * 表の行には「元注文ごとの行」と、その下に畳む「訂正前の版の行」の 2 種類があり、
  * 中ほどの 16 列は同じ並び・同じ整形なのでここにまとめてある。行ごとに違う先頭の
@@ -30,6 +31,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /**
+   * 部店・口座番号・顧客名の 3 列を出すか。顧客詳細の注文照会タブ（1 顧客に固定した一覧）は
+   * 顧客カードに同じものが出ているので false にする（画面モック customer_order_inquiry.html も持たない）
+   */
+  showCustomer: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const sideLabels = { buy: '買', sell: '売' }
@@ -52,9 +61,11 @@ function priceLabel() {
 </script>
 
 <template>
-  <td>{{ textOrDash(order.branchCode) }}</td>
-  <td class="numeric">{{ textOrDash(order.accountNumber) }}</td>
-  <td>{{ textOrDash(order.customerName) }}</td>
+  <template v-if="showCustomer">
+    <td>{{ textOrDash(order.branchCode) }}</td>
+    <td class="numeric">{{ textOrDash(order.accountNumber) }}</td>
+    <td>{{ textOrDash(order.customerName) }}</td>
+  </template>
 
   <td>
     <span class="order-inquiry-cells__symbol" :class="{ 'is-muted': muted }">

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import OrderCustomerBar from '@/components/orders/OrderCustomerBar.vue'
 import OrderEntryForm from '@/components/orders/OrderEntryForm.vue'
@@ -22,6 +22,7 @@ import {
   hasOrderFormErrors,
   validateOrderForm,
 } from '@/utils/orderEntryForm'
+import { parseOrderEntryQuery } from '@/utils/orderEntryQuery'
 
 /*
  * 新規注文（外株注文入力）。モックリポジトリの order_input → order_confirm → order_complete を
@@ -34,8 +35,10 @@ import {
  *   サーバの warnings … 「フロコン警告」の帯。強制区分を付けて送り直せば確認へ進む
  * 通信・サーバ障害は別の帯に 1 行で出す（入力はそのまま残す）。
  *
- * モックは顧客詳細から customer_id 付きで入る前提だったが、顧客検索・顧客詳細の画面がまだ無いので、
- * 口座番号を打って引き当てる形だけを持つ（クエリでの引き継ぎは預り検索と一緒に作る）。
+ * 顧客詳細（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）からは、部店・口座番号・銘柄・
+ * 売買・預り区分が URL クエリで引き継がれて入る（utils/orderEntryQuery.js）。引き継いだ値は入力欄の
+ * 初期値にするだけで、顧客と銘柄は口座番号・ティッカーを打ったときと同じ照会で引き当てる。
+ * モックの「顧客詳細から入ったときの大きな顧客カードとタブ」（customer_context）は持たない。
  */
 
 /** 照会を始めるまでの待ち（モックと同じ 400ms。打っている途中の値で API を叩かない） */
@@ -49,6 +52,7 @@ const PERMISSION_MESSAGE =
 
 const SUSPENDED_MESSAGE = '現在、システム障害対応のため、新規の注文入力を停止しています。'
 
+const route = useRoute()
 const router = useRouter()
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
@@ -123,7 +127,8 @@ function newForm(customer = {}) {
   }
 }
 
-const form = ref(newForm())
+// 顧客詳細から入ったときは、URL クエリで引き継いだ顧客・銘柄・売買・預り区分を初期値にする
+const form = ref(newForm(parseOrderEntryQuery(route.query)))
 
 // 休日を読み終えたら期間指定の先頭を入れる（開いた直後は選択肢がまだ無い）
 watch(expiryOptions, (options) => {
@@ -398,6 +403,12 @@ function reload() {
 store.reset()
 // 初回読み込み。onMounted に置くと最初の描画で一瞬フォームが出るため setup で始める
 store.loadContext(today)
+/*
+ * 引き継いだ口座番号・ティッカーの照会。入力欄の watch は値が変わったときにしか走らないので、
+ * 初期値として入った分はここで引く（打ったときと同じ照会。待ちの 400ms は置かない）
+ */
+if (customerKey.value.accountNumber) store.lookupCustomer(customerKey.value)
+if (tickerKey.value) store.lookupSymbol(tickerKey.value)
 // 起動時に main.js が読み始めているので、たいていは読み終えている。受注者が空なら埋める
 operatorStore.ensureLoaded().then(() => {
   if (!form.value.orderPerson) form.value.orderPerson = operatorCode.value

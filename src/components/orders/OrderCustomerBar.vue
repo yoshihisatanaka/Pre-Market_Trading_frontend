@@ -3,11 +3,17 @@
  * 新規注文の顧客バー。口座番号の照会で見つかった顧客を、フォームの上に 1 段で見せる
  * （モックの customer-bar。顧客詳細から入ったときの大きな顧客カードは、顧客詳細の画面と一緒に作る）。
  *
- * 注意の表示はモックと同じ 3 つ: コンプラランク A・B・Y・Z / 85 歳以上 / 全取引停止。
+ * 注意の表示はモックと同じ 3 つ: コンプラランク A・B・Y・Z / 85 歳以上 / 全取引停止
+ * （判定の規則は utils/customerCautions.js。顧客詳細の顧客カードと同じ）。
  * これは入力中に目に入れるための表示で、発注を止めるかはサーバ（POST /orders/validate）が決める。
  * 評価額・評価損益は /balances を組み込むまで出さない。
  */
 import { computed } from 'vue'
+import {
+  isCautionRank as isCautionRankCode,
+  isElderly as isElderlyAge,
+  parseAge,
+} from '@/utils/customerCautions'
 import { formatJpyUnit, formatUsdUnit } from '@/utils/format'
 
 const props = defineProps({
@@ -18,20 +24,11 @@ const props = defineProps({
   },
 })
 
-/** モックの顧客バーが「要注意」を出すランク */
-const CAUTION_RANKS = ['A', 'B', 'Y', 'Z']
-
-/** 高齢者として注意を出す年齢（モックの customer.age >= 85） */
-const ELDERLY_AGE = 85
-
 // 年齢は実 API でも文字列で、法人は空。数字として読めるときだけ判定する
-const age = computed(() => {
-  const value = String(props.customer.age ?? '').trim()
-  return /^\d+$/.test(value) ? Number(value) : null
-})
+const age = computed(() => parseAge(props.customer.age))
 
-const isElderly = computed(() => age.value !== null && age.value >= ELDERLY_AGE)
-const isCautionRank = computed(() => CAUTION_RANKS.includes(props.customer.complianceRank))
+const isElderly = computed(() => isElderlyAge(props.customer.age))
+const isCautionRank = computed(() => isCautionRankCode(props.customer.complianceRank))
 </script>
 
 <template>

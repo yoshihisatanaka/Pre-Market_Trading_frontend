@@ -5,6 +5,7 @@
  * （顧客マスタ / スライス基準マスタ）。その場合は公開モックの並びに合わせて足す。
  * 画面を実装したら router/index.js に同じ path のルートを足す。
  * 未実装の path は NotFoundView に落ちる。
+ * モックの項目にはアイコンが付いているが、項目はラベルだけで出す（アイコンは不要になった。2026-10-02）。
  *
  * 区分に requiredPermission（GET /auth/me の権限のキー）を付けると、その権限の無い利用者には
  * 区分ごと出さない（AppSidebar）。付けたら router/index.js の各ルートの meta.requiredPermission にも
@@ -17,20 +18,20 @@ export const navSections = [
   {
     label: '顧客',
     items: [
-      { label: '顧客検索', to: '/customers/search', icon: 'search' },
-      { label: '預り検索', to: '/customers/holdings', icon: 'cube' },
+      { label: '顧客検索', to: '/customers/search' },
+      { label: '預り検索', to: '/customers/holdings' },
     ],
   },
   {
     label: '注文・照会',
     // 新規注文（/orders/new）はモックどおりサイドメニューに置かない。注文照会などの画面内から遷移する
     items: [
-      { label: 'CSV一括注文', to: '/orders/csv/upload', icon: 'documentChart' },
-      { label: '注文照会', to: '/orders/inquiry', icon: 'clipboard' },
+      { label: 'CSV一括注文', to: '/orders/csv/upload' },
+      { label: '注文照会', to: '/orders/inquiry' },
       { label: 'Dream登録状況', to: '/orders/dream-status' },
       // モックは /executions/ だが、ルートは末尾スラッシュ無しで統一する
-      { label: '約定照会', to: '/executions', icon: 'chartBar' },
-      // 公開モックでは約定照会の直後。navIcons.js に合うアイコンが無いので icon は付けない
+      { label: '約定照会', to: '/executions' },
+      // 公開モックでは約定照会の直後
       { label: 'みずほ注文締', to: '/executions/mizuho-operations' },
     ],
   },
@@ -57,7 +58,6 @@ export const navSections = [
     /*
      * 公開モックの区分「運用管理」には お知らせ管理 / 滞留注文抽出 / 操作ログ / 障害管理 の
      * 4 項目がある。並びは公開モックに合わせる。
-     * navIcons.js に運用管理向けのアイコンが無いので icon は付けない（Dream登録状況 と同じ）。
      * 運用管理権限の無い利用者（IFA / 営業員）には区分ごと出さない。
      */
     label: '運用管理',

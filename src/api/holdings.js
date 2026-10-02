@@ -5,7 +5,7 @@ import { apiClient } from './client'
  *
  * 成熟度 B（パスとスキーマ HoldingItem はあるが、下に挙げる値の意味が仕様の説明だけでは定まらない）。
  * 顧客詳細の外株預り（/customers/:customerId/summary）が 1 顧客ぶんを読む。
- * 預り検索（/customers/holdings。未実装）も同じ関数で顧客横断に読む想定。
+ * 預り検索（/customers/holdings。stores/holdingSearch.js）は同じ関数で顧客横断に読む。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり。
  *   - プロパティ名が日本語（口座番号 / 銘柄コード / 評価額_JPY …）

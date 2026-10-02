@@ -23,7 +23,8 @@ import { SPECIFIC_DEPOSIT } from './apiEnums'
 
 /** 選択肢。BaseSelect の options にそのまま渡せる形にしておく */
 export const SPECIFIC_DEPOSIT_OPTIONS = [
-  { value: SPECIFIC_DEPOSIT.NON_SPECIFIC, label: '非特定' },
+  // 実 API（GET /holdings の 預り売買区分名）が返す名前に合わせる（2026-10-02 確認。enum の説明は「非特定」）
+  { value: SPECIFIC_DEPOSIT.NON_SPECIFIC, label: '一般' },
   { value: SPECIFIC_DEPOSIT.SPECIFIC, label: '特定' },
   { value: SPECIFIC_DEPOSIT.NISA, label: 'NISA' },
   { value: SPECIFIC_DEPOSIT.GROWTH_QUOTA, label: '成長投資枠' },

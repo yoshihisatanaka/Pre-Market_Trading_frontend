@@ -75,6 +75,9 @@
   --color-sidebar-text: #d3dae3;
   --color-sidebar-text-active: #ffffff;
   --color-sidebar-section: #aeb9c7;
+  --color-sidebar-active-bg: #2f4a6b; /* 現在地の面。hover より青みを足して区別する */
+  --color-sidebar-accent: #63b3ed; /* 現在地の左端のバー */
+  --color-sidebar-divider: #243142; /* 区分の区切り線（border より一段控えめ） */
 
   /*
    * 市場ステータス（ヘッダのバッジ）。モック 08986d1 の base.html から。

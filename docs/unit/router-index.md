@@ -18,8 +18,12 @@ PMG-05 が見ている。
 - **メニューの区分とルートの meta がそろっている。** メニューを隠すだけでは URL の直打ちで開けてしまい、
   ルートだけに付けるとメニューから辿れない制限になる（どちらか片方の付け忘れを検出する）
 
-`navigation.js` の項目のうちルートの無いもの（顧客検索 `/customers/search` など未実装の画面）は
+`navigation.js` の項目のうちルートの無いもの（預り検索 `/customers/holdings` など未実装の画面）は
 NotFound に落ちるだけなので、区分との一致の検査からは外す。
+
+顧客検索（`/customers/search`）と、そこから入る顧客詳細（`/customers/:customerId(\d+)`。子に `summary` /
+`orders`、空パスは `summary` へ redirect）は 2026-10-01 に入った。どちらも権限を要求しない（RTR-04 / RTR-06）。
+顧客詳細はメニューに載らないので RTR-04 の走査には入らず、RTR-06 で別に見る。
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
@@ -28,3 +32,4 @@ NotFound に落ちるだけなので、区分との一致の検査からは外�
 | RTR-03 | — | `navigation.js` の `requiredPermission` を持つ各区分（マスタメンテ・運用管理）について、項目のリンク先のルートを引く | ルートのある項目はすべて区分と同じ `requiredPermission` を持つ。逆にその権限を要求するルートの集合は、区分に載ったルートの集合と一致する | 実装済 |
 | RTR-04 | — | `requiredPermission` を持たない区分（顧客・注文）の項目のリンク先のルートを引く | ルートのある項目（みずほ注文締など）は `requiredPermission` を持たない | 実装済 |
 | RTR-05 | — | `routes` から `forbidden` と NotFound（`/:pathMatch(.*)*`）を引く | どちらも存在し、`requiredPermission` を持たない（回し先が自分を弾いて回り続けない） | 実装済 |
+| RTR-06 | — | `routes` から顧客詳細（`/customers/:customerId(\d+)`）を引き、子ルートと空パスの redirect を見る | 親と子（`summary` / `orders`）のどれも `requiredPermission` を持たない。空パスの子は同じ `customerId` のまま `customer-summary` へ回す | 実装済 |

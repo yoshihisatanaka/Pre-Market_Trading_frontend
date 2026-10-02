@@ -38,3 +38,5 @@
 | NOF-25 | 売り・指値 200 | `buildOrderReadback()` | tone `sell`、「売注文」、価格「指値 200.0000 ドル」。顧客なしは顧客名 `'—'` | 実装済 |
 | NOF-26 | 成行・前日終値あり・為替あり | `buildEstimateReadback()` | 前日終値 × 数量の外貨・円貨が単位付きで出て、注記が「参考価格（前日終値） × 数量 ／ USD/JPY 150.25」 | 実装済 |
 | NOF-27 | 指値・為替を読み込み中 | `buildEstimateReadback({ fxLoading: true })` | 外貨は指値 × 数量で出るが、円貨と注記の為替は `'…'`。注記の単価の出所は「指値価格」 | 実装済 |
+| NOF-28 | 顧客詳細の預りの「売り」から引き継ぐ（ティッカー・`SIDE.SELL`・預り区分 = 一般） | `createOrderForm({ ticker, side, depositCategory })` | `ticker` / `side` が引き継がれ、`depositCategory` は `ORDER_FORM_DEFAULTS` の既定（特定）より引き継いだ値が優先される。ほかの区分は既定のまま | 実装済 |
+| NOF-29 | 引き継ぐ預り区分が空文字 | `createOrderForm({ depositCategory: '' })` | `depositCategory` は `ORDER_FORM_DEFAULTS` の既定のまま（空で上書きしない） | 実装済 |

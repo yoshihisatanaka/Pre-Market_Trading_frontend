@@ -1,0 +1,32 @@
+import { defineStore } from 'pinia'
+import { fetchCustomers } from '@/api/customers'
+import { useCrudList } from '@/composables/useCrudList'
+import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
+
+/**
+ * 一覧 1 ページあたりの表示件数（既定は utils/pagination.js の DEFAULT_PAGE_SIZE）。
+ *
+ * 実 API（`GET /masters/customers`）の limit は 1〜200。
+ * この画面だけ変えるときはここを数値で上書きする（api 層が limit として送る）。
+ */
+export const CUSTOMER_SEARCH_PAGE_SIZE = DEFAULT_PAGE_SIZE
+
+/**
+ * 顧客検索（サイドメニューの /customers/search）のストア。
+ *
+ * 読む API は顧客マスタと同じ `fetchCustomers`（2026-09-28 決定。src/api/customers.js の冒頭）。
+ * **ストアは顧客マスタ（stores/customers.js）と分ける。** Pinia のインスタンスは全画面で共有なので、
+ * 同じストアを使うと、こちらの検索が顧客マスタ画面の検索条件とページ位置を踏み潰す
+ * （stores/customerOptions.js と同じ理由）。
+ *
+ * ページ位置・検索条件は URL クエリが正で、ここはその写しを持つだけ（画面側が load で渡す）。
+ * 取得・競合防止の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
+ * **一覧は読むだけ**なので createItem / updateItem / deleteItem は渡さない。
+ */
+export const useCustomerSearchStore = defineStore('customerSearch', () =>
+  useCrudList({
+    pageSize: CUSTOMER_SEARCH_PAGE_SIZE,
+    filterKeys: ['branchCode', 'handlerCode', 'accountNumber', 'customerName'],
+    fetchPage: fetchCustomers,
+  }),
+)

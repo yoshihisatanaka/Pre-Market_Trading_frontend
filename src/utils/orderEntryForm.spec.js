@@ -302,6 +302,31 @@ describe('orderEntryForm', () => {
     })
   })
 
+  it('[NOF-28] createOrderForm は預りから銘柄・売買・預り区分を引き継ぎ、預り区分は既定より優先する', () => {
+    // 既定と違う値でないと「優先される」ことを確かめられない
+    expect(DEPOSIT_CATEGORY.GENERAL).not.toBe(ORDER_FORM_DEFAULTS.depositCategory)
+
+    const form = createOrderForm({
+      now: new Date(2026, 8, 29, 9, 5),
+      ticker: 'AAPL',
+      side: SIDE.SELL,
+      depositCategory: DEPOSIT_CATEGORY.GENERAL,
+    })
+
+    expect(form).toMatchObject({
+      ...ORDER_FORM_DEFAULTS,
+      ticker: 'AAPL',
+      side: SIDE.SELL,
+      depositCategory: DEPOSIT_CATEGORY.GENERAL,
+    })
+  })
+
+  it('[NOF-29] 引き継ぐ預り区分が空なら既定のまま', () => {
+    const form = createOrderForm({ now: new Date(2026, 8, 29, 9, 5), depositCategory: '' })
+
+    expect(form.depositCategory).toBe(ORDER_FORM_DEFAULTS.depositCategory)
+  })
+
   it('[NOF-21] 概算は外貨を小数第 2 位、円貨を円未満で四捨五入する', () => {
     expect(estimateOrderAmount({ quantity: 7, unitPrice: 1.2345, fxRate: 150.25 })).toEqual({
       usd: 8.64,

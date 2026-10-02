@@ -23,6 +23,7 @@ import { executionHandlers } from './executions'
 import { dreamStatusHandlers, resetDreamStatusState } from './dreamStatus'
 import { orderCsvHandlers } from './orderCsv'
 import { orderEntryHandlers, resetOrderEntryState } from './orderEntry'
+import { holdingHandlers } from './holdings'
 
 /*
  * モックハンドラの集約。**ハンドラ本体は画面（API のまとまり）ごとのファイルに分けてある。**
@@ -131,4 +132,5 @@ export const handlers = [
   ...dreamStatusHandlers,
   ...orderCsvHandlers,
   ...orderEntryHandlers,
+  ...holdingHandlers,
 ]

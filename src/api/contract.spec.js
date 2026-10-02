@@ -43,6 +43,7 @@ import { mizuhoExecutions } from '../mocks/fixtures/mizuhoExecutions'
 import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '../mocks/fixtures/closing'
 import { executions } from '../mocks/fixtures/executions'
 import { orderInquiryRows } from '../mocks/fixtures/orderInquiry'
+import { holdings } from '../mocks/fixtures/holdings'
 import { dreamOrders, dreamStatusCodes } from '../mocks/fixtures/dreamStatus'
 import {
   bulkOrderCreateResponse,
@@ -54,7 +55,8 @@ import { orderCreateExamples, orderValidationExamples } from '../mocks/fixtures/
 import { fetchOrders } from './orders'
 import { amendOrder, cancelOrder, fetchOrderDetail, fetchOrderInquiry } from './orderInquiry'
 import { fetchBranches, fetchCodes, fetchHandlers } from './codes'
-import { fetchCustomers } from './customers'
+import { fetchCustomer, fetchCustomers } from './customers'
+import { fetchHoldings } from './holdings'
 import {
   createCorporateAction,
   deleteCorporateAction,
@@ -364,6 +366,7 @@ const FIXTURES = [
   },
   { name: 'executions', schema: 'ExecutionItem', rows: executions },
   { name: 'orderInquiry', schema: 'OrderItemResponse', rows: orderInquiryRows },
+  { name: 'holdings', schema: 'HoldingItem', rows: holdings },
   { name: 'dreamOrders', schema: 'DreamOrderItem', rows: dreamOrders },
   { name: 'dreamStatusCodes', schema: 'DreamStatusCodeItem', rows: dreamStatusCodes },
   // レスポンス全体が対象。columns[] は items.$ref 経由で CsvColumnSpec として型検査される
@@ -562,6 +565,21 @@ const PROBES = [
         restriction: '0',
         accountType: '1',
         corporateType: '1',
+      }),
+  },
+  { name: 'fetchCustomer', run: () => fetchCustomer('1') },
+  {
+    name: 'fetchHoldings',
+    run: () =>
+      fetchHoldings({
+        limit: 200,
+        offset: 0,
+        branchCode: '123',
+        accountNumber: '1230001',
+        customerName: '山田',
+        symbol: 'AAPL',
+        symbolName: 'Apple',
+        specificDeposit: '1',
       }),
   },
   {

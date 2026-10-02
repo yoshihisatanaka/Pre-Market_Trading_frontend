@@ -14,6 +14,13 @@ import { mockApi } from './helpers/mockApi'
 const toggleButton = (page) => page.getByTestId('sidebar-toggle')
 const contentLeft = async (page) => (await page.getByRole('main').boundingBox()).x
 
+/*
+ * LAY-03 / LAY-04 で使う、まだルートの無いメニュー項目。navigation.js から引いて、
+ * 名前や path が変わったときに黙って空振りしないようにする（2026-10-02 に顧客検索から差し替えた）。
+ */
+const UNIMPLEMENTED_LABEL = '預り検索'
+const UNIMPLEMENTED_PATH = navItems.find((item) => item.label === UNIMPLEMENTED_LABEL)?.to
+
 test.describe('共通レイアウト', () => {
   test('[LAY-01] サイドメニューにシステム名とセクション、全リンクが表示される', async ({ page }) => {
     await page.goto('/')
@@ -44,12 +51,13 @@ test.describe('共通レイアウト', () => {
   }) => {
     await page.goto('/')
 
+    // 未実装の項目を使う（実装されたら、その時点で未実装の別の項目へ差し替える）
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
-    await nav.getByRole('link', { name: '顧客検索', exact: true }).click()
+    await nav.getByRole('link', { name: UNIMPLEMENTED_LABEL, exact: true }).click()
 
-    await expect(page).toHaveURL(/\/customers\/search$/)
+    await expect(page).toHaveURL(new RegExp(`${UNIMPLEMENTED_PATH}$`))
     await expect(page.getByRole('heading', { name: 'ページが見つかりません' })).toBeVisible()
-    await expect(nav.getByRole('link', { name: '顧客検索', exact: true })).toHaveAttribute(
+    await expect(nav.getByRole('link', { name: UNIMPLEMENTED_LABEL, exact: true })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -58,12 +66,12 @@ test.describe('共通レイアウト', () => {
   })
 
   test('[LAY-04] 未実装の画面を直接開いてもレイアウトは表示される', async ({ page }) => {
-    await page.goto('/customers/search')
+    await page.goto(UNIMPLEMENTED_PATH)
 
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
     await expect(nav).toBeVisible()
     await expect(page.getByRole('heading', { name: 'ページが見つかりません' })).toBeVisible()
-    await expect(nav.getByRole('link', { name: '顧客検索', exact: true })).toHaveAttribute(
+    await expect(nav.getByRole('link', { name: UNIMPLEMENTED_LABEL, exact: true })).toHaveAttribute(
       'aria-current',
       'page',
     )

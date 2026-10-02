@@ -24,8 +24,13 @@
 /** 円貨概算に使う為替レート（応答の `適用為替レート`） */
 export const orderInquiryFxRate = 150
 
+/*
+ * 注文の顧客。yamada だけは顧客マスタ（fixtures/customers.js）の口座 1230001 と同じにしてある
+ * （顧客詳細の注文照会タブ /customers/1/orders で、その顧客の注文が出るように）。
+ * ほかの 3 人は顧客マスタに居ない口座のまま。
+ */
 const CUSTOMERS = {
-  kawata: { 部店: '123', 部店名: '本店営業部', 口座番号: 300001, 顧客名: '川田 健太' },
+  yamada: { 部店: '123', 部店名: 'A支店', 口座番号: 1230001, 顧客名: '山田 太郎' },
   kato: { 部店: '234', 部店名: '大阪支店', 口座番号: 200001, 顧客名: '加藤 誠' },
   tanaka: { 部店: '345', 部店名: '名古屋支店', 口座番号: 300002, 顧客名: '田中 正雄' },
   kimura: { 部店: '345', 部店名: '名古屋支店', 口座番号: 300003, 顧客名: '木村 浩二' },
@@ -153,7 +158,7 @@ export const orderInquiryRows = [
   order({
     id: 42,
     originalOrderId: 38,
-    customer: CUSTOMERS.kawata,
+    customer: CUSTOMERS.yamada,
     symbol: 'MSFT',
     name: 'Microsoft Corporation',
     side: '3',
@@ -166,7 +171,7 @@ export const orderInquiryRows = [
   }),
   order({
     id: 41,
-    customer: CUSTOMERS.kawata,
+    customer: CUSTOMERS.yamada,
     symbol: 'AAPL',
     name: 'Apple Inc.',
     side: '3',
@@ -212,7 +217,7 @@ export const orderInquiryRows = [
   }),
   order({
     id: 38,
-    customer: CUSTOMERS.kawata,
+    customer: CUSTOMERS.yamada,
     symbol: 'MSFT',
     name: 'Microsoft Corporation',
     side: '3',

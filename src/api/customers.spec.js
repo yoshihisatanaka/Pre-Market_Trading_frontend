@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { customers } from '@/mocks/fixtures/customers'
-import { createCustomer, fetchCustomers, updateCustomer, validateCustomer } from './customers'
+import { ApiError } from './client'
+import {
+  createCustomer,
+  fetchCustomer,
+  fetchCustomers,
+  updateCustomer,
+  validateCustomer,
+} from './customers'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -546,5 +553,43 @@ describe('api/customers', () => {
     })
     // 欠けた項目は文字列なら ''、数値なら null。合札の null は ''
     expect(items[1]).toMatchObject({ vwapDocument: '', growthQuotaNext: null, updatedAt: '' })
+  })
+
+  it('[CUA-26] 1 件の取得は行 ID をパスに載せ、account を一覧と同じ形に変換する', async () => {
+    server.use(
+      http.get('*/api/masters/customers/:id', ({ request }) => {
+        const url = new URL(request.url)
+        lastRequest = { url, params: url.searchParams }
+        return HttpResponse.json({ account: customerItem })
+      }),
+    )
+
+    const customer = await fetchCustomer(String(customerItem.ID))
+
+    expect(lastRequest.url.pathname).toBe(`/api/masters/customers/${customerItem.ID}`)
+    expect([...lastRequest.params.keys()]).toEqual([])
+    expect(customer).toMatchObject({
+      id: String(customerItem.ID),
+      accountNumber: String(customerItem.口座番号),
+      branchCode: customerItem.部店コード,
+      branchName: customerItem.部店名,
+      customerName: customerItem.顧客名,
+      age: customerItem.年齢,
+      complianceRankName: customerItem.コンプラランク名,
+    })
+    expect(typeof customer.accountNumber).toBe('string')
+  })
+
+  it('[CUA-27] 1 件の取得の 404 は status 付きの ApiError になる', async () => {
+    const detail = '指定された口座情報が存在しません'
+    server.use(
+      http.get('*/api/masters/customers/:id', () => HttpResponse.json({ detail }, { status: 404 })),
+    )
+
+    const error = await fetchCustomer(String(customerItem.ID)).catch((e) => e)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.status).toBe(404)
+    expect(error.message).toBe(detail)
   })
 })

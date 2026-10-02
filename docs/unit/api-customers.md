@@ -69,6 +69,8 @@
 | CUA-23 | 更新 API が 409（`{ detail }`）を返す | `updateCustomer()` を呼ぶ | 例外が投げられ、`message` に detail が入る（呼び出し側の `useAsync` が `updateError` に入れる） | 実装済 |
 | CUA-24 | 整数の項目に `'1.5'` / `'abc'`、小数を許す項目に `'abc'` | `createCustomer()` / `updateCustomer()` を呼ぶ | 数値にならない入力は空欄と同じに扱う（登録ではキーを送らず、更新では `null`）。サーバに 422 で弾かせない | 実装済 |
 | CUA-25 | API が `CustomerItem` を 1 件返す（`更新日時` あり / `null`、編集用の項目が欠けた行） | `fetchCustomers()` を呼ぶ | 編集フォームの初期値になる項目（`vwapDocument` / `specificAccountType` / `suspendEquityTrade` / `totalAssets` / `growthQuotaNext` / `birthDate` など）も返る。文字列は欠けたら `''`、数値は欠けたら `null`。`updatedAt` は `更新日時` の文字列で、`null` なら `''` | 実装済 |
+| CUA-26 | API が `{ account: CustomerItem }` を返す | `fetchCustomer(<行 ID>)` を呼ぶ | `GET /api/masters/customers/<行 ID>` に送られ（クエリなし）、`account` が一覧と同じアプリ内モデルに変換されて返る（`id` は行 ID の文字列、`accountNumber` は文字列） | 実装済 |
+| CUA-27 | API が 404（`{ detail }`）を返す | `fetchCustomer()` を呼ぶ | `status` が 404 の `ApiError` が投げられ、`message` に detail が入る（呼び出し側が「見つからない」を通信障害と分けて出せる） | 実装済 |
 
 ## 主キーは `id`（口座番号ではない）
 

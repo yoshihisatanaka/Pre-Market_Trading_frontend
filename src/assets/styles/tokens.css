@@ -54,6 +54,10 @@
   --color-sell-bg: #f8fbff;
   --color-sell-line: #90cdf4;
 
+  /* 評価損益の符号（顧客詳細の預り・資産状況）。モックの .pl-plus / .pl-minus。益=赤 / 損=青 */
+  --color-profit: #c53030;
+  --color-loss: #2b6cb0;
+
   /*
    * みずほ注文締めカードの操作ボタン（「みずほ注文締め」「注文ファイル作成」で共通）。
    * モックの .mizuho-close-action / .mizuho-order-file-action。押せないときは淡色面に灰色の文字

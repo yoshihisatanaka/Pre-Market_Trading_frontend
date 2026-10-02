@@ -71,4 +71,21 @@ describe('router/index の routes', () => {
     expect(notFound).toBeTruthy()
     expect(notFound.meta?.requiredPermission).toBeUndefined()
   })
+
+  it('[RTR-06] 顧客詳細と子ルートは権限を要求せず、空パスは外株預りへ回す', () => {
+    const detail = routeAt('/customers/:customerId(\\d+)')
+    expect(detail).toBeTruthy()
+    expect(detail.meta?.requiredPermission).toBeUndefined()
+
+    const children = detail.children ?? []
+    expect(pathsOf(children)).toEqual(expect.arrayContaining(['', 'summary', 'orders']))
+    for (const child of children) {
+      expect(child.meta?.requiredPermission, child.path).toBeUndefined()
+    }
+
+    const index = children.find((child) => child.path === '')
+    const params = { customerId: '7' }
+    expect(index.redirect({ params })).toEqual({ name: 'customer-summary', params })
+    expect(children.find((child) => child.path === 'summary')?.name).toBe('customer-summary')
+  })
 })

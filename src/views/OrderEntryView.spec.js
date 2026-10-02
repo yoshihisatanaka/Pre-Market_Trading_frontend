@@ -16,6 +16,7 @@ import { FIRST_ORDER_ID, orderMessages } from '@/mocks/fixtures/orderEntry'
 import { codeEntries } from '@/mocks/fixtures/codes'
 import { useCodesStore } from '@/stores/codes'
 import { EXPIRY_OPTION_COUNT } from '@/utils/orderEntryForm'
+import { DEPOSIT_CATEGORY, ORDER_FORM_DEFAULTS, SIDE } from '@/utils/orderEntryOptions'
 import OrderEntryView from './OrderEntryView.vue'
 
 // シナリオ: docs/unit/views-order-entry-view.md（タイトル先頭の [NOV-xx] が対応 ID）
@@ -35,7 +36,8 @@ const aapl = symbols.find((row) => row.Ticker === 'AAPL')
 
 const Page = { render: () => h('div') }
 
-async function mountView() {
+/** @param {Record<string, string>} [query] 顧客詳細からの引き継ぎ（NOV-22〜24）。既定はクエリなし */
+async function mountView(query = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -43,7 +45,7 @@ async function mountView() {
       { path: '/:pathMatch(.*)*', component: Page },
     ],
   })
-  await router.push(PATH)
+  await router.push({ path: PATH, query })
   // App.vue はコードマスタを読み終えてから画面を描く。それに合わせて先に読んでおく
   const pinia = createPinia()
   await useCodesStore(pinia).load()
@@ -428,5 +430,62 @@ describe('OrderEntryView', () => {
     expect(buttons.find((button) => button.attributes('data-selected') === 'true').text()).toBe(
       '通常',
     )
+  })
+
+  /** 顧客詳細の「新規注文」「買い」が組み立てるクエリ（警告の出る顧客・AAPL・買い・一般） */
+  const handoverQuery = () => ({
+    branch_code: cautionCustomer.部店コード,
+    account_number: String(cautionCustomer.口座番号),
+    // 小文字で来ても大文字に直して入る
+    ticker: aapl.Ticker.toLowerCase(),
+    side: 'buy',
+    deposit: DEPOSIT_CATEGORY.GENERAL,
+  })
+
+  /** BaseSegmentedControl で選ばれているボタンの値（未選択なら undefined） */
+  const selectedValue = (wrapper, testid) =>
+    byTestId(wrapper, testid)
+      .findAll('button')
+      .find((button) => button.attributes('data-selected') === 'true')
+      ?.attributes('data-value')
+
+  it('[NOV-22] URL クエリで引き継いだ部店・口座番号・ティッカー・売買・預り区分が初期値に入る', async () => {
+    const { wrapper } = await mountView(handoverQuery())
+    await formReady(wrapper)
+
+    expect(byTestId(wrapper, 'order-entry-branch').element.value).toBe(cautionCustomer.部店コード)
+    expect(byTestId(wrapper, 'order-entry-account').element.value).toBe(
+      String(cautionCustomer.口座番号),
+    )
+    expect(byTestId(wrapper, 'order-entry-ticker').element.value).toBe(aapl.Ticker)
+    expect(selectedValue(wrapper, 'order-entry-side')).toBe(SIDE.BUY)
+    expect(selectedValue(wrapper, 'order-entry-deposit-category')).toBe(DEPOSIT_CATEGORY.GENERAL)
+  })
+
+  it('[NOV-23] 引き継いだ顧客と銘柄は入力欄に触らなくても照会される', async () => {
+    const { wrapper } = await mountView(handoverQuery())
+    await formReady(wrapper)
+
+    await until(
+      () =>
+        byTestId(wrapper, 'order-entry-customer-bar').exists() &&
+        byTestId(wrapper, 'order-entry-ticker-hint').exists() &&
+        byTestId(wrapper, 'order-entry-ticker-hint').text() === aapl.銘柄名_英字,
+    )
+    expect(byTestId(wrapper, 'order-entry-customer-name').text()).toBe(cautionCustomer.顧客名)
+    expect(byTestId(wrapper, 'order-entry-account-hint').text()).toBe(cautionCustomer.顧客名)
+  })
+
+  it('[NOV-24] 読めない値は引き継がず既定のまま', async () => {
+    const { wrapper } = await mountView({ account_number: '12a', side: 'hold', deposit: '9' })
+    await formReady(wrapper)
+    await flushPromises()
+
+    expect(byTestId(wrapper, 'order-entry-account').element.value).toBe('')
+    expect(selectedValue(wrapper, 'order-entry-side')).toBeUndefined()
+    expect(selectedValue(wrapper, 'order-entry-deposit-category')).toBe(
+      ORDER_FORM_DEFAULTS.depositCategory,
+    )
+    expect(byTestId(wrapper, 'order-entry-customer-bar').exists()).toBe(false)
   })
 })

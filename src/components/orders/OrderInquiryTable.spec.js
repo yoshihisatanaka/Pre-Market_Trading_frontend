@@ -289,4 +289,50 @@ describe('OrderInquiryTable', () => {
     expect(historyRows(wrapper)).toHaveLength(2)
     expect(wrapper.find('[data-testid="order-inquiry-split-detail"]').exists()).toBe(true)
   })
+
+  const CUSTOMER_LABELS = ['部店', '口座番号', '顧客名']
+
+  it('[OIT-15] 既定では部店・口座番号・顧客名の列が出る', () => {
+    const latest = order()
+    const wrapper = mountTable([group(latest)])
+    const [row] = rows(wrapper)
+
+    for (const label of CUSTOMER_LABELS) {
+      expect(headers(wrapper)).toContain(label)
+    }
+    expect(cell(wrapper, row, '部店').text()).toBe(latest.branchCode)
+    expect(cell(wrapper, row, '口座番号').text()).toBe(latest.accountNumber)
+    expect(cell(wrapper, row, '顧客名').text()).toBe(latest.customerName)
+  })
+
+  it('[OIT-16] showCustomer が false なら顧客の 3 列が見出しとセルの両方から消える', async () => {
+    const full = headers(mountTable([group(order())]))
+    const wrapper = mountTable([amendedGroup()], { showCustomer: false })
+    await wrapper.find('[data-testid="order-inquiry-history-toggle"]').trigger('click')
+
+    expect(headers(wrapper)).toEqual(full.filter((label) => !CUSTOMER_LABELS.includes(label)))
+    expect(headers(wrapper)).toHaveLength(full.length - CUSTOMER_LABELS.length)
+
+    const latest = order()
+    for (const row of [...rows(wrapper), ...historyRows(wrapper)]) {
+      expect(row.findAll('td')).toHaveLength(headers(wrapper).length)
+      const texts = row.findAll('td').map((td) => td.text())
+      expect(texts).not.toContain(latest.branchCode)
+      expect(texts).not.toContain(latest.accountNumber)
+      expect(texts).not.toContain(latest.customerName)
+    }
+    expect(historyRows(wrapper)).toHaveLength(2)
+  })
+
+  it('[OIT-17] 自動分割の明細の colspan は列数に合う', async () => {
+    for (const showCustomer of [false, true]) {
+      const wrapper = mountTable([splitGroup()], { showCustomer })
+      await wrapper.find('[data-testid="order-inquiry-split-toggle"]').trigger('click')
+
+      const detailCell = wrapper.find('[data-testid="order-inquiry-split-detail"] > td')
+      expect(detailCell.attributes('colspan'), String(showCustomer)).toBe(
+        String(headers(wrapper).length),
+      )
+    }
+  })
 })

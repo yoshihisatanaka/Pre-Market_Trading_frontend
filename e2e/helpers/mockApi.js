@@ -4,9 +4,11 @@
  * page.goto() より前に呼ぶこと。ページ実行前に window.__mswOverrides をセットし、
  * dev サーバ側の MSW（src/mocks/browser.js）が起動時に worker.use() へ変換する。
  *
- * なぜ page.route を使わないか:
+ * なぜ API に page.route を使わないか:
  *   MSW はページ内で fetch を横取りするため、リクエストがネットワークに出ず
  *   Playwright の page.route では捕まえられない。
+ *   モジュール取得（/src/** の import()）は MSW の対象外でネットワークに出るので、
+ *   そちらは page.route で遅らせられる（e2e/layout.spec.js の LAY-21）。
  *
  * @param {import('@playwright/test').Page} page
  * @param {Array<{ method?: 'get'|'post'|'put'|'patch'|'delete', path: string, status?: number, body?: unknown }>} overrides

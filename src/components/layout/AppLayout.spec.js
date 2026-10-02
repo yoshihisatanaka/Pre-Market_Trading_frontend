@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { h } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { trackRouteLoading } from '@/composables/useRouteLoading'
 import AppLayout from './AppLayout.vue'
 
 /*
@@ -12,18 +13,32 @@ import AppLayout from './AppLayout.vue'
  *
  * jsdom は scoped CSS を評価しないため「見えない」ことは検証できない。
  * 開閉の判定はメニューボタンの aria-expanded で行う（見え方は E2E の LAY-06 が見る）。
+ *
+ * 遷移の確定待ち（ALY-05〜07）は、本番と同じく trackRouteLoading をテスト用ルータに差し、
+ * /customers/search を解決を手で止められる遅延ルートにして作る。解除条件は useRouteLoading.spec.js が持つ。
  */
 const Page = { render: () => h('div') }
 
+/** /customers/search のチャンクを解決する */
+let release
+/** trackRouteLoading の登録解除（状態はモジュールで 1 つなので、テストごとに必ず外す） */
+let stops = []
+
 function createTestRouter() {
-  return createRouter({
+  const held = new Promise((resolve) => {
+    release = () => resolve(Page)
+  })
+  const router = createRouter({
     history: createMemoryHistory(),
     // サイドメニューの 15 件を実描画するので、受け皿が無いとルータ警告で埋まる
     routes: [
       { path: '/', component: Page, meta: { title: '注文一覧' } },
+      { path: '/customers/search', component: () => held, meta: { title: '顧客検索' } },
       { path: '/:pathMatch(.*)*', component: Page, meta: { title: 'ページが見つかりません' } },
     ],
   })
+  stops.push(trackRouteLoading(router))
+  return router
 }
 
 async function mountLayout() {
@@ -37,6 +52,9 @@ async function mountLayout() {
 
 const toggleButton = (wrapper) => wrapper.find('[data-testid="sidebar-toggle"]')
 const isOpen = (wrapper) => toggleButton(wrapper).attributes('aria-expanded') === 'true'
+const routeLoading = (wrapper) => wrapper.find('[data-testid="route-loading"]')
+const sidebarLink = (wrapper, label) =>
+  wrapper.findAll('[data-testid="app-sidebar"] a').find((link) => link.text() === label)
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -45,6 +63,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  stops.forEach((stop) => stop())
+  stops = []
   vi.unstubAllGlobals()
 })
 
@@ -82,5 +102,38 @@ describe('AppLayout', () => {
     const second = await mountLayout()
 
     expect(isOpen(second)).toBe(false)
+  })
+
+  it('[ALY-05] 遅延ルートへの遷移中は読み込み中のバーを出し、本文を aria-busy にする', async () => {
+    const wrapper = await mountLayout()
+
+    wrapper.vm.$router.push('/customers/search')
+    await flushPromises()
+
+    expect(routeLoading(wrapper).exists()).toBe(true)
+    expect(routeLoading(wrapper).text()).toContain('画面を読み込んでいます')
+    expect(wrapper.find('main').attributes('aria-busy')).toBe('true')
+  })
+
+  it('[ALY-06] チャンクが解決するとバーが消え、本文の aria-busy が外れる', async () => {
+    const wrapper = await mountLayout()
+    const navigation = wrapper.vm.$router.push('/customers/search')
+    await flushPromises()
+
+    release()
+    await navigation
+    await flushPromises()
+
+    expect(routeLoading(wrapper).exists()).toBe(false)
+    expect(wrapper.find('main').attributes('aria-busy')).toBeUndefined()
+  })
+
+  it('[ALY-07] 遷移中は押した項目をサイドメニューの読み込み中の見た目にする', async () => {
+    const wrapper = await mountLayout()
+
+    wrapper.vm.$router.push('/customers/search')
+    await flushPromises()
+
+    expect(sidebarLink(wrapper, '顧客検索').classes()).toContain('is-pending')
   })
 })

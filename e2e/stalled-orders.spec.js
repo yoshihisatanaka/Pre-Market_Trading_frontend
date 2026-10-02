@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { stalledOrderErrors, stalledWorkingOrders } from '../src/mocks/fixtures/stalledOrders'
 import { formatUsd } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
@@ -102,8 +103,7 @@ test.describe('滞留注文抽出', () => {
   test('[SO-01] サイドメニューから開くと 2 本の一覧が件数付きで表示される', async ({ page }) => {
     await page.goto('/')
 
-    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
-    await nav.getByRole('link', { name: '滞留注文抽出', exact: true }).click()
+    await clickSideMenuLink(page, '滞留注文抽出')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '滞留注文抽出', exact: true })).toBeVisible()

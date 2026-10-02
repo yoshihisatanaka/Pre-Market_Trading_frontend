@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { fxRates } from '../src/mocks/fixtures/fxRates'
 import { mockApi } from './helpers/mockApi'
 
@@ -252,7 +253,7 @@ test.describe('為替マスタ', () => {
   test('[FX-12] サイドメニューから遷移できる', async ({ page }) => {
     await page.goto('/')
 
-    await page.getByRole('link', { name: '為替マスタ', exact: true }).click()
+    await clickSideMenuLink(page, '為替マスタ')
 
     await expect(page).toHaveURL(/\/masters\/fx$/)
     await expect(page.getByTestId('fx-current')).toBeVisible()

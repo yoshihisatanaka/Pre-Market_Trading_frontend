@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { caStocks, corporateActions } from '../src/mocks/fixtures/ca'
 import { CA_TYPE_OPTIONS } from '../src/utils/caTypes'
 import { mockApi } from './helpers/mockApi'
@@ -155,10 +156,7 @@ test.describe('CAマスタ一覧', () => {
   test('[CA-01] サイドメニューから開くと一覧と件数が表示される', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: 'CAマスタ', exact: true })
-      .click()
+    await clickSideMenuLink(page, 'CAマスタ')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: 'CAマスタ', exact: true })).toBeVisible()

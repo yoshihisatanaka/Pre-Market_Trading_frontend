@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { announcement, announcementHistories } from '../src/mocks/fixtures/announcements'
 import { incidentBannerResponse } from '../src/mocks/fixtures/banner'
 import { mockApi } from './helpers/mockApi'
@@ -57,10 +58,7 @@ test.describe('お知らせ管理 表示', () => {
   test('[AN-01] サイドメニューから開くと現在のお知らせと履歴が表示される', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: 'お知らせ管理', exact: true })
-      .click()
+    await clickSideMenuLink(page, 'お知らせ管理')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: 'お知らせ管理', exact: true })).toBeVisible()

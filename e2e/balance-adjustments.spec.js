@@ -534,7 +534,7 @@ const firstRowCustomer = customerOptionRows.find(
   (customer) => customer.口座番号 === firstRow.口座番号,
 )
 
-// src/utils/balanceTypes.js の SPECIFIC_DEPOSIT_DEFAULT（'1' 特定）の表示名
+// 画面の初期選択（'1' 特定）の表示名。名前はコードマスタ（GET /codes）の 特定預り区分
 const DEFAULT_DEPOSIT_LABEL = '特定'
 
 /** 新規追加モーダル。見出しは入力ステップと確認ステップで変わる */

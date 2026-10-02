@@ -10,11 +10,8 @@ import { customers } from '@/mocks/fixtures/customers'
 import { BALANCE_ADJUSTMENTS_PAGE_SIZE } from '@/stores/balanceAdjustments'
 import { useCodesStore } from '@/stores/codes'
 import { CUSTOMER_OPTIONS_LIMIT } from '@/stores/customerOptions'
-import {
-  SPECIFIC_DEPOSIT_DEFAULT,
-  SPECIFIC_DEPOSIT_OPTIONS,
-  formatSpecificDeposit,
-} from '@/utils/balanceTypes'
+import { codeEntries } from '@/mocks/fixtures/codes'
+import { SPECIFIC_DEPOSIT } from '@/utils/apiEnums'
 import { formatMonthDayTime, formatQuantity, joinWide } from '@/utils/format'
 import BalanceAdjustmentListView from './BalanceAdjustmentListView.vue'
 
@@ -148,6 +145,9 @@ const cellsOf = (wrapper, label) => {
 /** 行が出しているティッカー（Ticker が無ければ銘柄コード） */
 const tickerOf = (raw) => raw.Ticker || raw.銘柄コード
 
+/** 口座区分（特定預り区分）の選択肢。コードマスタ（GET /codes）の並び */
+const DEPOSIT_ENTRIES = codeEntries('特定預り区分')
+
 /* ------------------------------------------------------------------ *
  * 数量の加算（BLV-14〜26）
  * ------------------------------------------------------------------ */
@@ -258,9 +258,7 @@ const NEW_TICKER = 'newco'
 const NEW_SYMBOL_CODE = NEW_TICKER.toUpperCase()
 const NEW_SYMBOL_NAME = 'NewCo Inc.'
 /** 口座区分は既定（特定）以外を選び、選んだ値が送られることを見る */
-const NEW_DEPOSIT = SPECIFIC_DEPOSIT_OPTIONS.find(
-  (option) => option.value !== SPECIFIC_DEPOSIT_DEFAULT,
-).value
+const NEW_DEPOSIT = DEPOSIT_ENTRIES.find((entry) => entry.code !== SPECIFIC_DEPOSIT.SPECIFIC).code
 /** 入力する加算数量（新規なので補正後と同じ値になる） */
 const NEW_QUANTITY = 100
 
@@ -281,9 +279,9 @@ async function fillAdd(wrapper) {
   await addInput(wrapper, 'quantity').setValue(String(NEW_QUANTITY))
 }
 
-/** 一覧と顧客の選択肢を出し、追加モーダルを開き、入力して確認ステップまで進める */
+/** 一覧と顧客・口座区分の選択肢を出し、追加モーダルを開き、入力して確認ステップまで進める */
 async function openAddConfirm() {
-  const mounted = await mountView()
+  const mounted = await mountView({ withCodes: true })
   await settle()
   await openAdd(mounted.wrapper)
   await fillAdd(mounted.wrapper)
@@ -538,22 +536,22 @@ describe('BalanceAdjustmentListView', () => {
       expect(plainRow.classes()).not.toContain('is-user-modified')
     })
 
-    it('[BLV-13] 特定預り区分名が空の行は、口座区分セルがフロントの対応表の名前になる', async () => {
+    it('[BLV-13] 特定預り区分名が空の行は、口座区分セルがコードマスタの名前になる', async () => {
       // 区分ごとに 1 行ずつ、表示名を落としてコードだけにする
       const base = sorted[0]
-      const nameless = SPECIFIC_DEPOSIT_OPTIONS.map((option, index) => ({
+      const nameless = DEPOSIT_ENTRIES.map((entry, index) => ({
         ...base,
         ID: base.ID + index,
-        特定預り区分: option.value,
+        特定預り区分: entry.code,
         特定預り区分名: null,
         預り区分名: null,
       }))
       server.use(listHandler(nameless))
-      const { wrapper } = await mountView()
+      const { wrapper } = await mountView({ withCodes: true })
       await settle()
 
       expect(cellsOf(wrapper, '口座区分').map((cell) => cell.text())).toEqual(
-        SPECIFIC_DEPOSIT_OPTIONS.map((option) => option.label),
+        DEPOSIT_ENTRIES.map((entry) => entry.label),
       )
     })
   })
@@ -571,9 +569,8 @@ describe('BalanceAdjustmentListView', () => {
       const deposit = input(wrapper, 'balance-adjustments-increase-deposit')
       expect(customer.text()).toBe(`${TARGET.顧客名 || '—'}（${TARGET.口座番号}）`)
       expect(symbol.text()).toBe(joinWide(tickerOf(TARGET), TARGET.銘柄名 ?? '').trim())
-      expect(deposit.text()).toBe(
-        (TARGET.特定預り区分名 ?? TARGET.預り区分名) || formatSpecificDeposit(TARGET.特定預り区分),
-      )
+      // フィクスチャの行はサーバが付けた名前を持つ
+      expect(deposit.text()).toBe(TARGET.特定預り区分名 ?? TARGET.預り区分名)
       // 読み取り専用 = 入力欄ではない
       for (const el of [customer, symbol, deposit]) {
         expect(['INPUT', 'SELECT', 'TEXTAREA']).not.toContain(el.element.tagName)
@@ -772,7 +769,7 @@ describe('BalanceAdjustmentListView', () => {
 
   describe('新規保有を追加（入力ステップ）', () => {
     it('[BLV-27] 「新規保有を追加」で追加モーダルが開き、顧客は未選択・入力欄は空・口座区分は「特定」', async () => {
-      const { wrapper } = await mountView()
+      const { wrapper } = await mountView({ withCodes: true })
       await settle()
 
       await openAdd(wrapper)
@@ -783,9 +780,16 @@ describe('BalanceAdjustmentListView', () => {
       expect(addInput(wrapper, 'symbol-name').element.value).toBe('')
       expect(addInput(wrapper, 'quantity').element.value).toBe('')
 
-      const deposit = addInput(wrapper, 'deposit').element
-      expect(deposit.value).toBe(SPECIFIC_DEPOSIT_DEFAULT)
-      expect(deposit.selectedOptions[0].textContent.trim()).toBe('特定')
+      const deposit = addInput(wrapper, 'deposit')
+      expect(deposit.element.value).toBe(SPECIFIC_DEPOSIT.SPECIFIC)
+      expect(deposit.element.selectedOptions[0].textContent.trim()).toBe('特定')
+      // 選択肢はコードマスタの 特定預り区分 そのもの（フロントに対応表を持たない）
+      expect(
+        deposit
+          .findAll('option')
+          .filter((option) => option.element.value !== '')
+          .map((option) => option.text()),
+      ).toEqual(DEPOSIT_ENTRIES.map((entry) => entry.label))
     })
 
     it('[BLV-28] 未入力で「内容を確認」を押すと 4 項目それぞれの直下にエラーが出て、確認に進まない', async () => {
@@ -802,7 +806,7 @@ describe('BalanceAdjustmentListView', () => {
     })
 
     it('[BLV-29] 加算数量 0 は「1 以上で入力してください」のエラーになる', async () => {
-      const { wrapper } = await mountView()
+      const { wrapper } = await mountView({ withCodes: true })
       await settle()
       await openAdd(wrapper)
 

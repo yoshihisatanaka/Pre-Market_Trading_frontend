@@ -13,9 +13,15 @@
  * 区分ごとのアコーディオンの開閉はここで持つ（板全体の開閉とは別物）。初期値は navigation.js の defaultOpen。
  * 現在のページを含む区分は、遷移のたびに開く（畳んだ区分の中にいて現在地が見えなくならないように）。
  * 畳んだ区分のリンクは v-show で隠すだけで、DOM には残す。
+ *
+ * 画面は遅延 import なので、押してからチャンクが届くまで遷移が確定せず aria-current も動かない。
+ * その間は pendingPath（所有者の AppLayout が router から配る）に一致する項目を読み込み中の見た目にし、
+ * 押した瞬間に反応が返るようにする。マウスが乗った / フォーカスした時点でチャンクを先読みするのも
+ * 同じ理由（loadRouteLocation は解決済みなら何もしない）。
  */
 import { computed, reactive, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, loadRouteLocation, useRoute, useRouter } from 'vue-router'
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { navSections } from './navigation'
 import { navIcons } from './navIcons'
@@ -26,9 +32,18 @@ defineProps({
     type: Boolean,
     default: true,
   },
+  /** 遷移の確定待ちの行き先（path）。一致する項目を読み込み中の見た目にする。空なら無し */
+  pendingPath: {
+    type: String,
+    default: '',
+  },
 })
 
 const operator = useCurrentOperatorStore()
+const router = useRouter()
+
+/** 行き先のチャンクを先に取りに行く。全 record が redirect のときだけ reject するので握りつぶす */
+const prefetch = (to) => loadRouteLocation(router.resolve(to)).catch(() => {})
 
 const visibleSections = computed(() =>
   navSections.filter(
@@ -110,7 +125,10 @@ watch(
             :key="item.to"
             :to="item.to"
             class="sidebar__link"
+            :class="{ 'is-pending': item.to === pendingPath }"
             active-class="is-active"
+            @pointerenter="prefetch(item.to)"
+            @focus="prefetch(item.to)"
           >
             <!-- アイコンはラベルの装飾。読み上げ対象から外してリンク名をラベルだけにする -->
             <svg
@@ -127,6 +145,13 @@ watch(
               <path :d="navIcons[item.icon]" />
             </svg>
             {{ item.label }}
+            <!-- 読み上げは AppLayout のバーに任せる（リンク名をラベルだけに保つ） -->
+            <BaseSpinner
+              v-if="item.to === pendingPath"
+              size="sm"
+              label=""
+              class="sidebar__pending"
+            />
           </RouterLink>
         </div>
       </template>
@@ -242,7 +267,8 @@ watch(
 }
 
 .sidebar__link:hover,
-.sidebar__link.is-active {
+.sidebar__link.is-active,
+.sidebar__link.is-pending {
   background-color: var(--color-sidebar-hover);
   color: var(--color-sidebar-text-active);
 }
@@ -251,6 +277,11 @@ watch(
   flex-shrink: 0;
   width: 16px;
   height: 16px;
+}
+
+/* 読み込み中の回転マークはラベルの右端に寄せる */
+.sidebar__pending {
+  margin-left: auto;
 }
 
 /* 0s にすると visibility の遅延も 0s になり、その場で切り替わる */

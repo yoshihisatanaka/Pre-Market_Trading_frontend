@@ -42,6 +42,13 @@ export default defineConfig(({ mode }) => {
       // E2E コンテナは http://frontend:5173 でアクセスするため明示的に許可する
       // （'frontend' は docker-compose.yml のサービス名 = DNS 名。対で維持すること）。
       allowedHosts: ['frontend', 'localhost'],
+      // 画面は遅延 import なので、初めて開く画面はそのとき初めて SFC 以下が変換される。
+      // Windows の bind mount 越しだとこれが数秒かかり、メニューを押しても止まって見える。
+      // 起動時に画面を先に変換しておく（起動直後に 1 回 CPU が上がるだけで、編集後は従来どおり
+      // オンデマンド）。spec は含めない。
+      warmup: {
+        clientFiles: ['./src/views/*.vue'],
+      },
       // hmr は明示設定しないこと。未設定なら HMR クライアントは
       // 「ブラウザが読み込んだ origin」へ WebSocket を張るので、worktree ごとに
       // ホスト公開ポートが 5174 / 5175 とずれても成立する。

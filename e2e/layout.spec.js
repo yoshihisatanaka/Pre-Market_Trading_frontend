@@ -387,4 +387,111 @@ test.describe('共通レイアウト', () => {
     )
     await expect(sectionToggle(page, '運用管理')).toHaveAttribute('aria-expanded', 'false')
   })
+
+  /*
+   * 遷移の確定待ち（遅延 import のチャンク取得。src/composables/useRouteLoading.js）。
+   * router の各フックの解除条件は単体側が持つので、ここでは「押した直後に反応が返るか」
+   * 「読み終えたら消えるか」「後から押した方が勝つか」「マウスを載せると先読みするか」だけを見る。
+   *
+   * 遅延は page.route() で画面モジュールの取得を遅らせて作る。/src/** の import() は MSW の対象外で
+   * ネットワークに出るので捕まえられる（API の ?mockDelay とは別物。API は MSW が横取りするので page.route が効かない）。
+   * dev の URL は /src/views/CustomerSearchView.vue（HMR 後は ?t= が付く）。<style scoped> は同じ pathname に
+   * ?vue&type=style を付けた別リクエストで、本体の評価中に取りに行く。遅らせるのは本体だけにし、
+   * 「本体の応答が返った」= 「遅れていたチャンクが届いた」と読めるようにする。
+   */
+  const CUSTOMER_SEARCH_MODULE = '/src/views/CustomerSearchView.vue'
+  const isCustomerSearchModule = (url) =>
+    url.pathname.endsWith(CUSTOMER_SEARCH_MODULE) && !url.searchParams.has('type')
+
+  /** 顧客検索の画面モジュールの取得を delayMs 遅らせる。page.goto() の後・click の前に仕掛ける */
+  async function delayCustomerSearchModule(page, delayMs) {
+    await page.route(isCustomerSearchModule, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+      await route.continue()
+    })
+  }
+
+  test('[LAY-21] 画面の読み込み中はバーと押した項目の回転マークが出て、読み終えると消える', async ({
+    page,
+  }) => {
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+
+    await delayCustomerSearchModule(page, 1500)
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    const link = nav.getByRole('link', { name: '顧客検索', exact: true })
+    const loading = page.getByTestId('route-loading')
+    await link.click()
+
+    // 押した直後の反応（読み込み中は URL も見出しも現在ページも動かない）
+    await expect(loading).toBeVisible()
+    await expect(loading).toContainText('画面を読み込んでいます')
+    await expect(link.locator('.base-spinner')).toBeVisible()
+    await expect(page.getByRole('main')).toHaveAttribute('aria-busy', 'true')
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(0)
+
+    // 読み終えると遷移が確定し、読み込み中の表示が全部消える
+    await expect(page).toHaveURL(/\/customers\/search$/)
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
+    await expect(loading).toHaveCount(0)
+    await expect(link.locator('.base-spinner')).toHaveCount(0)
+    await expect(page.getByRole('main')).not.toHaveAttribute('aria-busy', 'true')
+    await expect(link).toHaveAttribute('aria-current', 'page')
+  })
+
+  test('[LAY-22] 読み込み中に別の項目を押すと後から押した方が勝つ', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+
+    await delayCustomerSearchModule(page, 1500)
+    // 遅れていたチャンクが届いたことを「本体の応答が返った」で知る（固定 sleep の代わり）
+    const delayedModuleArrived = page.waitForResponse((response) =>
+      isCustomerSearchModule(new URL(response.url())),
+    )
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    const loading = page.getByTestId('route-loading')
+    await nav.getByRole('link', { name: '顧客検索', exact: true }).click()
+    await expect(loading).toBeVisible()
+
+    await nav.getByRole('link', { name: '注文照会', exact: true }).click()
+
+    await expect(page).toHaveURL(/\/orders\/inquiry$/)
+    await expect(page.getByRole('heading', { name: '注文照会', exact: true })).toBeVisible()
+    await expect(loading).toHaveCount(0)
+
+    // 遅れていた顧客検索が届いても追い越されたままで、表示も戻らない
+    await delayedModuleArrived
+    await page.waitForLoadState('networkidle')
+    await expect(page).toHaveURL(/\/orders\/inquiry$/)
+    await expect(page.getByRole('heading', { name: '注文照会', exact: true })).toBeVisible()
+    await expect(loading).toHaveCount(0)
+    await expect(nav.getByRole('link', { name: '注文照会', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
+  })
+
+  test('[LAY-23] メニューの項目にマウスを載せると画面を先読みする', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+
+    // hover より前に仕掛ける（後からだと取り逃す）
+    const prefetched = page.waitForRequest((request) =>
+      isCustomerSearchModule(new URL(request.url())),
+    )
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    await nav.getByRole('link', { name: '顧客検索', exact: true }).hover()
+
+    await prefetched
+    // 先読みだけで遷移はしない
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(0)
+  })
 })

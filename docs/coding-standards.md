@@ -162,7 +162,9 @@ views / components  →  stores  →  api  →  (HTTP)
 - E2E の要素特定は `data-testid` か `getByRole` を使う。CSS クラス名に依存しない
 - E2E でシナリオ別に API 応答を変えるときは [e2e/helpers/mockApi.js](../e2e/helpers/mockApi.js) の `mockApi()` を **`page.goto()` より前に**呼ぶ
   （見本: [e2e/orders.spec.js](../e2e/orders.spec.js)）。
-  **`page.route()` は使えない** — MSW がページ内で fetch を横取りするため、リクエストがネットワークに出ない
+  **API（`/api/*`）に `page.route()` は使えない** — MSW がページ内で fetch を横取りするため、リクエストがネットワークに出ない。
+  **モジュール取得（`/src/**`）には使える**。`import()` は MSW の差し替え対象ではなくネットワークに出るので、
+  画面のチャンク取得を遅らせたり失敗させたりできる（見本: [e2e/layout.spec.js](../e2e/layout.spec.js) の LAY-21）
 - E2E はコンテナ間通信（`http://frontend:5173`）のため secure context にならず、
   MSW は Service Worker ではなく fallback mode で動作する（コンソールに `(fallback mode)` と出るが正常）。
   開発者がブラウザで開く `http://localhost:<割当ポート>`（本体は 5173、worktree は 5174〜）は

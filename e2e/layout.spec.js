@@ -16,11 +16,14 @@ const toggleButton = (page) => page.getByTestId('sidebar-toggle')
 const contentLeft = async (page) => (await page.getByRole('main').boundingBox()).x
 
 /*
- * LAY-03 / LAY-04 で使う、まだルートの無いメニュー項目。navigation.js から引いて、
- * 名前や path が変わったときに黙って空振りしないようにする（2026-10-02 に顧客検索から差し替えた）。
+ * LAY-03 で遷移に使うメニュー項目。既定の画面（注文一覧）ではない項目なら何でもよい。
+ * navigation.js から引いて、名前や path が変わったときに黙って空振りしないようにする。
+ * 2026-10-02 に預り検索が実装されてメニューの未実装の項目が無くなったので、「見つからない」は
+ * メニューに無い URL（LAY-04）で見る形に分けた。
  */
-const UNIMPLEMENTED_LABEL = '預り検索'
-const UNIMPLEMENTED_PATH = navItems.find((item) => item.label === UNIMPLEMENTED_LABEL)?.to
+const TARGET_LABEL = '預り検索'
+const TARGET_PATH = navItems.find((item) => item.label === TARGET_LABEL)?.to
+const UNKNOWN_PATH = '/no-such-page'
 
 test.describe('共通レイアウト', () => {
   test('[LAY-01] サイドメニューにシステム名とセクションが出て、既定で開く区分のリンクだけが見える', async ({
@@ -69,13 +72,13 @@ test.describe('共通レイアウト', () => {
   }) => {
     await page.goto('/')
 
-    // 未実装の項目を使う（実装されたら、その時点で未実装の別の項目へ差し替える）
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
-    await nav.getByRole('link', { name: UNIMPLEMENTED_LABEL, exact: true }).click()
+    await nav.getByRole('link', { name: TARGET_LABEL, exact: true }).click()
 
-    await expect(page).toHaveURL(new RegExp(`${UNIMPLEMENTED_PATH}$`))
-    await expect(page.getByRole('heading', { name: 'ページが見つかりません' })).toBeVisible()
-    await expect(nav.getByRole('link', { name: UNIMPLEMENTED_LABEL, exact: true })).toHaveAttribute(
+    await expect(page).toHaveURL(new RegExp(`${TARGET_PATH}$`))
+    // 見出しは遷移先のルートの meta.title（メニューの表示名と同じ）。画面の中身はここでは見ない
+    await expect(page.getByRole('heading', { name: TARGET_LABEL, exact: true })).toBeVisible()
+    await expect(nav.getByRole('link', { name: TARGET_LABEL, exact: true })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -83,16 +86,15 @@ test.describe('共通レイアウト', () => {
     await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
   })
 
-  test('[LAY-04] 未実装の画面を直接開いてもレイアウトは表示される', async ({ page }) => {
-    await page.goto(UNIMPLEMENTED_PATH)
+  test('[LAY-04] メニューに無い URL を直接開いてもレイアウトは表示される', async ({ page }) => {
+    await page.goto(UNKNOWN_PATH)
 
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
     await expect(nav).toBeVisible()
     await expect(page.getByRole('heading', { name: 'ページが見つかりません' })).toBeVisible()
-    await expect(nav.getByRole('link', { name: UNIMPLEMENTED_LABEL, exact: true })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
+    // どのメニュー項目も現在ページにならない
+    await expect(nav.getByRole('link').first()).toBeVisible()
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(0)
   })
 
   test('[LAY-05] 広い画面では既定でサイドメニューが開いている', async ({ page }) => {

@@ -33,6 +33,13 @@ const routes = [
     meta: { title: '顧客検索' },
   },
   {
+    // path は navigation.js（サイドメニュー）の項目と一致させる
+    path: '/customers/holdings',
+    name: 'holding-search',
+    component: () => import('@/views/HoldingSearchView.vue'),
+    meta: { title: '預り検索' },
+  },
+  {
     /*
      * 顧客詳細。顧客検索の顧客名から入る画面で、サイドメニューには載せない。
      * 親（CustomerDetailView）が顧客カードとタブを持ち、タブの中身を子ルートが描く。

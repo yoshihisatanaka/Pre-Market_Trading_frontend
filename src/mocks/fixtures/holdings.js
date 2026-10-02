@@ -24,7 +24,11 @@ import { symbols } from './symbols'
  *   - 特定預り区分 1 特定 / 0 非特定 / 6 成長投資枠
  *   - 売却不可区分 1（売りボタンが押せない）
  *   - CA 発生中（警告の帯と行の印）
- * 口座 1230002 は 1 銘柄だけ、1230006 は CA の無い 2 銘柄、ほかの顧客は保有なし（空の状態）。
+ * 口座 1230002 は 1 銘柄だけ、1230006 は CA の無い 2 銘柄、部店 123 のほかの顧客は保有なし（空の状態）。
+ *
+ * 預り検索（顧客をまたいで引く）のページャーの確かめに 1 ページ（50 件）を超える件数が要るので、
+ * 部店 345 / 456 の顧客 28 人に 2 銘柄ずつ（56 件）を機械生成して足し、全体を 64 件にしてある
+ * （下の BULK_*。顧客詳細のテストが使う部店 123 の顧客には足さない）。
  */
 
 /** 為替（円 / ドル） */
@@ -81,6 +85,30 @@ function holding({
   }
 }
 
+/** 機械生成の明細を持たせる部店と、順に割り当てる銘柄（前日終値のある銘柄だけ） */
+const BULK_BRANCHES = ['345', '456']
+const BULK_TICKERS = ['META', 'JPM', 'V', 'AAPL', 'MSFT', 'GOOGL', 'AMZN']
+
+/**
+ * 機械生成の明細。1 顧客に隣り合う 2 銘柄を、特定預り・CA なし・売却可で持たせる。
+ * 平均取得単価は前日終値の円換算から 1 銘柄目は 10% 安く（評価益）、2 銘柄目は 10% 高く（評価損）置く。
+ */
+const bulkHoldings = customers
+  .filter((customer) => BULK_BRANCHES.includes(customer.部店コード))
+  .flatMap((customer, index) =>
+    [0, 1].map((shift) => {
+      const ticker = BULK_TICKERS[(index + shift) % BULK_TICKERS.length]
+      const yenClose = findSymbol(ticker).前日終値 * HOLDINGS_FX_RATE
+      return holding({
+        accountNo: customer.口座番号,
+        ticker,
+        quantity: 10 * (index + 1),
+        deposit: '1',
+        averageCost: Math.round(yenClose * (shift === 0 ? 0.9 : 1.1)),
+      })
+    }),
+  )
+
 export const holdings = [
   // 山田 太郎（部店 123）。評価益
   holding({ accountNo: 1230001, ticker: 'AAPL', quantity: 100, deposit: '1', averageCost: 30_000 }),
@@ -117,4 +145,5 @@ export const holdings = [
   holding({ accountNo: 1230006, ticker: 'AAPL', quantity: 500, deposit: '6', averageCost: 32_000 }),
   // 別の部店（234）の顧客。部店での絞り込みを確かめる
   holding({ accountNo: 2340001, ticker: 'AAPL', quantity: 10, deposit: '1', averageCost: 33_000 }),
+  ...bulkHoldings,
 ]

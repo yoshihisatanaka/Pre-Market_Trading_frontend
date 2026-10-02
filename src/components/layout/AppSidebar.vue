@@ -9,9 +9,13 @@
  * 権限の要る区分（requiredPermission）は、その権限を持つ利用者にだけ出す。
  * /auth/me を読み終えるまでは持っていない扱いにする（出てから消えるちらつきを防ぐ）。
  * 読み込みを始めるのは main.js で、ここは結果を見るだけ。画面そのものの制限は router の permissionGuard。
+ *
+ * 区分ごとのアコーディオンの開閉はここで持つ（板全体の開閉とは別物）。初期値は navigation.js の defaultOpen。
+ * 現在のページを含む区分は、遷移のたびに開く（畳んだ区分の中にいて現在地が見えなくならないように）。
+ * 畳んだ区分のリンクは v-show で隠すだけで、DOM には残す。
  */
-import { computed } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, reactive, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { navSections } from './navigation'
 import { navIcons } from './navIcons'
@@ -30,6 +34,29 @@ const visibleSections = computed(() =>
   navSections.filter(
     (section) => !section.requiredPermission || operator.can(section.requiredPermission),
   ),
+)
+
+/** 区分ラベル → 開いているか */
+const expanded = reactive(
+  Object.fromEntries(navSections.map((section) => [section.label, section.defaultOpen !== false])),
+)
+
+function toggleSection(section) {
+  expanded[section.label] = !expanded[section.label]
+}
+
+/** 配下のページ（/masters/symbols/… など）にいるときも、その項目の区分を現在地とみなす */
+const containsPath = (section, path) =>
+  section.items.some((item) => path === item.to || path.startsWith(`${item.to}/`))
+
+const route = useRoute()
+watch(
+  () => route.path,
+  (path) => {
+    const current = navSections.find((section) => containsPath(section, path))
+    if (current) expanded[current.label] = true
+  },
+  { immediate: true },
 )
 </script>
 
@@ -52,30 +79,56 @@ const visibleSections = computed(() =>
 
     <nav class="sidebar__nav" aria-label="メインメニュー">
       <template v-for="section in visibleSections" :key="section.label">
-        <h2 class="sidebar__section">{{ section.label }}</h2>
-        <RouterLink
-          v-for="item in section.items"
-          :key="item.to"
-          :to="item.to"
-          class="sidebar__link"
-          active-class="is-active"
-        >
-          <!-- アイコンはラベルの装飾。読み上げ対象から外してリンク名をラベルだけにする -->
-          <svg
-            v-if="item.icon"
-            class="sidebar__icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
+        <!-- 見出しの中にボタンを置く（見出しとしての読み上げと、開閉ボタンとしての操作を両立させる） -->
+        <h2 class="sidebar__section">
+          <button
+            type="button"
+            class="sidebar__section-toggle"
+            :class="{ 'is-closed': !expanded[section.label] }"
+            :aria-expanded="String(expanded[section.label])"
+            :aria-controls="`sidebar-section-${section.label}`"
+            @click="toggleSection(section)"
           >
-            <path :d="navIcons[item.icon]" />
-          </svg>
-          {{ item.label }}
-        </RouterLink>
+            {{ section.label }}
+            <svg
+              class="sidebar__chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </h2>
+        <div v-show="expanded[section.label]" :id="`sidebar-section-${section.label}`">
+          <RouterLink
+            v-for="item in section.items"
+            :key="item.to"
+            :to="item.to"
+            class="sidebar__link"
+            active-class="is-active"
+          >
+            <!-- アイコンはラベルの装飾。読み上げ対象から外してリンク名をラベルだけにする -->
+            <svg
+              v-if="item.icon"
+              class="sidebar__icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path :d="navIcons[item.icon]" />
+            </svg>
+            {{ item.label }}
+          </RouterLink>
+        </div>
       </template>
     </nav>
   </aside>
@@ -131,7 +184,6 @@ const visibleSections = computed(() =>
 
 .sidebar__section {
   margin: var(--space-4) 0 var(--space-2);
-  padding: 0 var(--space-2);
   color: var(--color-sidebar-section);
   font-size: var(--font-size-xs);
   font-weight: 500;
@@ -141,6 +193,38 @@ const visibleSections = computed(() =>
 
 .sidebar__section:first-child {
   margin-top: 0;
+}
+
+/* 見た目は従来の見出しのまま。ボタンの既定の装飾だけを外す */
+.sidebar__section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.sidebar__section-toggle:hover {
+  color: var(--color-sidebar-text-active);
+}
+
+.sidebar__chevron {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  transition: transform var(--sidebar-transition-duration) ease;
+}
+
+/* 閉じているときは右向き（開くと下向きに戻る） */
+.sidebar__section-toggle.is-closed .sidebar__chevron {
+  transform: rotate(-90deg);
 }
 
 .sidebar__link {

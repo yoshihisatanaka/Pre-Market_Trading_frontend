@@ -9,6 +9,9 @@
  * 区分に requiredPermission（GET /auth/me の権限のキー）を付けると、その権限の無い利用者には
  * 区分ごと出さない（AppSidebar）。付けたら router/index.js の各ルートの meta.requiredPermission にも
  * 同じ値を付ける（メニューを隠すだけでは URL を直接開けば入れてしまう）。
+ *
+ * 区分はアコーディオンで開閉する。defaultOpen: false を付けた区分は畳んだ状態で始まる（省略時は開）。
+ * ただし現在のページを含む区分は、既定に関わらず開く（AppSidebar）。
  */
 export const navSections = [
   {
@@ -19,7 +22,7 @@ export const navSections = [
     ],
   },
   {
-    label: '注文',
+    label: '注文・照会',
     // 新規注文（/orders/new）はモックどおりサイドメニューに置かない。注文照会などの画面内から遷移する
     items: [
       { label: 'CSV一括注文', to: '/orders/csv/upload', icon: 'documentChart' },
@@ -35,6 +38,7 @@ export const navSections = [
     label: 'マスタメンテ',
     // マスタ更新権限が無い操作者には全項目を出さない（2026-09-28 決定）
     requiredPermission: 'master',
+    defaultOpen: false,
     items: [
       { label: '顧客マスタ', to: '/masters/customers' },
       { label: '権限マスタ', to: '/masters/permissions' },
@@ -58,6 +62,7 @@ export const navSections = [
      */
     label: '運用管理',
     requiredPermission: 'operation',
+    defaultOpen: false,
     items: [
       { label: 'お知らせ管理', to: '/operations/announcements' },
       { label: '滞留注文抽出', to: '/operations/stalled-orders' },

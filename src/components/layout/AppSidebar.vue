@@ -24,7 +24,6 @@ import { RouterLink, loadRouteLocation, useRoute, useRouter } from 'vue-router'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { navSections } from './navigation'
-import { navIcons } from './navIcons'
 
 defineProps({
   /** 展開しているか。既定は展開（畳むのは呼び出し側の明示的な指定） */
@@ -130,22 +129,6 @@ watch(
             @pointerenter="prefetch(item.to)"
             @focus="prefetch(item.to)"
           >
-            <!-- アイコンはラベルの装飾。読み上げ対象から外してリンク名をラベルだけにする -->
-            <svg
-              v-if="item.icon"
-              class="sidebar__icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path :d="navIcons[item.icon]" />
-            </svg>
-            <!-- アイコンの無い項目も同じ幅を空け、ラベルの頭を揃える -->
-            <span v-else class="sidebar__icon" aria-hidden="true" />
             {{ item.label }}
             <!-- 読み上げは AppLayout のバーに任せる（リンク名をラベルだけに保つ） -->
             <BaseSpinner
@@ -309,12 +292,6 @@ watch(
   box-shadow: inset 3px 0 0 var(--color-sidebar-accent);
   color: var(--color-sidebar-text-active);
   font-weight: 600;
-}
-
-.sidebar__icon {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
 }
 
 /* 読み込み中の回転マークはラベルの右端に寄せる */

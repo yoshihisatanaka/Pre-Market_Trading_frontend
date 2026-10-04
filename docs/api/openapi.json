@@ -487,7 +487,7 @@
           "Orders"
         ],
         "summary": "List Orders Endpoint",
-        "description": "注文一覧照会API\n- 口座番号・銘柄・処理状況・部店・売買区分・預託先・注文種別・受注日による絞り込み\n- 同じ検索条件での集計 `summary`（件数・売買別件数・数量・約定代金 USD/円貨概算）を同梱\n- 各行に数量内訳（出来数量・取消数量・有効残数量・出来有無）と約定代金（USD/円貨概算）を付与\n- 円貨概算は `m_為替` の直近有効レートを一律に適用し、`適用為替レート`・`為替基準日` で明示\n- ページネーション対応 (limit, offset)",
+        "description": "注文一覧照会API\n- 口座番号・銘柄・処理状況・部店・売買区分・預託先・注文種別・受注日による絞り込み\n- 同じ検索条件での集計 `summary`（件数・売買別件数・数量・約定代金 USD/円貨概算）を同梱\n- 各行に数量内訳（出来数量・取消数量・有効残数量・出来有無）と約定代金（USD/円貨概算）を付与\n- 円貨概算は `m_為替` の直近有効レートを一律に適用し、`適用為替レート`・`為替基準日` で明示\n- ページネーション対応 (limit, offset)\n- 預託先（`注文ルート`／`注文ルート名`）は `預託先参照権限` が無い操作者には返さず、`route` の指定も無視する（Phase 62）",
         "operationId": "list_orders_endpoint_orders_get",
         "parameters": [
           {
@@ -756,7 +756,7 @@
           "Orders"
         ],
         "summary": "Create Order Endpoint",
-        "description": "注文受付・DB登録API（確定時）\n\n- 事前検証を通過した注文をDB(d_注文)へ登録 (処理状況=000)\n- VWAP引合番号の自動採番",
+        "description": "注文受付・DB登録API（確定時）\n\n- 事前検証を通過した注文をDB(d_注文)へ登録 (処理状況=000)\n- VWAP引合番号の自動採番\n- 業務エラー（残高不足・売買規制・発注停止中など）は 400。`強制区分=1` で警告に格下げされる項目は受付される\n- `作成者` はセッション／`X-User-Code` の操作者で上書きする（Phase 62）。`受注者` は本文必須",
         "operationId": "create_order_endpoint_orders_post",
         "parameters": [
           {
@@ -817,6 +817,26 @@
               }
             }
           },
+          "400": {
+            "description": "注文検証エラー（残高不足・売買規制・発注停止中・重複注文など。detail は「注文検証エラー: …」）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -836,7 +856,7 @@
           "Orders"
         ],
         "summary": "Export Orders Csv Endpoint",
-        "description": "注文一覧CSV出力API\n- 一覧と同じ検索条件を反映した全件（上限10,000件・注文ID昇順）をUTF-8 BOM付きCSVで出力",
+        "description": "注文一覧CSV出力API\n- 一覧と同じ検索条件を反映した全件（上限10,000件・注文ID昇順）をUTF-8 BOM付きCSVで出力\n- 預託先参照権限が無い操作者には「注文ルート」「預託先」列を出力しない（Phase 62）",
         "operationId": "export_orders_csv_endpoint_orders_export_csv_get",
         "parameters": [
           {
@@ -1730,7 +1750,7 @@
           "Orders"
         ],
         "summary": "Cancel Order Endpoint",
-        "description": "注文取消API\n\n- 未発注注文 (000): 即時取消 (034)\n- 注文中 (003) / 一部出来 (010): 取消依頼受付 (030 未取消) -> ib_cancel_worker へ連携\n- 取消失敗 (131/133): 取消再依頼 (030)\n- 発注失敗 (101/103): 取消済 (034)\n- 全部出来 (011) / 処理中 (002, 031, 033): 取消不可（400エラー）",
+        "description": "注文取消API\n\n- 未発注注文 (000): 即時取消 (034)\n- 注文中 (003) / 一部出来 (010): 取消依頼受付 (030 未取消) -> ib_cancel_worker へ連携\n- 取消失敗 (131/133): 取消再依頼 (030)\n- 発注失敗 (101/103): 取消済 (034)\n- 全部出来 (011) / 処理中 (002, 031, 033): 取消不可（400エラー）\n- 取消者はセッション／`X-User-Code` の操作者で記録する（本文の `取消者` は無視。Phase 62）",
         "operationId": "cancel_order_endpoint_orders__order_id__cancel_post",
         "parameters": [
           {
@@ -1803,6 +1823,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrderCancelResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "取消不可の状態（全部出来・処理中・取消済など）・発注停止中",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "注文が存在しない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2034,7 +2084,7 @@
           "Customers"
         ],
         "summary": "List Customers Endpoint",
-        "description": "m_口座情報から顧客を検索する（1ページ最大50件）。",
+        "description": "m_口座情報から顧客を検索する（limit 1〜200・既定 50）。",
         "operationId": "list_customers_endpoint_customers_get",
         "parameters": [
           {
@@ -2102,6 +2152,20 @@
               "title": "Include Deleted"
             },
             "description": "削除済みデータを含めるか（デフォルト: False）"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
           },
           {
             "name": "offset",
@@ -2280,7 +2344,7 @@
           "Closing"
         ],
         "summary": "Get Closing Status Endpoint",
-        "description": "締め状態照会API",
+        "description": "締め状態照会API。現在の状態に加え、直近の締め・解除履歴（`history`）と最後の操作の更新日時・実行者を返す。",
         "operationId": "get_closing_status_endpoint_closing_status_get",
         "parameters": [
           {
@@ -2294,6 +2358,20 @@
               "title": "Closing Type"
             },
             "description": "締め種別"
+          },
+          {
+            "name": "history_limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 0,
+              "description": "返す状態変更履歴の件数（新しい順。0 で省略。Phase 62）",
+              "default": 3,
+              "title": "History Limit"
+            },
+            "description": "返す状態変更履歴の件数（新しい順。0 で省略。Phase 62）"
           },
           {
             "name": "X-User-Code",
@@ -2362,7 +2440,7 @@
           "Closing"
         ],
         "summary": "Execute Mizuho Closing Endpoint",
-        "description": "みずほ締め実行API（フラグ=1）",
+        "description": "みずほ締め実行API（フラグ=1）。実行者はセッション／`X-User-Code` の操作者で記録する（本文の `実行者` は無視。Phase 62）",
         "operationId": "execute_mizuho_closing_endpoint_closing_mizuho_post",
         "parameters": [
           {
@@ -2548,7 +2626,7 @@
           "Closing"
         ],
         "summary": "Reset Ib Closing Endpoint",
-        "description": "IB 締め解除API（フラグ=0）。解除すると未発注のレギュラー注文（03）は再び保留される。",
+        "description": "IB 締め解除API（フラグ=0）。解除すると未発注のレギュラー注文（03）は再び保留される。実行者は認証情報の操作者。",
         "operationId": "reset_ib_closing_endpoint_closing_ib_reset_post",
         "parameters": [
           {
@@ -2635,7 +2713,7 @@
           "Closing"
         ],
         "summary": "Reset Mizuho Closing Endpoint",
-        "description": "みずほ締め解除API（フラグ=0、朝のバッチ/手動解除）",
+        "description": "みずほ締め解除API（フラグ=0、朝のバッチ/手動解除）。実行者は認証情報の操作者。",
         "operationId": "reset_mizuho_closing_endpoint_closing_mizuho_reset_post",
         "parameters": [
           {
@@ -3923,7 +4001,7 @@
           "MasterCustomers"
         ],
         "summary": "Get Customer History Endpoint",
-        "description": "口座情報の登録・変更履歴取得API（1ページ最大50件・行IDで指定）。\n\n全店参照権限が無い操作者は、自部店の口座のみ参照できる（他店の口座は403）。",
+        "description": "口座情報の登録・変更履歴取得API（limit 1〜200・既定 50・行IDで指定）。\n\n全店参照権限が無い操作者は、自部店の口座のみ参照できる（他店の口座は403）。",
         "operationId": "get_customer_history_endpoint_masters_customers__account_id__history_get",
         "parameters": [
           {
@@ -3934,6 +4012,20 @@
               "type": "integer",
               "title": "Account Id"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
           },
           {
             "name": "offset",
@@ -9292,7 +9384,7 @@
           "MasterBlackoutDates"
         ],
         "summary": "List Blackout Dates Endpoint",
-        "description": "受注不可日マスタ一覧検索API（1ページ50件、範囲指定、受注不可日の降順）",
+        "description": "受注不可日マスタ一覧検索API（limit 1〜200・既定 50、範囲指定、受注不可日の降順）",
         "operationId": "list_blackout_dates_endpoint_masters_blackout_dates_get",
         "parameters": [
           {
@@ -9360,6 +9452,20 @@
               "title": "Include Deleted"
             },
             "description": "削除済みレコードを含めるか（デフォルト: False）"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
           },
           {
             "name": "offset",
@@ -10032,7 +10138,7 @@
           "MasterBlackoutDates"
         ],
         "summary": "Get Blackout Date History Endpoint",
-        "description": "受注不可日マスタ変更履歴照会API（変更差分diff付き・行IDで指定）",
+        "description": "受注不可日マスタ変更履歴照会API（変更差分diff付き・行IDで指定。limit 1〜200・既定 50）",
         "operationId": "get_blackout_date_history_endpoint_masters_blackout_dates__blackout_date_id__history_get",
         "parameters": [
           {
@@ -10043,6 +10149,20 @@
               "type": "integer",
               "title": "Blackout Date Id"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "取得件数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "取得件数"
           },
           {
             "name": "offset",
@@ -15153,10 +15273,10 @@
                   "type": "null"
                 }
               ],
-              "description": "操作区分（CREATE / UPDATE / DELETE / BATCH）",
+              "description": "操作区分（CREATE / UPDATE / DELETE / BATCH / SUSPEND / RESUME / SHOW / HIDE / VWAP_BULK）",
               "title": "Operation"
             },
-            "description": "操作区分（CREATE / UPDATE / DELETE / BATCH）"
+            "description": "操作区分（CREATE / UPDATE / DELETE / BATCH / SUSPEND / RESUME / SHOW / HIDE / VWAP_BULK）"
           },
           {
             "name": "target_types",
@@ -16598,7 +16718,7 @@
           "Executions"
         ],
         "summary": "List Executions Endpoint",
-        "description": "約定一覧照会API\n\n`d_約定` を軸に注文属性・銘柄・顧客名・部店名を結合して返す。\n同じ検索条件での集計（件数・売買別件数・約定数量・約定代金USD・手数料）を\n`summary` に含めるので、件数カードは別途呼び出さなくてよい。\n\n預託先（`route`）はコード値・名称のどちらでも指定でき、`d_注文.注文ルート` に\n混在する両形式のデータを拾う。",
+        "description": "約定一覧照会API\n\n`d_約定` を軸に注文属性・銘柄・顧客名・部店名を結合して返す。\n同じ検索条件での集計（件数・売買別件数・約定数量・約定代金USD・手数料）を\n`summary` に含めるので、件数カードは別途呼び出さなくてよい。\n\n預託先（`route`）はコード値・名称のどちらでも指定でき、`d_注文.注文ルート` に\n混在する両形式のデータを拾う。預託先は `預託先参照権限` が無い操作者には返さず\n（`注文ルート`／`注文ルート名` は null）、`route` の指定も無視する（Phase 62）。\n`status` はカンマ区切りで複数指定できる（例: `032,034`）。",
         "operationId": "list_executions_endpoint_executions_get",
         "parameters": [
           {
@@ -18182,7 +18302,7 @@
           "Batch"
         ],
         "summary": "Morning Batch Run Endpoint",
-        "description": "朝バッチ一括実行 API\n\n- ① 事前バックアップ（DBダンプ取得）\n- ② 為替レート取込 / ③ 銘柄マスタ作成 / ④ 顧客属性作成（基幹受領CSV）\n- ⑤ 日初残高作成（m_残高情報 の 初期残高・残高 を洗い替え）\n- ⑥ 前日未約定IB注文の不出来(020)更新\n- ⑦ みずほコンファメーション照合 & 約定付与\n- 各ステップの実行状態は d_バッチ実行管理 に記録され、失敗時は以降を中断する。\n- 履歴テーブルへは 操作区分='BATCH' で記録される。",
+        "description": "朝バッチ一括実行 API\n\n- ① 事前バックアップ（DBダンプ取得）\n- ② 為替レート取込 / ③ 銘柄マスタ作成 / ④ 顧客属性作成（基幹受領CSV）\n- ⑤ みずほコンファメーション照合 & 約定付与（Phase 61 で日初残高の前へ）\n- ⑥ 日初残高作成（m_残高情報 の 初期残高・残高 を洗い替え）\n- ⑦ 前日未約定IB注文の不出来(020)更新\n- 各ステップの実行状態は d_バッチ実行管理 に記録され、失敗時は以降を中断する。\n- 履歴テーブルへは 操作区分='BATCH' で記録される。",
         "operationId": "morning_batch_run_endpoint_batch_morning_run_post",
         "parameters": [
           {
@@ -19086,7 +19206,7 @@
           "Batch"
         ],
         "summary": "Expire Unfilled Orders Endpoint",
-        "description": "朝バッチ: 前日未約定IB注文一括不出来(020)更新 API\n\n- 対象:\n  - 注文ルート: '1' or 'IB'\n  - VWAP区分: 0 (通常注文)\n  - 処理状況: '000', '002', '003'\n  - 発注範囲: '01', '02', '03' (レギュラーまでの注文)\n  - 約定レコードなし\n  - 受注日 < 指定基準日（またはシステム基準日）\n- 処理内容:\n  - 処理状況を '020' (不出来) に更新\n  - d_注文イベントに 'EXPIRED' イベントを登録",
+        "description": "朝バッチ: 前日未約定IB注文一括不出来(020)更新 API\n\n- 対象:\n  - 注文ルート: '1' or 'IB'\n  - VWAP区分: 0 (通常注文)\n  - 処理状況: '000', '002', '003'\n  - 発注範囲: '02', '03' (レギュラーまでの注文)\n  - 約定レコードなし\n  - 受注日 < 指定基準日（またはシステム基準日）\n- 処理内容:\n  - 処理状況を '020' (不出来) に更新\n  - d_注文イベントに 'EXPIRED' イベントを登録",
         "operationId": "expire_unfilled_orders_endpoint_batch_expire_unfilled_orders_post",
         "parameters": [
           {
@@ -19604,7 +19724,7 @@
           "操作区分": {
             "type": "string",
             "title": "操作区分",
-            "description": "操作区分 (CREATE, UPDATE, DELETE, BATCH)"
+            "description": "操作区分 (CREATE, UPDATE, DELETE, BATCH, SUSPEND, RESUME, SHOW, HIDE, VWAP_BULK)。名称は GET /codes の 操作区分"
           },
           "操作者": {
             "anyOf": [
@@ -21615,6 +21735,18 @@
             "title": "Total",
             "description": "履歴総件数"
           },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "取得件数（Phase 62）",
+            "default": 50
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "取得開始位置",
+            "default": 0
+          },
           "histories": {
             "items": {
               "$ref": "#/components/schemas/BlackoutDateHistoryItem"
@@ -23603,7 +23735,19 @@
           "スプレッド": {
             "type": "number",
             "title": "スプレッド",
-            "description": "仮計算マスタの為替スプレッド。為替手入力時は 0"
+            "description": "為替スプレッド（円/USD）。優遇マスタに口座別の値があればそれ、無ければ仮計算マスタ。為替手入力時は 0"
+          },
+          "スプレッド取得元": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スプレッド取得元",
+            "description": "ハンド入力（手入力レートで 0）／優遇マスタ／仮計算マスタ（Phase 63）"
           },
           "源泉レート": {
             "anyOf": [
@@ -24445,12 +24589,75 @@
               }
             ],
             "title": "実行者",
-            "default": "SYSTEM"
+            "description": "廃止予定。実行者はセッション／X-User-Code の操作者で記録する（送っても無視。Phase 62）"
           }
         },
         "type": "object",
         "title": "ClosingActionRequest",
-        "description": "締め実行/解除リクエスト"
+        "description": "締め実行/解除リクエスト（本文は省略可）"
+      },
+      "ClosingHistoryItem": {
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "基準日": {
+            "type": "string",
+            "title": "基準日"
+          },
+          "締め種別": {
+            "type": "string",
+            "title": "締め種別"
+          },
+          "操作区分": {
+            "type": "string",
+            "title": "操作区分",
+            "description": "CLOSE: 締め / RESET: 解除"
+          },
+          "締め状態": {
+            "type": "integer",
+            "title": "締め状態"
+          },
+          "締め状態名": {
+            "type": "string",
+            "title": "締め状態名"
+          },
+          "実行者": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "実行者"
+          },
+          "操作日時": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "操作日時"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ID",
+          "基準日",
+          "締め種別",
+          "操作区分",
+          "締め状態",
+          "締め状態名"
+        ],
+        "title": "ClosingHistoryItem",
+        "description": "締め・締め解除の履歴 1 件（Phase 62）"
       },
       "ClosingStatusResponse": {
         "properties": {
@@ -24492,6 +24699,14 @@
               }
             ],
             "title": "実行者"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ClosingHistoryItem"
+            },
+            "type": "array",
+            "title": "History",
+            "description": "直近の締め・解除履歴（新しい順。Phase 62）"
           }
         },
         "type": "object",
@@ -25081,6 +25296,18 @@
             "type": "integer",
             "title": "Total",
             "description": "履歴総件数"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "取得件数（Phase 62）",
+            "default": 50
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "取得開始位置",
+            "default": 0
           },
           "histories": {
             "items": {
@@ -28215,6 +28442,18 @@
             "title": "約定代金",
             "description": "約定数量 × 約定単価（USD）"
           },
+          "約定代金_JPY": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "約定代金 Jpy",
+            "description": "円貨概算（約定代金 × 直近の USD 為替レート。為替未登録なら null。Phase 62）"
+          },
           "約定日時": {
             "anyOf": [
               {
@@ -28303,6 +28542,30 @@
             "type": "integer",
             "title": "Offset"
           },
+          "適用為替レート": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "適用為替レート",
+            "description": "円貨概算に使った USD 為替レート（m_為替 の直近有効）"
+          },
+          "為替基準日": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "為替基準日",
+            "description": "適用為替レートの基準日"
+          },
           "summary": {
             "$ref": "#/components/schemas/ExecutionSummary",
             "description": "同じ検索条件での集計"
@@ -28329,11 +28592,9 @@
       "ExecutionScopeEnum": {
         "type": "string",
         "enum": [
-          "01",
           "02",
           "03",
           "04",
-          "05",
           "06"
         ],
         "title": "ExecutionScopeEnum"
@@ -28349,6 +28610,12 @@
             "type": "integer",
             "title": "注文件数",
             "description": "約定が発生した注文の件数（DISTINCT 注文ID）"
+          },
+          "一部出来件数": {
+            "type": "integer",
+            "title": "一部出来件数",
+            "description": "処理状況が 010（一部出来）の注文の件数（Phase 62）",
+            "default": 0
           },
           "売件数": {
             "type": "integer",
@@ -28366,6 +28633,18 @@
             "type": "number",
             "title": "約定代金合計 Usd",
             "description": "約定数量 × 約定単価 の合計（USD）"
+          },
+          "約定代金合計_JPY": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "約定代金合計 Jpy",
+            "description": "円貨概算（USD 合計 × 直近の USD 為替レート。Phase 62）"
           },
           "手数料合計_USD": {
             "type": "number",
@@ -29374,6 +29653,18 @@
             "title": "上限ベイシス円",
             "description": "ベイシス方式の手数料上限（税抜・円）"
           },
+          "スプレッド": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スプレッド",
+            "description": "口座別の為替スプレッド（円/USD）。0 は免除、null は仮計算マスタの値（Phase 63）"
+          },
           "部店コード": {
             "anyOf": [
               {
@@ -29638,6 +29929,20 @@
             ],
             "title": "上限ベイシス円",
             "description": "ベイシス方式の手数料上限（税抜・円）。加算判定の閾値も兼ねる"
+          },
+          "スプレッド": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スプレッド",
+            "description": "口座別の為替スプレッド（円/USD）。0 は為替手数料免除、未設定は仮計算マスタの為替スプレッドを使う（Phase 63）"
           }
         },
         "type": "object",
@@ -29792,6 +30097,20 @@
             "title": "上限ベイシス円",
             "description": "ベイシス方式の手数料上限（税抜・円）"
           },
+          "スプレッド": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スプレッド",
+            "description": "口座別の為替スプレッド（円/USD）。0 は免除（Phase 63）"
+          },
           "更新日時": {
             "anyOf": [
               {
@@ -29919,6 +30238,20 @@
             ],
             "title": "上限ベイシス円",
             "description": "ベイシス方式の手数料上限（税抜・円）"
+          },
+          "スプレッド": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スプレッド",
+            "description": "口座別の為替スプレッド（円/USD）。0 は免除（Phase 63）"
           },
           "更新日時": {
             "anyOf": [
@@ -32675,7 +33008,7 @@
               }
             ],
             "title": "取消者",
-            "default": "user"
+            "description": "廃止予定。取消者はセッション／X-User-Code の操作者で記録する（送っても無視。Phase 62）"
           },
           "理由": {
             "anyOf": [
@@ -34407,6 +34740,184 @@
               }
             ],
             "title": "取消者"
+          },
+          "部店名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "部店名"
+          },
+          "顧客名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "顧客名"
+          },
+          "銘柄名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "銘柄名"
+          },
+          "売買区分名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "売買区分名"
+          },
+          "発注範囲名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "発注範囲名"
+          },
+          "注文ルートコード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文ルートコード",
+            "description": "注文ルートをコード値へ正規化したもの（`注文ルート` は DB の生値）"
+          },
+          "注文ルート名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "注文ルート名"
+          },
+          "処理状況名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "処理状況名"
+          },
+          "表示状況名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "表示状況名"
+          },
+          "出来数量": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "出来数量"
+          },
+          "取消数量": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "取消数量"
+          },
+          "有効残数量": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "有効残数量"
+          },
+          "出来有無": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "出来有無"
+          },
+          "集計対象": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "集計対象"
+          },
+          "約定代金": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "約定代金",
+            "description": "約定数量 × 約定単価 の合計（USD）"
+          },
+          "約定代金_JPY": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "約定代金 Jpy"
           }
         },
         "type": "object",
@@ -34474,10 +34985,18 @@
             "$ref": "#/components/schemas/SettlementCurrencyEnum"
           },
           "証券受渡方法": {
-            "$ref": "#/components/schemas/SecuritiesDeliveryEnum"
+            "$ref": "#/components/schemas/SecuritiesDeliveryEnum",
+            "default": "100"
           },
           "預り売買区分": {
-            "$ref": "#/components/schemas/DepositCategoryEnum"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DepositCategoryEnum"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "取引": {
             "$ref": "#/components/schemas/TransactionTypeEnum"
@@ -34517,14 +35036,9 @@
             "title": "受注時刻"
           },
           "受注者": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
+            "maxLength": 4,
+            "minLength": 1,
             "title": "受注者"
           },
           "メモ": {
@@ -34540,6 +35054,8 @@
           },
           "強制区分": {
             "type": "integer",
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "強制区分",
             "default": 0
           },
@@ -34554,11 +35070,20 @@
             "$ref": "#/components/schemas/ExecutionScopeEnum"
           },
           "作成者": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "作成者"
           },
           "VWAP区分": {
             "type": "integer",
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Vwap区分",
             "default": 0
           }
@@ -34572,8 +35097,6 @@
           "数量",
           "指成区分",
           "決済通貨区分",
-          "証券受渡方法",
-          "預り売買区分",
           "取引",
           "勧誘区分",
           "受注方法",
@@ -34582,8 +35105,8 @@
           "金銭受渡方法",
           "受注日",
           "受注時刻",
-          "発注範囲",
-          "作成者"
+          "受注者",
+          "発注範囲"
         ],
         "title": "OrderRequest",
         "description": "注文受付APIの入力モデル"
@@ -34657,6 +35180,12 @@
             "type": "boolean",
             "title": "Branch All",
             "description": "全店参照権限（false の場合、照会は自部店のデータのみに限定される）"
+          },
+          "depositary": {
+            "type": "boolean",
+            "title": "Depositary",
+            "description": "預託先参照権限（false の場合、約定・注文の一覧と CSV に預託先（注文ルート）を返さず、route の指定は無視される。Phase 62）",
+            "default": false
           }
         },
         "type": "object",
@@ -34842,6 +35371,11 @@
             "title": "全店参照権限",
             "default": 0
           },
+          "預託先参照権限": {
+            "type": "integer",
+            "title": "預託先参照権限",
+            "default": 0
+          },
           "権限": {
             "$ref": "#/components/schemas/PermissionFlags"
           },
@@ -34936,6 +35470,20 @@
             ],
             "title": "全店参照権限",
             "description": "未指定時は現在値を維持（既存クライアントとの互換のため任意）"
+          },
+          "預託先参照権限": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "預託先参照権限",
+            "description": "未指定時は現在値を維持（Phase 62）"
           },
           "説明": {
             "anyOf": [
@@ -37508,6 +38056,83 @@
             "type": "array",
             "title": "Duplicate Orders",
             "default": []
+          },
+          "nisa_trade_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa Trade Year"
+          },
+          "nisa_limit_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa Limit Amount"
+          },
+          "nisa_used_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa Used Amount"
+          },
+          "nisa_available_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa Available Amount"
+          },
+          "nisa_estimated_usage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa Estimated Usage"
+          },
+          "deposit_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Category"
+          },
+          "deposit_category_derived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Category Derived"
           }
         },
         "type": "object",
@@ -37777,6 +38402,18 @@
       },
       "app__api__order_models__CustomerListResponse": {
         "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "取得件数（Phase 62）",
+            "default": 50
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "取得開始位置",
+            "default": 0
+          },
           "total": {
             "type": "integer",
             "title": "Total"

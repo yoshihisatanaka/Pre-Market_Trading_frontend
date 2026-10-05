@@ -10,6 +10,7 @@ import { blackoutDates, canceledBlackoutDates } from '../mocks/fixtures/blackout
 import { canceledMarketHolidays, marketHolidays } from '../mocks/fixtures/marketHolidays'
 import { sliceCriteriaSetting } from '../mocks/fixtures/sliceCriteria'
 import { canceledFxRates, fxRates } from '../mocks/fixtures/fxRates'
+import { calculationSetting } from '../mocks/fixtures/calculationSettings'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../mocks/fixtures/activityLogTargets'
 import { rolePermissions } from '../mocks/fixtures/permissions'
@@ -86,6 +87,7 @@ import {
   updateFxRate,
   validateFxRate,
 } from './fxRates'
+import { fetchCalculationSettings, updateCalculationSettings } from './calculationSettings'
 import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
 import { fetchStalledOrders, importConfirmationCsv } from './stalledOrders'
 import { fetchPermissions, updateRolePermission } from './permissions'
@@ -323,6 +325,7 @@ const FIXTURES = [
   },
   { name: 'sliceCriteria', schema: 'SliceSettingResponse', rows: [sliceCriteriaSetting] },
   { name: 'fxRates', schema: 'FxItem', rows: [...fxRates, ...canceledFxRates] },
+  { name: 'calculationSettings', schema: 'CalculationSettingItem', rows: [calculationSetting] },
   { name: 'activityLogs', schema: 'ActivityLogItem', rows: activityLogs },
   { name: 'activityLogTargets', schema: 'ActivityLogTargetItem', rows: activityLogTargets },
   { name: 'permissions', schema: 'RolePermissionItem', rows: rolePermissions },
@@ -685,6 +688,18 @@ const PROBES = [
     name: 'updateFxRate',
     run: () =>
       updateFxRate({ id: '1', baseDate: '2026-07-25', currencyCode: 'USD', rate: 1, updatedAt: '' }),
+  },
+  { name: 'fetchCalculationSettings', run: () => fetchCalculationSettings() },
+  {
+    name: 'updateCalculationSettings',
+    run: () =>
+      updateCalculationSettings({
+        exchangeTaxRate: 0.0001,
+        localCommissionBp: 1,
+        fxSpread: 1,
+        nisaFxMarkupRate: 1,
+        updatedAt: '',
+      }),
   },
   {
     name: 'fetchActivityLogs',

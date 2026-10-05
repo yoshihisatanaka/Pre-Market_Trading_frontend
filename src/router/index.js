@@ -162,6 +162,12 @@ const routes = [
     meta: { title: '為替マスタ', requiredPermission: 'master' },
   },
   {
+    path: '/masters/provisional-calculation',
+    name: 'calculation-settings-master',
+    component: () => import('@/views/CalculationSettingsMasterView.vue'),
+    meta: { title: '仮計算マスタ', requiredPermission: 'master' },
+  },
+  {
     path: '/masters/hard-limits',
     name: 'slice-criteria-master',
     component: () => import('@/views/SliceCriteriaMasterView.vue'),

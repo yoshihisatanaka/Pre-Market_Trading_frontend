@@ -11,10 +11,12 @@ import { codeEntries } from '@/mocks/fixtures/codes'
 import { ACTIVITY_LOGS_PAGE_SIZE } from '@/stores/activityLogs'
 import { useCodesStore } from '@/stores/codes'
 import {
-  ACTIVITY_OPERATION_OPTIONS,
+  ACTIVITY_CATEGORY_OPTIONS,
+  OPERATION_TARGET_TYPES,
+  categoryBadgeVariant,
+  categoryLabel,
+  categoryOf,
   formatActivityAt,
-  operationBadgeVariant,
-  operationLabel,
 } from '@/utils/activityLogTypes'
 import ActivityLogListView from './ActivityLogListView.vue'
 
@@ -40,6 +42,12 @@ const PLACEHOLDER = '-- 全て --'
 const EMPTY = '—'
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
+/** 区分 → フィクスチャの対象種別コード（運用管理は固定の 2 種、マスタ更新はそれ以外） */
+const targetTypesOf = (category) =>
+  activityLogTargets
+    .map((raw) => raw.対象種別)
+    .filter((code) => OPERATION_TARGET_TYPES.includes(code) === (category === 'operation'))
+
 const idOf = (row) => `${row.対象種別}:${row.履歴ID}`
 const dateOf = (row) => row.操作日時.slice(0, 10)
 
@@ -47,13 +55,13 @@ const dateOf = (row) => row.操作日時.slice(0, 10)
  * モックと同じ意味の絞り込み（期待値をフィクスチャから導くため）。
  * 期間は両端を含み、操作者・操作区分・対象種別は完全一致、対象キーは部分一致。
  */
-function matches(row, { dateFrom, dateTo, operator, operation, targetType, targetKey }) {
+function matches(row, { dateFrom, dateTo, operator, operation, targetTypes, targetKey }) {
   return (
     (!dateFrom || dateOf(row) >= dateFrom) &&
     (!dateTo || dateOf(row) <= dateTo) &&
     (!operator || row.操作者 === operator) &&
     (!operation || row.操作区分 === operation) &&
-    (!targetType || row.対象種別 === targetType) &&
+    (!targetTypes?.length || targetTypes.includes(row.対象種別)) &&
     (!targetKey || (row.対象キー ?? '').includes(targetKey))
   )
 }
@@ -99,8 +107,10 @@ async function mountView({ query = {} } = {}) {
 /**
  * 操作 → router.push → queryKey の watch → 再取得 → 再描画 までを待つ。
  * 1 回目でナビゲーションが確定して再取得が始まり、2 回目で応答が反映される。
+ * 区分で絞るときは対象種別の取得を待ってから一覧を読むので、もう 1 回ぶん待つ。
  */
 async function settle() {
+  await flushPromises()
   await flushPromises()
   await flushPromises()
 }
@@ -151,9 +161,13 @@ describe('ActivityLogListView', () => {
 
     const cells = cellsOf(rows(wrapper)[0]).map((cell) => cell.text())
     expect(cells[0]).toBe(formatActivityAt(head.操作日時))
-    expect(cells[1]).toBe(head.対象種別名)
-    expect(cells[2]).toBe(operationLabel(head.操作区分))
-    expect(cells[3]).toBe(head.操作者)
+    expect(cells[1]).toBe(categoryLabel(categoryOf(head.対象種別)))
+    // 操作者は氏名と、実行者区分・コードの 2 段
+    expect(cells[2]).toContain(head.操作者名)
+    expect(cells[2]).toContain(`${head.実行者区分}・${head.操作者}`)
+    // 対象機能・操作は対象機能名と操作内容（サーバの表示文）の 2 段
+    expect(cells[3]).toContain(head.対象機能)
+    expect(cells[3]).toContain(head.操作内容)
     expect(cells[4]).toBe(head.対象キー)
     expect(cells[5]).toBe(head.変更項目.join('、'))
   })
@@ -164,16 +178,16 @@ describe('ActivityLogListView', () => {
 
     expect(find(wrapper, 'activity-logs-table').findAll('th').map((th) => th.text())).toEqual([
       '操作日時',
-      '対象種別',
       '操作区分',
       '操作者',
+      '対象機能・操作',
       '対象キー',
       '変更項目',
       '',
     ])
   })
 
-  it('[ALV-04] 対象キーと操作者を持たない行は — を出す', async () => {
+  it('[ALV-04] 対象キーと操作者コードを持たない行は、対象キーが — で操作者がサーバの氏名だけになる', async () => {
     const index = firstPage.findIndex((row) => row.対象キー === null && row.操作者 === null)
     // フィクスチャにその行が無いと、このシナリオは意味を失う
     expect(index).toBeGreaterThanOrEqual(0)
@@ -182,28 +196,27 @@ describe('ActivityLogListView', () => {
     await settle()
 
     const cells = cellsOf(rows(wrapper)[index])
-    expect(cells[3].text()).toBe(EMPTY)
+    // 操作者コードが無い行は、サーバが 操作者名 に入れる「システム」だけを出す（2 段目は無い）
+    expect(cells[2].text()).toBe(firstPage[index].操作者名)
     expect(cells[4].text()).toBe(EMPTY)
   })
 
-  it('[ALV-05] 操作区分は表示名のバッジで、区分ごとの色で出る', async () => {
+  it('[ALV-05] 操作区分は対象種別から導いた区分のバッジで、区分ごとの色で出る', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     const seen = new Set()
     rows(wrapper).forEach((row, index) => {
-      const operation = firstPage[index].操作区分
-      const badge = cellsOf(row)[2].find('[data-variant]')
-      expect(badge.text()).toBe(operationLabel(operation))
-      expect(badge.attributes('data-variant')).toBe(operationBadgeVariant(operation))
-      seen.add(operation)
+      const category = categoryOf(firstPage[index].対象種別)
+      const badge = cellsOf(row)[1].find('[data-variant]')
+      expect(badge.text()).toBe(categoryLabel(category))
+      expect(badge.attributes('data-variant')).toBe(categoryBadgeVariant(category))
+      seen.add(category)
     })
-    // 1 ページ目に全区分が出ていないと、色の出し分けを確かめたことにならない
-    expect([...seen].sort()).toEqual(ACTIVITY_OPERATION_OPTIONS.map(({ value }) => value).sort())
-    expect(operationBadgeVariant('CREATE')).toBe('success')
-    expect(operationBadgeVariant('UPDATE')).toBe('info')
-    expect(operationBadgeVariant('DELETE')).toBe('warning')
-    expect(operationBadgeVariant('BATCH')).toBe('gray')
+    // 1 ページ目に両方の区分が出ていないと、色の出し分けを確かめたことにならない
+    expect([...seen].sort()).toEqual(ACTIVITY_CATEGORY_OPTIONS.map(({ value }) => value).sort())
+    expect(categoryBadgeVariant('master')).toBe('success')
+    expect(categoryBadgeVariant('operation')).toBe('gray')
   })
 
   it('[ALV-06] 0 件のときは空状態を出し、表は描画しない', async () => {
@@ -256,7 +269,7 @@ describe('ActivityLogListView', () => {
       dateTo: dateOf(head),
       operator: head.操作者,
       operation: head.操作区分,
-      targetType: head.対象種別,
+      targetTypes: [head.対象種別],
       targetKey: head.対象キー.slice(0, 2),
     }
     const expected = activityLogs.filter((row) => matches(row, conditions))
@@ -269,7 +282,7 @@ describe('ActivityLogListView', () => {
     await find(wrapper, 'activity-logs-date-to').setValue(conditions.dateTo)
     await find(wrapper, 'activity-logs-operator').setValue(conditions.operator)
     await find(wrapper, 'activity-logs-operation').setValue(conditions.operation)
-    await find(wrapper, 'activity-logs-target-type').setValue(conditions.targetType)
+    await find(wrapper, 'activity-logs-target-type').setValue(head.対象種別)
     await find(wrapper, 'activity-logs-target-key').setValue(conditions.targetKey)
     await find(wrapper, 'activity-logs-search').trigger('submit')
     await settle()
@@ -280,7 +293,7 @@ describe('ActivityLogListView', () => {
       end_date: conditions.dateTo,
       operator: conditions.operator,
       operation: conditions.operation,
-      target_types: conditions.targetType,
+      target_types: head.対象種別,
       target_key: conditions.targetKey,
     })
     expect(shownIds(wrapper)).toEqual(expected.map(idOf))
@@ -308,7 +321,7 @@ describe('ActivityLogListView', () => {
       dateTo: dateOf(head),
       operator: sample.操作者,
       operation: sample.操作区分,
-      targetType: sample.対象種別,
+      targetTypes: [sample.対象種別],
       // 水増しの行（口座番号 12301xx）にも当たる長さの部分一致にする
       targetKey: sample.対象キー.slice(0, 4),
     }
@@ -320,8 +333,9 @@ describe('ActivityLogListView', () => {
         start_date: conditions.dateFrom,
         end_date: conditions.dateTo,
         operator: conditions.operator,
+        category: 'master',
         operation: conditions.operation,
-        target_types: conditions.targetType,
+        target_types: sample.対象種別,
         target_key: conditions.targetKey,
         sort: 'asc',
       },
@@ -331,8 +345,9 @@ describe('ActivityLogListView', () => {
     expect(find(wrapper, 'activity-logs-date-from').element.value).toBe(conditions.dateFrom)
     expect(find(wrapper, 'activity-logs-date-to').element.value).toBe(conditions.dateTo)
     expect(find(wrapper, 'activity-logs-operator').element.value).toBe(conditions.operator)
+    expect(find(wrapper, 'activity-logs-category').element.value).toBe('master')
     expect(find(wrapper, 'activity-logs-operation').element.value).toBe(conditions.operation)
-    expect(find(wrapper, 'activity-logs-target-type').element.value).toBe(conditions.targetType)
+    expect(find(wrapper, 'activity-logs-target-type').element.value).toBe(sample.対象種別)
     expect(find(wrapper, 'activity-logs-target-key').element.value).toBe(conditions.targetKey)
     expect(sortButton(wrapper, 'asc').attributes('aria-pressed')).toBe('true')
     expect(countText(wrapper)).toContain(String(expected.length))
@@ -340,11 +355,14 @@ describe('ActivityLogListView', () => {
     expect(shownIds(wrapper)).toEqual(expected.slice(0, PAGE_SIZE).map(idOf))
   })
 
-  it('[ALV-13] 選択肢に無い操作区分と並び順は空に落ちる', async () => {
-    const { wrapper } = await mountView({ query: { operation: 'PURGE', sort: 'desc' } })
+  it('[ALV-13] 選択肢に無い操作内容・区分・並び順は空に落ちる', async () => {
+    const { wrapper } = await mountView({
+      query: { operation: 'PURGE', category: 'business', sort: 'desc' },
+    })
     await settle()
 
     expect(find(wrapper, 'activity-logs-operation').element.value).toBe('')
+    expect(find(wrapper, 'activity-logs-category').element.value).toBe('')
     expect(sortButton(wrapper, '').attributes('aria-pressed')).toBe('true')
     expect(sortButton(wrapper, 'asc').attributes('aria-pressed')).toBe('false')
     // 条件なし・既定の並び（新しい順）の全件
@@ -352,7 +370,7 @@ describe('ActivityLogListView', () => {
     expect(shownIds(wrapper)).toEqual(firstPage.map(idOf))
   })
 
-  it('[ALV-14] 対象種別の選択肢は API から、操作区分はコードマスタ 操作区分 から来る', async () => {
+  it('[ALV-14] 対象機能の選択肢は API から、操作内容はコードマスタ 操作区分、操作区分は固定の 2 種', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -364,9 +382,14 @@ describe('ActivityLogListView', () => {
       { value: '', label: PLACEHOLDER },
       ...codeEntries('操作区分').map(({ code, label }) => ({ value: code, label })),
     ])
+    // 業務操作は実 API に無いので、マスタ更新 / 運用管理 の 2 つだけ
+    expect(optionsOf(wrapper, 'activity-logs-category')).toEqual([
+      { value: '', label: PLACEHOLDER },
+      ...ACTIVITY_CATEGORY_OPTIONS,
+    ])
   })
 
-  it('[ALV-15] 対象種別を取得できなくても欄の下に理由を出し、検索はできる', async () => {
+  it('[ALV-15] 対象機能を取得できなくても欄の下に理由を出し、検索はできる', async () => {
     server.use(errorHandler(TARGETS_PATH))
     const { wrapper, router } = await mountView()
     await settle()
@@ -376,7 +399,7 @@ describe('ActivityLogListView', () => {
     const describedBy = select.attributes('aria-describedby')
     expect(describedBy).toBeTruthy()
     expect(wrapper.find(`[id="${describedBy}"]`).text()).toBe(
-      `対象種別を取得できませんでした（${ERROR_MESSAGE}）`,
+      `対象機能を取得できませんでした（${ERROR_MESSAGE}）`,
     )
     expect(optionsOf(wrapper, 'activity-logs-target-type')).toEqual([
       { value: '', label: PLACEHOLDER },
@@ -424,14 +447,15 @@ describe('ActivityLogListView', () => {
     expect(shownIds(wrapper)[0]).toBe(idOf(oldest))
   })
 
-  it('[ALV-18] 説明バナーと検索カードは 4 状態のいずれでも表示される', async () => {
+  it('[ALV-18] 検索カードは 4 状態のいずれでも表示される', async () => {
     for (const handler of [null, emptyHandler(), errorHandler(LIST_PATH)]) {
       if (handler) server.use(handler)
       const { wrapper } = await mountView()
       await settle()
 
-      expect(exists(wrapper, 'activity-logs-description')).toBe(true)
       expect(exists(wrapper, 'activity-logs-search')).toBe(true)
+      // 画面モックに無い説明の帯は出さない
+      expect(exists(wrapper, 'activity-logs-description')).toBe(false)
     }
   })
 
@@ -445,5 +469,71 @@ describe('ActivityLogListView', () => {
       expect(buttons).toHaveLength(1)
       expect(buttons[0].text()).toBe('詳細')
     }
+  })
+
+  it('[ALV-20] 操作区分で検索すると URL に category が乗り、その区分の対象種別だけに絞られる', async () => {
+    const { wrapper, router } = await mountView()
+    await settle()
+
+    for (const category of ['operation', 'master']) {
+      const targetTypes = targetTypesOf(category)
+      const expected = activityLogs.filter((row) => matches(row, { targetTypes }))
+      expect(expected.length).toBeGreaterThan(0)
+      expect(expected.length).toBeLessThan(TOTAL)
+
+      await find(wrapper, 'activity-logs-category').setValue(category)
+      await find(wrapper, 'activity-logs-search').trigger('submit')
+      await settle()
+
+      // 実 API に区分は無いので、URL には画面の言葉（category）だけが乗り、対象種別には展開しない
+      expect(router.currentRoute.value.query).toEqual({ category })
+      expect(countText(wrapper)).toContain(String(expected.length))
+      expect(shownIds(wrapper)).toEqual(expected.slice(0, PAGE_SIZE).map(idOf))
+      for (const row of rows(wrapper)) {
+        expect(cellsOf(row)[1].text()).toBe(categoryLabel(category))
+      }
+    }
+  })
+
+  it('[ALV-21] 操作区分を選ぶと対象機能の選択肢がその区分に絞られ、外れた対象機能は選択が消える', async () => {
+    const operationType = OPERATION_TARGET_TYPES[0]
+    const masterType = targetTypesOf('master')[0]
+    const { wrapper } = await mountView()
+    await settle()
+
+    await find(wrapper, 'activity-logs-target-type').setValue(masterType)
+    await find(wrapper, 'activity-logs-category').setValue('operation')
+
+    // 運用管理の対象種別だけが並び、マスタの対象機能は選択が外れる
+    expect(optionsOf(wrapper, 'activity-logs-target-type').map(({ value }) => value)).toEqual([
+      '',
+      ...targetTypesOf('operation'),
+    ])
+    expect(find(wrapper, 'activity-logs-target-type').element.value).toBe('')
+
+    // 同じ区分の対象機能は残る
+    await find(wrapper, 'activity-logs-target-type').setValue(operationType)
+    await find(wrapper, 'activity-logs-category').setValue('operation')
+    expect(find(wrapper, 'activity-logs-target-type').element.value).toBe(operationType)
+
+    // 区分を「全て」に戻すと対象機能の選択肢も全部に戻る
+    await find(wrapper, 'activity-logs-category').setValue('')
+    expect(optionsOf(wrapper, 'activity-logs-target-type')).toHaveLength(
+      activityLogTargets.length + 1,
+    )
+  })
+
+  it('[ALV-22] 区分と対象機能の両方があるときは対象機能で絞る', async () => {
+    const targetType = targetTypesOf('master')[0]
+    const expected = activityLogs.filter((row) => row.対象種別 === targetType)
+    expect(expected.length).toBeGreaterThan(0)
+
+    const { wrapper } = await mountView({
+      query: { category: 'master', target_types: targetType },
+    })
+    await settle()
+
+    expect(countText(wrapper)).toContain(String(expected.length))
+    expect(shownIds(wrapper)).toEqual(expected.slice(0, PAGE_SIZE).map(idOf))
   })
 })

@@ -7,12 +7,13 @@ import { activityLogTargets } from './activityLogTargets'
  *
  * 各行の末尾 5 項目（操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果）は画面モックが出していた項目で、
  * **契約提案**としてここに書いた（docs/api/requests.md #1）。うち 4 項目は 2026-09-30 の取り込みで
- * 仕様に入り、**仕様に無いのは 結果 だけ**になった。src/api/activityLogs.js はまだどれも読まない
- * （画面にも出さない）。契約テスト（src/api/contract.spec.js）は KNOWN_GAPS で 結果 だけを
- * 許しているので、仕様に入った日に CON-07 が落ちて気づける。
+ * 仕様に入り（src/api/activityLogs.js が読む）、**仕様に無いのは 結果 だけ**になった。
+ * 契約テスト（src/api/contract.spec.js）は KNOWN_GAPS で 結果 だけを許しているので、
+ * 仕様に入った日に CON-07 が落ちて気づける。
  *
  * ページャーの動作確認には 1 ページ（50 件）を超えるデータが要るので、
- * 対象種別・操作区分を一通り含む 16 件に、古い日付の顧客マスタ更新を 40 件足して 56 件にしてある。
+ * 対象種別・操作区分を一通り含む 21 件に、古い日付の顧客マスタ更新を 40 件足して 61 件にしてある。
+ * 運用管理（発注停止 / お知らせ）の行は画面の「操作区分」の絞り込みとバッジの色分けの確認用。
  *
  * ブラウザ(MSW worker)・単体テスト・E2E で共用する。
  */
@@ -25,13 +26,24 @@ const OPERATORS = {
   '005': { name: '高橋 管理', role: '管理者' },
   '006': { name: '伊藤 責任者', role: '管理責任者' },
 }
-const SYSTEM_OPERATOR = { name: 'システム', role: 'システム' }
+// 操作者がマスタに無い行。実 API は 操作者名 を「システム」、実行者区分 を null で返す（2026-10-05 実測）
+const SYSTEM_OPERATOR = { name: 'システム', role: null }
 
-/** 契約提案の操作内容の動詞 */
-const OPERATION_VERBS = { CREATE: '登録', UPDATE: '更新', DELETE: '削除', BATCH: '一括取込' }
+/** 操作内容の動詞（実 API の 操作内容 は「<対象機能>を<動詞>」。動詞は /codes の 操作区分 の名称） */
+const OPERATION_VERBS = {
+  CREATE: '登録',
+  UPDATE: '更新',
+  DELETE: '削除',
+  BATCH: '一括処理',
+  SUSPEND: '停止',
+  RESUME: '再開',
+  SHOW: '表示',
+  HIDE: '非表示',
+  VWAP_BULK: 'VWAP対象一括更新',
+}
 
 /**
- * 対象種別・操作区分を一通り含む 16 件。操作日時の降順。
+ * 対象種別・操作区分を一通り含む 21 件。操作日時の降順。
  * before / after は変更前後のレコード（登録は before が、削除は after が無い）。
  */
 const BASE_ROWS = [
@@ -56,6 +68,17 @@ const BASE_ROWS = [
     after: { 口座番号: '1230001', 顧客名: '山本 健一', 取引制限区分: '1' },
   },
   {
+    // 運用管理（発注停止の再開）。画面の「操作区分」で 運用管理 を選ぶと残る行
+    type: 'order-suspensions',
+    targetId: '1',
+    targetKey: 'ALL',
+    operation: 'RESUME',
+    operator: '006',
+    at: '2026-09-16T09:50:00',
+    before: { 停止対象: 'ALL', 発注停止フラグ: 1, 停止理由: 'IB 接続障害' },
+    after: { 停止対象: 'ALL', 発注停止フラグ: 0, 停止理由: 'IB 接続障害' },
+  },
+  {
     type: 'fx',
     targetId: '2026-09-16',
     targetKey: '2026-09-16',
@@ -64,6 +87,36 @@ const BASE_ROWS = [
     at: '2026-09-16T09:05:00',
     before: { 適用日: '2026-09-16', 為替レート: 147.85 },
     after: { 適用日: '2026-09-16', 為替レート: 148.2 },
+  },
+  {
+    type: 'order-suspensions',
+    targetId: '1',
+    targetKey: 'ALL',
+    operation: 'SUSPEND',
+    operator: '006',
+    at: '2026-09-16T08:30:00',
+    before: { 停止対象: 'ALL', 発注停止フラグ: 0, 停止理由: null },
+    after: { 停止対象: 'ALL', 発注停止フラグ: 1, 停止理由: 'IB 接続障害' },
+  },
+  {
+    type: 'announcements',
+    targetId: '1',
+    targetKey: '1',
+    operation: 'HIDE',
+    operator: '005',
+    at: '2026-09-16T07:00:00',
+    before: { ID: 1, 表示フラグ: 1, 本文: '9月15日 06:00〜07:00 に計画メンテナンスを行います。' },
+    after: { ID: 1, 表示フラグ: 0, 本文: '9月15日 06:00〜07:00 に計画メンテナンスを行います。' },
+  },
+  {
+    type: 'announcements',
+    targetId: '1',
+    targetKey: '1',
+    operation: 'SHOW',
+    operator: '005',
+    at: '2026-09-15T18:00:00',
+    before: { ID: 1, 表示フラグ: 0, 本文: '' },
+    after: { ID: 1, 表示フラグ: 1, 本文: '9月15日 06:00〜07:00 に計画メンテナンスを行います。' },
   },
   {
     type: 'balance_adjustments',
@@ -94,6 +147,17 @@ const BASE_ROWS = [
     at: '2026-09-15T11:00:00',
     before: null,
     after: { 銘柄コード: 'PLTR', 銘柄名: 'パランティア', 規制区分: '0', 発注経路: '1' },
+  },
+  {
+    // VWAP 対象の一括更新。1 件のレコードに紐づかないので対象ID / 対象キーを持たない
+    type: 'symbols',
+    targetId: null,
+    targetKey: null,
+    operation: 'VWAP_BULK',
+    operator: '005',
+    at: '2026-09-15T09:00:00',
+    before: { VWAP対象区分: '0' },
+    after: { VWAP対象区分: '1' },
   },
   {
     type: 'customers',

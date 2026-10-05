@@ -10,11 +10,10 @@ import { apiClient } from './client'
  * 実 API の操作ログは「各マスタの履歴テーブルを UNION ALL で横断したもの」で、1 行が 1 回の
  * 登録・更新・削除・一括処理にあたる。変更前後のレコード JSON と項目別の差分を持つ。
  *
- * 画面モック（https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）にある
- * 操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果 は、ここではまだ扱わない。
- * 結果 以外の 4 項目は 2026-09-30 の取り込みで ActivityLogItem に入ったので、画面に出すときは
- * ここの変換に足す。結果 はバックエンドに依頼中（docs/api/requests.md #1）で、提案する形は
- * src/mocks/fixtures/activityLogs.js に書いてある。
+ * 画面モック（https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）にあった
+ * 操作者名 / 実行者区分 / 対象機能 / 操作内容 は 2026-09-30 の取り込みで ActivityLogItem に入り、
+ * ここで読む。結果 だけは仕様に無い（バックエンドの回答は「追加しない」。履歴は成功した変更しか
+ * 残さないため。docs/api/requests.md #1）。
  */
 
 /**
@@ -41,8 +40,12 @@ import { apiClient } from './client'
  * @property {string} targetTypeName 対象種別名
  * @property {string} targetId 各マスタの個別履歴 API に渡すキー。無い行は空文字
  * @property {string} targetKey 対象レコードの識別キー（画面表示用）。無い行は空文字
- * @property {string} operation 操作区分（CREATE / UPDATE / DELETE / BATCH）
+ * @property {string} operation 操作区分（CREATE / UPDATE / DELETE / BATCH / SUSPEND / RESUME / SHOW / HIDE / VWAP_BULK）
+ * @property {string} operationText 操作内容の表示文（「銘柄情報を更新」など）。無い行は空文字
  * @property {string} operator 操作者コード。一括処理など、持たない行は空文字
+ * @property {string} operatorName 操作者の氏名。操作者がマスタに無い行は「システム」（サーバの既定）
+ * @property {string} operatorRole 実行者区分（操作者のロール名）。解決できない行は空文字
+ * @property {string} feature 対象機能名（対象種別名と同じ）。無い行は空文字
  * @property {string} at 操作日時（ISO8601）。整形は utils/activityLogTypes.js の formatActivityAt
  * @property {Record<string, *>|null} before 変更前のレコード。登録の行では null
  * @property {Record<string, *>|null} after 変更後のレコード。削除の行では null
@@ -51,7 +54,7 @@ import { apiClient } from './client'
  */
 
 /**
- * 操作ログの対象種別を取得する（検索の「対象種別」プルダウン用）。
+ * 操作ログの対象種別を取得する（検索の「対象機能」プルダウン用）。
  *
  * @returns {Promise<ActivityLogTarget[]>} 仕様の並びのまま
  */
@@ -79,8 +82,9 @@ function toActivityLogTarget(raw) {
  * @param {string} [params.dateFrom] 期間（From）。YYYY-MM-DD
  * @param {string} [params.dateTo] 期間（To）。YYYY-MM-DD
  * @param {string} [params.operator] 操作者コード（完全一致）
- * @param {string} [params.operation] 操作区分（CREATE / UPDATE / DELETE / BATCH）
- * @param {string} [params.targetType] 対象種別コード。画面は 1 つだけ選ぶ
+ * @param {string} [params.operation] 操作区分（CREATE / UPDATE / DELETE / BATCH / SUSPEND / RESUME / SHOW / HIDE / VWAP_BULK）
+ * @param {string[]} [params.targetTypes] 対象種別コードの並び。画面の 区分 / 対象機能 を展開したもの
+ *   （utils/activityLogTypes.js の targetTypesFor）。空なら全対象種別を横断する
  * @param {string} [params.targetKey] 対象キー（部分一致）
  * @param {string} [params.sort] 操作日時の並び順（asc / desc）。空なら送らず、実 API の既定（desc）に任せる
  * @returns {Promise<{ items: ActivityLog[], total: number }>}
@@ -92,7 +96,7 @@ export async function fetchActivityLogs({
   dateTo = '',
   operator = '',
   operation = '',
-  targetType = '',
+  targetTypes = [],
   targetKey = '',
   sort = '',
 } = {}) {
@@ -105,8 +109,8 @@ export async function fetchActivityLogs({
       end_date: dateTo || undefined,
       operator: operator || undefined,
       operation: operation || undefined,
-      // 仕様はカンマ区切りで複数を受けるが、画面の選択は 1 つなのでそのまま載せる
-      target_types: targetType || undefined,
+      // 仕様はカンマ区切りで複数を受ける
+      target_types: targetTypes.length > 0 ? targetTypes.join(',') : undefined,
       target_key: targetKey || undefined,
       sort: sort || undefined,
     },
@@ -132,7 +136,11 @@ function toActivityLog(raw) {
     targetId: raw?.対象ID ?? '',
     targetKey: raw?.対象キー ?? '',
     operation: raw?.操作区分 ?? '',
+    operationText: raw?.操作内容 ?? '',
     operator: raw?.操作者 ?? '',
+    operatorName: raw?.操作者名 ?? '',
+    operatorRole: raw?.実行者区分 ?? '',
+    feature: raw?.対象機能 ?? '',
     at: raw?.操作日時 ?? '',
     // レコードは「無い」（登録前・削除後）と「空」が別物なので null を潰さない
     before: raw?.変更前データ ?? null,

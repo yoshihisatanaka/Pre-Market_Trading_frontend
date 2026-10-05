@@ -694,7 +694,7 @@ const PROBES = [
         dateTo: '2026-12-31',
         operator: '001',
         operation: 'UPDATE',
-        targetType: 'customers',
+        targetTypes: ['customers'],
         targetKey: 'x',
         sort: 'asc',
       }),

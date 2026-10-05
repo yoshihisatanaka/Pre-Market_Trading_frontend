@@ -101,9 +101,9 @@ test.describe('アクセス制御（実 API 接続）', () => {
   test('[ACR-02] 権限の要るルートが /auth/me の権限フラグどおりに開ける / 権限なしの画面に回される', async ({
     page,
   }) => {
-    test.slow() // 15 画面を読み込み直す
+    test.slow() // 16 画面を読み込み直す
     // 再掲した区分がメニュー定義から外れていない（改名・移動に気づくため）
-    expect(GUARDED_ROUTES.filter((route) => route.permission === 'master')).toHaveLength(9)
+    expect(GUARDED_ROUTES.filter((route) => route.permission === 'master')).toHaveLength(10)
     expect(GUARDED_ROUTES.filter((route) => route.permission === 'operation')).toHaveLength(4)
 
     const { body } = await openAndCaptureMe(page, '/')

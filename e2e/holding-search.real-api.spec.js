@@ -135,6 +135,8 @@ const HOLDINGS_LIST_KEY = 'holdings'
  */
 const DEPOSIT_QUERY_FOR = { 1: '0', 0: '1', 6: '6' }
 const GROWTH_DEPOSIT = '6'
+/** 注文の預り区分の値 → ラベル（src/utils/orderEntryOptions.js の DEPOSIT_CATEGORY_OPTIONS） */
+const DEPOSIT_LABELS = { 0: '特定', 1: '一般', 6: '成長投資枠' }
 
 /** 照会結果のヒントの文言（src/views/OrderEntryView.vue の customerHint / symbolHint） */
 const HINT_NOT_FOUND = { customer: '該当なし', symbol: '銘柄なし' }
@@ -223,9 +225,17 @@ async function expectOrderEntryPrefilled(page, api, expected) {
       .getByTestId('order-entry-side')
       .getByRole('button', { name: expected.side === 'buy' ? '買い' : '売り', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true')
+  // 預り売買区分はセグメント（button の aria-pressed）なので、押されているラベルで比べる
   const deposit = page.getByTestId('order-entry-deposit-category')
-  if (expected.deposit) await expect(deposit).toHaveValue(expected.deposit)
-  else await expect(deposit).not.toHaveValue(GROWTH_DEPOSIT)
+  if (expected.deposit) {
+    await expect(
+      deposit.getByRole('button', { name: DEPOSIT_LABELS[expected.deposit], exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  } else {
+    await expect(
+      deposit.getByRole('button', { name: DEPOSIT_LABELS[GROWTH_DEPOSIT], exact: true }),
+    ).toHaveAttribute('aria-pressed', 'false')
+  }
   // 数量は渡さない（GET /holdings に売却可能数量が無い。src/utils/orderEntryQuery.js）
   await expect(page.getByTestId('order-entry-quantity')).toHaveValue('')
 

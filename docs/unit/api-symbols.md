@@ -13,7 +13,7 @@
 そこでこの文書では、モックの応答ではなく**送信されたリクエストそのもの**を
 `docs/api/openapi.json` の宣言と突き合わせる。CAマスタの同種の文書は [api-ca.md](api-ca.md)。
 
-取り違えやすい点を 7 つ固定する。
+取り違えやすい点を 9 つ固定する。
 
 - **主キーは `id`（実 API の integer な `ID`）で、`銘柄コード` ではない。** 銘柄コードは
   一意な業務コードに格下げされ、画面が行を見分けるのに使う。`ID` が欠けた応答では
@@ -23,9 +23,18 @@
 - **パスは `/masters/symbols`。** リソース名も `stocks` から `symbols` へ変わった
   （マスタ系は 2026-09-15 の取り込みでまとめて `/masters/` 配下へ移っている）
 - **リクエストのクエリ名は英語、レスポンスのキーは日本語。** 送るのは
-  `symbol` / `restriction` / `route` / `vwap_target` で、返ってくるのは
-  `銘柄コード` / `規制情報` / `注文ルート` / `VWAP対象区分`。**名前の系統が向きで違う**ので、
+  `symbol` / `symbol_name_ja` / `symbol_name_en` / `restriction` / `route` / `vwap_target` で、返ってくるのは
+  `銘柄コード` / `銘柄名` / `銘柄名_英字` / `規制情報` / `注文ルート` / `VWAP対象区分`。**名前の系統が向きで違う**ので、
   レスポンスのキーをそのままクエリ名に使っていないことを STA-03 が押さえる
+- **「銘柄名」は `symbol_name_ja` と `symbol_name_en` のどちらか 1 つにだけ乗せる。** `symbol` は
+  銘柄コードまたは Ticker にしか当たらず、銘柄名は別パラメータ。2 つを同時に送ると AND になって
+  日本語名と英語名の両方に当たる行しか返らないので、入力に ASCII 以外の文字（かな・漢字）が
+  含まれていれば `symbol_name_ja`、ASCII だけなら `symbol_name_en` を選ぶ（STA-32 / 33）。
+  空欄はどちらも送らない（STA-34）
+- **VWAP対象区分の一括更新は「事前確認（`/vwap-target/validate`・dry-run）→ 本実行（`/vwap-target`）」の
+  2 段で、本文はどちらも `{ mode: 'set', VWAP対象区分: '0' }`。** `symbol_ids` は載せない（省略時は有効な
+  全銘柄が候補）。応答（`VwapTargetBulkResponse`）の `dry_run` / `候補件数` / `対象件数` / `更新件数` /
+  `symbols[].ID` を camelCase に寄せ、`ID` は一覧と同じく文字列にする（STA-35〜38）
 - **`limit` を送る。** `GET /masters/symbols` の limit は 1..200・既定 50 で、こちらから指定できる
   （`GET /masters/ca` と同じ。`GET /masters/blackout-dates` だけが `limit` を持たない）
 - **相場の 3 項目だけは `null` のまま通す。** 他の nullable は空文字に寄せるが、
@@ -93,3 +102,10 @@ STA-06 以降のアプリ内モデルには現れない。
 | STA-29 | 既定モック | 編集の payload（`id` と `updatedAt` 込み）をそのまま `validateSymbol()` に渡す | 本文（`SymbolRequest`）に `id` / `ID` / `更新日時` が載らない（事前検証は楽観的ロックを照合しない） | 実装済 |
 | STA-30 | 既定モック | `deleteSymbol('7')` を呼ぶ | `DELETE /api/masters/symbols/7` を叩き、本文を送らない（合札の `更新日時` も送らない ＝ 削除に楽観的ロックは無い）。パスに載るのは **`id` であって銘柄コードではない**。戻り値は削除した id（`'7'`） | 実装済 |
 | STA-31 | `DELETE /api/masters/symbols/{id}` が 404 を返す | `deleteSymbol()` を呼ぶ | 例外が投げられ、`message` にサーバの `detail` が入る | 実装済 |
+| STA-32 | 既定モック | `fetchSymbols({ symbolName: 'アップル' })`（ASCII 以外を含む）を呼ぶ | `symbol_name_ja=アップル` だけが載り、`symbol_name_en` と `symbol` は載らない | 実装済 |
+| STA-33 | 既定モック | `fetchSymbols({ symbolName: 'Apple' })`（ASCII だけ）を呼ぶ | `symbol_name_en=Apple` だけが載り、`symbol_name_ja` と `symbol` は載らない | 実装済 |
+| STA-34 | 既定モック | `fetchSymbols({ symbolName: '' })` と空白だけの文字列で呼ぶ | `symbol_name_ja` / `symbol_name_en` のどちらも載らない（「条件なし」を空文字として送らない） | 実装済 |
+| STA-35 | 既定モック | `previewDisableAllVwapTargets()` を呼ぶ | `POST /api/masters/symbols/vwap-target/validate` の本文がちょうど `{ mode: 'set', VWAP対象区分: '0' }` で、`symbol_ids` のキーが載らない。クエリは付かない | 実装済 |
+| STA-36 | 事前確認が `VwapTargetBulkResponse`（`dry_run: true`、`symbols` に `ID` が integer の行と `Ticker` / `銘柄名` が `null` の行）を返す | `previewDisableAllVwapTargets()` を呼ぶ | `{ dryRun: true, candidateCount, targetCount, updatedCount: 0, symbols: [{ id, symbolCode, ticker, name }], message }` に変換される。`id` は文字列、`null` は空文字。`変更前` / `変更後` / `success` / `mode` は外へ出さない | 実装済 |
+| STA-37 | 既定モック | `disableAllVwapTargets()` を呼ぶ | `POST /api/masters/symbols/vwap-target` に事前確認と同じ本文が載る（`symbol_ids` を載せない）。応答の `dry_run: false` / `更新件数` が `dryRun: false` / `updatedCount` に変換される | 実装済 |
+| STA-38 | `POST /api/masters/symbols/vwap-target` が 500 を返す | `disableAllVwapTargets()` を呼ぶ | 例外が投げられ、`message` にサーバの `detail` が入る（呼び出し側の `useAsync` が `vwapBulkError` に入れる） | 実装済 |

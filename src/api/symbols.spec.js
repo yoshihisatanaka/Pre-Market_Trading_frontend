@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { createSymbol, deleteSymbol, fetchSymbols, updateSymbol, validateSymbol } from './symbols'
+import {
+  createSymbol,
+  deleteSymbol,
+  disableAllVwapTargets,
+  fetchSymbols,
+  previewDisableAllVwapTargets,
+  updateSymbol,
+  validateSymbol,
+} from './symbols'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -128,6 +136,33 @@ const listBody = (stocks) => ({
   limit: 50,
   offset: 0,
   stocks,
+})
+
+/** 一括更新の 2 本のパス（事前確認は本実行のパスの下に validate が付く） */
+const VWAP_BULK_PATH = '*/api/masters/symbols/vwap-target'
+const VWAP_BULK_VALIDATE_PATH = '*/api/masters/symbols/vwap-target/validate'
+
+/** 事前確認と本実行で共用する本文（VwapTargetBulkRequest）。画面はこの 1 通りしか送らない */
+const DISABLE_ALL_BODY = { mode: 'set', VWAP対象区分: '0' }
+
+/**
+ * VwapTargetBulkResponse（openapi.json の項目をひととおり埋めたもの）。
+ * 2 行目は nullable な項目を null にして、空文字への寄せかたを見る。
+ */
+const vwapBulkBody = (overrides = {}) => ({
+  success: true,
+  dry_run: true,
+  mode: 'set',
+  VWAP対象区分: '0',
+  候補件数: 3,
+  対象件数: 2,
+  更新件数: 0,
+  symbols: [
+    { ID: 1, 銘柄コード: 'S001', Ticker: 'AAPL', 銘柄名: 'アップル', 変更前: '1', 変更後: '0' },
+    { ID: 2, 銘柄コード: 'S002', Ticker: null, 銘柄名: null, 変更前: '1', 変更後: '0' },
+  ],
+  message: '2 件が対象です（更新は行っていません）',
+  ...overrides,
 })
 
 describe('api/symbols', () => {
@@ -582,5 +617,89 @@ describe('api/symbols', () => {
     recordDelete({ detail }, 404)
 
     await expect(deleteSymbol('7')).rejects.toMatchObject({ message: detail, status: 404 })
+  })
+
+  it('[STA-32] ASCII 以外を含む銘柄名は symbol_name_ja にだけ乗せる', async () => {
+    record(listBody([]))
+
+    await fetchSymbols({ symbolName: 'アップル' })
+
+    expect(lastRequest.params.get('symbol_name_ja')).toBe('アップル')
+    // 2 つ同時に送ると AND になるので、必ずどちらか 1 つ。銘柄名は symbol にも乗せない
+    expect(lastRequest.params.has('symbol_name_en')).toBe(false)
+    expect(lastRequest.params.has('symbol')).toBe(false)
+  })
+
+  it('[STA-33] ASCII だけの銘柄名は symbol_name_en にだけ乗せる', async () => {
+    record(listBody([]))
+
+    await fetchSymbols({ symbolName: 'Apple' })
+
+    expect(lastRequest.params.get('symbol_name_en')).toBe('Apple')
+    expect(lastRequest.params.has('symbol_name_ja')).toBe(false)
+    expect(lastRequest.params.has('symbol')).toBe(false)
+  })
+
+  it('[STA-34] 空欄の銘柄名はどちらのクエリにも載せない', async () => {
+    for (const symbolName of ['', '   ']) {
+      record(listBody([]))
+
+      await fetchSymbols({ symbolName })
+
+      expect(lastRequest.params.has('symbol_name_ja')).toBe(false)
+      expect(lastRequest.params.has('symbol_name_en')).toBe(false)
+    }
+  })
+
+  it('[STA-35] 一括対象外化の事前確認は validate に mode=set / VWAP対象区分=0 だけを送る', async () => {
+    recordPost(VWAP_BULK_VALIDATE_PATH, vwapBulkBody())
+
+    await previewDisableAllVwapTargets()
+
+    expect(lastRequest.url.pathname).toBe('/api/masters/symbols/vwap-target/validate')
+    expect(lastRequest.url.search).toBe('')
+    // 本文はちょうどこの 2 項目。symbol_ids を載せない（省略時は有効な全銘柄が候補）
+    expect(lastRequest.body).toEqual(DISABLE_ALL_BODY)
+    expect(Object.hasOwn(lastRequest.body, 'symbol_ids')).toBe(false)
+  })
+
+  it('[STA-36] 事前確認の応答を camelCase に変換し、ID は文字列・null は空文字に寄せる', async () => {
+    recordPost(VWAP_BULK_VALIDATE_PATH, vwapBulkBody())
+
+    const result = await previewDisableAllVwapTargets()
+
+    expect(result).toEqual({
+      dryRun: true,
+      candidateCount: 3,
+      targetCount: 2,
+      updatedCount: 0,
+      symbols: [
+        // ID は一覧と同じく文字列（画面の v-for の key と行の id が同じ型になる）
+        { id: '1', symbolCode: 'S001', ticker: 'AAPL', name: 'アップル' },
+        { id: '2', symbolCode: 'S002', ticker: '', name: '' },
+      ],
+      message: '2 件が対象です（更新は行っていません）',
+    })
+    // 変更前 / 変更後 / success / mode は画面が使わないので外へ出さない
+    expect(result.symbols[0]).not.toHaveProperty('変更前')
+    expect(result).not.toHaveProperty('success')
+  })
+
+  it('[STA-37] 一括対象外化の本実行は vwap-target に事前確認と同じ本文を送る', async () => {
+    recordPost(VWAP_BULK_PATH, vwapBulkBody({ dry_run: false, 更新件数: 2 }))
+
+    const result = await disableAllVwapTargets()
+
+    expect(lastRequest.url.pathname).toBe('/api/masters/symbols/vwap-target')
+    expect(lastRequest.body).toEqual(DISABLE_ALL_BODY)
+    expect(Object.hasOwn(lastRequest.body, 'symbol_ids')).toBe(false)
+    expect(result).toMatchObject({ dryRun: false, updatedCount: 2, targetCount: 2 })
+  })
+
+  it('[STA-38] 本実行の 500 は例外になり、サーバの detail が message に入る', async () => {
+    const detail = 'サーバーでエラーが発生しました。'
+    recordPost(VWAP_BULK_PATH, { detail }, 500)
+
+    await expect(disableAllVwapTargets()).rejects.toMatchObject({ message: detail, status: 500 })
   })
 })

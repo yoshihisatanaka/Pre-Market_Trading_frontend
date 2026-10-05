@@ -171,6 +171,7 @@ order_id,confirmation_ref,confirmation_status,filled_quantity,average_price,conf
 | 権限マスタ | `PUT {role_code}` / `history`（#4 の形合わせ後に使う） |
 | 障害管理 | `history` の `target` / `offset`（直近 50 件固定） |
 | 為替マスタ（2026-10-02 追記） | `GET /masters/fx`（一覧）/ `DELETE {id}` / `{id}/history` / `export-csv` / `import-csv`。画面は現在レート 1 件のカードと更新モーダルだけで、一覧・履歴・CSV・削除の導線が無い。一覧と DELETE は実 API E2E（`FXR`）の `beforeAll` / `afterAll` が試験データの控えと後片付けにだけ使う。未着手の「源泉レートの表示・更新」も同じ 5 本（`latest` / `GET {id}` / `validate` / `POST` / `PUT {id}`）で賄う見込み（#34 の回答待ち） |
+| 仮計算マスタ（2026-10-05 追記） | `history`（モック `c4e8a58` で履歴の一覧表示を外した）。`PUT` は画面に出す 4 項目（取引所税率 / 為替スプレッド / 現地手数料率_bp / NISA為替上乗せ率）だけを送り、`消費税率` / `譲渡益所得税率` / `譲渡益住民税率` / `備考` は送らない（部分更新なので現在値が残る） |
 
 **実装済み画面で送っていないクエリ**（既定に頼っている・画面に条件が無い）:
 

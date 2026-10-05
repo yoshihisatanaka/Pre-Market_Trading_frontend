@@ -64,7 +64,15 @@ import {
   updateCorporateAction,
   validateCorporateAction,
 } from './ca'
-import { createSymbol, deleteSymbol, fetchSymbols, updateSymbol, validateSymbol } from './symbols'
+import {
+  createSymbol,
+  deleteSymbol,
+  disableAllVwapTargets,
+  fetchSymbols,
+  previewDisableAllVwapTargets,
+  updateSymbol,
+  validateSymbol,
+} from './symbols'
 import {
   createMarketHoliday,
   deleteMarketHoliday,
@@ -610,6 +618,11 @@ const PROBES = [
         vwapTarget: '0',
       }),
   },
+  // 銘柄名は ASCII 以外なら symbol_name_ja、ASCII だけなら symbol_name_en に乗る（両方を 1 回ずつ通す）
+  { name: 'fetchSymbols (symbol_name_ja)', run: () => fetchSymbols({ symbolName: 'アップル' }) },
+  { name: 'fetchSymbols (symbol_name_en)', run: () => fetchSymbols({ symbolName: 'Apple' }) },
+  { name: 'previewDisableAllVwapTargets', run: () => previewDisableAllVwapTargets() },
+  { name: 'disableAllVwapTargets', run: () => disableAllVwapTargets() },
   {
     name: 'validateSymbol',
     run: () => validateSymbol({ id: '1', symbolCode: 'AAPL', ticker: 'AAPL', name: 'x' }),

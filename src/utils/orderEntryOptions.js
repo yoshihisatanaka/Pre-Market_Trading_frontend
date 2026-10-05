@@ -37,11 +37,10 @@ export const ORDER_TYPE_OPTIONS = [
  * 「＋」は全角（モックの表記）。
  */
 export const EXECUTION_SCOPE_OPTIONS = [
-  { value: '01', label: 'プレ' },
+  // '01'（プレ）と '05'（レギュラー＋アフター）は 2026-10-02 の取り込みで enum から外れた
   { value: '02', label: 'プレ＋レギュラー' },
   { value: '04', label: 'プレ＋レギュラー＋アフター' },
   { value: '03', label: 'レギュラー' },
-  { value: '05', label: 'レギュラー＋アフター' },
   { value: '06', label: 'アフター' },
 ]
 

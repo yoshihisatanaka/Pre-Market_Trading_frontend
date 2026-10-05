@@ -45,6 +45,8 @@ export const navSections = [
       { label: '権限マスタ', to: '/masters/permissions' },
       { label: '銘柄マスタ', to: '/masters/symbols' },
       { label: '為替マスタ', to: '/masters/fx' },
+      // 公開モックで 2026-09-29 に追加（b9d023e）。並びは公開モックのサイドバーどおり為替マスタの直後
+      { label: '仮計算マスタ', to: '/masters/provisional-calculation' },
       // docs/mock/layout/ の原本には無いが、公開モックのサイドバーには
       // /masters/hard-limits がこの位置にある（原本の取り込みが古い）
       { label: 'スライス基準マスタ', to: '/masters/hard-limits' },

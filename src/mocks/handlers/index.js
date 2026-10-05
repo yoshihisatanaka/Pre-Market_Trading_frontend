@@ -9,6 +9,7 @@ import { marketHolidayHandlers, resetMarketHolidayRows } from './marketHolidays'
 import { blackoutDateHandlers, resetBlackoutDateRows } from './blackoutDates'
 import { sliceCriteriaHandlers, resetSliceCriteriaRow } from './sliceCriteria'
 import { fxRateHandlers, resetFxRateRows } from './fxRates'
+import { calculationSettingsHandlers, resetCalculationSettingsRow } from './calculationSettings'
 import { activityLogHandlers } from './activityLogs'
 import { permissionHandlers, resetPermissionRows } from './permissions'
 import { marketStatusHandlers } from './marketStatus'
@@ -46,6 +47,7 @@ import { holdingHandlers } from './holdings'
  *   /masters/blackout-dates  … 同上
  *   /masters/hard-limits     … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
  *   /masters/fx              … 日本語キー / integer の基準日 / 最新・詳細・事前検証・登録・変更だけ
+ *   /masters/calculation-settings … 日本語キー / 部分更新 / 拒否は 422 と 409（実 API はローカル DB が未初期化で 500）
  *   /market-status           … 日本語キー / 空白入りキー / 日付を「今日」へずらして返す
  *   /orders/csv-spec         … CSV一括注文の全 22 列の仕様（CsvHeaderSpecResponse そのまま）
  *   /orders/csv-template     … 同じくテンプレート（text/csv・BOM 付き・Content-Disposition 付き）
@@ -87,6 +89,7 @@ export function resetMockState() {
   resetBalanceAdjustmentRows()
   resetSliceCriteriaRow()
   resetFxRateRows()
+  resetCalculationSettingsRow()
   resetPermissionRows()
   resetAnnouncementState()
   resetStalledOrderState()
@@ -117,6 +120,7 @@ export const handlers = [
   ...blackoutDateHandlers,
   ...sliceCriteriaHandlers,
   ...fxRateHandlers,
+  ...calculationSettingsHandlers,
   ...activityLogHandlers,
   ...permissionHandlers,
   ...marketStatusHandlers,

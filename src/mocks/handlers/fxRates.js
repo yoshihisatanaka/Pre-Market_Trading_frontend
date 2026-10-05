@@ -48,6 +48,7 @@ export const fxRateHandlers = [
       基準日: latest.基準日,
       通貨コード: latest.通貨コード,
       為替レート: latest.為替レート,
+      源泉レート: latest.源泉レート,
     })
   }),
 
@@ -110,6 +111,7 @@ export const fxRateHandlers = [
     const saved = canceled
       ? Object.assign(canceled, {
           為替レート: body.為替レート,
+          源泉レート: withholdingOf(body),
           取消区分: 0,
           ユーザー操作フラグ: 1,
           更新日時: now,
@@ -122,6 +124,7 @@ export const fxRateHandlers = [
           基準日: body.基準日,
           通貨コード: currencyCode,
           為替レート: body.為替レート,
+          源泉レート: withholdingOf(body),
           取消区分: 0,
           ユーザー操作フラグ: 1,
           作成日時: now,
@@ -159,6 +162,7 @@ export const fxRateHandlers = [
       基準日: body.基準日,
       通貨コード: currencyOf(body),
       為替レート: body.為替レート,
+      源泉レート: withholdingOf(body),
       ユーザー操作フラグ: 1,
       更新日時: nowIsoTimestamp(),
       更新者: operatorOf(request),
@@ -191,6 +195,11 @@ function currencyOf(body) {
   return body.通貨コード ?? 'USD'
 }
 
+/** 源泉レートは FxRequest で任意（default null）。省略されたら未設定として扱う */
+function withholdingOf(body) {
+  return body.源泉レート ?? null
+}
+
 /** 操作者は X-User-Code ヘッダから取る（client.js の interceptor が付ける）。無ければモックの既定 */
 function operatorOf(request) {
   return request.headers.get('X-User-Code') || '006'
@@ -198,19 +207,14 @@ function operatorOf(request) {
 
 /**
  * FxRequest の制約（openapi.json）のうち、pydantic が本文の段階で弾くもの。
- * 為替レートは正の数（exclusiveMinimum 0）、基準日は 19000101〜29991231 の integer。
+ * 為替レートは正の数（exclusiveMinimum 0）、源泉レートは null か正の数、
+ * 基準日は 19000101〜29991231 の integer。
  * 不合格は 422 の HTTPValidationError。合格なら null。
  */
 function bodyValidationError(body) {
   const detail = []
-  const rate = body?.為替レート
-  if (typeof rate !== 'number' || !Number.isFinite(rate)) {
-    detail.push(fieldError('float_parsing', '為替レート', '数値で入力してください', rate))
-  } else if (rate <= 0) {
-    detail.push(
-      fieldError('greater_than', '為替レート', '0 より大きい値を入力してください', rate, { gt: 0 }),
-    )
-  }
+  pushRateError(detail, '為替レート', body?.為替レート)
+  if (body?.源泉レート != null) pushRateError(detail, '源泉レート', body.源泉レート)
 
   const baseDate = body?.基準日
   if (!Number.isInteger(baseDate) || baseDate < 19000101 || baseDate > 29991231) {
@@ -218,6 +222,17 @@ function bodyValidationError(body) {
   }
 
   return detail.length > 0 ? HttpResponse.json({ detail }, { status: 422 }) : null
+}
+
+/** レート（正の数）の型違反を detail に積む */
+function pushRateError(detail, field, rate) {
+  if (typeof rate !== 'number' || !Number.isFinite(rate)) {
+    detail.push(fieldError('float_parsing', field, '数値で入力してください', rate))
+  } else if (rate <= 0) {
+    detail.push(
+      fieldError('greater_than', field, '0 より大きい値を入力してください', rate, { gt: 0 }),
+    )
+  }
 }
 
 /** ValidationError 1 件。loc の先頭は値の出所（本文なので 'body'）。ctx は制約違反のときだけ付く */

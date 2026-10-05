@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { apiContext, listHelpers, skipUnlessRealApi } from './helpers/realApi.js'
+import { apiContext, assertRealApi, listHelpers, skipUnlessRealApi } from './helpers/realApi.js'
 
 /*
  * 権限マスタを「実 API に当てて」確かめる E2E。
@@ -48,10 +48,32 @@ const [, , OPERATION, BRANCH_ALL] = PERMISSIONS
 /** 許可 / 不可のバッジの文言（src/utils/permissionTypes.js の permissionBadge と同じ） */
 const badge = (flag) => (flag === 1 ? '許可' : '不可')
 
-const { openList, countOf, rowsOf, expectListConsistent } = listHelpers({
+const { settleList, countOf, rowsOf, expectListConsistent } = listHelpers({
   path: PATH,
   testIdPrefix: 'permissions',
 })
+
+/*
+ * 一覧の表示を待つ上限。この画面は共通の 4 本（codes / branches / handlers / market-status）と /auth/me が
+ * 返ってから一覧を読み始め、実 API はおおむね 300ms ずつ直列に返すので、温まっていても表示まで 4 秒近くかかる
+ * （2026-10-05 の検証で 3.8 秒を実測）。helpers の openList は expect 既定の 5 秒で待つため、dev サーバの
+ * 起動直後や負荷のある状態で落ちる。ここだけ延ばす（共通化の候補: openList に待ち時間を渡せるようにする）
+ */
+const OPEN_TIMEOUT = 20_000
+
+/** 一覧を開いて実 API に当たっていることまで確認する。helpers の openList と同じ手順で、表示の待ちだけ長い */
+async function openList(page) {
+  await page.goto(PATH)
+  await expect(page.getByTestId('permissions-count')).toBeVisible({ timeout: OPEN_TIMEOUT })
+  await settleList(page)
+  // 取得がタイムアウト（client.js の 15 秒）すると件数 0 とエラーが出て、以降は「編集が無い」で紛らわしく落ちる。
+  // 原因（バックエンドの応答遅延）が分かる形でここで止める
+  await expect(
+    page.getByTestId('permissions-error'),
+    '一覧の取得が失敗した（バックエンドの応答遅延かタイムアウト）。api コンテナの状態を確認する',
+  ).toHaveCount(0)
+  await assertRealApi(page)
+}
 
 /** 書き換える対象のロール（beforeAll で決める）と、その実行前の値 */
 let target = null
@@ -307,6 +329,9 @@ test.describe('権限マスタ（実 API 接続）', () => {
   })
 
   test('[PMR-08] 先に別の画面で保存されていると競合で弾かれる', async ({ page, playwright }) => {
+    // 一覧を 3 回開いて保存を 3 回行う。実 API は 1 画面の表示に 4 秒前後かかるので
+    // 既定の 30 秒では足りないことがある（2026-10-05 の検証で保存中のまま打ち切られた）
+    test.slow()
     const before = await readTarget(playwright)
 
     // 画面 A: 編集を開いて、取得時の更新日時を掴んだままにする

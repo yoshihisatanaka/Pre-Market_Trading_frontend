@@ -338,6 +338,11 @@ test.describe('お知らせ管理（実 API 接続）', () => {
 
     // 再読み込みしても新しい本文のまま
     await page.reload()
+    /*
+     * 再読み込みも権限ガード（GET /auth/me）と遅延 import を通る。settle はローディングの testid が
+     * 出る前に素通りするので、openPage と同じく先にフォームを待つ（2026-10-05 に 5 秒で間に合わず落ちた）
+     */
+    await expect(page.getByTestId('announcements-form')).toBeVisible({ timeout: 20_000 })
     await settle(page)
     await expect(page.getByTestId('announcements-enabled')).toBeChecked()
     await expect(page.getByTestId('announcements-message')).toHaveValue(TEST_MESSAGE)

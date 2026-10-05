@@ -248,6 +248,19 @@ function waitForPut(page) {
   )
 }
 
+/*
+ * 画面から送られる POST（事前検証 /validate と登録）を標準出力に残す。
+ * 登録は validate → POST の 2 本で、どちらで落ちたかは応答を見ないと判らない
+ * （画面はどちらの障害も「内部サーバーエラー」の枠にまとめて出す）。
+ */
+function logPosts(page, label) {
+  page.on('response', (res) => {
+    if (res.request().method() !== 'POST') return
+    if (!new URL(res.url()).pathname.startsWith(API_PATH)) return
+    void logExchange(label, res)
+  })
+}
+
 // 登録 → 重複 → 編集 → 競合 → 取消 → 再有効化 は 1 本の流れなので順に実行する
 test.describe.configure({ mode: 'serial' })
 
@@ -281,6 +294,7 @@ test.describe('顧客マスタ（実 API 接続）', () => {
     const before = await countOf(page)
     const pair = await firstBranchAndHandler(page)
 
+    logPosts(page, 'CUR-02')
     await submitAdd(page, pair)
 
     await expect(addDialogOf(page)).toBeHidden()

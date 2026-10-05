@@ -120,6 +120,141 @@ async function expectNarrowed(page, total) {
   return shown
 }
 
+/* ---------- 直接発注導線（HSR-09〜11）。新規注文の画面へ URL クエリで引き継ぐ ---------- */
+
+const SYMBOLS_API_PATH = '/api/masters/symbols'
+// 銘柄一覧の応答の配列キー（src/api/symbols.js の fetchSymbols）
+const SYMBOLS_LIST_KEY = 'stocks'
+// 預り一覧の応答の配列キー（openapi.json の HoldingListResponse）
+const HOLDINGS_LIST_KEY = 'holdings'
+
+/*
+ * 預りの特定預り区分 → 注文の預り区分（URL の deposit）。
+ * src/utils/orderEntryQuery.js の toDepositCategory の再掲（向きが逆なので、実装をなぞらず期待値として書く）。
+ * 4 NISA / 8 継続管理勘定は注文の預り区分に無いので載らない。
+ */
+const DEPOSIT_QUERY_FOR = { 1: '0', 0: '1', 6: '6' }
+const GROWTH_DEPOSIT = '6'
+
+/** 照会結果のヒントの文言（src/views/OrderEntryView.vue の customerHint / symbolHint） */
+const HINT_NOT_FOUND = { customer: '該当なし', symbol: '銘柄なし' }
+
+function queryOf(page) {
+  return Object.fromEntries(new URL(page.url()).searchParams)
+}
+
+/** 実 API の明細 1 件から、「買い」「売り」が組み立てる URL クエリの期待値（空の値は載らない） */
+function expectedOrderQuery(holding, side) {
+  const deposit = DEPOSIT_QUERY_FOR[String(holding.預り売買区分 ?? '')] ?? ''
+  const entries = [
+    ['branch_code', holding.部店コード ?? ''],
+    ['account_number', String(holding.口座番号 ?? '')],
+    ['ticker', holding.ティッカー ?? ''],
+    ['side', side],
+    // 買付に成長投資枠は選べないので、「買い」は成長投資枠の明細でも預り区分を引き継がない
+    ['deposit', side === 'buy' && deposit === GROWTH_DEPOSIT ? '' : deposit],
+  ]
+  return Object.fromEntries(entries.filter(([, value]) => value))
+}
+
+/**
+ * 表の n 行目に対応する実 API の明細。画面の行 ID と同じ組（口座番号・銘柄コード・預り区分）で引く
+ * （並びが API と同じとは限らないので、位置では引かない）。
+ */
+async function holdingOfRow(page, holdings, index) {
+  const accountNumber = await cellText(page, '口座番号', index)
+  const symbolCode = await cellText(page, '銘柄コード', index)
+  const depositName = await cellText(page, '預り区分', index)
+  const holding = holdings.find(
+    (row) =>
+      String(row.口座番号 ?? '') === accountNumber &&
+      (row.銘柄コード || EMPTY_CELL) === symbolCode &&
+      (row.預り売買区分名 || EMPTY_CELL) === depositName,
+  )
+  expect(
+    holding,
+    `${index + 1} 行目（口座 ${accountNumber} / 銘柄 ${symbolCode}）が実 API の一覧に無い`,
+  ).toBeTruthy()
+  return holding
+}
+
+/**
+ * 預り検索を開き、操作列に「買い」「売り」が出ていることを確かめ、実 API からも全件を読む。
+ * 0 件、または操作列が「閲覧のみ」（発注権限なし）ならスキップ。返した api は使い終えたら dispose する
+ */
+async function openListForOrder(page, playwright) {
+  await openListOrSkip(page)
+
+  // 操作列は発注権限を読み終えるまで空なので、どちらかが出るまで待つ
+  const firstRow = rowsOf(page).first()
+  const buy = firstRow.getByTestId('holding-search-buy')
+  const viewOnly = firstRow.getByTestId('holding-search-view-only')
+  await expect(buy.or(viewOnly)).toBeVisible()
+  test.skip(
+    (await viewOnly.count()) > 0,
+    '発注権限の無い利用者（VITE_USER_CODE）なので「買い」「売り」が出ない（HSE-19 の担当）',
+  )
+
+  const api = await apiContext(playwright)
+  const holdings = await fetchAll(api, API_PATH, HOLDINGS_LIST_KEY)
+  return { api, holdings }
+}
+
+/**
+ * 新規注文の画面に移ったあとの共通の期待値。URL のクエリ・入力欄の初期値・口座番号とティッカーの照会結果。
+ * 照会の期待値は stores/orderEntry.js（findCustomer / findSymbol）と同じ照合を実 API で引いて決める。
+ */
+async function expectOrderEntryPrefilled(page, api, expected) {
+  await expect(page).toHaveURL(/\/orders\/new\?/)
+  expect(queryOf(page)).toEqual(expected)
+
+  // 期間指定に使う休日・発注停止の状態を実 API から読み終えると入力フォームが出る
+  await expect(page.getByTestId('order-entry-form')).toBeVisible()
+  await expect(page.getByTestId('order-entry-error')).toHaveCount(0)
+
+  const branchCode = expected.branch_code ?? ''
+  const accountNumber = expected.account_number ?? ''
+  const ticker = (expected.ticker ?? '').toUpperCase()
+  await expect(page.getByTestId('order-entry-branch')).toHaveValue(branchCode)
+  await expect(page.getByTestId('order-entry-account')).toHaveValue(accountNumber)
+  await expect(page.getByTestId('order-entry-ticker')).toHaveValue(ticker)
+  await expect(
+    page
+      .getByTestId('order-entry-side')
+      .getByRole('button', { name: expected.side === 'buy' ? '買い' : '売り', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true')
+  const deposit = page.getByTestId('order-entry-deposit-category')
+  if (expected.deposit) await expect(deposit).toHaveValue(expected.deposit)
+  else await expect(deposit).not.toHaveValue(GROWTH_DEPOSIT)
+  // 数量は渡さない（GET /holdings に売却可能数量が無い。src/utils/orderEntryQuery.js）
+  await expect(page.getByTestId('order-entry-quantity')).toHaveValue('')
+
+  // 口座番号の照会。保有のある口座が顧客マスタに無いと「該当なし」（docs/api/requests.md #32）。
+  // 照会に失敗したときは何も出ない（それも食い違いとしてここで落ちる）
+  const customers = await fetchAll(api, CUSTOMERS_API_PATH, CUSTOMERS_LIST_KEY, {
+    account_no: accountNumber,
+    ...(branchCode ? { branch_code: branchCode } : {}),
+  })
+  const customer = customers.find(
+    (row) =>
+      String(row.口座番号 ?? '') === accountNumber && (!branchCode || row.部店コード === branchCode),
+  )
+  await expect(page.getByTestId('order-entry-account-hint')).toHaveText(
+    customer?.顧客名 || HINT_NOT_FOUND.customer,
+  )
+
+  // ティッカーの照会（ティッカーの無い明細はクエリに載らず、銘柄欄は空のまま）
+  if (ticker) {
+    const stocks = await fetchAll(api, SYMBOLS_API_PATH, SYMBOLS_LIST_KEY, { ticker })
+    const symbol = stocks.find((row) => (row.Ticker ?? '').toUpperCase() === ticker)
+    await expect(page.getByTestId('order-entry-ticker-hint')).toHaveText(
+      symbol?.銘柄名_英字 || symbol?.銘柄名 || HINT_NOT_FOUND.symbol,
+    )
+  } else {
+    await expect(page.getByTestId('order-entry-ticker-hint')).toHaveCount(0)
+  }
+}
+
 test.describe('預り検索（実 API 接続）', () => {
   skipUnlessRealApi(test)
 
@@ -304,5 +439,71 @@ test.describe('預り検索（実 API 接続）', () => {
     await expect(page.getByTestId('customer-info-bar')).toBeVisible()
     await expect(page.getByTestId('customer-info-account')).toHaveText(target.accountNumber)
     await expect(page.getByTestId('holding-search-customer-error')).toHaveCount(0)
+  })
+
+  test('[HSR-09] 1 行目の「買い」で新規注文へ移り、実 API のその明細の顧客・銘柄が引き継がれる', async ({
+    page,
+    playwright,
+  }) => {
+    const { api, holdings } = await openListForOrder(page, playwright)
+    try {
+      const holding = await holdingOfRow(page, holdings, 0)
+
+      await rowsOf(page).first().getByTestId('holding-search-buy').click()
+
+      await expectOrderEntryPrefilled(page, api, expectedOrderQuery(holding, 'buy'))
+    } finally {
+      await api.dispose()
+    }
+  })
+
+  test('[HSR-10] 売却できる明細の「売り」で新規注文へ移り、売りとして顧客・銘柄・預り区分が引き継がれる', async ({
+    page,
+    playwright,
+  }) => {
+    const { api, holdings } = await openListForOrder(page, playwright)
+    try {
+      // 「売り」が押せる最初の明細（売却不可の明細は押せない button になっている）
+      const shown = await rowsOf(page).count()
+      let index = -1
+      for (let i = 0; i < shown && index < 0; i += 1) {
+        if (await rowsOf(page).nth(i).getByTestId('holding-search-sell').isEnabled()) index = i
+      }
+      test.skip(index < 0, '表示中に「売り」が押せる明細が無い')
+
+      const holding = await holdingOfRow(page, holdings, index)
+      // 押せるのは実 API で売却不可でない明細だけ
+      expect(holding.売却不可区分).not.toBe(1)
+
+      await rowsOf(page).nth(index).getByTestId('holding-search-sell').click()
+
+      await expectOrderEntryPrefilled(page, api, expectedOrderQuery(holding, 'sell'))
+    } finally {
+      await api.dispose()
+    }
+  })
+
+  test('[HSR-11] 売却不可の明細だけ「売り」が押せない', async ({ page, playwright }) => {
+    const { api, holdings } = await openListForOrder(page, playwright)
+    await api.dispose()
+
+    // 表示中の各行を実 API の明細と突き合わせる（売却不可区分は画面に出ないので API から読む）
+    const shown = await rowsOf(page).count()
+    const prohibited = []
+    for (let i = 0; i < shown; i += 1) {
+      const holding = await holdingOfRow(page, holdings, i)
+      prohibited.push(holding.売却不可区分 === 1)
+    }
+    test.skip(!prohibited.includes(true), '表示中に売却不可（売却不可区分=1）の明細が無い')
+
+    for (let i = 0; i < shown; i += 1) {
+      const row = rowsOf(page).nth(i)
+      if (prohibited[i]) {
+        await expect(row.getByTestId('holding-search-sell')).toBeDisabled()
+        await expect(row.getByTestId('holding-search-buy')).toBeEnabled()
+      } else {
+        await expect(row.getByTestId('holding-search-sell')).toBeEnabled()
+      }
+    }
   })
 })

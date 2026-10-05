@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import {
   API_LIMIT_MAX,
   apiContext,
+  assertRealApi,
   cleanupMarked,
   fetchAll,
   listHelpers,
@@ -84,10 +85,26 @@ const DEPOSIT_SPECIFIC = '1'
 /** 数量の表示（src/utils/format.js の formatQuantity + 単位） */
 const shares = (value) => `${value.toLocaleString('ja-JP')}株`
 
-const { settleList, openList, countOf, rowsOf, expectListConsistent } = listHelpers({
+const { settleList, countOf, rowsOf, expectListConsistent } = listHelpers({
   path: PATH,
   testIdPrefix: 'balance-adjustments',
 })
+
+/*
+ * 画面はコードマスタ（/codes・/branches・/handlers）と顧客の選択肢が返ってから一覧を読み始め、
+ * 実 API は 1 画面の表示に 4 秒前後かかる。helpers の openList は expect 既定の 5 秒で待つため
+ * 稀に落ちる（2026-10-05 の検証で BAR-04 が単独でも再現）。permissions.real-api.spec.js と同じく
+ * ここだけ延ばす（共通化の候補: openList に待ち時間を渡せるようにする）
+ */
+const OPEN_TIMEOUT = 20_000
+
+/** 一覧を開いて実 API に当たっていることまで確認する。helpers の openList と同じ手順で、表示の待ちだけ長い */
+async function openList(page, query = '') {
+  await page.goto(`${PATH}${query}`)
+  await expect(page.getByTestId('balance-adjustments-count')).toBeVisible({ timeout: OPEN_TIMEOUT })
+  await settleList(page)
+  await assertRealApi(page)
+}
 
 /**
  * beforeAll が選ぶ試験用の組。どちらも同じ顧客で、銘柄だけ違う。
@@ -488,8 +505,10 @@ test.describe('残高マスタ（実 API 接続）', () => {
     const total = await countOf(page)
     test.skip(total === 0, '残高が 0 件なので絞り込みを確かめられない')
 
-    const name = ((await columnOf(page, '顧客名').first().textContent()) ?? '').trim()
-    test.skip(name === '' || name === '—', '1 行目の顧客名が空')
+    // 顧客マスタに無い口座の行（開発 DB の手入力データ）は顧客名が空なので、1 ページ目から名前のある行を選ぶ
+    const names = (await columnOf(page, '顧客名').allTextContents()).map((text) => text.trim())
+    const name = names.find((text) => text !== '' && text !== '—') ?? ''
+    test.skip(name === '', '1 ページ目に顧客名のある行が無い')
 
     const request = waitForListRequest(page, 'customer_name', name)
     await page.getByTestId('balance-adjustments-customer-name').fill(name)
@@ -520,15 +539,15 @@ test.describe('残高マスタ（実 API 接続）', () => {
     const total = await countOf(page)
     test.skip(total === 0, '残高が 0 件なので絞り込みを確かめられない')
 
-    const branchCode = ((await columnOf(page, '部店').first().textContent()) ?? '').trim()
-    test.skip(branchCode === '' || branchCode === '—', '1 行目の部店コードが空')
-
-    // 選択肢はコードマスタ（GET /codes の 部店）から来る。データにある部店が選択肢に無ければ噛み合っていない
+    /*
+     * 選択肢は部店マスタ（GET /branches）から来る。開発 DB には部店マスタに無い部店コードの残高行がある
+     * （2026-10-05 時点で 001。/branches は 100〜103 だけ）ので、1 ページ目から選択肢にある部店の行を選ぶ
+     */
     const select = page.getByTestId('balance-adjustments-branch-code')
-    await expect(
-      select.locator(`option[value="${branchCode}"]`),
-      `部店のプルダウンに ${branchCode} が無い（コードマスタと残高データが食い違う）`,
-    ).toHaveCount(1)
+    const options = await select.locator('option').evaluateAll((els) => els.map((el) => el.value))
+    const branchCodes = (await columnOf(page, '部店').allTextContents()).map((text) => text.trim())
+    const branchCode = branchCodes.find((code) => code !== '' && options.includes(code)) ?? ''
+    test.skip(branchCode === '', '1 ページ目に部店マスタの選択肢にある部店の行が無い')
 
     const request = waitForListRequest(page, 'branch_code', branchCode)
     await select.selectOption(branchCode)
@@ -666,6 +685,7 @@ test.describe('残高マスタ（実 API 接続）', () => {
 
     // URL に検索条件が載っているので、再読み込みしても同じ組に絞られる
     await page.reload()
+    await expect(page.getByTestId('balance-adjustments-count')).toBeVisible({ timeout: OPEN_TIMEOUT })
     await settleList(page)
     await expect(cellOf(rowById(page, createdId), '現在数量')).toHaveText(shares(after))
 

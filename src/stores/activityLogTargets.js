@@ -21,10 +21,22 @@ export const useActivityLogTargetsStore = defineStore('activityLogTargets', () =
     (data.value ?? []).map((target) => ({ value: target.code, label: target.name })),
   )
 
-  /** 未取得のときだけ読み込む。取得中・取得済みなら何もしない */
+  /** 取得中の Promise。重ねて呼ばれたときに同じ取得を待たせる */
+  let pending = null
+
+  /**
+   * 未取得のときだけ読み込む。取得済みなら何もしない（undefined を返す）。
+   * 取得中なら新しいリクエストは送らず、進行中の取得の Promise を返す
+   * （画面は「区分」の絞り込みを対象種別に展開するために、取得の完了を待てる必要がある）。
+   */
   function ensureLoaded() {
-    if (loading.value || (data.value ?? []).length > 0) return undefined
-    return execute()
+    if ((data.value ?? []).length > 0) return undefined
+    if (!pending) {
+      pending = execute().finally(() => {
+        pending = null
+      })
+    }
+    return pending
   }
 
   return {

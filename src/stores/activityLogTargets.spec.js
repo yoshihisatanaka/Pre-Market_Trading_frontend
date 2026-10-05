@@ -92,6 +92,8 @@ describe('stores/activityLogTargets', () => {
     const first = store.ensureLoaded()
     const second = store.ensureLoaded()
     expect(store.loading).toBe(true)
+    // 2 回目も待てる（画面が「区分」の展開のために完了を待つ）
+    expect(second).toBeInstanceOf(Promise)
 
     await Promise.all([first, second])
 

@@ -57,27 +57,34 @@ MSW が有効なままだと実 API を見ていないので、各シナリオ�
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
-| ALR-01 | 実 API に接続。件数は問わない | 操作ログ `/operations/activity-logs` を開く | 件数表示が `GET /api/operations/activity-logs` の `total` と一致し、表の行数が min(total, 50)。対象種別プルダウンに `GET /api/operations/activity-logs/targets` の件数 +「全て」が並ぶ。ローディング・エラーは残らない（0 件なら空状態） | 実装済 |
-| ALR-02 | 実 API に接続。画面で選べる操作区分（CREATE / UPDATE / DELETE / BATCH）ごとに `operation=` 付きで API を直接引き、最初に 1 件以上返った操作区分と、その最新行の対象種別を組にする（その組は必ず 1 件以上ある） | その対象種別・操作区分を選んで「検索」 | URL に `target_types=` と `operation=` が付き、件数が同じクエリで API に投げた `total` と一致し全件以下。表示行の対象種別名・操作区分がすべて条件どおり（クエリ名が黙って無視されていないことの確認）。4 種のどれも 0 件ならスキップ | 実装済 |
+| ALR-01 | 実 API に接続。件数は問わない | 操作ログ `/operations/activity-logs` を開く | 件数表示が `GET /api/operations/activity-logs` の `total` と一致し、表の行数が min(total, 50)。対象機能プルダウンに `GET /api/operations/activity-logs/targets` の件数 +「全て」が並ぶ。ローディング・エラーは残らない（0 件なら空状態） | 実装済 |
+| ALR-02 | 実 API に接続。画面の「操作内容」で選べる操作区分（CREATE … VWAP_BULK の 9 種）ごとに `operation=` 付きで API を直接引き、最初に 1 件以上返った操作区分と、その最新行の対象種別を組にする（その組は必ず 1 件以上ある） | その対象機能・操作内容を選んで「検索」 | URL に `target_types=` と `operation=` が付き、件数が同じクエリで API に投げた `total` と一致し全件以下。表示行の 対象機能・操作 のセルがすべて「その対象種別名 + その行の操作内容」で、操作区分バッジが対象種別から導いた区分（クエリ名が黙って無視されていないことの確認）。9 種のどれも 0 件ならスキップ | 実装済 |
 
-## ALR-02 の前提の作りかた（2026-09-29 の実測）
+## ALR-02 の前提の作りかた（2026-09-29 / 2026-10-05 の実測）
 
-CREATE / UPDATE / DELETE / BATCH の操作ログが 1 件も無い DB では、前提が成立せずスキップされる
-（絞り込みが効いたことを確かめられない）。**マスタの実 API E2E（CA・海外休場日・受注不可日）を先に流して
-行を積んでから**実行する。2026-09-29 にこの順で流して通した。
+9 種の操作区分の操作ログが 1 件も無い DB では、前提が成立せずスキップされる
+（絞り込みが効いたことを確かめられない）。障害管理・お知らせ管理の実 API E2E が流れていれば
+`SUSPEND` / `RESUME` / `SHOW` / `HIDE` の行が積まれているので、通常は成立する。
+マスタの行（CREATE / UPDATE / DELETE）も欲しければ、マスタの実 API E2E（CA・海外休場日・受注不可日）を先に流す。
 
 実測した値:
 
-- `GET /api/operations/activity-logs` の `total` は実行中に 4 → 12 に増えた（並行して流れていた障害管理・
+- 2026-09-29: `GET /api/operations/activity-logs` の `total` は実行中に 4 → 12 に増えた（並行して流れていた障害管理・
   お知らせ管理の実 API E2E が積んだ行）。内訳は `order-suspensions` の `SUSPEND` / `RESUME` と、
   `announcements` の `SHOW` / `HIDE` だけで、CREATE / UPDATE / DELETE / BATCH は 0 件
-- `operation=SUSPEND` は **400**（`指定できない操作区分です: SUSPEND（指定可能: CREATE, UPDATE, DELETE, BATCH）`）。
-  一覧が返す操作区分を、同じ API の絞り込みに渡せない。`openapi.json` の `ActivityLogItem.操作区分` の説明も
-  CREATE / UPDATE / DELETE / BATCH の 4 種だけで、SUSPEND / RESUME / SHOW / HIDE は載っていない
-- 画面の操作区分プルダウンは 4 種だけなので、発注停止・お知らせの行は操作区分で絞り込めない。
-  一覧のバッジには `SUSPEND` などが生の値のまま出る（`operationLabel` が知らない値をそのまま返す）
+- 2026-09-29: `operation=SUSPEND` は **400**（`指定できない操作区分です: SUSPEND（指定可能: CREATE, UPDATE, DELETE, BATCH）`）。
+  **2026-10-05 に再測したところ 200 になり**、`openapi.json`（2026-09-30 取り込み）の説明も 9 種
+  （CREATE / UPDATE / DELETE / BATCH / SUSPEND / RESUME / SHOW / HIDE / VWAP_BULK）に増えていた。
+  `GET /codes` の `操作区分` も同じ 9 種を返す。画面の「操作内容」の選択肢はこの 9 種
+- 2026-10-05: 一覧の行には `操作者名` / `実行者区分` / `対象機能` / `操作内容` が入っている
+  （`操作内容` は「発注停止を停止」「銘柄情報を削除」のような表示文。操作者がマスタに無い `e2e` は
+  `操作者名` が「システム」、`実行者区分` が `null`）
 - ALR-01 は件数が増えている最中でも通った（画面の件数と API の `total` を続けて読むので、その間に
   行が増えると揺れうる。揺れたら他の実 API E2E を止めて流し直す）
-- 対象種別コードは 14 種。`schedule_times` だけがアンダースコアで、他はケバブケース（`order-suspensions` 等）。
-  知らないコードは 400（`指定できない対象種別です`）で弾かれるので、黙って無視はされない
+- 対象種別コードは 14 種。2026-09-29 は `schedule_times` だけがアンダースコアだったが、2026-10-05 には
+  `schedule-times` になり全部ケバブケース（`order-suspensions` 等）。
+  知らないコードは 400（`指定できない対象種別です`）で弾かれるので、黙って無視はされない。
+  画面の「操作区分」（マスタ更新 / 運用管理）は対象種別から導き、運用管理は `order-suspensions` / `announcements`
+  の 2 種（`src/utils/activityLogTypes.js` の `OPERATION_TARGET_TYPES`）。バックエンドが運用管理の対象種別を
+  増やしたときは、この定数に足すまでマスタ更新に数えられる（`docs/api/requests.md` #38 で区分の返却を依頼中）
 

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { categoryLabel, categoryOf } from '../src/utils/activityLogTypes'
 
 /*
  * 操作ログを「実 API に当てて」確かめる E2E（スモーク 2 本）。
@@ -22,16 +23,24 @@ const PATH = '/operations/activity-logs'
 // ストアは import.meta.env を辿る api/client.js に依存しており Playwright からは import できない。
 const PAGE_SIZE = 50
 
-// src/utils/activityLogTypes.js の ACTIVITY_OPERATION_OPTIONS と同じ対応（同じ理由で再掲）
-const OPERATION_LABELS = {
-  CREATE: '登録',
-  UPDATE: '更新',
-  DELETE: '削除',
-  BATCH: '一括処理',
-}
+/**
+ * 画面の「操作内容」で選べる操作区分（実 API の operation クエリ。/codes の 操作区分 と同じ 9 種）。
+ * 検索の前提を探す順。先頭の 4 種はマスタの行、後ろの 5 種は運用管理・VWAP の行に付く
+ */
+const OPERATIONS = [
+  'CREATE',
+  'UPDATE',
+  'DELETE',
+  'BATCH',
+  'SUSPEND',
+  'RESUME',
+  'SHOW',
+  'HIDE',
+  'VWAP_BULK',
+]
 
 /** 列の並び（activity-logs.spec.js の COLUMNS と同じ）。セルを列名で引く索引 */
-const COLUMNS = ['操作日時', '対象種別', '操作区分', '操作者', '対象キー', '変更項目', '']
+const COLUMNS = ['操作日時', '操作区分', '操作者', '対象機能・操作', '対象キー', '変更項目', '']
 
 /** 実 API を直接叩く宛先。dev サーバの /api プロキシ越しに実 API へ届く */
 const baseURL = process.env.E2E_BASE_URL || 'http://frontend:5173'
@@ -133,7 +142,7 @@ test.describe('操作ログ（実 API 接続）', () => {
       await expect(page.getByTestId('activity-logs-empty')).toHaveCount(0)
     }
 
-    // 対象種別の選択肢は API の件数 +「全て」
+    // 対象機能の選択肢は API の件数 +「全て」
     const options = page.getByTestId('activity-logs-target-type').locator('option')
     await expect(options).toHaveCount(targets.length + 1)
     for (const target of targets) {
@@ -145,28 +154,32 @@ test.describe('操作ログ（実 API 接続）', () => {
     await expect(page.getByTestId('activity-logs-error')).toHaveCount(0)
   })
 
-  test('[ALR-02] 対象種別と操作区分で検索すると API と同じ件数に絞られる', async ({ page }) => {
+  test('[ALR-02] 対象機能と操作内容で検索すると API と同じ件数に絞られる', async ({ page }) => {
     /*
      * 1 件以上ある「対象種別 × 操作区分」の組を API から探す（その組は必ず 1 件以上ある）。
-     * 操作区分は画面で選べる 4 種（= 実 API の operation クエリが受け付ける 4 種）に限る。
-     * 発注停止の行は SUSPEND / RESUME を返すが、operation クエリはそれを 400 で拒否するので
-     * 絞り込みの対象にできない（docs/e2e/activity-logs-real-api.md の「2026-09-29 の実測」）。
+     * 操作区分は画面の「操作内容」で選べる 9 種（= 実 API の operation クエリが受け付ける値。
+     * 2026-10-05 の実測で SUSPEND なども 200 になった）。
      */
-    // 操作区分ごとに最新の 1 行を引き、その行の対象種別と組にする（API 呼び出しは最大 4 回）
+    // 操作区分ごとに最新の 1 行を引き、その行の対象種別と組にする（API 呼び出しは最大 9 回）
     let picked = null
-    for (const operation of Object.keys(OPERATION_LABELS)) {
+    for (const operation of OPERATIONS) {
       const body = await getJson('/api/operations/activity-logs', { limit: 1, operation })
       const [row] = body.activity_logs ?? []
       if (row) {
-        picked = { targetType: row['対象種別'], targetTypeName: row['対象種別名'], operation }
+        picked = {
+          targetType: row['対象種別'],
+          targetTypeName: row['対象種別名'],
+          operation,
+          operationText: row['操作内容'],
+        }
         break
       }
     }
     test.skip(
       picked === null,
-      '画面で選べる操作区分（CREATE / UPDATE / DELETE / BATCH）の操作ログが 1 件も無いので絞り込みを確かめられない',
+      '画面で選べる操作内容（CREATE … VWAP_BULK）の操作ログが 1 件も無いので絞り込みを確かめられない',
     )
-    const { targetType, targetTypeName, operation } = picked
+    const { targetType, targetTypeName, operation, operationText } = picked
 
     await openList(page)
     const total = await countOf(page)
@@ -184,12 +197,15 @@ test.describe('操作ログ（実 API 接続）', () => {
     expect(expected).toBeLessThanOrEqual(total)
     await expect(page.getByTestId('activity-logs-count')).toHaveText(`${expected} 件`)
 
-    // 表示行がすべて条件どおり。クエリ名が黙って無視されていれば他の種別・区分が混ざる
+    // 表示行がすべて条件どおり。クエリ名が黙って無視されていれば他の種別・区分が混ざる。
+    // 対象機能・操作のセルは「<対象機能>\n<操作内容>」、操作区分は対象種別から導いた区分（マスタ更新 / 運用管理）
     const shown = Math.min(expected, PAGE_SIZE)
     await expect(rowsOf(page)).toHaveCount(shown)
-    await expect(columnOf(page, '対象種別')).toHaveText(Array(shown).fill(targetTypeName))
+    await expect(columnOf(page, '対象機能・操作')).toHaveText(
+      Array(shown).fill(new RegExp(`^${targetTypeName}[\\s\\S]*${operationText ?? ''}$`)),
+    )
     await expect(columnOf(page, '操作区分')).toHaveText(
-      Array(shown).fill(OPERATION_LABELS[operation]),
+      Array(shown).fill(categoryLabel(categoryOf(targetType))),
     )
   })
 })

@@ -20,7 +20,7 @@ const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 const MARKERS = {
   '/operations/announcements': 'announcements-status',
   '/operations/stalled-orders': 'stalled-orders-description',
-  '/operations/activity-logs': 'activity-logs-description',
+  '/operations/activity-logs': 'activity-logs-search',
   '/operations/incidents': 'incidents-targets',
 }
 const operationSection = navSections.find((section) => section.label === '運用管理')

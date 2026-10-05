@@ -2,14 +2,18 @@ import { expect, test } from '@playwright/test'
 import { clickSideMenuLink } from './helpers/sideMenu'
 import { activityLogs } from '../src/mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../src/mocks/fixtures/activityLogTargets'
-import { formatActivityAt } from '../src/utils/activityLogTypes'
+import {
+  OPERATION_TARGET_TYPES,
+  categoryLabel,
+  formatActivityAt,
+} from '../src/utils/activityLogTypes'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/activity-logs.md（タイトル先頭の [AL-xx] が対応 ID）
-// 各マスタの変更履歴を横断して読む画面。ページ位置と検索条件は URL クエリを正とするため、
+// 各マスタと運用管理の変更履歴を横断して読む画面。ページ位置と検索条件は URL クエリを正とするため、
 // URL と画面の同期と、行の「詳細」ダイアログをここで守る。
 // mockApi() は固定の body を返すだけで offset や検索条件のクエリを解釈しない。
-// ページングと絞り込み（AL-02〜AL-10 / AL-15 / AL-16）はクエリを実際に処理する既定ハンドラで検証する。
+// ページングと絞り込み（AL-02〜AL-10 / AL-15 / AL-16 / AL-18）はクエリを実際に処理する既定ハンドラで検証する。
 
 const PATH = '/operations/activity-logs'
 
@@ -18,7 +22,7 @@ const PATH = '/operations/activity-logs'
 const PAGE_SIZE = 50
 
 /** 列の並び。見出しの検証（AL-12）と、セルを列名で引くための索引を兼ねる。最後は「詳細」ボタンの列 */
-const COLUMNS = ['操作日時', '対象種別', '操作区分', '操作者', '対象キー', '変更項目', '']
+const COLUMNS = ['操作日時', '操作区分', '操作者', '対象機能・操作', '対象キー', '変更項目', '']
 
 // フィクスチャは実 API の既定（sort=desc）と同じ操作日時の降順
 const TOTAL = activityLogs.length
@@ -49,6 +53,14 @@ const byPeriod = activityLogs.filter(
 
 const byCustomersUpdate = activityLogs.filter(
   (log) => log.対象種別 === 'customers' && log.操作区分 === 'UPDATE',
+)
+
+/** 運用管理（発注停止 / お知らせ）の行と、その対象種別名 */
+const operationTargets = activityLogTargets.filter((target) =>
+  OPERATION_TARGET_TYPES.includes(target.対象種別),
+)
+const byOperationCategory = activityLogs.filter((log) =>
+  OPERATION_TARGET_TYPES.includes(log.対象種別),
 )
 
 // フィクスチャのどの対象キーにも当たらない文字列
@@ -101,7 +113,7 @@ test.describe('操作ログ一覧', () => {
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(PAGE_SIZE)
     await expect(cellOf(rows.first(), '操作日時')).toHaveText(formatActivityAt(firstRow.操作日時))
-    await expect(cellOf(rows.first(), '対象種別')).toHaveText(firstRow.対象種別名)
+    await expect(cellOf(rows.first(), '対象機能・操作')).toContainText(firstRow.対象種別名)
     await expect(cellOf(rows.first(), '対象キー')).toHaveText(firstRow.対象キー)
   })
 
@@ -122,7 +134,7 @@ test.describe('操作ログ一覧', () => {
     )
   })
 
-  test('[AL-03] 操作区分で絞り込むと URL と一覧に反映される', async ({ page }) => {
+  test('[AL-03] 操作内容で絞り込むと URL と一覧に反映される', async ({ page }) => {
     expect(byDelete.length).toBeGreaterThan(0)
 
     await page.goto(PATH)
@@ -134,10 +146,13 @@ test.describe('操作ログ一覧', () => {
     await expect(page).toHaveURL(/operation=DELETE/)
     await expect(page.getByTestId('activity-logs-count')).toHaveText(`${byDelete.length} 件`)
     await expect(rowsOf(page)).toHaveCount(byDelete.length)
-    await expect(columnOf(page, '操作区分')).toHaveText(Array(byDelete.length).fill('削除'))
+    // 対象機能・操作のセルは「<対象機能>\n<操作内容>」。操作内容はサーバの表示文（…を削除）
+    await expect(columnOf(page, '対象機能・操作')).toHaveText(
+      byDelete.map((log) => new RegExp(`${log.対象種別名}[\\s\\S]*削除`)),
+    )
   })
 
-  test('[AL-04] 対象種別の選択肢が API から並び、選ぶと絞り込まれる', async ({ page }) => {
+  test('[AL-04] 対象機能の選択肢が API から並び、選ぶと絞り込まれる', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
@@ -155,8 +170,8 @@ test.describe('操作ログ一覧', () => {
     await expect(page).toHaveURL(new RegExp(`target_types=${symbolsTarget.対象種別}`))
     await expect(page.getByTestId('activity-logs-count')).toHaveText(`${bySymbols.length} 件`)
     await expect(rowsOf(page)).toHaveCount(bySymbols.length)
-    await expect(columnOf(page, '対象種別')).toHaveText(
-      Array(bySymbols.length).fill(symbolsTarget.対象種別名),
+    await expect(columnOf(page, '対象機能・操作')).toHaveText(
+      Array(bySymbols.length).fill(new RegExp(`^${symbolsTarget.対象種別名}`)),
     )
   })
 
@@ -170,7 +185,10 @@ test.describe('操作ログ一覧', () => {
     await expect(page.getByTestId('activity-logs-count')).toHaveText(`${byOperator.length} 件`)
     expect(new URL(page.url()).searchParams.get('operator')).toBe(OPERATOR)
     await expect(rowsOf(page)).toHaveCount(byOperator.length)
-    await expect(columnOf(page, '操作者')).toHaveText(Array(byOperator.length).fill(OPERATOR))
+    // 操作者のセルは「<氏名>\n<実行者区分>・<コード>」
+    await expect(columnOf(page, '操作者')).toHaveText(
+      byOperator.map((log) => new RegExp(`${log.操作者名}[\\s\\S]*${log.実行者区分}・${OPERATOR}$`)),
+    )
   })
 
   test('[AL-06] 対象キーの部分一致で別の対象種別の行も当たる', async ({ page }) => {
@@ -270,8 +288,7 @@ test.describe('操作ログ一覧', () => {
     await expect(error).toContainText(ERROR_MESSAGE)
     await expect(error.getByRole('button', { name: '再試行' })).toBeVisible()
     await expect(page.getByTestId('activity-logs-table')).toBeHidden()
-    // エラーのときも説明バナーと検索カードは消えない
-    await expect(page.getByTestId('activity-logs-description')).toBeVisible()
+    // エラーのときも検索カードは消えない
     await expect(page.getByTestId('activity-logs-search')).toBeVisible()
   })
 
@@ -288,7 +305,8 @@ test.describe('操作ログ一覧', () => {
     await expect(page.getByTestId('activity-logs-table').locator('th')).toHaveText(COLUMNS)
 
     const noKeyRow = rows.nth(noKeyIndex)
-    await expect(cellOf(noKeyRow, '操作者')).toHaveText('—')
+    // 操作者コードが無い行は、サーバが 操作者名 に入れる「システム」だけ
+    await expect(cellOf(noKeyRow, '操作者')).toHaveText(firstPage[noKeyIndex].操作者名)
     await expect(cellOf(noKeyRow, '対象キー')).toHaveText('—')
 
     // 読むだけの画面。追加の導線は無く、行の操作は「詳細」だけ
@@ -400,7 +418,7 @@ test.describe('操作ログ一覧', () => {
     await expect(cellOf(rowsOf(page).first(), '対象キー')).toHaveText(firstRow.対象キー)
   })
 
-  test('[AL-17] 対象種別の取得に失敗しても一覧と検索は使える', async ({ page }) => {
+  test('[AL-17] 対象機能の取得に失敗しても一覧と検索は使える', async ({ page }) => {
     await mockApi(page, [
       {
         path: '*/api/operations/activity-logs/targets',
@@ -411,14 +429,49 @@ test.describe('操作ログ一覧', () => {
     await page.goto(PATH)
 
     await expect(page.getByTestId('activity-logs-search')).toContainText(
-      '対象種別を取得できませんでした',
+      '対象機能を取得できませんでした',
     )
     await expect(page.getByTestId('activity-logs-count')).toHaveText(`${TOTAL} 件`)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    // 対象種別なしで他の条件の検索はできる
+    // 対象機能なしで他の条件の検索はできる
     await page.getByTestId('activity-logs-operation').selectOption({ label: '削除' })
     await search(page)
     await expect(page.getByTestId('activity-logs-count')).toHaveText(`${byDelete.length} 件`)
+  })
+
+  test('[AL-18] 操作区分で「運用管理」を選ぶと対象機能が絞られ、検索すると運用管理の行だけが出る', async ({
+    page,
+  }) => {
+    // 運用管理の行が 1 件以上あり、全件ではないこと（絞り込みが効いたと言えること）
+    expect(byOperationCategory.length).toBeGreaterThan(0)
+    expect(byOperationCategory.length).toBeLessThan(TOTAL)
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('activity-logs-category').selectOption({ label: categoryLabel('operation') })
+
+    // 対象機能の選択肢が運用管理の 2 種（+「全て」）になる
+    const options = page.getByTestId('activity-logs-target-type').locator('option')
+    await expect(options).toHaveCount(operationTargets.length + 1)
+    for (const target of operationTargets) {
+      await expect(options.filter({ hasText: target.対象種別名 })).toHaveCount(1)
+    }
+
+    await search(page)
+
+    // 実 API に区分は無いので URL には画面の言葉だけが乗り、対象種別には展開しない
+    const query = new URL(page.url()).searchParams
+    expect(query.get('category')).toBe('operation')
+    expect(query.get('target_types')).toBeNull()
+
+    await expect(page.getByTestId('activity-logs-count')).toHaveText(
+      `${byOperationCategory.length} 件`,
+    )
+    await expect(rowsOf(page)).toHaveCount(byOperationCategory.length)
+    await expect(columnOf(page, '操作区分')).toHaveText(
+      Array(byOperationCategory.length).fill(categoryLabel('operation')),
+    )
   })
 })

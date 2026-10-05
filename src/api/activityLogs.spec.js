@@ -55,7 +55,11 @@ const MODEL_KEYS = [
   'targetId',
   'targetKey',
   'operation',
+  'operationText',
   'operator',
+  'operatorName',
+  'operatorRole',
+  'feature',
   'at',
   'before',
   'after',
@@ -83,7 +87,8 @@ describe('api/activityLogs', () => {
       dateTo: '2026-09-16',
       operator: updateItem.操作者,
       operation: updateItem.操作区分,
-      targetType: updateItem.対象種別,
+      // 対象種別は複数をカンマ区切りで送る（画面の 区分 を展開した並び）
+      targetTypes: [updateItem.対象種別, 'order-suspensions'],
       targetKey: updateItem.対象キー,
       sort: 'asc',
     }
@@ -94,7 +99,7 @@ describe('api/activityLogs', () => {
     expect(lastRequest.params.get('end_date')).toBe(conditions.dateTo)
     expect(lastRequest.params.get('operator')).toBe(conditions.operator)
     expect(lastRequest.params.get('operation')).toBe(conditions.operation)
-    expect(lastRequest.params.get('target_types')).toBe(conditions.targetType)
+    expect(lastRequest.params.get('target_types')).toBe(conditions.targetTypes.join(','))
     expect(lastRequest.params.get('target_key')).toBe(conditions.targetKey)
     expect(lastRequest.params.get('sort')).toBe(conditions.sort)
     expect([...lastRequest.params.keys()].sort()).toEqual(
@@ -120,7 +125,7 @@ describe('api/activityLogs', () => {
       dateTo: '',
       operator: '',
       operation: '',
-      targetType: '',
+      targetTypes: [],
       targetKey: '',
       sort: '',
     })
@@ -244,18 +249,38 @@ describe('api/activityLogs', () => {
     }
   })
 
-  it('[ALA-12] 仕様に無い契約提案の 5 項目は変換結果に出さない', async () => {
-    // フィクスチャに契約提案の項目が載っていないと、このシナリオは意味を失う
+  it('[ALA-12] 仕様に入った 4 項目は読み、仕様に無い 結果 は変換結果に出さない', async () => {
+    // フィクスチャに 4 項目と契約提案の 結果 が載っていないと、このシナリオは意味を失う
     expect(updateItem).toHaveProperty('操作者名')
+    expect(updateItem).toHaveProperty('結果')
     record(listBody([updateItem]))
 
     const { items } = await fetchActivityLogs()
 
     expect(Object.keys(items[0]).sort()).toEqual([...MODEL_KEYS].sort())
-    const values = Object.values(items[0])
-    for (const key of ['操作者名', '実行者区分', '操作内容']) {
-      expect(values).not.toContain(updateItem[key])
-    }
+    expect(items[0]).toMatchObject({
+      operatorName: updateItem.操作者名,
+      operatorRole: updateItem.実行者区分,
+      feature: updateItem.対象機能,
+      operationText: updateItem.操作内容,
+    })
+    expect(Object.values(items[0])).not.toContain(updateItem.結果)
+  })
+
+  it('[ALA-16] 4 項目が null・欠落のときは空文字に寄せる', async () => {
+    const raw = { ...updateItem, 実行者区分: null, 操作内容: null }
+    delete raw.操作者名
+    delete raw.対象機能
+    record(listBody([raw]))
+
+    const { items } = await fetchActivityLogs()
+
+    expect(items[0]).toMatchObject({
+      operatorName: '',
+      operatorRole: '',
+      feature: '',
+      operationText: '',
+    })
   })
 
   it('[ALA-13] 履歴ID が重複しても行キーは一意になる', async () => {

@@ -69,8 +69,18 @@ export const PROPOSED_CODE_MASTERS = {
   約定出来状況: { '010': '一部出来', '011': '全部出来', '034': '取消済（出来有）' },
   /** 新規注文の注文種別（OrderRequest の VWAP区分。integer で送る） */
   VWAP区分: { 0: '通常', 1: 'VWAP' },
-  /** 操作ログの検索（GET /operations/activity-logs の operation） */
-  操作区分: { CREATE: '登録', UPDATE: '更新', DELETE: '削除', BATCH: '一括処理' },
+  /** 操作ログの検索（GET /operations/activity-logs の operation）。実 API の /codes の写し（2026-10-05 実測） */
+  操作区分: {
+    CREATE: '登録',
+    UPDATE: '更新',
+    DELETE: '削除',
+    BATCH: '一括処理',
+    SUSPEND: '停止',
+    RESUME: '再開',
+    SHOW: '表示',
+    HIDE: '非表示',
+    VWAP_BULK: 'VWAP対象一括更新',
+  },
 }
 
 /**

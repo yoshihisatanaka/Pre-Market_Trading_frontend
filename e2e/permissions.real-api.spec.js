@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { apiContext, listHelpers, skipUnlessRealApi } from './helpers/realApi.js'
+import { apiContext, assertRealApi, listHelpers, skipUnlessRealApi } from './helpers/realApi.js'
 
 /*
  * 権限マスタを「実 API に当てて」確かめる E2E。
@@ -48,10 +48,26 @@ const [, , OPERATION, BRANCH_ALL] = PERMISSIONS
 /** 許可 / 不可のバッジの文言（src/utils/permissionTypes.js の permissionBadge と同じ） */
 const badge = (flag) => (flag === 1 ? '許可' : '不可')
 
-const { openList, countOf, rowsOf, expectListConsistent } = listHelpers({
+const { settleList, countOf, rowsOf, expectListConsistent } = listHelpers({
   path: PATH,
   testIdPrefix: 'permissions',
 })
+
+/*
+ * 一覧の表示を待つ上限。この画面は共通の 4 本（codes / branches / handlers / market-status）と /auth/me が
+ * 返ってから一覧を読み始め、実 API はおおむね 300ms ずつ直列に返すので、温まっていても表示まで 4 秒近くかかる
+ * （2026-10-05 の検証で 3.8 秒を実測）。helpers の openList は expect 既定の 5 秒で待つため、dev サーバの
+ * 起動直後や負荷のある状態で落ちる。ここだけ延ばす（共通化の候補: openList に待ち時間を渡せるようにする）
+ */
+const OPEN_TIMEOUT = 20_000
+
+/** 一覧を開いて実 API に当たっていることまで確認する。helpers の openList と同じ手順で、表示の待ちだけ長い */
+async function openList(page) {
+  await page.goto(PATH)
+  await expect(page.getByTestId('permissions-count')).toBeVisible({ timeout: OPEN_TIMEOUT })
+  await settleList(page)
+  await assertRealApi(page)
+}
 
 /** 書き換える対象のロール（beforeAll で決める）と、その実行前の値 */
 let target = null

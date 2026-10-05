@@ -35,6 +35,7 @@ async function fetchCurrentFxRate() {
 
 /**
  * 為替マスタ（USD/JPY の現在レート）。単一のリソースなので一覧のようなページングは持たない。
+ * 公示（社内）レートと源泉レートは同じ行の 2 項目なので、取得も保存も 1 件として扱う。
  *
  * **更新の対象は当日（JST）の行だけ**（2026-09-29 決定。画面モックの「適用日」は置かない）。
  * 現在の行の基準日が今日なら変更（PUT）、今日の行がまだ無ければ今日の基準日で登録（POST）する。
@@ -52,11 +53,15 @@ export const useFxRatesStore = defineStore('fxRates', () => {
    * 事前検証 → 登録 / 変更。検証で弾かれた場合は例外にせず { valid: false, errors } を返す。
    * 警告付きの合格（範囲外のレート）は、承知して押し直すまで保存しない。
    */
-  async function validateThenSave({ rate: nextRate, acknowledgedWarnings = false }) {
+  async function validateThenSave({
+    rate: nextRate,
+    withholdingRate = null,
+    acknowledgedWarnings = false,
+  }) {
     const baseDate = todayJst()
     const current = data.value
     const target = current?.baseDate === baseDate ? current : null
-    const payload = { baseDate, currencyCode: CURRENCY_CODE, rate: nextRate }
+    const payload = { baseDate, currencyCode: CURRENCY_CODE, rate: nextRate, withholdingRate }
 
     const validation = await validateFxRate({ ...payload, id: target?.id ?? '' })
     if (!validation.valid) return { valid: false, errors: validation.errors }
@@ -77,9 +82,10 @@ export const useFxRatesStore = defineStore('fxRates', () => {
   const validationWarnings = ref([])
 
   /**
-   * 今日のレートを保存する。
+   * 今日のレート（公示（社内）レートと源泉レート）を保存する。
    *
-   * @param {{ rate: number, acknowledgedWarnings?: boolean }} params
+   * @param {{ rate: number, withholdingRate?: number | null, acknowledgedWarnings?: boolean }} params
+   *   rate は公示（社内）レート、withholdingRate は源泉レート。
    *   警告を承知して押し直すときは acknowledgedWarnings: true
    * @returns {Promise<object|null>} 保存後の 1 件。保存しなかったときは null
    *   （通信・サーバエラーは saveError、事前検証で弾かれた理由は validationErrors、

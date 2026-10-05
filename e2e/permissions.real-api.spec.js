@@ -66,6 +66,12 @@ async function openList(page) {
   await page.goto(PATH)
   await expect(page.getByTestId('permissions-count')).toBeVisible({ timeout: OPEN_TIMEOUT })
   await settleList(page)
+  // 取得がタイムアウト（client.js の 15 秒）すると件数 0 とエラーが出て、以降は「編集が無い」で紛らわしく落ちる。
+  // 原因（バックエンドの応答遅延）が分かる形でここで止める
+  await expect(
+    page.getByTestId('permissions-error'),
+    '一覧の取得が失敗した（バックエンドの応答遅延かタイムアウト）。api コンテナの状態を確認する',
+  ).toHaveCount(0)
   await assertRealApi(page)
 }
 
@@ -323,6 +329,9 @@ test.describe('権限マスタ（実 API 接続）', () => {
   })
 
   test('[PMR-08] 先に別の画面で保存されていると競合で弾かれる', async ({ page, playwright }) => {
+    // 一覧を 3 回開いて保存を 3 回行う。実 API は 1 画面の表示に 4 秒前後かかるので
+    // 既定の 30 秒では足りないことがある（2026-10-05 の検証で保存中のまま打ち切られた）
+    test.slow()
     const before = await readTarget(playwright)
 
     // 画面 A: 編集を開いて、取得時の更新日時を掴んだままにする

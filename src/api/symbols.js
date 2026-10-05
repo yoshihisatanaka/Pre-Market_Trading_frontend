@@ -14,13 +14,14 @@ import { apiClient } from './client'
  *     ワイヤ上の名前なのでこの層の中で吸収し、外へは出さない）
  *   - 削除は論理削除（取消区分=1）。一覧は既定で取消済みを返さない
  *
- * 画面の検索欄（銘柄コード・ティッカーコード）は `symbol` パラメータにだけ乗る。
- * 実 API は `symbol` / `ticker` / `symbol_name_ja` / `symbol_name_en` をそれぞれ別の
- * パラメータに分けていて、まとめて 1 語で探すパラメータが無いため、
- * **この欄では銘柄名では絞れない**（名前の 2 つは 2026-09-16 の取り込みで
- * `name_ja` / `name_en` から改名された。この層は送っていないので影響は無い）。
+ * 画面の検索欄は 2 つ。「銘柄コード・ティッカーコード」は `symbol`（銘柄コードまたは Ticker の
+ * 部分一致。2026-09-30 に実 API で確認済み。docs/api/requests.md #19）、「銘柄名」は
+ * `symbol_name_ja` / `symbol_name_en` のどちらか 1 つに乗る。実 API は 4 つを別々のパラメータに
+ * 分けていて、まとめて 1 語で探すパラメータが無い（画面モックは 1 欄で銘柄コードと銘柄名の両方に
+ * 当てる）。日本語名と英語名のどちらに当てるかの決めかたは fetchSymbols() を参照。
  *
- * いまは一覧の取得・登録・更新・削除を持つ。CSV 入出力と更新履歴は別途。
+ * いまは一覧の取得・登録・更新・削除と、VWAP対象区分の一括更新（事前確認 → 本実行）を持つ。
+ * CSV 入出力と更新履歴は別途。
  *
  * **登録・更新の本文（SymbolRequest）には `市場名` / `前日出来高` / `Pre区分` を載せない。**
  * 画面のフォームがこの 3 項目を持たないため。理由は toSymbolRequest() のコメントを参照。
@@ -65,9 +66,13 @@ import { apiClient } from './client'
  *
  * 取消済み（論理削除）の行は含めない。実 API の include_deleted は既定 false なので送らない。
  *
- * 画面の検索欄 1 つは `symbol` にだけ乗せる。実 API は `ticker` を別パラメータに分けているが、
- * 欄を 2 つに割るかはバックエンドの `symbol` が Ticker にも当たるか次第なので、
- * 確認が付くまでは従来どおり 1 つの欄・1 つのパラメータで通す。
+ * 画面の「銘柄コード・ティッカーコード」欄は `symbol` に乗せる（実 API は銘柄コードまたは Ticker の
+ * 部分一致。2026-09-30 に確認済み）。
+ *
+ * **「銘柄名」欄は `symbol_name_ja` と `symbol_name_en` のどちらか 1 つに乗せる。** 2 つを同時に送ると
+ * AND になって日本語名と英語名の両方に当たる行しか返らないので、入力に ASCII 以外の文字（かな・漢字など）
+ * が含まれていれば日本語名（`symbol_name_ja`）、ASCII だけなら英語名（`symbol_name_en`）に当てる。
+ * 英語名が未登録（null）の銘柄は英字で探しても当たらないが、その場合は Ticker で探せる。
  *
  * `ticker` は新規注文のティッカー照会が使う（`?ticker=` は実 API で Ticker に当たることを
  * 2026-09-25 に実測済み。docs/api/requests.md #19）。一致が完全か部分かは仕様に書かれていないので、
@@ -77,12 +82,14 @@ import { apiClient } from './client'
  *   limit?: number,
  *   offset?: number,
  *   symbolCode?: string,
+ *   symbolName?: string,
  *   ticker?: string,
  *   regulation?: string,
  *   orderRoute?: string,
  *   vwapTarget?: string,
  * }} [params]
  *   limit は 1..200（実 API の既定は 50）。symbolCode は銘柄コードまたは Ticker。
+ *   symbolName は銘柄名（日本語または英語。上の規則で送り先を選ぶ）。
  *   regulation / orderRoute / vwapTarget は utils/symbolTypes.js のコード値。
  *   空文字は「条件なし」としてリクエストに載せない
  * @returns {Promise<{ items: Symbol[], total: number }>}
@@ -91,6 +98,7 @@ export async function fetchSymbols({
   limit = 50,
   offset = 0,
   symbolCode = '',
+  symbolName = '',
   ticker = '',
   regulation = '',
   orderRoute = '',
@@ -103,6 +111,7 @@ export async function fetchSymbols({
       offset,
       symbol: symbolCode || undefined,
       ticker: ticker || undefined,
+      ...toSymbolNameQuery(symbolName),
       restriction: regulation || undefined,
       route: orderRoute || undefined,
       vwap_target: vwapTarget || undefined,
@@ -224,6 +233,89 @@ export async function updateSymbol({ id, ...symbol }) {
 export async function deleteSymbol(id) {
   await apiClient.delete(`/masters/symbols/${encodeURIComponent(id)}`)
   return id
+}
+
+/**
+ * VWAP対象の銘柄をすべて対象外にする操作の**事前確認**（dry-run。更新しない）。
+ *
+ * 実 API `POST /masters/symbols/vwap-target/validate` に `mode=set` / `VWAP対象区分='0'` を送り、
+ * 値が変わる銘柄（いま対象の銘柄）の件数と一覧を受け取る。`symbol_ids` は送らない
+ * （省略時は有効な全銘柄が候補。現在値が同じ銘柄は対象に含めない）。
+ *
+ * 画面モックのボタンは「VWAP対象を一括で対象外へ」の 1 方向だけなので、`mode=reset`
+ * （朝バッチ後の値へ戻す）と対象外→対象の向きはこの層に置かない。必要になったら引数で向きを取る。
+ *
+ * @returns {Promise<VwapTargetBulkResult>}
+ */
+export async function previewDisableAllVwapTargets() {
+  const { data } = await apiClient.post(
+    '/masters/symbols/vwap-target/validate',
+    DISABLE_ALL_VWAP_TARGETS_REQUEST,
+  )
+  return toVwapTargetBulkResult(data)
+}
+
+/**
+ * VWAP対象の銘柄をすべて対象外にする（本実行）。
+ *
+ * 実 API `POST /masters/symbols/vwap-target` に事前確認と同じ本文を送る。サーバは 1 トランザクションで
+ * 全件更新し（途中エラーは全件ロールバック）、銘柄ごとに ユーザー操作フラグ=1 を立てて履歴に
+ * 操作区分 `VWAP_BULK` で記録する。楽観的ロックは無い（更新日時 の照合をしない）。
+ *
+ * @returns {Promise<VwapTargetBulkResult>} 更新件数と更新した銘柄の一覧
+ */
+export async function disableAllVwapTargets() {
+  const { data } = await apiClient.post(
+    '/masters/symbols/vwap-target',
+    DISABLE_ALL_VWAP_TARGETS_REQUEST,
+  )
+  return toVwapTargetBulkResult(data)
+}
+
+/** 事前確認と本実行で共用する本文（VwapTargetBulkRequest）。全銘柄を対象外（'0'）へ */
+const DISABLE_ALL_VWAP_TARGETS_REQUEST = { mode: 'set', VWAP対象区分: '0' }
+
+/**
+ * 一括更新の結果（事前確認・本実行で同じ形）
+ *
+ * @typedef {{
+ *   dryRun: boolean,
+ *   candidateCount: number,
+ *   targetCount: number,
+ *   updatedCount: number,
+ *   symbols: Array<{ id: string, symbolCode: string, ticker: string, name: string }>,
+ *   message: string,
+ * }} VwapTargetBulkResult
+ *   candidateCount は絞り込み前の銘柄数（有効な全銘柄）、targetCount は値が変わる銘柄数、
+ *   updatedCount は実際に更新した件数（事前確認では 0）。symbols は値が変わる（変わった）銘柄
+ */
+
+/** VwapTargetBulkResponse → VwapTargetBulkResult */
+function toVwapTargetBulkResult(raw) {
+  return {
+    dryRun: Boolean(raw?.dry_run),
+    candidateCount: raw?.候補件数 ?? 0,
+    targetCount: raw?.対象件数 ?? 0,
+    updatedCount: raw?.更新件数 ?? 0,
+    symbols: (raw?.symbols ?? []).map((symbol) => ({
+      id: String(symbol?.ID ?? ''),
+      symbolCode: symbol?.銘柄コード ?? '',
+      ticker: symbol?.Ticker ?? '',
+      name: symbol?.銘柄名 ?? '',
+    })),
+    message: raw?.message ?? '',
+  }
+}
+
+/**
+ * 「銘柄名」欄の入力をクエリに直す。ASCII 以外の文字を含めば日本語名、ASCII だけなら英語名に当てる
+ * （2 つを同時に送ると AND になるため、必ずどちらか 1 つ）。空欄は何も送らない。
+ */
+function toSymbolNameQuery(symbolName) {
+  const name = String(symbolName ?? '').trim()
+  if (!name) return {}
+  // eslint-disable-next-line no-control-regex -- ASCII の範囲を明示するための意図的な指定
+  return /[^\x00-\x7F]/.test(name) ? { symbol_name_ja: name } : { symbol_name_en: name }
 }
 
 /**

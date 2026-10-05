@@ -307,6 +307,9 @@ test.describe('障害管理（実 API 接続）', () => {
   })
 
   test('[IR-04] 履歴の各列が API の操作履歴と一致する', async ({ page }) => {
+    // 履歴 1 ページ（50 行 × 4 列）を 1 行ずつ照合する。実 API は画面の表示に 4 秒前後かかり、
+    // 履歴が 50 行に達すると既定の 30 秒を超える（2026-10-05 の検証で afterEach まで届かず打ち切られた）
+    test.slow()
     await openView(page)
 
     const body = await getHistoryPage(0)
@@ -524,6 +527,9 @@ test.describe('障害管理（実 API 接続）', () => {
     test('[IR-08] 全体を停止すると全体停止中の表示と抑止になり、再開で通常運用に戻る', async ({
       page,
     }) => {
+      // 開く → 停止 → 再開で画面が状態と履歴を 3 回引く。実 API は 1 回 4 秒前後かかるので
+      // 既定の 30 秒では足りないことがある（2026-10-05 の検証で再開後の API 確認の直前に打ち切られた）
+      test.slow()
       const initial = await expectAllIdle()
       const allName = initial['停止対象名']
       const routeCodes = (await getStatus()).targets

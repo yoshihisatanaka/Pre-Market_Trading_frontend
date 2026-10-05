@@ -98,7 +98,7 @@ function priceLabel() {
   <td class="numeric">{{ positiveOrDash(order.filledAmountJpy, formatJpyUnit) }}</td>
 
   <!--
-    市場区分。API は 発注範囲 のコード（'01'〜'06'）しか返さないので、名前はバックエンドの
+    市場区分。API は 発注範囲 のコード（'02' / '03' / '04' / '06'）しか返さないので、名前はバックエンドの
     コードマスタの写し（src/utils/orderTypes.js）で引く。知らないコードはコードのまま出す。
   -->
   <td class="order-inquiry-cells__center">

@@ -54,7 +54,9 @@ describe('utils/stalledOrderCsv', () => {
   })
 
   it('[SOU-03] 指値の注文は LMT で指値をそのまま出す', () => {
-    expect(lines(buildTwsOrderCsv([LIMIT_ORDER]))[1]).toBe('26,300001,AAPL,SELL,20,LMT,228.5,DAY,プレ')
+    expect(lines(buildTwsOrderCsv([LIMIT_ORDER]))[1]).toBe(
+      '26,300001,AAPL,SELL,20,LMT,228.5,DAY,プレ＋レギュラー',
+    )
   })
 
   it('[SOU-04] 未知の売買の向きは action を空欄にする', () => {

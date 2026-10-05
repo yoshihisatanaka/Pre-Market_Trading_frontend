@@ -95,8 +95,8 @@ describe('orderEntryOptions', () => {
     expect(optionLabel(ORDER_TYPE_OPTIONS, 'LO')).toBe('指値')
   })
 
-  it('[NOP-06] 市場区分は時間帯の順に並び、enum の 6 値を過不足なく含む', () => {
-    expect(valuesOf(EXECUTION_SCOPE_OPTIONS)).toEqual(['01', '02', '04', '03', '05', '06'])
+  it('[NOP-06] 市場区分は時間帯の順に並び、enum の 4 値を過不足なく含む', () => {
+    expect(valuesOf(EXECUTION_SCOPE_OPTIONS)).toEqual(['02', '04', '03', '06'])
     expect([...valuesOf(EXECUTION_SCOPE_OPTIONS)].sort()).toEqual([...EXECUTION_SCOPE_VALUES].sort())
   })
 

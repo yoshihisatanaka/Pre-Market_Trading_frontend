@@ -339,7 +339,7 @@ test.describe('注文照会・注文訂正・注文取消（実 API 接続）', 
     const { total, first } = await openOrSkip(page)
 
     const code = statusOf(first)
-    // 選択肢はコードマスタ `注文照会出来状況`（契約提案）から来る。実 API の /codes に無ければ選べない
+    // 選択肢はコードマスタ `注文照会出来状況` から来る（2026-10-06 に実 API の /codes に入った）。無ければ選べない
     const select = page.getByTestId('order-inquiry-status')
     const options = await select.locator('option').evaluateAll((els) => els.map((el) => el.value))
     test.skip(code === '' || !options.includes(code), `出来状況のプルダウンに ${code} が無い`)

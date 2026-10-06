@@ -35,7 +35,7 @@ const withStatus = (code) => orderInquiryRows.filter((row) => row.処理状況 =
 
 /*
  * 出来状況（画面の名称）→ 処理状況コード。選択肢はコードマスタ 注文照会出来状況
- * （src/mocks/fixtures/codes.js の契約提案）で、コードは URL の status と API の status にそのまま載る。
+ * （src/mocks/fixtures/codes.js）で、コードは URL の status と API の status にそのまま載る。
  * 「取消済」だけは選択肢の名称が「取消済（出来有・無）」で、表の出来状況は「取消済」で始まる。
  */
 const EXECUTION_STATUS_CODES = {

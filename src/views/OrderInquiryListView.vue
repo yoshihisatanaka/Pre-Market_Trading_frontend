@@ -38,7 +38,7 @@ const canOrder = computed(() => operator.can('order'))
 const operatorPending = computed(() => !operator.operator && !operator.error)
 
 /*
- * 出来状況の選択肢はコードマスタ `注文照会出来状況`（依頼中の契約提案）から。値は処理状況コードで、
+ * 出来状況の選択肢はコードマスタ `注文照会出来状況` から。値は処理状況コードで、
  * URL クエリ（status）にも API の status にもそのまま載る。
  * App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で選択肢は揃っている。
  */

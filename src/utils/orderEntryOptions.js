@@ -106,7 +106,7 @@ export const CASH_DELIVERY_OPTIONS = [
 export const VWAP = Object.freeze({ NORMAL: '0', VWAP: '1' })
 
 /**
- * 注文種別の名前。**入力欄の選択肢はコードマスタ `VWAP区分`（依頼中の契約提案）から来る**
+ * 注文種別の名前。**入力欄の選択肢はコードマスタ `VWAP区分` から来る**
  * （components/orders/OrderEntryForm.vue）。ここは確認・完了の読み上げ（utils/orderEntryForm.js）用の写し
  */
 export const VWAP_OPTIONS = [

@@ -32,10 +32,12 @@ const year2025 = marketHolidays.filter((h) => h.休場日 >= 20250101 && h.休�
 
 const firstHoliday = marketHolidays[0]
 
-// 休場区分。画面に出る表示名で書く（コード '0' / '1' は利用者に見えない）
+// 休場区分（画面では「短縮取引日」）。画面に出る表示名で書く（コード '0' / '1' は利用者に見えない）
 const TYPE_ALL_LABEL = '-- すべて --'
-const TYPE_FULL_LABEL = '終日休場'
-const TYPE_SHORT_LABEL = '短縮取引'
+const TYPE_SHORT_LABEL = '短縮取引日'
+// 一覧の「短縮取引日」列。短縮取引日の行は終了時刻のバッジ、終日休場の行は —（画面モックと同じ）
+const EARLY_CLOSE_LABEL = '13:00 ET 終了'
+const NOT_SHORT_LABEL = '—'
 
 // 短縮取引の行はフィクスチャから数える（件数を直書きするとフィクスチャ変更で崩れる）
 const shortenedHolidays = marketHolidays.filter((holiday) => holiday.休場区分 === '1')
@@ -276,17 +278,17 @@ test.describe('海外休場日マスタ 新規追加', () => {
     )
   })
 
-  test('[MH-21] 短縮取引で追加した行が一覧に短縮取引で出る', async ({ page }) => {
+  test('[MH-21] 短縮取引日にチェックして追加した行が一覧に終了時刻付きで出る', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
     await page.getByTestId('market-holidays-add').click()
 
-    // 既定は終日休場（プレースホルダを置かないので常に有効なコードが入っている）
-    const addType = page.getByTestId('market-holidays-add-holiday-type')
-    await expect(addType.getByRole('option', { selected: true })).toHaveText(TYPE_FULL_LABEL)
+    // 既定は外れている（= 終日休場）。画面モックの「短縮取引日として登録する」チェックボックス
+    const shortTradingDay = page.getByTestId('market-holidays-add-short-trading-day')
+    await expect(shortTradingDay).not.toBeChecked()
 
-    await addType.selectOption({ label: TYPE_SHORT_LABEL })
+    await shortTradingDay.check()
     await page.getByTestId('market-holidays-add-date').fill(NEW_DATE)
     await page.getByTestId('market-holidays-add-reason').fill(NEW_REASON)
     await page.getByTestId('market-holidays-add-submit').click()
@@ -311,7 +313,7 @@ test.describe('海外休場日マスタ 新規追加', () => {
     const addedRow = rows.filter({ hasText: NEW_DATE })
     await expect(addedRow).toHaveCount(1)
     await expect(addedRow).toContainText(NEW_REASON)
-    await expect(addedRow).toContainText(TYPE_SHORT_LABEL)
+    await expect(addedRow).toContainText(EARLY_CLOSE_LABEL)
   })
 
   test('[MH-22] 取消済みの日付を追加すると警告が出て登録されない', async ({ page }) => {
@@ -453,10 +455,10 @@ test.describe('海外休場日マスタ 削除', () => {
   })
 })
 
-// 休場区分（MH-17〜20）。一覧の列・検索条件・URL クエリ（holiday_type）の同期を守る。
-// 既定モックの短縮取引はボクシングデーの 7 件だけなので、絞り込みの前後で件数が変わる。
-test.describe('海外休場日マスタ 休場区分', () => {
-  test('[MH-17] 一覧に休場区分の列が削除ボタンの左に表示される', async ({ page }) => {
+// 短縮取引日（MH-17〜20）。一覧の列・検索条件・URL クエリ（holiday_type）の同期を守る。
+// 既定モックの短縮取引日はボクシングデーの 7 件だけなので、絞り込みの前後で件数が変わる。
+test.describe('海外休場日マスタ 短縮取引日', () => {
+  test('[MH-17] 一覧に短縮取引日の列が削除ボタンの左に表示される', async ({ page }) => {
     await page.goto(PATH)
 
     const table = page.getByTestId('market-holidays-table')
@@ -466,21 +468,21 @@ test.describe('海外休場日マスタ 休場区分', () => {
     await expect(table.getByRole('columnheader')).toHaveText([
       '日付',
       '休場理由',
-      '休場区分',
+      '短縮取引日',
       '',
     ])
 
-    // 休場区分のセルは削除ボタンのセルより左（列の並びと同じ位置関係）
+    // 短縮取引日のセルは削除ボタンのセルより左（列の並びと同じ位置関係）。終日休場は —
     const fullDayRow = rowsOf(page).filter({ hasText: toIsoDate(fullDayHoliday.休場日) })
-    await expect(fullDayRow.getByRole('cell').nth(2)).toHaveText(TYPE_FULL_LABEL)
+    await expect(fullDayRow.getByRole('cell').nth(2)).toHaveText(NOT_SHORT_LABEL)
     await expect(fullDayRow.getByRole('cell').nth(3).getByRole('button', { name: '削除' })).toBeVisible()
 
-    // ボクシングデーだけ短縮取引
+    // ボクシングデーだけ短縮取引日（終了時刻のバッジ）
     const shortenedRow = rowsOf(page).filter({ hasText: toIsoDate(shortenedHolidays[0].休場日) })
-    await expect(shortenedRow.getByRole('cell').nth(2)).toHaveText(TYPE_SHORT_LABEL)
+    await expect(shortenedRow.getByRole('cell').nth(2)).toHaveText(EARLY_CLOSE_LABEL)
   })
 
-  test('[MH-18] 休場区分で絞り込むと URL と一覧に反映される', async ({ page }) => {
+  test('[MH-18] 短縮取引日で絞り込むと URL と一覧に反映される', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
@@ -494,8 +496,7 @@ test.describe('海外休場日マスタ 休場区分', () => {
 
     const rows = rowsOf(page)
     await expect(rows).toHaveCount(shortenedHolidays.length)
-    await expect(rows.filter({ hasText: TYPE_SHORT_LABEL })).toHaveCount(shortenedHolidays.length)
-    await expect(rows.filter({ hasText: TYPE_FULL_LABEL })).toHaveCount(0)
+    await expect(rows.filter({ hasText: EARLY_CLOSE_LABEL })).toHaveCount(shortenedHolidays.length)
     for (const holiday of shortenedHolidays) {
       await expect(rows.filter({ hasText: toIsoDate(holiday.休場日) })).toHaveCount(1)
     }
@@ -515,7 +516,7 @@ test.describe('海外休場日マスタ 休場区分', () => {
     await expect(rowsOf(page)).toHaveCount(shortenedHolidays.length)
   })
 
-  test('[MH-20] 「クリア」を押すと休場区分の条件も解除される', async ({ page }) => {
+  test('[MH-20] 「クリア」を押すと短縮取引日の条件も解除される', async ({ page }) => {
     await page.goto(PATH)
 
     await page.getByTestId('market-holidays-holiday-type').selectOption({ label: TYPE_SHORT_LABEL })

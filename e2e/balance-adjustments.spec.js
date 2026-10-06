@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { clickSideMenuLink } from './helpers/sideMenu'
 import { balanceAdjustments } from '../src/mocks/fixtures/balanceAdjustments'
 import { customers } from '../src/mocks/fixtures/customers'
+import { supervisorOperator } from '../src/mocks/fixtures/currentOperator'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/balance-adjustments.md（タイトル先頭の [BA-xx] が対応 ID）
@@ -79,9 +80,14 @@ test.describe('残高マスタ 一覧・検索', () => {
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '残高マスタ', exact: true })).toBeVisible()
-    // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている
-    await expect(page.getByTestId('balance-adjustments-add')).toBeVisible()
-    await expect(page.getByTestId('balance-adjustments-add')).toHaveText('新規保有を追加')
+    // 「新規保有を追加」は画面モックどおり一覧カードの見出し（件数の横）にあり、ヘッダには無い
+    const add = page.getByTestId('balance-adjustments-add')
+    await expect(add).toBeVisible()
+    await expect(add).toHaveText('新規保有を追加')
+    await expect(
+      page.getByTestId('balance-adjustments-count').locator('..').getByTestId('balance-adjustments-add'),
+    ).toBeVisible()
+    await expect(page.locator('#topbar-actions').getByTestId('balance-adjustments-add')).toHaveCount(0)
 
     await expect(page.getByTestId('balance-adjustments-count')).toHaveText(
       `${balanceAdjustments.length} 件`,
@@ -272,6 +278,20 @@ test.describe('残高マスタ 一覧・検索', () => {
     const backgroundOf = (locator) =>
       locator.evaluate((element) => getComputedStyle(element).backgroundColor)
     expect(await backgroundOf(modified)).not.toBe(await backgroundOf(untouched))
+  })
+
+  test('[BA-34] 説明文の右に操作者の権限「補正可能」と 氏名（社員コード）が出る', async ({ page }) => {
+    // 操作者は .env の VITE_USER_CODE で変わるので、/auth/me を管理責任者に固定する
+    await mockApi(page, [{ path: '*/api/auth/me', body: supervisorOperator }])
+    await page.goto(PATH)
+
+    const authority = page.getByTestId('balance-adjustments-authority')
+    await expect(authority).toBeVisible()
+    await expect(authority).toContainText('補正可能')
+    await expect(authority).toContainText(
+      `${supervisorOperator.氏名}（${supervisorOperator.操作者コード}）`,
+    )
+    await expect(page.getByTestId('balance-adjustments-description')).toBeVisible()
   })
 })
 
@@ -542,7 +562,7 @@ function addDialogOf(page, name = '新規保有を追加') {
   return page.getByRole('dialog', { name })
 }
 
-/** 一覧を開き、ヘッダの「新規保有を追加」を押してモーダルを出す */
+/** 一覧を開き、一覧カードの見出しの「新規保有を追加」を押してモーダルを出す */
 async function openAdd(page) {
   await page.goto(PATH)
   await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)

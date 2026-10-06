@@ -93,6 +93,12 @@ const EDIT_TARGET = {
 const EDITED_NOTE = `${EDIT_TARGET.note}（訂正）`
 
 /*
+ * 編集の事前検証を不合格にしたときの理由（CA-20）。銘柄コードは編集で変えられないので、
+ * 既定ハンドラが更新で返しうる文言（src/mocks/handlers/ca.js の validate）を mockApi() で返す。
+ */
+const EDIT_VALIDATION_MESSAGE = `指定されたCA(ID=${EDIT_TARGET.id})は存在しません`
+
+/*
  * 削除の対象も一覧の 1 行目（EDIT_TARGET と同じ行）。確認ダイアログに出る対象ラベルは
  * 成功メッセージと同じ 銘柄コード / CA種別名 / 効力発生日 の 1 行（この行は効力発生日を持つ）。
  */
@@ -487,15 +493,22 @@ test.describe('CAマスタ 新規追加', () => {
  *   必須未入力       … FormField の error（CA-19）
  *   事前検証の不合格 … ca-edit-validation-error の箇条書き（CA-20）
  *   通信・サーバ障害 … ca-edit-error（CA-21。楽観的ロックの競合 409 も同じ枠）
+ *
+ * **銘柄コードは変更できない**（CA-17。読み取り専用）。必須の理由は CA種別を空にして起こし（CA-19）、
+ * 事前検証の不合格は画面の導線からは起こせないので mockApi() で応答を差し替えて出しかただけを見る（CA-20）。
  */
 test.describe('CAマスタ 編集', () => {
-  test('[CA-17] 行の「編集」を押すとその行の値が入った状態で開く', async ({ page }) => {
+  test('[CA-17] 行の「編集」を押すとその行の値が入り、銘柄コードは変更できない', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
     await openEditOfFirstRow(page)
 
-    await expect(page.getByTestId('ca-edit-stock-code')).toHaveValue(EDIT_TARGET.stockCode)
+    const stockCode = page.getByTestId('ca-edit-stock-code')
+    await expect(stockCode).toHaveValue(EDIT_TARGET.stockCode)
+    // 読み取り専用（disabled ではない。値を選んでコピーできる）
+    await expect(stockCode).not.toBeEditable()
+    await expect(stockCode).toBeEnabled()
     await expect(page.getByTestId('ca-edit-type')).toHaveValue(EDIT_TARGET.caType)
     await expect(page.getByTestId('ca-edit-ex-rights-date')).toHaveValue(EDIT_TARGET.exRightsDate)
     await expect(page.getByTestId('ca-edit-effective-date')).toHaveValue(EDIT_TARGET.effectiveDate)
@@ -517,7 +530,7 @@ test.describe('CAマスタ 編集', () => {
     await expect(editDialogOf(page)).toBeHidden()
 
     /*
-     * 銘柄・CA種別・日付のどれも変えられるので、メッセージには受理された内容が出る
+     * CA種別・日付は変えられる（銘柄コードは読み取り専用）ので、メッセージには受理された内容が出る
      * （効力発生日を持つ行なので日付まで並ぶ）。
      */
     const notice = page.getByTestId('ca-notice')
@@ -534,16 +547,17 @@ test.describe('CAマスタ 編集', () => {
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
   })
 
-  test('[CA-19] 銘柄コードを空にして更新すると必須のエラーが出る', async ({ page }) => {
+  test('[CA-19] CA種別を空にして更新すると必須のエラーが出る', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
     await openEditOfFirstRow(page)
-    await page.getByTestId('ca-edit-stock-code').fill('')
+    // 先頭の「-- 選択してください --」が空値の選択肢
+    await page.getByTestId('ca-edit-type').selectOption('')
     await page.getByTestId('ca-edit-submit').click()
 
     const dialog = editDialogOf(page)
-    await expect(dialog.getByText('銘柄コードを入力してください。')).toBeVisible()
+    await expect(dialog.getByText('CA種別を選択してください。')).toBeVisible()
 
     // 3 系統のうち項目直下だけに出る。サーバへは行かないので他の 2 つは出ない
     await expect(page.getByTestId('ca-edit-validation-error')).toHaveCount(0)
@@ -555,19 +569,25 @@ test.describe('CAマスタ 編集', () => {
     await expect(rowsOf(page).first()).toContainText(EDIT_TARGET.note)
   })
 
-  test('[CA-20] 銘柄マスタに無い銘柄コードは事前検証で弾かれる', async ({ page }) => {
+  test('[CA-20] 事前検証に弾かれると理由が箇条書きで出る', async ({ page }) => {
+    // 事前検証だけを不合格にする（更新そのものは既定ハンドラのまま）
+    await mockApi(page, [
+      {
+        method: 'post',
+        path: '*/api/masters/ca/validate',
+        body: { valid: false, errors: [EDIT_VALIDATION_MESSAGE], warnings: [], details: null },
+      },
+    ])
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
     await openEditOfFirstRow(page)
-    await page.getByTestId('ca-edit-stock-code').fill(UNKNOWN_STOCK_CODE)
+    await page.getByTestId('ca-edit-note').fill(EDITED_NOTE)
     await page.getByTestId('ca-edit-submit').click()
 
     const validationError = page.getByTestId('ca-edit-validation-error')
     await expect(validationError).toBeVisible()
-    await expect(validationError.getByRole('listitem')).toHaveText([
-      `銘柄コード(${UNKNOWN_STOCK_CODE})は銘柄マスタに存在しません`,
-    ])
+    await expect(validationError.getByRole('listitem')).toHaveText([EDIT_VALIDATION_MESSAGE])
 
     // 事前検証の不合格は通信障害ではないので、専用の表示には出ない
     await expect(page.getByTestId('ca-edit-error')).toHaveCount(0)

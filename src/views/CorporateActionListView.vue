@@ -250,7 +250,7 @@ async function submitEdit() {
       // モーダルは開いたままになり入力を直せる（理由は updateError に出る）
       onSuccess: (item) => {
         editTarget.value = null
-        // 銘柄・CA種別・日付のどれも変えられるので、サーバが受理した内容をそのまま出す
+        // CA種別・日付は変えられるので、サーバが受理した内容をそのまま出す（銘柄コードは読み取り専用）
         noticeMessage.value = `${caLabel(item)} を更新しました。`
       },
     },
@@ -259,7 +259,7 @@ async function submitEdit() {
 
   /*
    * 絞り込み中に条件の圏外へ変えると total が 1 減り、最終ページが空になり得る
-   * （銘柄コードや CA種別を変えたとき）。行が別ページへ移ったことそのものは追わない
+   * （CA種別で絞り込んでいて CA種別を変えたとき。銘柄コードは編集で変えられない）。行が別ページへ移ったことそのものは追わない
    * （サーバが新しいインデックスを返さないため）。成功メッセージが新しい内容を含むので、
    * ユーザはその条件で検索できる。
    */
@@ -492,9 +492,11 @@ function caLabel(ca) {
       @close="closeEdit"
       @submit="submitEdit"
     >
+      <!-- 銘柄コードは編集で変えさせない（理由は CorporateActionFormFields の stockCodeLocked） -->
       <CorporateActionFormFields
         v-model="editForm"
         testid-prefix="ca-edit"
+        stock-code-locked
         :errors="editErrors"
       />
     </MasterFormDialog>

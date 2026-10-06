@@ -28,16 +28,16 @@ const TOTAL = marketHolidays.length
 const firstPage = marketHolidays.slice(0, PAGE_SIZE)
 const secondPage = marketHolidays.slice(PAGE_SIZE, PAGE_SIZE * 2)
 
-// 絞り込みはフィクスチャ先頭の年をそのまま使う（年もハードコードしない）
+// 登録用の日付を作るための年。フィクスチャ先頭の年をそのまま使う（年もハードコードしない）
 const YEAR = String(marketHolidays[0].休場日).slice(0, 4)
-const DATE_FROM = `${YEAR}-01-01`
-const DATE_TO = `${YEAR}-12-31`
-const inYear = marketHolidays.filter((holiday) => String(holiday.休場日).startsWith(YEAR))
 
-// 全期間を含む絞り込み条件（最古 / 最新の日付そのもの）
-const allDates = marketHolidays.map((holiday) => holiday.休場日)
-const ALL_FROM = toIsoDate(Math.min(...allDates))
-const ALL_TO = toIsoDate(Math.max(...allDates))
+/*
+ * 絞り込みは画面モックどおり 1 日指定（date）。フィクスチャの 2 件目の日付を使い、
+ * その日の行（休場日は一意なので 1 件）を期待値にする。
+ */
+const FILTER_ROW = marketHolidays[1]
+const FILTER_DATE = toIsoDate(FILTER_ROW.休場日)
+const onFilterDate = marketHolidays.filter((holiday) => holiday.休場日 === FILTER_ROW.休場日)
 
 // 登録に使う「フィクスチャに無い日付」もフィクスチャから導く（既存日付と衝突したら別日になる）
 const existingDates = new Set(marketHolidays.map((holiday) => toIsoDate(holiday.休場日)))
@@ -135,15 +135,14 @@ describe('useMarketHolidaysStore', () => {
     expect(ids(store.items)).toEqual(expectedIds(secondPage))
   })
 
-  it('[MHS-05] 日付で絞り込むと total も絞り込み後の件数になる', async () => {
+  it('[MHS-05] 日付で絞り込むとその日の行だけになり total も絞り込み後の件数になる', async () => {
     const store = useMarketHolidaysStore()
 
-    await store.load({ dateFrom: DATE_FROM, dateTo: DATE_TO })
+    await store.load({ date: FILTER_DATE })
 
-    expect(store.dateFrom).toBe(DATE_FROM)
-    expect(store.dateTo).toBe(DATE_TO)
-    expect(store.total).toBe(inYear.length)
-    expect(ids(store.items)).toEqual(expectedIds(inYear))
+    expect(store.date).toBe(FILTER_DATE)
+    expect(store.total).toBe(onFilterDate.length)
+    expect(ids(store.items)).toEqual(expectedIds(onFilterDate))
   })
 
   it('[MHS-06] reload は直前のページ位置と絞り込みを保ったまま取り直す', async () => {
@@ -219,20 +218,21 @@ describe('useMarketHolidaysStore', () => {
   })
 
   it('[MHS-10] create 後の読み直しでもページ位置と絞り込みが保たれる', async () => {
+    /*
+     * これから登録する日付で絞っておく（登録前は 0 件）。1 日指定の結果は 1 ページに収まるので、
+     * 表示件数の位置には行が無い。読み直しが全件に戻れば TOTAL + 1、1 ページ目に戻れば
+     * 登録した行が見える。
+     */
     const store = useMarketHolidaysStore()
-    await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
+    await store.load({ offset: PAGE_SIZE, date: NEW_DATE })
+    expect(store.total).toBe(0)
 
     await store.create({ date: NEW_DATE, reason: NEW_REASON, holidayType: NEW_TYPE })
 
-    // 登録後の一覧は日付降順のまま 1 件増える
-    const expected = [...marketHolidays.map((holiday) => toIsoDate(holiday.休場日)), NEW_DATE].sort(
-      (a, b) => b.localeCompare(a),
-    )
     expect(store.offset).toBe(PAGE_SIZE)
-    expect(store.dateFrom).toBe(ALL_FROM)
-    expect(store.dateTo).toBe(ALL_TO)
-    expect(store.total).toBe(TOTAL + 1)
-    expect(dates(store.items)).toEqual(expected.slice(PAGE_SIZE, PAGE_SIZE * 2))
+    expect(store.date).toBe(NEW_DATE)
+    expect(store.total).toBe(1)
+    expect(store.items).toEqual([])
   })
 
   it('[MHS-11] clearCreateError で登録エラーと事前検証の理由が消える', async () => {
@@ -311,18 +311,19 @@ describe('useMarketHolidaysStore', () => {
   })
 
   it('[MHS-15] remove 後の読み直しでもページ位置と絞り込みが保たれる', async () => {
+    // 削除する行の日付で絞っておく
+    const targetDate = toIsoDate(DELETE_TARGET.休場日)
     const store = useMarketHolidaysStore()
-    await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
+    await store.load({ offset: PAGE_SIZE, date: targetDate })
+    const before = store.total
 
     await store.remove(DELETE_TARGET_ID)
 
-    // 削除後の一覧は日付降順のまま 1 件減る（論理削除なので取消区分 1 の行は返らない）
-    const remaining = marketHolidays.filter((holiday) => toId(holiday) !== DELETE_TARGET_ID)
+    // 論理削除なので取消区分 1 の行は返らず、その日の件数が 1 減る（全件に戻れば TOTAL - 1）
     expect(store.offset).toBe(PAGE_SIZE)
-    expect(store.dateFrom).toBe(ALL_FROM)
-    expect(store.dateTo).toBe(ALL_TO)
-    expect(store.total).toBe(TOTAL - 1)
-    expect(ids(store.items)).toEqual(expectedIds(remaining.slice(PAGE_SIZE, PAGE_SIZE * 2)))
+    expect(store.date).toBe(targetDate)
+    expect(store.total).toBe(before - 1)
+    expect(store.items).toEqual([])
   })
 
   it('[MHS-16] clearDeleteError で削除エラーが消える', async () => {
@@ -369,21 +370,22 @@ describe('useMarketHolidaysStore', () => {
   })
 
   it('[MHS-19] reload は休場区分の絞り込みも保ったまま取り直す', async () => {
+    /*
+     * 短縮取引ではない行の日付と「短縮取引」を組み合わせ、両方に合う行が無い条件にする。
+     * 休場区分が落ちればその日の行が、日付が落ちれば短縮取引の行が現れるので、
+     * 0 件のままなら両方の条件が保たれている。
+     */
+    const regularRow = marketHolidays.find((holiday) => holiday.休場区分 !== SHORTENED_TYPE)
+    const regularDate = toIsoDate(regularRow.休場日)
     const store = useMarketHolidaysStore()
-    await store.load({
-      dateFrom: ALL_FROM,
-      dateTo: ALL_TO,
-      holidayType: SHORTENED_TYPE,
-    })
+    await store.load({ date: regularDate, holidayType: SHORTENED_TYPE })
 
     await store.reload()
 
     expect(store.holidayType).toBe(SHORTENED_TYPE)
-    expect(store.dateFrom).toBe(ALL_FROM)
-    expect(store.dateTo).toBe(ALL_TO)
-    // 条件が落ちて全件に戻っていないこと
-    expect(store.total).toBe(shortenedHolidays.length)
-    expect(ids(store.items)).toEqual(expectedIds(shortenedHolidays))
+    expect(store.date).toBe(regularDate)
+    expect(store.total).toBe(0)
+    expect(store.items).toEqual([])
   })
 
   it('[MHS-20] create は休場区分を送り、登録された行にその区分が入る', async () => {

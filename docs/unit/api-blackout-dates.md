@@ -42,6 +42,8 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 | BDA-15 | 既定モック | `deleteBlackoutDate('12')` を呼ぶ | `DELETE /api/masters/blackout-dates/12` を呼び、戻り値が渡した id になる。パスに載るのは id で、受注不可日ではない | 実装済 |
 | BDA-16 | `VITE_USER_CODE` が設定されている | 更新系（`createBlackoutDate`）を呼ぶ | リクエストに `X-User-Code` ヘッダが載る（実 API が必須にしているため） | 実装済 |
 | BDA-17 | API が `ID` を持たない `BlackoutDateItem` を返す | `fetchBlackoutDates()` を呼ぶ | `id` が空文字のままになる（受注不可日へフォールバックしない）。`date` は従来どおり出る | 実装済 |
+| BDA-18 | 既定モック | `fetchBlackoutDates({ date: '2026-12-25' })` を呼ぶ | 単一指定のクエリ `blackout_date` に integer の `20261225` が載る。`start_date` / `end_date` は送らない（期間指定と取り違えない） | 実装済 |
+| BDA-19 | 既定モック | `fetchBlackoutDates({ date: '' })` を呼ぶ | 空文字は「条件なし」なので `blackout_date` をキーごと送らない | 実装済 |
 
 ## 主キーは `id`（受注不可日ではない）
 

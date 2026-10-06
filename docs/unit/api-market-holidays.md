@@ -29,6 +29,8 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 | MHA-10 | 既定モック | `deleteMarketHoliday('12')` を呼ぶ | `DELETE /api/masters/market-holidays/12` を呼び、戻り値が渡した id になる。パスに載るのは id で、休場日ではない | 実装済 |
 | MHA-11 | `VITE_USER_CODE` が設定されている | 更新系（`createMarketHoliday`）を呼ぶ | リクエストに `X-User-Code` ヘッダが載る（実 API が必須にしているため） | 実装済 |
 | MHA-12 | API が `ID` を持たない `MarketHolidayItem` を返す | `fetchMarketHolidays()` を呼ぶ | `id` が空文字のままになる（休場日へフォールバックしない）。`date` は従来どおり出る | 実装済 |
+| MHA-14 | 既定モック | `fetchMarketHolidays({ date: '2026-12-25' })` を呼ぶ | 実 API に単一指定が無いので、`start_date` と `end_date` の両方に同じ integer の `20261225` が載る | 実装済 |
+| MHA-15 | 既定モック | `fetchMarketHolidays({ date: '2026-12-25', dateFrom: '2026-01-01', dateTo: '2026-12-31' })` を呼ぶ | `date` が優先され、`start_date` / `end_date` はどちらも `20261225` になる（期間の値は載らない） | 実装済 |
 
 ## 主キーは `id`（休場日ではない）
 

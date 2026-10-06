@@ -17,7 +17,7 @@ import HoldingSearchView from './HoldingSearchView.vue'
 /*
  * 画面テスト。実際の Pinia ストア + vue-router + MSW(node) を通し、
  * 検索前の案内・4 状態の出し分けと「URL クエリが正」の単方向フローを検証する。
- * 顧客名・買い / 売りの行き先（名前付きルート customer-summary / order-new）を解決できるよう、
+ * 顧客名・買い / 売りの行き先（名前付きルート customer-summary / customer-order-entry）を解決できるよう、
  * テスト用ルータに同名のルートを置く。
  */
 const PATH = '/customers/holdings'
@@ -84,7 +84,11 @@ async function mountView({ query = {}, withCodes = false } = {}) {
     routes: [
       { path: PATH, component: Page },
       { path: '/customers/:customerId/summary', name: 'customer-summary', component: Page },
-      { path: '/orders/new', name: 'order-new', component: Page },
+      {
+        path: '/customers/:customerId/order-entry',
+        name: 'customer-order-entry',
+        component: Page,
+      },
       { path: '/:pathMatch(.*)*', component: Page },
     ],
   })
@@ -131,12 +135,6 @@ const accountNumbers = (wrapper) =>
 const decimal2 = (value) =>
   value.toLocaleString('ja-JP', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const jpyText = (value) => `${value.toLocaleString('ja-JP')} 円`
-
-/** リンクの href → { path, query }（クエリの並びに依存しない） */
-function linkOf(element) {
-  const url = new URL(element.attributes('href'), 'http://localhost')
-  return { path: url.pathname, query: Object.fromEntries(url.searchParams) }
-}
 
 /** 既定の検索結果のうち、条件に合う最初の明細の行 */
 function rowWhere(wrapper, predicate) {
@@ -503,29 +501,52 @@ describe('HoldingSearchView', () => {
     await settle()
   })
 
-  it('[HSV-20] 「買い」「売り」は顧客・銘柄・売買・預り区分を新規注文へ引き継ぐ', async () => {
+  it('[HSV-20] 「買い」「売り」は顧客マスタを引き、顧客詳細の注文入力タブへ顧客・銘柄・売買・預り区分を引き継ぐ', async () => {
     expect(head.預り売買区分).toBe('1')
-    const { wrapper } = await mountView()
-    await settle()
-
-    const row = rows(wrapper)[0]
+    expect(headCustomer).toBeTruthy()
     const base = {
       branch_code: head.部店コード,
       account_number: String(head.口座番号),
       ticker: head.ティッカー,
       deposit: DEPOSIT_CATEGORY.SPECIFIC,
     }
-    expect(linkOf(row.find('[data-testid="holding-search-buy"]'))).toEqual({
-      path: '/orders/new',
-      query: { ...base, side: 'buy' },
-    })
-    expect(linkOf(row.find('[data-testid="holding-search-sell"]'))).toEqual({
-      path: '/orders/new',
-      query: { ...base, side: 'sell' },
-    })
+
+    for (const [testid, side] of [
+      ['holding-search-buy', 'buy'],
+      ['holding-search-sell', 'sell'],
+    ]) {
+      const queries = recordQueries(CUSTOMERS)
+      const { wrapper, router } = await mountView()
+      await settle()
+
+      await rows(wrapper)[0].find(`[data-testid="${testid}"]`).trigger('click')
+      await settle()
+
+      expect(queries).toHaveLength(1)
+      expect(queries[0].get('branch_code')).toBe(head.部店コード)
+      expect(queries[0].get('account_no')).toBe(String(head.口座番号))
+      expect(router.currentRoute.value.name).toBe('customer-order-entry')
+      expect(router.currentRoute.value.params.customerId).toBe(String(headCustomer.ID))
+      expect(router.currentRoute.value.query).toEqual({ ...base, side })
+      wrapper.unmount()
+    }
   })
 
-  it('[HSV-21] 売却不可の明細の「売り」は押せない button で、買いはリンクのまま', async () => {
+  it('[HSV-26] 「買い」で顧客マスタが 500 のときは理由の帯を出し、ルートは変わらない', async () => {
+    server.use(errorHandler(CUSTOMERS))
+    const { wrapper, router } = await mountView()
+    await settle()
+
+    await rows(wrapper)[0].find('[data-testid="holding-search-buy"]').trigger('click')
+    await settle()
+
+    const band = find(wrapper, 'holding-search-customer-error')
+    expect(band.text()).toContain('顧客詳細を開けませんでした。')
+    expect(band.text()).toContain(ERROR_MESSAGE)
+    expect(router.currentRoute.value.path).toBe(PATH)
+  })
+
+  it('[HSV-21] 売却不可の明細の「売り」は押せない button で、買いは押せる button', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -533,9 +554,10 @@ describe('HoldingSearchView', () => {
     const sell = row.find('[data-testid="holding-search-sell"]')
     expect(sell.element.tagName).toBe('BUTTON')
     expect(sell.attributes('disabled')).toBeDefined()
-    expect(sell.attributes('href')).toBeUndefined()
     expect(sell.attributes('title')).toBe('現在売却できません。')
-    expect(row.find('[data-testid="holding-search-buy"]').element.tagName).toBe('A')
+    const buy = row.find('[data-testid="holding-search-buy"]')
+    expect(buy.element.tagName).toBe('BUTTON')
+    expect(buy.attributes('disabled')).toBeUndefined()
   })
 
   it('[HSV-22] 発注権限が無ければ全行「閲覧のみ」で、買い・売りは出ない', async () => {

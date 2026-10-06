@@ -143,9 +143,20 @@ async function openSummary(page, id = YAMADA.ID) {
   await expect(page.getByTestId('customer-info-bar')).toBeVisible()
 }
 
-/** 新規注文の入力フォームが出て、部店・口座番号が引き継がれている */
+/** 顧客詳細の注文入力タブ（引き継ぎのクエリ付き） */
+const ORDER_ENTRY_URL = new RegExp(`/customers/${YAMADA.ID}/order-entry\\?`)
+
+/**
+ * 注文入力タブに移り、顧客カードとタブを残したまま新規注文の入力フォームが出て、
+ * 部店・口座番号が引き継がれている
+ */
 async function expectOrderEntryCustomer(page) {
-  await expect(page).toHaveURL(/\/orders\/new\?/)
+  await expect(page).toHaveURL(ORDER_ENTRY_URL)
+  await expect(page.getByTestId('customer-info-name')).toHaveText(YAMADA.顧客名)
+  await expect(page.getByTestId('customer-detail-tab-order-entry')).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
   await expect(page.getByTestId('order-entry-form')).toBeVisible()
   await expect(page.getByTestId('order-entry-branch')).toHaveValue(YAMADA.部店コード)
   await expect(page.getByTestId('order-entry-account')).toHaveValue(String(YAMADA.口座番号))
@@ -400,13 +411,13 @@ test.describe('顧客詳細 外株預り', () => {
     for (const holding of [AAPL, NVDA, TSLA]) {
       const sell = holdingRow(page, holding).getByTestId('customer-holdings-sell')
       await expect(sell).toBeEnabled()
-      await expect(sell).toHaveAttribute('href', /\/orders\/new\?/)
+      await expect(sell).toHaveAttribute('href', ORDER_ENTRY_URL)
     }
     await expect(page.getByTestId('customer-holdings-buy')).toHaveCount(yamadaHoldings.length)
     for (const holding of yamadaHoldings) {
       await expect(holdingRow(page, holding).getByTestId('customer-holdings-buy')).toHaveAttribute(
         'href',
-        /\/orders\/new\?/,
+        ORDER_ENTRY_URL,
       )
     }
   })
@@ -486,7 +497,7 @@ test.describe('顧客詳細 外株預り', () => {
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue('')
   })
 
-  test('[CDT-22] タブの「注文入力」は部店と口座番号を引き継いで新規注文へ移る', async ({
+  test('[CDT-22] タブの「注文入力」は顧客カードとタブを残したまま部店と口座番号を引き継ぐ', async ({
     page,
   }) => {
     await openSummary(page)
@@ -494,6 +505,12 @@ test.describe('顧客詳細 外株預り', () => {
 
     await expectOrderEntryCustomer(page)
     expect(queryOf(page)).toEqual(CUSTOMER_QUERY)
+    await expect(page.getByRole('heading', { name: '顧客詳細', exact: true })).toBeVisible()
+
+    // ほかのタブへ戻れる
+    await page.getByTestId('customer-detail-tab-summary').click()
+    await expect(page).toHaveURL(new RegExp(`${summaryPath(YAMADA.ID)}$`))
+    await expect(holdingRows(page)).toHaveCount(yamadaHoldings.length)
   })
 
   test('[CDT-34] 発注権限が無いと預りの操作は「閲覧のみ」で新規注文も出ない', async ({ page }) => {

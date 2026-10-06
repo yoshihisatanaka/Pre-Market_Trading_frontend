@@ -2,8 +2,9 @@ import { SPECIFIC_DEPOSIT } from './apiEnums'
 import { DEPOSIT_CATEGORY, SIDE } from './orderEntryOptions'
 
 /*
- * 新規注文（/orders/new）へ顧客・銘柄を引き継ぐ URL クエリ。
- * 顧客詳細（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）が組み立て、
+ * 新規注文（/orders/new と顧客詳細の注文入力タブ /customers/:customerId/order-entry）へ
+ * 顧客・銘柄を引き継ぐ URL クエリ。
+ * 顧客詳細（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）と預り検索が組み立て、
  * 新規注文の画面（views/OrderEntryView.vue）が読んで入力欄の初期値にする。
  *
  * クエリ名は URL 上の契約で、バックエンドには送らない（送るのは src/api/orderEntry.js）。

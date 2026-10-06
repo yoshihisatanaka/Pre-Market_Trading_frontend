@@ -27,8 +27,9 @@ import { formatSignedJpyUnit, formatSignedPercent, profitLossTone } from '@/util
  * 行の操作は顧客詳細の外株預り（views/CustomerSummaryView.vue）と同じ:
  *   - 顧客名 … 顧客詳細（/customers/:customerId/summary）へ移る。HoldingItem に顧客の ID が無いので、
  *              押したときに顧客マスタを引いてから移る（stores/holdingSearch.js の openCustomer）
- *   - 買い / 売り … 新規注文（/orders/new）へ顧客・銘柄・売買・預り区分を URL クエリで引き継ぐ
- *              （utils/orderEntryQuery.js）。発注権限の無い利用者には出さない
+ *   - 買い / 売り … 顧客詳細の注文入力タブ（/customers/:customerId/order-entry。モックの customer_context）へ
+ *              顧客・銘柄・売買・預り区分を URL クエリで引き継ぐ（utils/orderEntryQuery.js）。顧客名と同じく
+ *              押したときに顧客マスタの行 ID を引いてから移る。発注権限の無い利用者には出さない
  * 画面モックの「仮計算」ボタンは、仮計算の画面が未実装なので置かない（顧客詳細と同じ）。
  */
 
@@ -131,9 +132,21 @@ async function openCustomer(row) {
   if (customerId) router.push({ name: 'customer-summary', params: { customerId } })
 }
 
-function tradeRoute(row, side) {
-  // 顧客は行そのもの（部店コード・口座番号）から引き継ぐ
-  return { name: 'order-new', query: holdingOrderQuery(row, row, side) }
+/**
+ * 買い / 売りを押したら、顧客名と同じく顧客マスタの行 ID を引いてから顧客詳細の注文入力タブへ移る。
+ * 顧客は行そのもの（部店コード・口座番号）から引き継ぐ。引けなければ理由を帯に出す。
+ * 引いている間の連打は無視する（ボタンを無効にすると売却不可の見た目と紛れるので塞がない）
+ */
+async function openOrderEntry(row, side) {
+  if (customerLookupPending.value) return
+  const customerId = await store.openCustomer(row)
+  if (customerId) {
+    router.push({
+      name: 'customer-order-entry',
+      params: { customerId },
+      query: holdingOrderQuery(row, row, side),
+    })
+  }
 }
 
 function profitLossClass(row) {
@@ -297,13 +310,14 @@ function profitLossClass(row) {
               閲覧のみ
             </span>
             <div v-else class="holding-search__actions">
-              <RouterLink
-                :to="tradeRoute(row, SIDE.BUY)"
+              <button
+                type="button"
                 class="holding-search__trade is-buy"
                 data-testid="holding-search-buy"
+                @click="openOrderEntry(row, SIDE.BUY)"
               >
                 買い
-              </RouterLink>
+              </button>
               <!-- 売却不可（売却不可区分=1）の明細は押せない売りボタンを出す（モックと同じ） -->
               <button
                 v-if="row.sellProhibited"
@@ -315,14 +329,15 @@ function profitLossClass(row) {
               >
                 売り
               </button>
-              <RouterLink
+              <button
                 v-else
-                :to="tradeRoute(row, SIDE.SELL)"
+                type="button"
                 class="holding-search__trade is-sell"
                 data-testid="holding-search-sell"
+                @click="openOrderEntry(row, SIDE.SELL)"
               >
                 売り
-              </RouterLink>
+              </button>
             </div>
           </template>
         </template>

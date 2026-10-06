@@ -20,10 +20,12 @@ import { mockApi } from './helpers/mockApi'
 // 新規注文（外株注文入力）は入力 → 確認 → 完了を 1 つのルートで切り替える。初期読み込みの 4 状態、
 // 送信を受け付けない帯（権限なし・全体停止中）、口座番号・ティッカーの照会、止め方 3 種
 // （画面の入力不備 / サーバの errors / サーバの warnings）、確定から次の注文までを実ブラウザで守る。
-// 入口はサイドメニューに頼らず /orders/new を直接開く（メニュー項目は外す予定のため）。
+// 入口は顧客 ID 1 の顧客詳細の注文入力タブをクエリなしで直接開く（部店・口座番号は空のまま）。
+// /orders/new は口座番号のクエリが無いと顧客検索へ回る（NO-31）ので入口には使わない。
 // 既定モックは確定のたびに注文 ID を FIRST_ORDER_ID から採番する（ページを開くたびに初期化）。
 
-const PATH = '/orders/new'
+const PATH = '/customers/1/order-entry'
+const ORDER_NEW_PATH = '/orders/new'
 
 const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 
@@ -114,7 +116,6 @@ test.describe('新規注文 表示', () => {
   test('[NO-01] 画面を開くと入力フォームが既定値で表示される', async ({ page }) => {
     await openForm(page)
 
-    await expect(page.getByRole('heading', { name: '新規注文', exact: true })).toBeVisible()
     await expect(page.getByTestId('order-entry-submit')).toBeEnabled()
     await expect(page.getByTestId('order-entry-submit')).toHaveText('送信')
 
@@ -520,7 +521,7 @@ test.describe('新規注文 確定と次の注文', () => {
     )
   })
 
-  test('[NO-26] 「別の顧客で新規注文」は部店・口座番号も空にして入力へ戻る', async ({ page }) => {
+  test('[NO-26] 「別の顧客で新規注文」は顧客検索へ移る', async ({ page }) => {
     await openForm(page)
     await goToConfirm(page)
     await confirmOrder(page)
@@ -528,10 +529,23 @@ test.describe('新規注文 確定と次の注文', () => {
 
     await page.getByTestId('order-entry-new-order').click()
 
+    await expect(page).toHaveURL(/\/customers\/search$/, { timeout: 15_000 })
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
+  })
+
+  test('[NO-31] /orders/new は顧客の指定が無ければ顧客検索へ回り、口座番号付きなら開く', async ({
+    page,
+  }) => {
+    await page.goto(ORDER_NEW_PATH)
+    await expect(page).toHaveURL(/\/customers\/search$/)
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
+
+    await page.goto(`${ORDER_NEW_PATH}?branch_code=${BRANCH}&account_number=${PLAIN.口座番号}`)
+    await expect(page).toHaveURL(/\/orders\/new\?/)
+    await expect(page.getByRole('heading', { name: '新規注文', exact: true })).toBeVisible()
     await expect(page.getByTestId('order-entry-form')).toBeVisible()
-    await expect(page.getByTestId('order-entry-branch')).toHaveValue('')
-    await expect(page.getByTestId('order-entry-account')).toHaveValue('')
-    await expect(page.getByTestId('order-entry-customer-bar')).toHaveCount(0)
+    await expect(page.getByTestId('order-entry-branch')).toHaveValue(BRANCH)
+    await expect(page.getByTestId('order-entry-account')).toHaveValue(String(PLAIN.口座番号))
   })
 
   test('[NO-27] 「注文照会へ」で注文照会の画面へ移る', async ({ page }) => {

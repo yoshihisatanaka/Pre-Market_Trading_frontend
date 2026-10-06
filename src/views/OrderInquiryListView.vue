@@ -66,11 +66,12 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
 })
 
 /*
- * 新規注文（/orders/new。views/OrderEntryView.vue）へ移る。
+ * 顧客検索（/customers/search）へ移る。注文は顧客を選んでから顧客詳細の注文入力タブで入れる
+ * （モックの /orders/new は顧客の指定が無いと顧客検索へ回す。python_app/routers/orders.py の order_new_get）。
  * ボタンは発注権限のある利用者にだけ出す（上の canOrder。無ければ「発注権限なし」）。
  */
 function goToNewOrder() {
-  router.push('/orders/new')
+  router.push({ name: 'customer-search' })
 }
 
 /*

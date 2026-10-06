@@ -31,7 +31,7 @@ const CUSTOMER_LOOKUP_LIMIT = 10
  * 取得・競合防止の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
  * **一覧は読むだけ**なので createItem / updateItem / deleteItem は渡さない。
  *
- * もう 1 つ、顧客名から顧客詳細へ移るための「顧客マスタの行 ID を引く」（openCustomer）を持つ。
+ * もう 1 つ、顧客名・買い / 売りから顧客詳細へ移るための「顧客マスタの行 ID を引く」（openCustomer）を持つ。
  * 顧客詳細のルート（/customers/:customerId/summary）は顧客マスタの行 ID で顧客を指すが、
  * `HoldingItem` には ID が無く、部店コードと口座番号しか返らない。そこで押されたときに
  * `GET /masters/customers` を部店コード・口座番号で引いて ID を得る

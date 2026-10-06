@@ -22,7 +22,8 @@ import {
  *   2. バックエンドの api を起動しておく
  *   docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test customer-detail.real-api
  *
- * CDTR-04 以降は新規注文（/orders/new）への導線。部店・口座番号を URL クエリで引き継ぎ、新規注文の画面が
+ * CDTR-04 以降は注文入力タブ（/customers/<id>/order-entry。顧客カードとタブは残る）への導線。
+ * 部店・口座番号を URL クエリで引き継ぎ、新規注文の画面が
  * 実 API（GET /masters/customers?account_no=）で顧客を引き直せるところまでを見る。注文は送信しない。
  * 発注権限（GET /auth/me の order）は .env の VITE_USER_CODE で決まりテストからは変えられないので、
  * 無ければ（行の操作が「閲覧のみ」なら）スキップする。保有 0 件のときも「買い」「売り」はスキップ。
@@ -129,13 +130,19 @@ async function readCustomerCard(page) {
 /**
  * 顧客詳細から新規注文へ移る導線を押し、新規注文の画面が同じ顧客を実 API で引き直したところまで確かめる。
  * 顧客の照会は新規注文の画面が開いた直後に飛ぶので、押す前から待ち受ける。
+ * 移り先は顧客詳細の注文入力タブ（/customers/<id>/order-entry）で、顧客カードとタブは残る。
  * 返り値は URL のクエリ（導線ごとの差分は呼び出し側で見る）。
  */
 async function followOrderEntryLink(page, link, customer) {
   const lookup = waitForApiRequest(page, CUSTOMERS_API_PATH, 'account_no', customer.accountNumber)
   await link.click()
 
-  await expect(page).toHaveURL(/\/orders\/new\?/)
+  await expect(page).toHaveURL(/\/customers\/\d+\/order-entry\?/)
+  await expect(page.getByTestId('customer-info-name')).toHaveText(customer.customerName)
+  await expect(page.getByTestId('customer-detail-tab-order-entry')).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
   const request = await lookup
   if (customer.branchCode) {
     expect(new URL(request.url()).searchParams.get('branch_code')).toBe(customer.branchCode)
@@ -304,7 +311,7 @@ test.describe('顧客詳細（実 API 接続）', () => {
     await expect(page.getByTestId('customer-info-bar')).toHaveCount(0)
   })
 
-  test('[CDTR-04] タブの「注文入力」で新規注文へ移り、実 API で引き直した顧客名が出る', async ({
+  test('[CDTR-04] タブの「注文入力」で顧客詳細の中に新規注文が出て、実 API で引き直した顧客名が出る', async ({
     page,
     playwright,
   }) => {

@@ -88,4 +88,17 @@ describe('router/index の routes', () => {
     expect(index.redirect({ params })).toEqual({ name: 'customer-summary', params })
     expect(children.find((child) => child.path === 'summary')?.name).toBe('customer-summary')
   })
+
+  it('[RTR-07] /orders/new は口座番号のクエリが無ければ顧客検索へ回し、あれば通す', () => {
+    const orderNew = routeAt('/orders/new')
+    expect(orderNew?.name).toBe('order-new')
+
+    expect(orderNew.beforeEnter({ query: {} })).toEqual({ name: 'customer-search' })
+    expect(orderNew.beforeEnter({ query: { branch_code: '123' } })).toEqual({
+      name: 'customer-search',
+    })
+    expect(orderNew.beforeEnter({ query: { branch_code: '123', account_number: '1230001' } })).toBe(
+      true,
+    )
+  })
 })

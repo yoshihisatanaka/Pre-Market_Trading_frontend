@@ -16,8 +16,8 @@
 
 /**
  * 操作内容（実 API の 操作区分）の表示名。詳細ダイアログと、コードマスタが引けないときの一覧の
- * 代替表示で使う。**検索セレクトの選択肢と URL クエリの検査はコードマスタ `操作区分`（依頼中の契約提案）
- * から来る**（views/ActivityLogListView.vue）。
+ * 代替表示で使う。**検索セレクトの選択肢と URL クエリの検査はコードマスタ `操作区分` から
+ * 来る**（views/ActivityLogListView.vue）。
  */
 export const ACTIVITY_OPERATION_OPTIONS = [
   { value: 'CREATE', label: '登録' },

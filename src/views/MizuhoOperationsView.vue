@@ -55,8 +55,7 @@ const SIDE_OPTIONS = [
  * URL 上のクエリ名（branch_code / side / status / date_from など）はこの filters 定義にだけ現れる。
  * バックエンドへ送る名前（start_date / end_date など）と route=0（みずほ）の固定は
  * src/api/mizuhoExecutions.js の中に閉じている。
- * status は出来状況の処理状況コードで、選択肢はコードマスタ `約定出来状況`（依頼中の契約提案。
- * 約定照会と同じ）。App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で揃っている。
+ * status は出来状況の処理状況コードで、選択肢はコードマスタ `約定出来状況`（約定照会と同じ）。App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で揃っている。
  * 選択肢に無い値（手で書き換えられた URL）は条件なしに落とす（api 層はそのまま送るため）。
  */
 const codes = useCodesStore()

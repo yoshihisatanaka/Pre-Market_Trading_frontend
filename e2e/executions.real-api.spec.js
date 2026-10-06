@@ -281,7 +281,7 @@ test.describe('約定照会（実 API 接続）', () => {
     const { total, first } = await openOrSkip(page)
 
     const code = String(first.処理状況 ?? '')
-    // 選択肢はコードマスタ `約定出来状況`（契約提案）から来る。実 API に無ければ選べない
+    // 選択肢はコードマスタ `約定出来状況` から来る（2026-10-06 に実 API の /codes に入った）。無ければ選べない
     const select = page.getByTestId('executions-status')
     const options = await select.locator('option').evaluateAll((els) => els.map((el) => el.value))
     test.skip(code === '' || !options.includes(code), `出来状況のプルダウンに ${code} が無い`)

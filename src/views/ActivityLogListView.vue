@@ -68,7 +68,7 @@ const { targets, options: targetOptions, error: targetsError } = storeToRefs(tar
 targetsStore.ensureLoaded()
 
 /*
- * 操作内容の選択肢はコードマスタ `操作区分`（依頼中の契約提案）から。
+ * 操作内容の選択肢はコードマスタ `操作区分` から。
  * App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で揃っていて、
  * URL クエリの検査にもそのまま使える。
  */

@@ -14,12 +14,10 @@ import { buildOrderEntryQuery } from '@/utils/orderEntryQuery'
  *   外株預り … /customers/:customerId/summary（views/CustomerSummaryView.vue）
  *   注文照会 … /customers/:customerId/orders（views/CustomerOrdersView.vue）
  *   注文入力 … 新規注文（/orders/new）へ部店と口座番号を引き継いで移る（タブの中には描かない。モックと同じ）
+ *   仮計算   … /customers/:customerId/calculations（views/CustomerCalculationView.vue）
  *
  * 顧客はこの枠が 1 回だけ読む。タブを切り替えても枠は残るので読み直さない。
  * 子ルートは顧客を読み終えてから描く（注文照会タブは顧客の部店と口座番号で絞るため）。
- *
- * 画面モックの 4 つめのタブ「仮計算」（/calculations）は未実装なので置かない。
- * 作るときはここに 1 つ足す（docs/progress.md の「顧客詳細 / 仮計算タブ」）。
  */
 
 const route = useRoute()
@@ -71,6 +69,11 @@ const tabs = computed(() => [
     key: 'orders',
     label: '注文照会',
     to: { name: 'customer-orders', params: { customerId: customerId.value } },
+  },
+  {
+    key: 'calculations',
+    label: '仮計算',
+    to: { name: 'customer-calculations', params: { customerId: customerId.value } },
   },
 ])
 

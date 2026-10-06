@@ -59,6 +59,13 @@
   --color-loss: #2b6cb0;
 
   /*
+   * 仮計算への導線（外株預り・預り検索の「仮計算」）。発注の売買色と並べても紛れない灰青。
+   * モックの .calc-entry-btn / .calc-row-btn / .direct-order-calc
+   */
+  --color-calculation: #65778e;
+  --color-calculation-hover: #506176;
+
+  /*
    * みずほ注文締めカードの操作ボタン（「みずほ注文締め」「注文ファイル作成」で共通）。
    * モックの .mizuho-close-action / .mizuho-order-file-action。押せないときは淡色面に灰色の文字
    */

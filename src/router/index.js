@@ -45,7 +45,7 @@ const routes = [
      * 親（CustomerDetailView）が顧客カードとタブを持ち、タブの中身を子ルートが描く。
      * :customerId は顧客マスタの行 ID（数字だけにする。/customers/search と紛れない）。
      * /customers/:customerId だけを開いたら外株預りへ回す。
-     * 見出しは 2 つのタブとも「顧客詳細」（どのタブかはタブの選択で示す）
+     * 見出しはどのタブも「顧客詳細」（どのタブかはタブの選択で示す）
      */
     path: '/customers/:customerId(\\d+)',
     component: () => import('@/views/CustomerDetailView.vue'),
@@ -65,6 +65,11 @@ const routes = [
         path: 'orders',
         name: 'customer-orders',
         component: () => import('@/views/CustomerOrdersView.vue'),
+      },
+      {
+        path: 'calculations',
+        name: 'customer-calculations',
+        component: () => import('@/views/CustomerCalculationView.vue'),
       },
     ],
   },

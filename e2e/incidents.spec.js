@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { clickSideMenuLink } from './helpers/sideMenu'
 import { suspensionHistories, suspensionTargets } from '../src/mocks/fixtures/incidents'
-import { formatDateTime } from '../src/utils/format'
+import { formatMonthDayTime } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/incidents.md（タイトル先頭の [IN-nn] が対応 ID）
@@ -170,11 +170,13 @@ test.describe('障害管理', () => {
     // フィクスチャは実 API と同じ最新順。先頭が最も新しい
     const latest = suspensionHistories[0]
     const first = rows.first()
-    await expect(first).toContainText(formatDateTime(latest.操作日時))
+    // 変更日時は年なし（モックと同じ）。更新者はコードの下に氏名
+    await expect(first).toContainText(formatMonthDayTime(latest.操作日時))
     await expect(first.getByRole('cell').nth(1)).toHaveText(
       `${latest.停止対象名}：${latest.操作区分名}`,
     )
-    await expect(first).toContainText(latest.操作者)
+    await expect(first.getByTestId('incidents-history-operator-code')).toHaveText(latest.操作者)
+    await expect(first.getByRole('cell').nth(3)).toContainText(latest.操作者名)
   })
 
   test('[IN-09] 操作履歴が 0 件でも停止対象のカードは表示される', async ({ page }) => {

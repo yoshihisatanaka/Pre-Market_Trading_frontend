@@ -126,6 +126,8 @@ describe('api/incidents', () => {
         operation: raw['操作区分'],
         operationName: raw['操作区分名'],
         operator: raw['操作者'],
+        // 契約提案の 操作者名（docs/api/requests.md #39）。無ければ空文字
+        operatorName: raw['操作者名'] ?? '',
         reason: raw['変更後データ']['停止理由'],
         operatedAt: raw['操作日時'],
       })),

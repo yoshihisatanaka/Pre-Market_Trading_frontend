@@ -15,7 +15,7 @@
 | INA-01 | 既定モック | `fetchSuspensionStatus()` を呼ぶ | `発注停止中` → `suspended`、`全体停止中` → `allSuspended`、`停止中の対象` → `suspendedTargets`、`targets` の各行が `id` / `target` / `targetName` / `suspended` に変換される。`targets` は `ALL` が先頭のまま | 実装済 |
 | INA-02 | 既定モック | `fetchSuspensionStatus()` を呼ぶ | 各行の `停止理由` / `停止日時` / `停止者` / `再開日時` / `再開者` / `更新日時` / `更新者` が `reason` / `suspendedAt` / `suspendedBy` / `resumedAt` / `resumedBy` / `updatedAt` / `updatedBy` に変換される。`発注停止フラグ` は運ばない | 実装済 |
 | INA-03 | 本文が空で返る | `fetchSuspensionStatus()` を呼ぶ | `null` が返る（画面が「空」として出せる） | 実装済 |
-| INA-04 | 既定モック | `fetchSuspensionHistories()` を呼ぶ | `{ items, total }` が返り、`items` の各要素が `id` / `target` / `targetName` / `operation` / `operationName` / `operator` / `reason` / `operatedAt` を持つ。`reason` は `変更後データ` の `停止理由` | 実装済 |
+| INA-04 | 既定モック | `fetchSuspensionHistories()` を呼ぶ | `{ items, total }` が返り、`items` の各要素が `id` / `target` / `targetName` / `operation` / `operationName` / `operator` / `operatorName` / `reason` / `operatedAt` を持つ。`reason` は `変更後データ` の `停止理由`、`operatorName` は契約提案の `操作者名`（無ければ空文字） | 実装済 |
 | INA-05 | `histories` と `total` が無い本文で返る | `fetchSuspensionHistories()` を呼ぶ | `{ items: [], total: 0 }` が返る（`undefined` にしない） | 実装済 |
 | INA-06 | API が 500 を返す | `fetchSuspensionStatus()` を呼ぶ | `ApiError` が投げられ、`message` が「サーバーでエラーが発生しました。」になる | 実装済 |
 | INA-07 | 既定モック | `fetchSuspensionStatus()` を呼ぶ | `/operations/order-suspensions` に GET が飛ぶ | 実装済 |

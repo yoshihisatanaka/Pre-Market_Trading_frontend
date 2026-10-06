@@ -17,24 +17,31 @@ import BalanceQuantityPanel from '@/components/balance/BalanceQuantityPanel.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { useBalanceAdjustmentsStore } from '@/stores/balanceAdjustments'
 import { useCodesStore } from '@/stores/codes'
+import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useCustomerOptionsStore } from '@/stores/customerOptions'
 import { SPECIFIC_DEPOSIT } from '@/utils/apiEnums'
 import { formatMonthDayTime, formatQuantity, joinWide } from '@/utils/format'
 import { OPERATOR_CODE } from '@/utils/operator'
 
 /*
- * 残高マスタ（顧客残高の管理）。いまは見た目だけで、実 API とは繋がっていない
- * （src/mocks/handlers/index.js のモックが応えている）。
- * モックと実 API の食い違いは src/api/balanceAdjustments.js の冒頭に書いてある。
+ * 残高マスタ（顧客残高の管理）。実 API `/masters/balance-adjustments` に繋がっている。
+ * 画面と実 API の食い違いは src/api/balanceAdjustments.js の冒頭に書いてある。
  *
- * 画面モック（/masters/balance-adjustments）からの意図的なずれが 3 つある。
+ * 画面モック（/masters/balance-adjustments）に合わせてあるもの:
+ *   - 「新規保有を追加」は一覧カードの見出しの右（件数の横）に置く（MasterListCard の actions）
+ *   - 説明文の右に操作者の権限表示（「補正可能」/「閲覧のみ」と 氏名（社員コード））を出す。
+ *     出どころは GET /auth/me（stores/currentOperator.js）で、マスタ更新権限があれば「補正可能」
+ *
+ * 画面モックからの意図的なずれが 2 つある。
  *   - モックは全件を 1 つのスクロール領域に出すが、ここは 50 件ごとのページャー
  *     （MasterListCard が持つ）。残高は 顧客 × 銘柄 × 口座区分 の直積なので、
  *     出さないと 51 件目以降が黙って消える
- *   - モックは「新規保有を追加」を一覧カードの見出し横に置くが、ここはヘッダ
- *     （#topbar-actions）に差す。画面固有の操作の置き場所は既存の画面と揃える
  *   - 検索カードに「クリア」が増える（MasterSearchCard が検索とセットで持つ）。
  *     読み直しの導線はヘッダではなく、エラー状態の「再試行」だけにする
+ *
+ * 扱者・顧客名が「—」の行は、残高の口座番号が顧客マスタ（m_口座情報）に無いもの。
+ * 実 API は口座番号で顧客マスタを外部結合して名前を付けるので、結合先が無ければ空で返る
+ * （開発 DB の手入力データ。docs/api/requests.md #32 ⑫）。画面は空を「—」で出すだけにする。
  *
  * **列見出しの「口座区分」の中身は 特定預り区分。** 顧客マスタに出ている 口座区分
  * （一般 / 自己 / 同業者）とは別物で、同じ語が 2 つの意味で使われている。
@@ -138,10 +145,28 @@ function handlerNameOf(code) {
   return codes.optionsFor('扱者').find((option) => option.value === code)?.label ?? ''
 }
 
-/** 確認ステップの「更新者」。ログインの仕組みが無いので .env の社員コードから引く */
-const operatorLabel = computed(
-  () => handlerNameOf(OPERATOR_CODE) || OPERATOR_CODE || '—',
-)
+/*
+ * 操作者（GET /auth/me）。見出し右の権限表示と、確認ステップの「更新者」に使う。
+ * ensureLoaded は main.js が起動時に始めているので通常は何もしない
+ * （ガードを通らない単体テストのための保険。ExecutionListView と同じ）。
+ */
+const currentOperator = useCurrentOperatorStore()
+currentOperator.ensureLoaded()
+
+/** 補正できるか。残高の補正はマスタ更新権限の操作（ルートの requiredPermission と同じ） */
+const canAdjust = computed(() => currentOperator.can('master'))
+
+/**
+ * 「氏名（社員コード）」。画面モックの権限表示・確認ステップの更新者と同じ形。
+ * /auth/me が読めていなければ .env の社員コード（扱者の名前が引ければその表示）に落とす。
+ */
+const operatorLabel = computed(() => {
+  const operator = currentOperator.operator
+  if (operator?.operatorCode) {
+    return operator.name ? `${operator.name}（${operator.operatorCode}）` : operator.operatorCode
+  }
+  return handlerNameOf(OPERATOR_CODE) || OPERATOR_CODE || '—'
+})
 
 /* ------------------------------------------------------------------ *
  * 加算数量の入力（加算モーダルと新規追加モーダルで同じ規則を使う）
@@ -296,7 +321,7 @@ async function submitSell() {
 }
 
 /* ------------------------------------------------------------------ *
- * 新規保有を追加（ヘッダの「新規保有を追加」）
+ * 新規保有を追加（一覧カードの見出しの「新規保有を追加」）
  * ------------------------------------------------------------------ */
 const isAddOpen = ref(false)
 const addStep = ref('input')
@@ -451,22 +476,40 @@ const addSummary = computed(() => {
 
 <template>
   <section class="balance-adjustment-list">
-    <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
-    <Teleport defer to="#topbar-actions">
-      <BaseButton data-testid="balance-adjustments-add" @click="openAdd">
-        新規保有を追加
-      </BaseButton>
-    </Teleport>
+    <!-- 見出しはヘッダが meta.title から出す。この画面はヘッダに操作を差し込まない
+         （「新規保有を追加」は画面モックどおり一覧カードの見出しに置く） -->
 
-    <BaseAlert v-if="noticeMessage" variant="success" data-testid="balance-adjustments-notice">
-      {{ noticeMessage }}
-    </BaseAlert>
+    <!-- 説明（成功時はメッセージに入れ替わる）と、その右に操作者の権限表示（モックの見出し行） -->
+    <div class="balance-adjustment-list__heading">
+      <BaseAlert
+        v-if="noticeMessage"
+        variant="success"
+        class="balance-adjustment-list__heading-message"
+        data-testid="balance-adjustments-notice"
+      >
+        {{ noticeMessage }}
+      </BaseAlert>
 
+      <!-- 画面の説明。4 状態や検索結果に関わらず常時出す（モックの見出しの副文） -->
+      <BaseAlert
+        v-else
+        variant="info"
+        class="balance-adjustment-list__heading-message"
+        data-testid="balance-adjustments-description"
+      >
+        既存保有への数量加算、またはスピンオフ等の新規保有追加を記録します。
+      </BaseAlert>
 
-    <!-- 画面の説明。4 状態や検索結果に関わらず常時出す（モックのカード見出しの副文） -->
-    <BaseAlert v-else variant="info" data-testid="balance-adjustments-description">
-      既存保有への数量加算、またはスピンオフ等の新規保有追加を記録します。
-    </BaseAlert>
+      <!-- /auth/me を読み終えるまでは出さない（「閲覧のみ」が一瞬出て見えるのを避ける） -->
+      <p
+        v-if="currentOperator.operator"
+        :class="['balance-adjustment-list__authority', !canAdjust && 'is-readonly']"
+        data-testid="balance-adjustments-authority"
+      >
+        <strong>{{ canAdjust ? '補正可能' : '閲覧のみ' }}</strong>
+        <span>{{ operatorLabel }}</span>
+      </p>
+    </div>
 
     <!-- 画面モックの検索フォームは 5 項目を 1 行に並べるが、FormGrid が受ける列数は
          2 / 3 / 4 なので既定の 4 のままにし、銘柄名だけを次の行へ折り返す
@@ -534,6 +577,13 @@ const addSummary = computed(() => {
       @reload="store.reload()"
       @update:offset="goToOffset"
     >
+      <!-- 画面モックどおり一覧カードの見出しの右（件数の横）。4 状態に関わらず出る -->
+      <template #actions>
+        <BaseButton size="sm" data-testid="balance-adjustments-add" @click="openAdd">
+          新規保有を追加
+        </BaseButton>
+      </template>
+
       <DataTable
         flat
         data-testid="balance-adjustments-table"
@@ -802,6 +852,52 @@ const addSummary = computed(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+}
+
+/* 説明（またはメッセージ）と権限表示を 1 行に並べる。狭い画面では縦に積む（モックの adjustment-heading） */
+.balance-adjustment-list__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.balance-adjustment-list__heading-message {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .balance-adjustment-list__heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* 操作者の権限表示（モックの authority-note）。閲覧のみは一段淡くする */
+.balance-adjustment-list__authority {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.balance-adjustment-list__authority strong {
+  color: var(--color-text-heading);
+  font-weight: 600;
+}
+
+.balance-adjustment-list__authority.is-readonly {
+  color: var(--color-text-muted);
+}
+
+.balance-adjustment-list__authority.is-readonly strong {
+  color: var(--color-text-muted);
 }
 
 /* 部店コード・口座番号は桁を揃えて読ませる（モックの ui-code 相当） */

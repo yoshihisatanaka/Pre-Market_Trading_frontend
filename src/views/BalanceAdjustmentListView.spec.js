@@ -11,6 +11,7 @@ import { BALANCE_ADJUSTMENTS_PAGE_SIZE } from '@/stores/balanceAdjustments'
 import { useCodesStore } from '@/stores/codes'
 import { CUSTOMER_OPTIONS_LIMIT } from '@/stores/customerOptions'
 import { codeEntries } from '@/mocks/fixtures/codes'
+import { salesOperator, supervisorOperator } from '@/mocks/fixtures/currentOperator'
 import { SPECIFIC_DEPOSIT } from '@/utils/apiEnums'
 import { formatMonthDayTime, formatQuantity, joinWide } from '@/utils/format'
 import BalanceAdjustmentListView from './BalanceAdjustmentListView.vue'
@@ -113,7 +114,7 @@ async function mountView({ query = {}, withCodes = false } = {}) {
   const wrapper = mount(BalanceAdjustmentListView, {
     global: {
       plugins: [pinia, router],
-      // teleport を stub して、ヘッダへ差し込むボタンを wrapper 内に描画させる
+      // teleport を stub して、モーダル（BaseModal は body へ Teleport する）を wrapper 内に描画させる
       stubs: { teleport: true },
     },
   })
@@ -1032,6 +1033,75 @@ describe('BalanceAdjustmentListView', () => {
 
       release()
       await settle()
+    })
+  })
+
+  /* ------------------------------------------------------------------ *
+   * 見出しの権限表示と「新規保有を追加」の置き場所（BLV-44〜48。画面モックに合わせた）
+   * ------------------------------------------------------------------ */
+  describe('権限表示と新規保有を追加の置き場所', () => {
+    /** /auth/me を指定の操作者（生の形）で返す */
+    const meAs = (operator) => http.get('*/api/auth/me', () => HttpResponse.json(operator))
+    const authority = (wrapper) => wrapper.find('[data-testid="balance-adjustments-authority"]')
+    /** 「氏名（社員コード）」。画面モックの権限表示・確認ステップの更新者と同じ形 */
+    const labelOf = (operator) => `${operator.氏名}（${operator.操作者コード}）`
+
+    it('[BLV-44] マスタ更新権限のある操作者は「補正可能」と 氏名（社員コード）が見出しの右に出る', async () => {
+      server.use(meAs(supervisorOperator))
+      const { wrapper } = await mountView()
+      await settle()
+
+      expect(authority(wrapper).find('strong').text()).toBe('補正可能')
+      expect(authority(wrapper).text()).toContain(labelOf(supervisorOperator))
+      expect(authority(wrapper).classes()).not.toContain('is-readonly')
+    })
+
+    it('[BLV-45] マスタ更新権限の無い操作者は「閲覧のみ」になる', async () => {
+      server.use(meAs(salesOperator))
+      const { wrapper } = await mountView()
+      await settle()
+
+      expect(authority(wrapper).find('strong').text()).toBe('閲覧のみ')
+      expect(authority(wrapper).text()).toContain(labelOf(salesOperator))
+      expect(authority(wrapper).classes()).toContain('is-readonly')
+    })
+
+    it('[BLV-46] /auth/me が失敗したら権限表示は出さない（説明文は出る）', async () => {
+      server.use(
+        http.get('*/api/auth/me', () =>
+          HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+        ),
+      )
+      const { wrapper } = await mountView()
+      await settle()
+
+      expect(authority(wrapper).exists()).toBe(false)
+      expect(exists(wrapper, 'balance-adjustments-description')).toBe(true)
+    })
+
+    it('[BLV-47] 「新規保有を追加」は一覧カードの見出しで件数の横にあり、0 件でも押せる', async () => {
+      server.use(listHandler([]))
+      const { wrapper } = await mountView()
+      await settle()
+
+      // 件数と同じ並び（MasterListCard の actions スロット）に入っている
+      const count = wrapper.find('[data-testid="balance-adjustments-count"]')
+      const add = count.element.parentElement.querySelector(
+        '[data-testid="balance-adjustments-add"]',
+      )
+      expect(add).not.toBeNull()
+      expect(add.disabled).toBe(false)
+      expect(exists(wrapper, 'balance-adjustments-empty')).toBe(true)
+    })
+
+    it('[BLV-48] 確認ステップの「更新者」は /auth/me の 氏名（社員コード）になる', async () => {
+      server.use(meAs(supervisorOperator))
+      const { wrapper } = await openConfirm()
+      await settle()
+
+      const confirm = wrapper.find('[data-testid="balance-adjustments-increase-confirm"]')
+      const values = confirm.findAll('dd').map((dd) => dd.text())
+      expect(values.at(-1)).toBe(labelOf(supervisorOperator))
     })
   })
 })

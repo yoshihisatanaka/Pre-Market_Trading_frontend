@@ -44,6 +44,11 @@ const sellSkipped = ordersOf('1').filter((row) => row.Dream登録状況 !== '2')
 const buyRows = mizuhoExecutions.filter((row) => row.売買区分 === '3')
 const sellRows = mizuhoExecutions.filter((row) => row.売買区分 === '1')
 const partialRows = mizuhoExecutions.filter((row) => row.処理状況 === '010')
+// 件数カードの「一部出来」は約定の行数ではなく注文の件数（処理状況 010 の注文 ID の数）
+const partialOrderCount = new Set(partialRows.map((row) => row.注文ID)).size
+const sellPartialOrderCount = new Set(
+  partialRows.filter((row) => row.売買区分 === '1').map((row) => row.注文ID),
+).size
 
 // MZ-11: 部店 123 かつ AMD の行（取消済）
 const AMD_BRANCH = '123'
@@ -258,14 +263,14 @@ test.describe('みずほ注文締', () => {
     expect(downloads).toHaveLength(0)
   })
 
-  test('[MZ-08] 件数カードに総件数・買い・売りが出て、一部出来は — になる', async ({ page }) => {
+  test('[MZ-08] 件数カードに総件数・買い・売り・一部出来の注文件数が出る', async ({ page }) => {
     await page.goto(PATH)
 
     await expectSummary(page, {
       total: String(mizuhoExecutions.length),
       buy: String(buyRows.length),
       sell: String(sellRows.length),
-      partial: '—',
+      partial: String(partialOrderCount),
     })
   })
 
@@ -284,7 +289,7 @@ test.describe('みずほ注文締', () => {
       total: String(sellRows.length),
       buy: '0',
       sell: String(sellRows.length),
-      partial: '—',
+      partial: String(sellPartialOrderCount),
     })
   })
 
@@ -365,7 +370,7 @@ test.describe('みずほ注文締', () => {
       '該当する約定はありません。',
     )
     await expect(page.getByTestId('mizuho-executions-table')).toHaveCount(0)
-    await expectSummary(page, { total: '0', buy: '0', sell: '0', partial: '—' })
+    await expectSummary(page, { total: '0', buy: '0', sell: '0', partial: '0' })
     // 条件を直せるよう検索カードは残り、締めカードも影響を受けない
     await expect(page.getByTestId('mizuho-executions-search')).toBeVisible()
     await expect(page.getByTestId('mizuho-closing-state')).toHaveText('受付中')

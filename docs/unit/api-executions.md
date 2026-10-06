@@ -19,7 +19,7 @@
 | EXA-05 | 応答の `売買区分` が `'3'` / `'1'` / `'9'` | `fetchExecutions()` | `side` が `'buy'` / `'sell'` / `''` になる | 実装済 |
 | EXA-06 | 応答の nullable 項目が `null`（`顧客名` / `Ticker` / `約定単価` / `約定日時`） | `fetchExecutions()` | 文字列項目は `''`、数値項目は `null` のまま（0 と未取得を区別する） | 実装済 |
 | EXA-07 | 既定モック | `fetchExecutions()` | `ID` / `注文ID` / `口座番号`（integer）が文字列の `id` / `orderId` / `accountNumber` になる | 実装済 |
-| EXA-08 | 既定モック / `summary` が欠けた応答 | `fetchExecutions()` | `summary` が `count` / `orderCount` / `buyCount` / `sellCount` / `totalQuantity` / `totalAmountUsd` / `totalFeeUsd` に変換される。欠けているときは全項目 0 | 実装済 |
+| EXA-08 | 既定モック / `summary` が欠けた応答 | `fetchExecutions()` | `summary` が `count` / `orderCount` / `buyCount` / `sellCount` / `partialCount` / `totalQuantity` / `totalAmountUsd` / `totalFeeUsd` に変換される（`partialCount` は `一部出来件数` = 処理状況 010 の注文の件数）。欠けているときは全項目 0 | 実装済 |
 | EXA-09 | 既定モック | 各条件に値を入れて `exportExecutionsCsv()`（`side: 'buy'`） | `GET /executions/export-csv` に一覧と同じクエリ名 `branch_code` / `symbol` / `side=3` / `status` / `start_date` / `end_date` / `route` でその値が送られ、`limit` / `offset` は載らない | 実装済 |
 | EXA-10 | 既定モック | 全条件を空文字・`side: 'x'` にして `exportExecutionsCsv()` | 空文字の条件と知らない `side` はクエリに載らず、`limit` / `offset` も載らない（クエリが空） | 実装済 |
 | EXA-11 | 既定モック | `exportExecutionsCsv()` | `blob` が（文字列ではなく）Blob で、本文は見出し 1 行 + フィクスチャの全件（ページで切られない） | 実装済 |

@@ -363,8 +363,11 @@ test.describe('みずほ注文締（実 API 接続）', () => {
     const buy = await statValue(page, 'mizuho-summary-buy')
     const sell = await statValue(page, 'mizuho-summary-sell')
     expect(buy + sell).toBeLessThanOrEqual(total)
-    // ExecutionSummary に一部出来の件数が無いので '—' のまま
-    expect(await statValue(page, 'mizuho-summary-partial')).toBeNull()
+    // 一部出来は注文の件数（ExecutionSummary の 一部出来件数）。約定 1 行は注文 1 件以上に属するので総約定件数以下
+    const partial = await statValue(page, 'mizuho-summary-partial')
+    expect(partial).not.toBeNull()
+    expect(partial).toBeGreaterThanOrEqual(0)
+    expect(partial).toBeLessThanOrEqual(total)
   })
 
   test('[MZR-02] 締めと締め解除を往復すると実 API に受理され、実行前の状態に戻る', async ({

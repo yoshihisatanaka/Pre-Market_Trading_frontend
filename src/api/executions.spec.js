@@ -238,6 +238,10 @@ describe('api/executions', () => {
   it('[EXA-08] 集計をアプリ内モデルに変換し、欠けていれば全項目 0 にする', async () => {
     const sells = executions.filter((row) => row.売買区分 === '1')
     const buys = executions.filter((row) => row.売買区分 === '3')
+    // 一部出来は約定の行数ではなく注文の件数（処理状況 010 の注文 ID の数）
+    const partialOrders = new Set(
+      executions.filter((row) => row.処理状況 === '010').map((row) => row.注文ID),
+    )
 
     const { summary } = await fetchExecutions()
 
@@ -247,6 +251,7 @@ describe('api/executions', () => {
         'orderCount',
         'buyCount',
         'sellCount',
+        'partialCount',
         'totalQuantity',
         'totalAmountUsd',
         'totalFeeUsd',
@@ -256,6 +261,7 @@ describe('api/executions', () => {
     expect(summary.orderCount).toBe(new Set(executions.map((row) => row.注文ID)).size)
     expect(summary.buyCount).toBe(buys.length)
     expect(summary.sellCount).toBe(sells.length)
+    expect(summary.partialCount).toBe(partialOrders.size)
     expect(summary.totalQuantity).toBe(executions.reduce((sum, row) => sum + row.約定数量, 0))
     expect(summary.totalAmountUsd).toBeCloseTo(
       executions.reduce((sum, row) => sum + row.約定代金, 0),
@@ -275,6 +281,7 @@ describe('api/executions', () => {
       orderCount: 0,
       buyCount: 0,
       sellCount: 0,
+      partialCount: 0,
       totalQuantity: 0,
       totalAmountUsd: 0,
       totalFeeUsd: 0,

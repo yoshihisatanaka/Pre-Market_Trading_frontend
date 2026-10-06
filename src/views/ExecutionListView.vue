@@ -25,7 +25,6 @@ import { formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
  *
  * 画面モック（premarket-order-202609 の execution_management.html）からの意図的なずれ:
  *   - 約定金額は円ではなく USD の約定代金を出す（ExecutionItem が円貨の項目を持たない）
- *   - 「一部出来」の件数カードは '—' のまま（ExecutionSummary に一部出来の件数が無い）
  *   - 一覧カードのヘッダにある 2 つ目の CSV ボタンは置かない（ヘッダの「CSV出力」と同じ操作。
  *     MasterListCard のヘッダは件数の表示が占めている）
  *   - 件数カードの売買の色は表と同じ 買=赤 / 売=青 に揃えた（モックはカードだけ逆）
@@ -153,6 +152,7 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
 /*
  * 件数カード。集計は一覧と同じ応答に入っている。
  * 取得中とエラーのときは '—' にする（確定前の値を出すと、前回の集計が新しい結果に見える）。
+ * 「一部出来」だけは約定の行数ではなく一部出来の注文の件数（ExecutionSummary の 一部出来件数）。
  */
 const summaryReady = computed(() => !loading.value && !error.value && summary.value !== null)
 
@@ -175,8 +175,12 @@ const stats = computed(() => [
     value: summaryReady.value ? summary.value.sellCount : null,
     tone: 'sell',
   },
-  // TODO(処理実装): ExecutionSummary に一部出来の件数が入ったら api 層の toSummary() に足して出す
-  { testid: 'executions-summary-partial', label: '一部出来', value: null, tone: 'partial' },
+  {
+    testid: 'executions-summary-partial',
+    label: '一部出来',
+    value: summaryReady.value ? summary.value.partialCount : null,
+    tone: 'partial',
+  },
 ])
 
 /**

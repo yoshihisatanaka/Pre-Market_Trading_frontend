@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { HOLIDAY_TYPE } from './apiEnums'
 import {
+  MARKET_HOLIDAY_EARLY_CLOSE_LABEL,
   MARKET_HOLIDAY_TYPE_DEFAULT,
   MARKET_HOLIDAY_TYPE_OPTIONS,
+  formatMarketHolidayEarlyClose,
   formatMarketHolidayType,
   isMarketHolidayType,
+  isShortTradingDay,
 } from './marketHolidayTypes'
 
 /*
@@ -66,6 +69,22 @@ describe('MARKET_HOLIDAY_TYPE_DEFAULT', () => {
   it('[MHT-07] 既定値は選択肢の先頭のコードで、判定も通る', () => {
     expect(MARKET_HOLIDAY_TYPE_DEFAULT).toBe(FULL_DAY.value)
     expect(isMarketHolidayType(MARKET_HOLIDAY_TYPE_DEFAULT)).toBe(true)
+  })
+})
+
+describe('短縮取引日の判定と表示', () => {
+  it('[MHT-09] 短縮取引のコードだけが短縮取引日になる', () => {
+    expect(isShortTradingDay(SHORTENED.value)).toBe(true)
+    for (const value of [FULL_DAY.value, UNKNOWN_CODE, '', undefined, null, 0, 1]) {
+      expect(isShortTradingDay(value)).toBe(false)
+    }
+  })
+
+  it('[MHT-10] 短縮取引日は終了時刻の文言、それ以外は em dash になる', () => {
+    expect(formatMarketHolidayEarlyClose(SHORTENED.value)).toBe(MARKET_HOLIDAY_EARLY_CLOSE_LABEL)
+    for (const value of [FULL_DAY.value, UNKNOWN_CODE, '', undefined, null, 0]) {
+      expect(formatMarketHolidayEarlyClose(value)).toBe(UNKNOWN_LABEL)
+    }
   })
 })
 

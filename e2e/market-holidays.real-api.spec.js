@@ -156,11 +156,11 @@ test.describe('海外休場日マスタ（実 API 接続）', () => {
     await expect(page.getByTestId('market-holidays-error')).toHaveCount(0)
   })
 
-  test('[MR-02] 休場区分で絞り込むと、その区分の行だけが返る', async ({ page }) => {
+  test('[MR-02] 短縮取引日で絞り込むと、その区分の行だけが返る', async ({ page }) => {
     await openList(page)
     const total = await countOf(page)
 
-    await page.getByTestId('market-holidays-holiday-type').selectOption({ label: '短縮取引' })
+    await page.getByTestId('market-holidays-holiday-type').selectOption({ label: '短縮取引日' })
     await page.getByTestId('market-holidays-search-submit').click()
 
     await expect(page).toHaveURL(/holiday_type=1/)
@@ -172,10 +172,11 @@ test.describe('海外休場日マスタ（実 API 接続）', () => {
       return
     }
 
-    // 表示されている行がすべて短縮取引になっている（サーバ側の絞り込みが効いている）
+    // 表示されている行がすべて短縮取引日（終了時刻のバッジ）になっている（サーバ側の絞り込みが効いている）
     const rows = rowsOf(page)
-    await expect(rows).toHaveCount(Math.min(filtered, PAGE_SIZE))
-    await expect(rows.filter({ hasText: '終日休場' })).toHaveCount(0)
+    const shown = Math.min(filtered, PAGE_SIZE)
+    await expect(rows).toHaveCount(shown)
+    await expect(rows.filter({ hasText: '13:00 ET 終了' })).toHaveCount(shown)
   })
 
   test('[MR-03] 日付で絞り込むと、その日付の行だけが返る', async ({ page }) => {

@@ -7,6 +7,7 @@ import DataTable from '@/components/ui/DataTable.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useCustomerDetailStore } from '@/stores/customerDetail'
+import { holdingCalculationQuery } from '@/utils/calculationQuery'
 import { formatJpyUnit, formatQuantity, formatUsdUnit } from '@/utils/format'
 import { buildOrderEntryQuery, holdingOrderQuery } from '@/utils/orderEntryQuery'
 import { SIDE } from '@/utils/orderEntryOptions'
@@ -21,7 +22,9 @@ import { formatSignedJpyUnit, formatSignedPercent, profitLossTone } from '@/util
  * 顧客・銘柄・売買・預り区分を URL クエリで引き継いで移る（utils/orderEntryQuery.js）。発注権限（GET /auth/me の order）の
  * 無い利用者には出さない（注文照会の「新規注文」「訂正」「取消」と同じ扱い）。
  *
- * 画面モックの「仮計算」ボタン（行・カード見出し）は、仮計算の画面が未実装なので置かない。
+ * 「仮計算」は顧客詳細の仮計算タブ（/customers/:customerId/calculations）へ移る。見出しのものは買いで始め、
+ * 行のものは銘柄・売り・預り区分を URL クエリで引き継ぐ（utils/calculationQuery.js）。発注ではないので、
+ * 発注権限の無い利用者にも出す（IFA は「参照・仮計算のみ」）。
  * IB 取扱のバッジ（ib_available）は `GET /holdings` に該当する項目が無いので出さない。
  */
 
@@ -98,6 +101,16 @@ function tradeRoute(holding, side) {
   return orderEntryRoute(holdingOrderQuery(customerKey.value, holding, side))
 }
 
+/** 顧客は枠と同じ（パスの customerId）。行のものだけ銘柄・売り・預り区分を載せる */
+const calculationRoute = computed(() => ({
+  name: 'customer-calculations',
+  params: { customerId: String(route.params.customerId ?? '') },
+}))
+
+function holdingCalculationRoute(holding) {
+  return { ...calculationRoute.value, query: holdingCalculationQuery(holding) }
+}
+
 function profitLossClass(holding) {
   const tone = profitLossTone(holding.profitLossJpy)
   return tone ? `is-${tone}` : null
@@ -128,6 +141,13 @@ function profitLossClass(holding) {
         data-testid="customer-holdings-new-order"
       >
         ＋ 新規注文
+      </RouterLink>
+      <RouterLink
+        :to="calculationRoute"
+        class="customer-summary__calc-entry"
+        data-testid="customer-holdings-calculation-entry"
+      >
+        仮計算
       </RouterLink>
     </template>
 
@@ -202,9 +222,12 @@ function profitLossClass(holding) {
           <span v-else class="customer-summary__muted">—</span>
         </template>
 
-        <!-- 発注権限を読み終えるまでは何も出さない（「閲覧のみ」がちらつかない） -->
+        <!--
+          発注権限を読み終えるまでは何も出さない（「閲覧のみ」がちらつかない）。
+          「仮計算」は権限によらず出すが、列が後から伸びないよう同じときに出す
+        -->
         <template #cell-actions="{ row }">
-          <template v-if="!operatorPending">
+          <div v-if="!operatorPending" class="customer-summary__actions">
             <span
               v-if="!canOrder"
               class="customer-summary__muted"
@@ -212,7 +235,7 @@ function profitLossClass(holding) {
             >
               閲覧のみ
             </span>
-            <div v-else class="customer-summary__actions">
+            <template v-else>
               <RouterLink
                 :to="tradeRoute(row, SIDE.BUY)"
                 class="customer-summary__trade is-buy"
@@ -239,8 +262,15 @@ function profitLossClass(holding) {
               >
                 売り
               </RouterLink>
-            </div>
-          </template>
+            </template>
+            <RouterLink
+              :to="holdingCalculationRoute(row)"
+              class="customer-summary__trade is-calc"
+              data-testid="customer-holdings-calculation"
+            >
+              仮計算
+            </RouterLink>
+          </div>
         </template>
       </DataTable>
     </div>
@@ -281,6 +311,27 @@ function profitLossClass(holding) {
 
 .customer-summary__new-order:hover {
   background-color: var(--color-primary-hover);
+}
+
+/* カード見出しの「仮計算」。新規注文と同じ大きさで、色は仮計算の灰青（モックの .calc-entry-btn） */
+.customer-summary__calc-entry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 82px;
+  height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-calculation);
+  color: var(--color-primary-contrast);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.customer-summary__calc-entry:hover {
+  background-color: var(--color-calculation-hover);
 }
 
 .customer-summary__ticker {
@@ -334,6 +385,7 @@ function profitLossClass(holding) {
 
 .customer-summary__actions {
   display: flex;
+  align-items: center;
   justify-content: center;
   gap: var(--space-1);
 }
@@ -366,6 +418,15 @@ function profitLossClass(holding) {
 
 .customer-summary__trade.is-sell:hover {
   background-color: var(--color-sell-hover);
+}
+
+/* 行の「仮計算」（モックの .calc-row-btn） */
+.customer-summary__trade.is-calc {
+  background-color: var(--color-calculation);
+}
+
+.customer-summary__trade.is-calc:hover {
+  background-color: var(--color-calculation-hover);
 }
 
 .customer-summary__trade:disabled {

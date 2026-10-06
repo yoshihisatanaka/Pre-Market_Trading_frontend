@@ -89,6 +89,11 @@ async function mountView({ query = {}, withCodes = false } = {}) {
         name: 'customer-order-entry',
         component: Page,
       },
+      {
+        path: '/customers/:customerId/calculations',
+        name: 'customer-calculations',
+        component: Page,
+      },
       { path: '/:pathMatch(.*)*', component: Page },
     ],
   })
@@ -218,7 +223,7 @@ describe('HoldingSearchView', () => {
     expect(exists(wrapper, 'holding-search-table')).toBe(false)
   })
 
-  it('[HSV-06] 見出しは 14 列で、「仮計算」はどこにも無い', async () => {
+  it('[HSV-06] 見出しは 14 列で、全行の操作列に「仮計算」が出る', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -238,7 +243,9 @@ describe('HoldingSearchView', () => {
       'CA',
       '操作',
     ])
-    expect(wrapper.text()).not.toContain('仮計算')
+    const calculations = wrapper.findAll('[data-testid="holding-search-calculation"]')
+    expect(calculations).toHaveLength(rows(wrapper).length)
+    expect(calculations[0].text()).toBe('仮計算')
   })
 
   it('[HSV-07] 条件なしで「検索」を押しても URL は空のままで、引き直さない', async () => {
@@ -560,7 +567,7 @@ describe('HoldingSearchView', () => {
     expect(buy.attributes('disabled')).toBeUndefined()
   })
 
-  it('[HSV-22] 発注権限が無ければ全行「閲覧のみ」で、買い・売りは出ない', async () => {
+  it('[HSV-22] 発注権限が無ければ全行「閲覧のみ」で、買い・売りは出ない（仮計算は出る）', async () => {
     server.use(http.get(AUTH_ME, () => HttpResponse.json(noOperationOperator)))
     const { wrapper } = await mountView()
     await settle()
@@ -571,6 +578,9 @@ describe('HoldingSearchView', () => {
     )
     expect(exists(wrapper, 'holding-search-buy')).toBe(false)
     expect(exists(wrapper, 'holding-search-sell')).toBe(false)
+    expect(wrapper.findAll('[data-testid="holding-search-calculation"]')).toHaveLength(
+      rows(wrapper).length,
+    )
   })
 
   it('[HSV-23] 権限が決まるまでは操作列に何も出さない', async () => {
@@ -582,6 +592,7 @@ describe('HoldingSearchView', () => {
     expect(exists(wrapper, 'holding-search-view-only')).toBe(false)
     expect(exists(wrapper, 'holding-search-buy')).toBe(false)
     expect(exists(wrapper, 'holding-search-sell')).toBe(false)
+    expect(exists(wrapper, 'holding-search-calculation')).toBe(false)
 
     release()
     await settle()
@@ -612,5 +623,56 @@ describe('HoldingSearchView', () => {
       .map((option) => ({ value: option.element.value, label: option.text() }))
     expect(options[0]).toEqual({ value: '', label: '-- 全区分 --' })
     expect(options.slice(1)).toEqual(expected)
+  })
+
+  it('[HSV-27] 「仮計算」を押すと顧客マスタを引き、銘柄・売り・預り区分を仮計算タブへ引き継ぐ', async () => {
+    expect(headCustomer).toBeTruthy()
+    const queries = recordQueries(CUSTOMERS)
+    const { wrapper, router } = await mountView()
+    await settle()
+
+    await rows(wrapper)[0].find('[data-testid="holding-search-calculation"]').trigger('click')
+    await settle()
+
+    expect(queries).toHaveLength(1)
+    expect(queries[0].get('branch_code')).toBe(head.部店コード)
+    expect(queries[0].get('account_no')).toBe(String(head.口座番号))
+    const route = router.currentRoute.value
+    expect(route.name).toBe('customer-calculations')
+    expect(route.params.customerId).toBe(String(headCustomer.ID))
+    expect(route.query).toEqual({
+      symbol: head.ティッカー,
+      side: 'sell',
+      specific_deposit: head.預り売買区分,
+    })
+  })
+
+  it('[HSV-28] 顧客マスタが 500 のときは「仮計算」でも理由の帯を出し、ルートは変わらない', async () => {
+    server.use(errorHandler(CUSTOMERS))
+    const { wrapper, router } = await mountView()
+    await settle()
+
+    await rows(wrapper)[0].find('[data-testid="holding-search-calculation"]').trigger('click')
+    await settle()
+
+    expect(find(wrapper, 'holding-search-customer-error').text()).toContain(ERROR_MESSAGE)
+    expect(router.currentRoute.value.path).toBe(PATH)
+  })
+
+  it('[HSV-29] 顧客を引いているあいだは「仮計算」がすべて押せない', async () => {
+    const release = gate(CUSTOMERS)
+    const { wrapper } = await mountView()
+    await settle()
+
+    await rows(wrapper)[0].find('[data-testid="holding-search-calculation"]').trigger('click')
+
+    const buttons = wrapper.findAll('[data-testid="holding-search-calculation"]')
+    expect(buttons.length).toBe(rows(wrapper).length)
+    for (const button of buttons) {
+      expect(button.attributes('disabled')).toBeDefined()
+    }
+
+    release()
+    await settle()
   })
 })

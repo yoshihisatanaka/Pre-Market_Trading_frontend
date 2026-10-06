@@ -8,8 +8,8 @@ import { mockApi } from './helpers/mockApi'
 import { COLUMNS as INQUIRY_COLUMNS, expectedRowIds } from './helpers/orderInquiry'
 
 // シナリオ: docs/e2e/customer-detail.md（タイトル先頭の [CDT-nn] が対応 ID）
-// 顧客詳細（枠 = 顧客カードとタブ、子 = 外株預り / 注文照会）。顧客・預り・注文の 3 か所の 4 状態、
-// タブと URL の同期、新規注文への引き継ぎ（新規注文の入力欄に値が入るまで）、発注権限での出し分けを守る。
+// 顧客詳細（枠 = 顧客カードとタブ、子 = 外株預り / 注文照会 / 仮計算）。顧客・預り・注文の 3 か所の 4 状態、
+// タブと URL の同期、新規注文・仮計算への引き継ぎ（入力欄に値が入るまで）、発注権限での出し分けを守る。
 // mockApi() は固定の body を返すだけでクエリを解釈しない。注文照会タブの絞り込み（CDT-26〜30）は
 // クエリを実際に処理する既定ハンドラで検証する。
 
@@ -100,6 +100,7 @@ const sum = (values) => values.reduce((total, value) => total + value, 0)
 
 const summaryPath = (id) => `/customers/${id}/summary`
 const ordersPath = (id) => `/customers/${id}/orders`
+const calculationsPath = (id) => `/customers/${id}/calculations`
 
 /** 外株預りの表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function holdingRows(page) {
@@ -132,7 +133,7 @@ function queryOf(page) {
   return Object.fromEntries(new URL(page.url()).searchParams)
 }
 
-/** 新規注文の切り替えボタン（売買・預り区分）が選ばれているか */
+/** 切り替えボタン（新規注文・仮計算の売買、新規注文の預り区分）が選ばれているか */
 function toggleButton(page, testId, name) {
   return page.getByTestId(testId).getByRole('button', { name, exact: true })
 }
@@ -513,7 +514,9 @@ test.describe('顧客詳細 外株預り', () => {
     await expect(holdingRows(page)).toHaveCount(yamadaHoldings.length)
   })
 
-  test('[CDT-34] 発注権限が無いと預りの操作は「閲覧のみ」で新規注文も出ない', async ({ page }) => {
+  test('[CDT-34] 発注権限が無いと預りの操作は「閲覧のみ」で新規注文も出ない（仮計算は出る）', async ({
+    page,
+  }) => {
     await mockApi(page, [{ path: '*/api/auth/me', body: noOperationOperator }])
     await openSummary(page)
     await expect(holdingRows(page)).toHaveCount(yamadaHoldings.length)
@@ -522,6 +525,78 @@ test.describe('顧客詳細 外株預り', () => {
     await expect(page.getByTestId('customer-holdings-buy')).toHaveCount(0)
     await expect(page.getByTestId('customer-holdings-sell')).toHaveCount(0)
     await expect(page.getByTestId('customer-holdings-new-order')).toHaveCount(0)
+    await expect(page.getByTestId('customer-holdings-calculation')).toHaveCount(
+      yamadaHoldings.length,
+    )
+    await expect(page.getByTestId('customer-holdings-calculation-entry')).toBeVisible()
+  })
+
+  test('[CDT-37] 行の「仮計算」は銘柄・売り・預り区分を仮計算タブへ引き継ぐ', async ({ page }) => {
+    await openSummary(page)
+    await holdingRow(page, TSLA).getByTestId('customer-holdings-calculation').click()
+
+    await expect(page).toHaveURL(new RegExp(`${calculationsPath(YAMADA.ID)}\\?`))
+    // 仮計算は特定預り区分のまま渡す（新規注文の deposit と違い、向きを読み替えない）
+    expect(queryOf(page)).toEqual({
+      symbol: TSLA.ティッカー,
+      side: 'sell',
+      specific_deposit: TSLA.預り売買区分,
+    })
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(TSLA.ティッカー)
+    await expect(toggleButton(page, 'customer-calc-side', '売り')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await expect(page.getByTestId('customer-calc-deposit').locator('option:checked')).toHaveText(
+      '一般',
+    )
+    await expect(page.getByTestId('customer-detail-tab-calculations')).toHaveAttribute(
+      'class',
+      /is-active/,
+    )
+  })
+
+  test('[CDT-38] 見出しの「仮計算」は引き継ぎなしで買いの仮計算を開く', async ({ page }) => {
+    await openSummary(page)
+    await page.getByTestId('customer-holdings-calculation-entry').click()
+
+    await expect(page).toHaveURL(new RegExp(`${calculationsPath(YAMADA.ID)}$`))
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveValue('')
+    await expect(toggleButton(page, 'customer-calc-side', '買い')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await expect(page.getByTestId('customer-calc-deposit').locator('option:checked')).toHaveText(
+      '特定',
+    )
+  })
+})
+
+test.describe('顧客詳細 仮計算', () => {
+  test('[CDT-36] タブ「仮計算」で入力フォームと結果のカードが出る', async ({ page }) => {
+    await openSummary(page)
+    await page.getByTestId('customer-detail-tab-calculations').click()
+
+    await expect(page).toHaveURL(new RegExp(`${calculationsPath(YAMADA.ID)}$`))
+    await expect(page.getByTestId('customer-detail-tab-calculations')).toHaveAttribute(
+      'class',
+      /is-active/,
+    )
+    await expect(page.getByTestId('customer-info-name')).toHaveText(YAMADA.顧客名)
+    await expect(page.getByTestId('customer-calc-form')).toBeVisible()
+    await expect(page.getByRole('heading', { name: /^現地費用/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /^手数料条件/ })).toBeVisible()
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText('買付概算 ／ 未実行')
+    await expect(page.getByTestId('customer-calc-total-label')).toHaveText('概算必要金額')
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('—')
+
+    // 見た目だけの段階なので、実行しても何も変わらない
+    await page.getByTestId('customer-calc-submit').click()
+    await expect(page).toHaveURL(new RegExp(`${calculationsPath(YAMADA.ID)}$`))
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('—')
+
+    await page.getByTestId('customer-calc-back').click()
+    await expect(page).toHaveURL(new RegExp(`${summaryPath(YAMADA.ID)}$`))
   })
 })
 

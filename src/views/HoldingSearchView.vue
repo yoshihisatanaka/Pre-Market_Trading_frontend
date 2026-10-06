@@ -13,6 +13,7 @@ import { useListQuery } from '@/composables/useListQuery'
 import { useCodesStore } from '@/stores/codes'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useHoldingSearchStore } from '@/stores/holdingSearch'
+import { holdingCalculationQuery } from '@/utils/calculationQuery'
 import { formatJpyUnit, formatQuantity, formatUsdUnit } from '@/utils/format'
 import { holdingOrderQuery } from '@/utils/orderEntryQuery'
 import { SIDE } from '@/utils/orderEntryOptions'
@@ -30,7 +31,9 @@ import { formatSignedJpyUnit, formatSignedPercent, profitLossTone } from '@/util
  *   - 買い / 売り … 顧客詳細の注文入力タブ（/customers/:customerId/order-entry。モックの customer_context）へ
  *              顧客・銘柄・売買・預り区分を URL クエリで引き継ぐ（utils/orderEntryQuery.js）。顧客名と同じく
  *              押したときに顧客マスタの行 ID を引いてから移る。発注権限の無い利用者には出さない
- * 画面モックの「仮計算」ボタンは、仮計算の画面が未実装なので置かない（顧客詳細と同じ）。
+ *   - 仮計算 … 顧客詳細の仮計算タブ（/customers/:customerId/calculations）へ銘柄・売り・預り区分を
+ *              引き継いで移る（utils/calculationQuery.js）。顧客名と同じく、押したときに顧客マスタを引く。
+ *              発注ではないので、発注権限の無い利用者にも出す
  */
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
@@ -126,10 +129,17 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
 
 const router = useRouter()
 
-/** 顧客名を押したら、顧客マスタの行 ID を引いてから顧客詳細へ移る。引けなければ理由を帯に出す */
-async function openCustomer(row) {
+/**
+ * 顧客マスタの行 ID を引いてから顧客詳細のタブへ移る。引けなければ理由を帯に出す。
+ * 顧客名は外株預りへ、「仮計算」は銘柄・売り・預り区分を引き継いで仮計算へ。
+ */
+async function openCustomer(row, name = 'customer-summary', query = {}) {
   const customerId = await store.openCustomer(row)
-  if (customerId) router.push({ name: 'customer-summary', params: { customerId } })
+  if (customerId) router.push({ name, params: { customerId }, query })
+}
+
+function openCalculation(row) {
+  return openCustomer(row, 'customer-calculations', holdingCalculationQuery(row))
 }
 
 /**
@@ -299,9 +309,12 @@ function profitLossClass(row) {
           <span v-else class="holding-search__secondary">—</span>
         </template>
 
-        <!-- 発注権限を読み終えるまでは何も出さない（「閲覧のみ」がちらつかない） -->
+        <!--
+          発注権限を読み終えるまでは何も出さない（「閲覧のみ」がちらつかない）。
+          「仮計算」は権限によらず出すが、列が後から伸びないよう同じときに出す
+        -->
         <template #cell-actions="{ row }">
-          <template v-if="!operatorPending">
+          <div v-if="!operatorPending" class="holding-search__actions">
             <span
               v-if="!canOrder"
               class="holding-search__secondary"
@@ -309,7 +322,7 @@ function profitLossClass(row) {
             >
               閲覧のみ
             </span>
-            <div v-else class="holding-search__actions">
+            <template v-else>
               <button
                 type="button"
                 class="holding-search__trade is-buy"
@@ -338,8 +351,18 @@ function profitLossClass(row) {
               >
                 売り
               </button>
-            </div>
-          </template>
+            </template>
+            <!-- 移る先の顧客 ID を引くまで押せない（顧客名と同じ。二重に引かない） -->
+            <button
+              type="button"
+              class="holding-search__trade is-calc"
+              :disabled="customerLookupPending"
+              data-testid="holding-search-calculation"
+              @click="openCalculation(row)"
+            >
+              仮計算
+            </button>
+          </div>
         </template>
       </DataTable>
     </MasterListCard>
@@ -410,6 +433,7 @@ function profitLossClass(row) {
 
 .holding-search__actions {
   display: flex;
+  align-items: center;
   justify-content: center;
   gap: var(--space-1);
 }
@@ -444,8 +468,23 @@ function profitLossClass(row) {
   background-color: var(--color-sell-hover);
 }
 
+/* 行の「仮計算」（モックの .direct-order-calc） */
+.holding-search__trade.is-calc {
+  background-color: var(--color-calculation);
+}
+
+.holding-search__trade.is-calc:hover:not(:disabled) {
+  background-color: var(--color-calculation-hover);
+}
+
 .holding-search__trade:disabled {
   background-color: var(--color-input-border);
   cursor: not-allowed;
+}
+
+/* 顧客を引いているあいだの「仮計算」は待ちの表示にする（売却不可の「売り」とは意味が違う） */
+.holding-search__trade.is-calc:disabled {
+  background-color: var(--color-calculation);
+  cursor: progress;
 }
 </style>

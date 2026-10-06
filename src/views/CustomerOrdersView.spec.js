@@ -55,6 +55,7 @@ async function mountView(query = {}) {
           { path: 'summary', name: 'customer-summary', component: Page },
           { path: 'orders', name: 'customer-orders', component: CustomerOrdersView },
           { path: 'order-entry', name: 'customer-order-entry', component: Page },
+          { path: 'calculations', name: 'customer-calculations', component: Page },
         ],
       },
       { path: '/orders/:orderId(\\d+)/amend', name: 'order-amend', component: Page },

@@ -8,7 +8,7 @@ import { server } from '@/mocks/server'
 import { suspensionHistories, suspensionTargets } from '@/mocks/fixtures/incidents'
 import IncidentControlDialog from '@/components/incidents/IncidentControlDialog.vue'
 import { INCIDENT_HISTORY_PAGE_SIZE, useIncidentsStore } from '@/stores/incidents'
-import { formatDateTime } from '@/utils/format'
+import { formatDateTime, formatMonthDayTime } from '@/utils/format'
 import IncidentManagementView from './IncidentManagementView.vue'
 
 /*
@@ -175,9 +175,11 @@ const pageButton = (wrapper, page) =>
 const currentPage = (wrapper) =>
   pagination(wrapper).find('[data-testid="pagination-page"][aria-current="page"]').text()
 const pagerButtons = (wrapper) => pagination(wrapper).findAll('button')
-// 更新者（4 列目）
+// 更新者（4 列目）のコード。氏名が下に並ぶので、コードの要素だけを読む
 const historyOperators = (wrapper) =>
-  historyRows(wrapper).map((row) => row.findAll('td')[3].text())
+  historyRows(wrapper).map((row) =>
+    row.find('[data-testid="incidents-history-operator-code"]').text(),
+  )
 
 // シナリオ: docs/unit/views-incident-management-view.md
 describe('IncidentManagementView', () => {
@@ -332,6 +334,45 @@ describe('IncidentManagementView', () => {
     expect(historyRows(wrapper)[0].findAll('td')[1].text()).toBe(
       `${latest['停止対象名']}：${latest['操作区分名']}`,
     )
+  })
+
+  it('[INV-31] 変更日時は年なしで、更新者はコードの下に氏名（無ければコードだけ）', async () => {
+    const latest = suspensionHistories[0]
+    const { wrapper } = await mountView()
+    await settle()
+
+    const cells = historyRows(wrapper)[0].findAll('td')
+    expect(cells[0].text()).toBe(formatMonthDayTime(latest['操作日時']))
+    expect(historyOperators(wrapper)[0]).toBe(latest['操作者'])
+    expect(cells[3].text()).toContain(latest['操作者名'])
+
+    // 氏名が無い行（実 API のいまの形）はコードだけ
+    server.use(
+      http.get(HISTORY_PATH, () =>
+        HttpResponse.json({
+          total: 1,
+          limit: 50,
+          offset: 0,
+          histories: [{ ...latest, 操作者名: undefined }],
+        }),
+      ),
+    )
+    const { wrapper: codeOnly } = await mountView()
+    await settle()
+    expect(historyRows(codeOnly)[0].findAll('td')[3].text()).toBe(latest['操作者'])
+  })
+
+  it('[INV-32] 現在の運用状態の枠は見出し行にあり、取得の成否によらず出る（取得前・失敗時は —）', async () => {
+    server.use(errorHandler())
+    const { wrapper } = await mountView()
+    await settle()
+
+    const status = find(wrapper, 'incidents-status')
+    expect(status.exists()).toBe(true)
+    expect(status.text()).toContain('現在の運用状態')
+    expect(stateText(wrapper)).toBe('—')
+    // カードの外（説明文と同じ見出し行）にある
+    expect(status.element.parentElement.classList).toContain('incident__head')
   })
 
   it('[INV-14] 停止中のカードは「停止中」、通常は「通常」で、停止理由と日時はカードに出ない', async () => {

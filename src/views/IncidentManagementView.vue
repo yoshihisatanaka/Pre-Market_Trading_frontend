@@ -10,7 +10,7 @@ import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import BaseSwitch from '@/components/ui/BaseSwitch.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { INCIDENT_HISTORY_PAGE_SIZE, useIncidentsStore } from '@/stores/incidents'
-import { formatDateTime } from '@/utils/format'
+import { formatMonthDayTime } from '@/utils/format'
 import { summarizeSuspension } from '@/utils/suspensionState'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
@@ -55,6 +55,9 @@ function targetDescription(target) {
 /*
  * 履歴はモックの 変更日時 / 制御内容 / 更新者 に、停止理由の列を足した 4 列。
  * 停止理由はモックに無い意図的なずれ（API は停止に理由を必須とし、何のために止めたかは監査上残す必要がある）。
+ * 変更日時はモックと同じく年を出さない（履歴が並ぶので日付が読み取りにくくなる。お知らせ管理と同じ）。
+ * 更新者はモックと同じくコードの下に氏名を出す。氏名は API に無い（docs/api/requests.md #39）ので、
+ * 入るまではコードだけが出る。
  */
 const HISTORY_COLUMNS = [
   { key: 'operatedAt', label: '変更日時' },
@@ -71,7 +74,13 @@ const HISTORY_COLUMNS = [
 const INTRO_TEXT =
   '停止中は注文の新規受付と取消、IB発注・Dream連携のバッチが止まります。受付済みの発注待ち注文は保留され、再開後に通常のバッチ周期で順次発注されます。'
 
+/*
+ * 現在の運用状態。モックと同じく見出し行（説明文の右）に置き、取得の成否によらず枠は出す
+ * （取得前・失敗時は「—」。お知らせ管理と同じ）。文言と色は summarizeSuspension が決める。
+ */
 const summary = computed(() => summarizeSuspension(status.value))
+const stateTone = computed(() => summary.value?.tone ?? 'normal')
+const stateLabel = computed(() => summary.value?.label ?? '—')
 
 // 制御内容。モックの「IB送信制御：制御開始」と同じ形で、停止対象名と操作区分名をサーバの文言のまま繋ぐ
 function historyContent(row) {
@@ -139,8 +148,14 @@ store.load()
       {{ noticeMessage }}
     </BaseAlert>
 
-    <!-- 画面の説明。取得結果に依存しないので 4 状態のチェーンの外に置く -->
-    <p class="incident__lead">障害発生時に、全体または注文ルート別に発注を停止・再開します。</p>
+    <!-- 画面の説明と現在の運用状態。取得結果に依存しないので 4 状態のチェーンの外に置く（モックの .operation-head） -->
+    <header class="incident__head">
+      <p class="incident__lead">障害発生時に、全体または注文ルート別に発注を停止・再開します。</p>
+      <div :class="['incident__state', `is-${stateTone}`]" data-testid="incidents-status">
+        <span class="incident__state-label">現在の運用状態</span>
+        <strong class="incident__state-value" data-testid="incidents-state">{{ stateLabel }}</strong>
+      </div>
+    </header>
 
     <!--
       ローディング / エラー / 空 / データあり の 4 状態。
@@ -163,12 +178,7 @@ store.load()
     <template v-else>
       <BaseCard title="障害時の運用制御">
         <template #header-actions>
-          <span :class="['incident__state', `is-${summary.tone}`]">
-            <span class="incident__state-label">現在の運用状態</span>
-            <strong class="incident__state-value" data-testid="incidents-state">
-              {{ summary.label }}
-            </strong>
-          </span>
+          <span class="incident__head-note">障害時のみ使用します。</span>
         </template>
 
         <p class="incident__intro">{{ INTRO_TEXT }}</p>
@@ -242,9 +252,18 @@ store.load()
           :columns="HISTORY_COLUMNS"
           :rows="histories"
         >
-          <template #cell-operatedAt="{ value }">{{ formatDateTime(value) }}</template>
+          <template #cell-operatedAt="{ value }">
+            <span class="incident__code">{{ formatMonthDayTime(value) }}</span>
+          </template>
           <template #cell-content="{ row }">{{ historyContent(row) }}</template>
           <template #cell-reason="{ value }">{{ value ?? '—' }}</template>
+          <!-- コードの下に氏名（モックの .ui-code + .text-xs）。氏名が無ければコードだけ -->
+          <template #cell-operator="{ row }">
+            <span class="incident__code" data-testid="incidents-history-operator-code">
+              {{ row.operator || '—' }}
+            </span>
+            <span v-if="row.operatorName" class="incident__sub">{{ row.operatorName }}</span>
+          </template>
         </DataTable>
 
         <p v-else data-testid="incidents-history-empty" class="incident__history-empty">
@@ -286,9 +305,31 @@ store.load()
   gap: var(--space-5);
 }
 
+/* モックの .operation-head。説明文の右に運用状態の枠を置く */
+.incident__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+
 .incident__lead {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
+}
+
+/* 日時と更新者コード。桁位置をそろえて縦に読めるようにする（モックの .ui-code） */
+.incident__code {
+  display: block;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 更新者の氏名（モックの .text-xs .text-gray） */
+.incident__sub {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 
 .incident__head-note {
@@ -301,8 +342,9 @@ store.load()
 .incident__state {
   display: inline-flex;
   flex-direction: column;
-  min-width: 140px;
-  padding: var(--space-1) var(--space-2);
+  flex-shrink: 0;
+  min-width: 172px;
+  padding: var(--space-2) var(--space-3);
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);

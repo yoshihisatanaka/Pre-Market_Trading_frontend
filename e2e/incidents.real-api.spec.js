@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { formatDateTime } from '../src/utils/format'
+import { formatDateTime, formatMonthDayTime } from '../src/utils/format'
 
 /*
  * 障害管理を「実 API に当てて」確かめる E2E（スモーク 2 本 IR-01 / IR-02 と、網羅の IR-03〜IR-09）。
@@ -113,10 +113,13 @@ async function getHistoryPage(offset) {
   return res.json()
 }
 
-/** 履歴 1 件が画面に出るはずの 4 列（変更日時 / 制御内容 / 停止理由 / 更新者） */
+/**
+ * 履歴 1 件が画面に出るはずの 4 列（変更日時 / 制御内容 / 停止理由 / 更新者）。
+ * 変更日時は年なしの書式。更新者は 操作者（コード）だけ（氏名 操作者名 は依頼中 #39 で、実 API はまだ返さない）
+ */
 function historyCellsOf(item) {
   return [
-    formatDateTime(item['操作日時']),
+    formatMonthDayTime(item['操作日時']),
     `${item['停止対象名']}：${item['操作区分名']}`,
     item['変更後データ']?.['停止理由'] ?? '—',
     item['操作者'],

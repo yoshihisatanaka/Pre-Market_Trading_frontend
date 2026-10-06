@@ -220,6 +220,18 @@ const KNOWN_GAPS = [
     request: '#1',
   },
   /*
+   * 障害管理の履歴の更新者は、画面モックがコードの下に氏名を出す。SuspensionHistoryItem には
+   * 操作者（コード）しか無いので、氏名をフィクスチャに契約提案として載せている（src/api/incidents.js は
+   * あれば読む）。仕様に入った日に CON-07 が落ちて気づける。
+   */
+  {
+    kind: 'fixture',
+    fixture: 'suspensionHistories',
+    keys: ['操作者名'],
+    reason: '画面モックの更新者列（コード＋氏名）に要る項目。SuspensionHistoryItem に無い',
+    request: '#39',
+  },
+  /*
    * 一覧の *Item が ID を返すようになった（2026-09-18 の取り込み）。フロントが先行して
    * 主キーを id に寄せていた間はここに keys: ['ID'] の行を置いていたが、仕様に入ったので外した。
    * 残っているのは更新系のパスキーで、そちらは型で検出できない（CON-06 のコメント）。

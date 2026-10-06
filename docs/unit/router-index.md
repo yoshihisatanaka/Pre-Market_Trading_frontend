@@ -33,4 +33,5 @@ PMG-05 が見ている。
 | RTR-03 | — | `navigation.js` の `requiredPermission` を持つ各区分（マスタメンテ・運用管理）について、項目のリンク先のルートを引く | ルートのある項目はすべて区分と同じ `requiredPermission` を持つ。逆にその権限を要求するルートの集合は、区分に載ったルートの集合と一致する | 実装済 |
 | RTR-04 | — | `requiredPermission` を持たない区分（顧客・注文）の項目のリンク先のルートを引く | ルートのある項目（みずほ注文締など）は `requiredPermission` を持たない | 実装済 |
 | RTR-05 | — | `routes` から `forbidden` と NotFound（`/:pathMatch(.*)*`）を引く | どちらも存在し、`requiredPermission` を持たない（回し先が自分を弾いて回り続けない） | 実装済 |
-| RTR-06 | — | `routes` から顧客詳細（`/customers/:customerId(\d+)`）を引き、子ルートと空パスの redirect を見る | 親と子（`summary` / `orders`）のどれも `requiredPermission` を持たない。空パスの子は同じ `customerId` のまま `customer-summary` へ回す | 実装済 |
+| RTR-06 | — | `routes` から顧客詳細（`/customers/:customerId(\d+)`）を引き、子ルートと空パスの redirect を見る | 親と子（`summary` / `orders` / `order-entry`）のどれも `requiredPermission` を持たない。空パスの子は同じ `customerId` のまま `customer-summary` へ回す | 実装済 |
+| RTR-07 | — | `routes` から `/orders/new` を引き、`beforeEnter` にクエリなし・部店だけ・部店と口座番号を渡す | 口座番号（`account_number`）が無ければ `customer-search` へ回し、あれば `true`（通す）を返す（モックの「顧客の指定が無ければ顧客検索へ」と同じ） | 実装済 |

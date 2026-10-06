@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -16,13 +17,15 @@ import { formatSignedJpyUnit, formatSignedPercent, profitLossTone } from '@/util
  * 顧客と預りは枠（views/CustomerDetailView.vue）が読んだものを stores/customerDetail.js から受け取る。
  * この画面が描かれるのは顧客を読み終えてからなので、customer は常に居る。
  *
- * 行の「買い」「売り」と「新規注文」は、新規注文（/orders/new）へ顧客・銘柄・売買・預り区分を
- * URL クエリで引き継いで移る（utils/orderEntryQuery.js）。発注権限（GET /auth/me の order）の
+ * 行の「買い」「売り」と「新規注文」は、注文入力タブ（/customers/:customerId/order-entry）へ
+ * 顧客・銘柄・売買・預り区分を URL クエリで引き継いで移る（utils/orderEntryQuery.js）。発注権限（GET /auth/me の order）の
  * 無い利用者には出さない（注文照会の「新規注文」「訂正」「取消」と同じ扱い）。
  *
  * 画面モックの「仮計算」ボタン（行・カード見出し）は、仮計算の画面が未実装なので置かない。
  * IB 取扱のバッジ（ib_available）は `GET /holdings` に該当する項目が無いので出さない。
  */
+
+const route = useRoute()
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useCustomerDetailStore()
@@ -82,13 +85,17 @@ const customerKey = computed(() => ({
   accountNumber: customer.value?.accountNumber ?? '',
 }))
 
-const newOrderRoute = computed(() => ({
-  name: 'order-new',
-  query: buildOrderEntryQuery(customerKey.value),
-}))
+/** 顧客詳細の注文入力タブ。顧客カードとタブを残したまま新規注文を出す */
+const orderEntryRoute = (query) => ({
+  name: 'customer-order-entry',
+  params: { customerId: route.params.customerId },
+  query,
+})
+
+const newOrderRoute = computed(() => orderEntryRoute(buildOrderEntryQuery(customerKey.value)))
 
 function tradeRoute(holding, side) {
-  return { name: 'order-new', query: holdingOrderQuery(customerKey.value, holding, side) }
+  return orderEntryRoute(holdingOrderQuery(customerKey.value, holding, side))
 }
 
 function profitLossClass(holding) {

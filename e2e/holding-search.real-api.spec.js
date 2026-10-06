@@ -203,12 +203,18 @@ async function openListForOrder(page, playwright) {
 }
 
 /**
- * 新規注文の画面に移ったあとの共通の期待値。URL のクエリ・入力欄の初期値・口座番号とティッカーの照会結果。
+ * 顧客詳細の注文入力タブ（/customers/<id>/order-entry）に移ったあとの共通の期待値。顧客カードとタブ・
+ * URL のクエリ・入力欄の初期値・口座番号とティッカーの照会結果。
  * 照会の期待値は stores/orderEntry.js（findCustomer / findSymbol）と同じ照合を実 API で引いて決める。
  */
 async function expectOrderEntryPrefilled(page, api, expected) {
-  await expect(page).toHaveURL(/\/orders\/new\?/)
+  await expect(page).toHaveURL(/\/customers\/\d+\/order-entry\?/)
   expect(queryOf(page)).toEqual(expected)
+  await expect(page.getByTestId('customer-info-bar')).toBeVisible()
+  await expect(page.getByTestId('customer-detail-tab-order-entry')).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
 
   // 期間指定に使う休日・発注停止の状態を実 API から読み終えると入力フォームが出る
   await expect(page.getByTestId('order-entry-form')).toBeVisible()

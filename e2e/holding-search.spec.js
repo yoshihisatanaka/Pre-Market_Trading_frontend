@@ -419,12 +419,14 @@ test.describe('預り検索', () => {
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
   })
 
-  test('[HSE-17] 「買い」で新規注文へ顧客・銘柄・売買・預り区分を引き継ぐ', async ({ page }) => {
+  test('[HSE-17] 「買い」で顧客詳細の注文入力タブへ顧客・銘柄・売買・預り区分を引き継ぐ', async ({
+    page,
+  }) => {
     await openList(page)
 
     await rowsOf(page).first().getByTestId('holding-search-buy').click()
 
-    await expect(page).toHaveURL(/\/orders\/new\?/)
+    await expect(page).toHaveURL(new RegExp(`/customers/${FIRST_CUSTOMER.ID}/order-entry\\?`))
     expect(queryOf(page)).toEqual({
       branch_code: firstRow.部店コード,
       account_number: String(firstRow.口座番号),
@@ -432,10 +434,17 @@ test.describe('預り検索', () => {
       side: 'buy',
       deposit: DEPOSIT_QUERY_FOR[firstRow.預り売買区分],
     })
-    await expect(pageHeading(page, '新規注文')).toBeVisible()
+    // 顧客カードとタブが上に出て、注文入力タブが選択中（モックの customer_context）
+    await expect(pageHeading(page, '顧客詳細')).toBeVisible()
+    await expect(page.getByTestId('customer-info-name')).toHaveText(firstRow.顧客名)
+    await expect(page.getByTestId('customer-detail-tab-order-entry')).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(page.getByTestId('order-entry-ticker')).toHaveValue(firstRow.ティッカー)
   })
 
-  test('[HSE-18] 売却不可の明細は「売り」が押せず、売却できる明細の「売り」で新規注文へ移る', async ({
+  test('[HSE-18] 売却不可の明細は「売り」が押せず、売却できる明細の「売り」で注文入力タブへ移る', async ({
     page,
   }) => {
     await openList(page)
@@ -446,7 +455,8 @@ test.describe('預り検索', () => {
     await expect(sell).toBeEnabled()
     await sell.click()
 
-    await expect(page).toHaveURL(/\/orders\/new\?/)
+    await expect(page).toHaveURL(/\/customers\/\d+\/order-entry\?/)
+    await expect(page.getByTestId('customer-info-name')).toHaveText(SELLABLE_ROW.顧客名)
     const query = queryOf(page)
     expect(query.side).toBe('sell')
     expect(query.ticker).toBe(SELLABLE_ROW.ティッカー)

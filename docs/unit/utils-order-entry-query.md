@@ -4,7 +4,8 @@
 - 対象: `src/utils/orderEntryQuery.js`
 - テスト: `src/utils/orderEntryQuery.spec.js`
 
-顧客詳細（「注文入力」「新規注文」・預りの「買い」「売り」）が `/orders/new` へ渡すクエリの組み立てと読み取り。
+顧客詳細（「注文入力」「新規注文」・預りの「買い」「売り」）と預り検索（「買い」「売り」）が新規注文の画面
+（顧客詳細の注文入力タブ `/customers/:customerId/order-entry`。`/orders/new` も同じクエリを読む）へ渡すクエリの組み立てと読み取り。
 クエリ名（`branch_code` / `account_number` / `ticker` / `side` / `deposit`）は URL 上の契約で、
 `side` は売買区分のコードではなく `'buy'` / `'sell'`。
 

@@ -47,9 +47,9 @@ async function mountView(path) {
         children: [
           { path: 'summary', name: 'customer-summary', component: CustomerSummaryView },
           { path: 'orders', name: 'customer-orders', component: Page },
+          { path: 'order-entry', name: 'customer-order-entry', component: Page },
         ],
       },
-      { path: '/orders/new', name: 'order-new', component: Page },
       { path: '/:pathMatch(.*)*', component: Page },
     ],
   })
@@ -188,7 +188,7 @@ describe('CustomerSummaryView', () => {
 
     const buy = rowOf(wrapper, 'AAPL').find('[data-testid="customer-holdings-buy"]')
     expect(linkOf(buy)).toEqual({
-      path: '/orders/new',
+      path: '/customers/1/order-entry',
       query: { ...FIRST_KEY, ticker: 'AAPL', side: 'buy', deposit: DEPOSIT_CATEGORY.SPECIFIC },
     })
   })
@@ -242,7 +242,7 @@ describe('CustomerSummaryView', () => {
     await settle()
 
     expect(linkOf(wrapper.find('[data-testid="customer-holdings-new-order"]'))).toEqual({
-      path: '/orders/new',
+      path: '/customers/1/order-entry',
       query: FIRST_KEY,
     })
   })

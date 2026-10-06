@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -35,6 +35,7 @@ const { customer } = storeToRefs(detail)
 
 const store = useCustomerOrdersStore()
 const { items, total, limit, offset, loading, error, isEmpty } = storeToRefs(store)
+const route = useRoute()
 const router = useRouter()
 
 /* 発注権限での出し分け（注文照会と同じ。views/OrderInquiryListView.vue の冒頭） */
@@ -80,8 +81,13 @@ const emptyMessage = computed(() =>
   filtered.value ? '条件に一致する注文が見つかりませんでした' : 'この顧客の注文はありません',
 )
 
+/** 注文入力タブへ移る（顧客カードとタブは残る） */
 function goToNewOrder() {
-  router.push({ name: 'order-new', query: buildOrderEntryQuery(customerKey.value) })
+  router.push({
+    name: 'customer-order-entry',
+    params: { customerId: route.params.customerId },
+    query: buildOrderEntryQuery(customerKey.value),
+  })
 }
 
 /* 訂正・取消は、その元注文の最新の版（group.latest）に対して行う（注文照会と同じ） */

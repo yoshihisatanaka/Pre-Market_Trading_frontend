@@ -13,7 +13,8 @@ import { buildOrderEntryQuery } from '@/utils/orderEntryQuery'
  * 顧客カードとタブを持ち、タブの中身は子ルートが描く（router/index.js の children）。
  *   外株預り … /customers/:customerId/summary（views/CustomerSummaryView.vue）
  *   注文照会 … /customers/:customerId/orders（views/CustomerOrdersView.vue）
- *   注文入力 … 新規注文（/orders/new）へ部店と口座番号を引き継いで移る（タブの中には描かない。モックと同じ）
+ *   注文入力 … /customers/:customerId/order-entry（views/OrderEntryView.vue。新規注文と同じ画面）。
+ *              部店と口座番号を URL クエリで引き継ぐ（モックの customer_context と同じく顧客カードとタブを残す）
  *
  * 顧客はこの枠が 1 回だけ読む。タブを切り替えても枠は残るので読み直さない。
  * 子ルートは顧客を読み終えてから描く（注文照会タブは顧客の部店と口座番号で絞るため）。
@@ -60,7 +61,8 @@ const tabs = computed(() => [
     key: 'order-entry',
     label: '注文入力',
     to: {
-      name: 'order-new',
+      name: 'customer-order-entry',
+      params: { customerId: customerId.value },
       query: buildOrderEntryQuery({
         branchCode: customer.value?.branchCode,
         accountNumber: customer.value?.accountNumber,

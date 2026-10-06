@@ -38,7 +38,8 @@ import { parseOrderEntryQuery } from '@/utils/orderEntryQuery'
  * 顧客詳細（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）からは、部店・口座番号・銘柄・
  * 売買・預り区分が URL クエリで引き継がれて入る（utils/orderEntryQuery.js）。引き継いだ値は入力欄の
  * 初期値にするだけで、顧客と銘柄は口座番号・ティッカーを打ったときと同じ照会で引き当てる。
- * モックの「顧客詳細から入ったときの大きな顧客カードとタブ」（customer_context）は持たない。
+ * 顧客詳細からの導線（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）は、この画面を顧客詳細の
+ * 子ルート（/customers/:customerId/order-entry）として描く。大きな顧客カードとタブ（モックの customer_context）は親の CustomerDetailView が持つ。
  */
 
 /** 照会を始めるまでの待ち（モックと同じ 400ms。打っている途中の値で API を叩かない） */
@@ -370,13 +371,11 @@ async function confirmOrder() {
 /* ---------- 完了 → 次の注文 ---------- */
 
 /**
- * 入力画面に戻して次の注文を始める。
- *
- * @param {boolean} keepCustomer 部店と口座番号を引き継ぐ（モックの「同顧客で新規注文」）
+ * 入力画面に戻して、同じ顧客で次の注文を始める（モックの「同顧客で新規注文」）。部店と口座番号を引き継ぐ。
  */
-function startNewOrder(keepCustomer) {
+function startNewOrderSameCustomer() {
   const { branchCode, accountNumber } = pending.value?.form ?? {}
-  form.value = newForm(keepCustomer ? { branchCode, accountNumber } : {})
+  form.value = newForm({ branchCode, accountNumber })
   fieldErrors.value = {}
   serverErrors.value = []
   serverWarnings.value = []
@@ -387,8 +386,12 @@ function startNewOrder(keepCustomer) {
   store.clearSymbol()
   store.clearValidateError()
   store.clearSubmitError()
-  if (!keepCustomer) store.clearCustomer()
   step.value = 'input'
+}
+
+/** 別の顧客の注文は顧客を選び直すところから（/orders/new の「顧客の指定が無ければ顧客検索へ」と同じ） */
+function goToCustomerSearch() {
+  router.push({ name: 'customer-search' })
 }
 
 function goToInquiry() {
@@ -573,14 +576,14 @@ operatorStore.ensureLoaded().then(() => {
             <BaseButton
               variant="secondary"
               data-testid="order-entry-new-same-customer"
-              @click="startNewOrder(true)"
+              @click="startNewOrderSameCustomer"
             >
               同じ顧客で新規注文
             </BaseButton>
             <BaseButton
               variant="secondary"
               data-testid="order-entry-new-order"
-              @click="startNewOrder(false)"
+              @click="goToCustomerSearch"
             >
               別の顧客で新規注文
             </BaseButton>

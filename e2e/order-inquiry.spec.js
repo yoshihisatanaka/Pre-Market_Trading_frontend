@@ -289,15 +289,15 @@ test.describe('注文照会', () => {
     await expect(page.getByTestId('order-inquiry-search')).toBeVisible()
   })
 
-  test('[OI-15] ヘッダの「新規注文」で /orders/new へ移る', async ({ page }) => {
+  test('[OI-15] ヘッダの「新規注文」で顧客検索へ移る', async ({ page }) => {
     await page.goto(INQUIRY_PATH)
 
     await page.getByTestId('order-inquiry-new-order').click()
 
-    // URL は遷移先（遅延 import の OrderEntryView）を読み終えてから変わる。
+    // URL は遷移先（遅延 import の CustomerSearchView）を読み終えてから変わる。
     // 並列実行で dev サーバの初回変換が重なると 5 秒を越えることがあるので猶予を延ばす
-    await expect(page).toHaveURL(/\/orders\/new$/, { timeout: 15_000 })
-    await expect(page.getByTestId('order-entry-form')).toBeVisible()
+    await expect(page).toHaveURL(/\/customers\/search$/, { timeout: 15_000 })
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
   })
 
   test('[OI-16] 出来状況「注文中」で検索すると URL に載り、注文中の行だけになる', async ({

@@ -24,7 +24,7 @@ export const navSections = [
   },
   {
     label: '注文・照会',
-    // 新規注文（/orders/new）はモックどおりサイドメニューに置かない。注文照会などの画面内から遷移する
+    // 新規注文はモックどおりサイドメニューに置かない。顧客を選んでから顧客詳細の注文入力タブで入れる
     items: [
       { label: 'CSV一括注文', to: '/orders/csv/upload' },
       { label: '注文照会', to: '/orders/inquiry' },

@@ -45,7 +45,7 @@ const routes = [
      * 親（CustomerDetailView）が顧客カードとタブを持ち、タブの中身を子ルートが描く。
      * :customerId は顧客マスタの行 ID（数字だけにする。/customers/search と紛れない）。
      * /customers/:customerId だけを開いたら外株預りへ回す。
-     * 見出しは 2 つのタブとも「顧客詳細」（どのタブかはタブの選択で示す）
+     * 見出しは 3 つのタブとも「顧客詳細」（どのタブかはタブの選択で示す）
      */
     path: '/customers/:customerId(\\d+)',
     component: () => import('@/views/CustomerDetailView.vue'),
@@ -66,6 +66,12 @@ const routes = [
         name: 'customer-orders',
         component: () => import('@/views/CustomerOrdersView.vue'),
       },
+      {
+        // 新規注文（/orders/new）と同じ画面を顧客カードとタブの下に描く。部店と口座番号は URL クエリで渡す
+        path: 'order-entry',
+        name: 'customer-order-entry',
+        component: () => import('@/views/OrderEntryView.vue'),
+      },
     ],
   },
   {
@@ -76,11 +82,16 @@ const routes = [
     meta: { title: 'CSV一括注文' },
   },
   {
-    // 入力 → 確認 → 完了は 1 つのルートの中で段階を切り替える（再読み込みで入力へ戻る）
+    /*
+     * 入力 → 確認 → 完了は 1 つのルートの中で段階を切り替える（再読み込みで入力へ戻る）。
+     * 顧客（口座番号のクエリ）の指定が無ければ顧客検索へ回す（モックの order_new_get と同じ。
+     * 注文は顧客を選んでから、顧客詳細の注文入力タブで入れる）
+     */
     path: '/orders/new',
     name: 'order-new',
     component: () => import('@/views/OrderEntryView.vue'),
     meta: { title: '新規注文' },
+    beforeEnter: (to) => (to.query.account_number ? true : { name: 'customer-search' }),
   },
   {
     // 取込み画面の「内容を確認する」の先。メニューには載せない（事前検証の結果はストアが持つ）

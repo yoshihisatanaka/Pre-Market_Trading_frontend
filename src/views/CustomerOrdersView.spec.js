@@ -54,6 +54,7 @@ async function mountView(query = {}) {
         children: [
           { path: 'summary', name: 'customer-summary', component: Page },
           { path: 'orders', name: 'customer-orders', component: CustomerOrdersView },
+          { path: 'calculations', name: 'customer-calculations', component: Page },
         ],
       },
       { path: '/orders/new', name: 'order-new', component: Page },

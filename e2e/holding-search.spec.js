@@ -361,13 +361,12 @@ test.describe('預り検索', () => {
     await expect(page.getByTestId('holding-search-table')).toBeHidden()
   })
 
-  test('[HSE-13] 列順が仕様どおりで、「仮計算」のボタンは無い', async ({ page }) => {
+  test('[HSE-13] 列順が仕様どおりで、全行の操作列に「仮計算」が出る', async ({ page }) => {
     await openList(page)
 
     const table = page.getByTestId('holding-search-table')
     await expect(table.locator('th')).toHaveText(COLUMNS)
-    await expect(page.getByRole('button', { name: '仮計算' })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: '仮計算' })).toHaveCount(0)
+    await expect(table.getByRole('button', { name: '仮計算', exact: true })).toHaveCount(PAGE_SIZE)
   })
 
   test('[HSE-14] 評価損益は符号付きで益と損で色が違い、CA 発生中の明細に CA が出る', async ({
@@ -453,7 +452,9 @@ test.describe('預り検索', () => {
     expect(query.account_number).toBe(String(SELLABLE_ROW.口座番号))
   })
 
-  test('[HSE-19] 発注権限が無いと操作は「閲覧のみ」で、顧客名のリンクは出る', async ({ page }) => {
+  test('[HSE-19] 発注権限が無いと操作は「閲覧のみ」で、顧客名のリンクと「仮計算」は出る', async ({
+    page,
+  }) => {
     await mockApi(page, [{ path: '*/api/auth/me', body: noOperationOperator }])
     await openList(page)
 
@@ -461,6 +462,28 @@ test.describe('預り検索', () => {
     await expect(page.getByTestId('holding-search-buy')).toHaveCount(0)
     await expect(page.getByTestId('holding-search-sell')).toHaveCount(0)
     await expect(page.getByTestId('holding-search-customer-link')).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('holding-search-calculation')).toHaveCount(PAGE_SIZE)
+  })
+
+  test('[HSE-23] 「仮計算」で顧客詳細の仮計算タブへ銘柄・売り・預り区分を引き継ぐ', async ({
+    page,
+  }) => {
+    await openList(page)
+
+    await rowsOf(page).first().getByTestId('holding-search-calculation').click()
+
+    await expect(page).toHaveURL(new RegExp(`/customers/${FIRST_CUSTOMER.ID}/calculations\\?`))
+    expect(queryOf(page)).toEqual({
+      symbol: firstRow.ティッカー,
+      side: 'sell',
+      specific_deposit: firstRow.預り売買区分,
+    })
+    await expect(pageHeading(page, '顧客詳細')).toBeVisible()
+    await expect(page.getByTestId('customer-info-name')).toHaveText(firstRow.顧客名)
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(firstRow.ティッカー)
+    await expect(
+      page.getByTestId('customer-calc-side').getByRole('button', { name: '売り', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('[HSE-20] ブラウザバックで 1 ページ目に戻る', async ({ page }) => {

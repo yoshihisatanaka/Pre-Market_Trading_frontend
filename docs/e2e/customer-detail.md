@@ -2,20 +2,24 @@
 
 - 略号: `CDT`
 - 画面: `src/views/CustomerDetailView.vue`（枠）/ `src/views/CustomerSummaryView.vue`（外株預りタブ）/
-  `src/views/CustomerOrdersView.vue`（注文照会タブ）
+  `src/views/CustomerOrdersView.vue`（注文照会タブ）/ `src/views/CustomerCalculationView.vue`（仮計算タブ）
 - テスト: `e2e/customer-detail.spec.js`
 
 **当てる先は MSW のモック。** 期待値にフィクスチャの中身（顧客名・銘柄・注文 ID・金額）を使うので、実 API に当てると通らない。
 
-`/customers/:customerId/summary` と `/customers/:customerId/orders` の受け入れ条件。顧客検索の顧客名から入り、
-枠（顧客カードとタブ）が顧客を 1 回読み、タブの中身を子ルートが描く。`/customers/:customerId` だけを開くと外株預りへ回る。
-ここで守るのは次の 4 つ。
+`/customers/:customerId/summary`・`/customers/:customerId/orders`・`/customers/:customerId/calculations` の受け入れ条件。
+顧客検索の顧客名から入り、枠（顧客カードとタブ）が顧客を 1 回読み、タブの中身を子ルートが描く。
+`/customers/:customerId` だけを開くと外株預りへ回る。ここで守るのは次の 4 つ。
 
 - **4 状態**を 3 か所で: 顧客（読み込み中 / 見つからない（404）/ エラー / データあり）、外株預りの一覧、注文照会の一覧
 - **タブと URL の同期**（タブを押すと URL が変わり、選択中のタブが変わる。注文照会タブの絞り込みは URL クエリ `symbol` / `status` に載る）
 - **新規注文への引き継ぎ**（タブの「注文入力」・「＋ 新規注文」・預りの「買い」「売り」）。URL クエリで渡し、
-  **新規注文の画面の入力欄に値が入るところまで**を実ブラウザで通す
-- 発注権限（`GET /auth/me` の `権限.order`）での出し分け。権限なしは `/auth/me` を `noOperationOperator` に差し替えて見る
+  **新規注文の画面の入力欄に値が入るところまで**を実ブラウザで通す。仮計算タブへの引き継ぎ（預りの「仮計算」）も同じ
+- 発注権限（`GET /auth/me` の `権限.order`）での出し分け。権限なしは `/auth/me` を `noOperationOperator` に差し替えて見る。
+  「仮計算」は発注ではないので権限なしでも出る
+
+**仮計算タブはいまは見た目だけ**（入力欄は値を持つだけで「仮計算を実行」は何もしない。結果の金額は「—」）。
+ここではタブ・導線・引き継ぎと、フォームと結果のカードが出ることだけを見る。仮計算をつなぐときに実行と結果の行を足す。
 
 既定モックの顧客は `src/mocks/fixtures/customers.js`。顧客 ID 1 は部店 123・口座 1230001・山田 太郎
 （75 歳・コンプラ A「要注意」・取引制限なし）、ID 5 は全取引停止、ID 9 は法人（年齢なし）、ID 3 は保有も注文も無い顧客。
@@ -64,5 +68,8 @@ ID 9999 は居ない（404）。預りは `src/mocks/fixtures/holdings.js` で�
 | CDT-31 | `GET /orders` が 500 | `/customers/1/orders` を開く | 注文の欄にエラーの理由と「再試行」ボタンが出て、表は出ない。顧客カードとタブは残る | 実装済 |
 | CDT-32 | 既定モック。応答を遅らせる（`?mockDelay=`） | `/customers/1/orders` を開く | 注文を読む間は注文の欄に読み込み中の表示が出て、読み終えると表が出る | 実装済 |
 | CDT-33 | 既定モック | 注文照会タブでヘッダの「新規注文」を click | URL が `/orders/new?branch_code=123&account_number=1230001` になり、部店と口座番号が入る | 実装済 |
-| CDT-34 | `/auth/me` が発注権限なし（`noOperationOperator`） | `/customers/1/summary` を開く | 預りの操作列は全行「閲覧のみ」で、「買い」「売り」「＋ 新規注文」は出ない | 実装済 |
+| CDT-34 | `/auth/me` が発注権限なし（`noOperationOperator`） | `/customers/1/summary` を開く | 預りの操作列は全行「閲覧のみ」で、「買い」「売り」「＋ 新規注文」は出ない。行と見出しの「仮計算」は出る | 実装済 |
 | CDT-35 | `/auth/me` が発注権限なし（`noOperationOperator`） | `/customers/1/orders` を開く | 注文の操作列は全行「閲覧のみ」で「訂正」「取消」は出ない。ヘッダの「新規注文」も出ない | 実装済 |
+| CDT-36 | 既定モック | 外株預りでタブ「仮計算」を click し、「仮計算を実行」、続けて「戻る」を click | URL が `/customers/1/calculations` になってタブ「仮計算」が選択中、顧客カードは残る。入力フォーム（区画「現地費用」「手数料条件」）と結果のカード（「買付概算 ／ 未実行」・「概算必要金額」「—」）が出る。実行しても URL も金額も変わらない。「戻る」で `/customers/1/summary` へ移る | 実装済 |
+| CDT-37 | 既定モック | TSLA（非特定）の行の「仮計算」を click | URL が `/customers/1/calculations?symbol=TSLA&side=sell&specific_deposit=0` になり（特定預り区分のまま。新規注文の `deposit` と違い読み替えない）、銘柄「TSLA」・売買「売り」・預り区分「一般」が入る。タブ「仮計算」が選択中 | 実装済 |
+| CDT-38 | 既定モック | 外株預りの見出しの「仮計算」を click | URL がクエリなしの `/customers/1/calculations` になり、銘柄は空・売買「買い」・預り区分「特定」で始まる | 実装済 |

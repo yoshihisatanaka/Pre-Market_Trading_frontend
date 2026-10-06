@@ -46,6 +46,11 @@ async function mountView(path) {
           },
           { path: 'summary', name: 'customer-summary', component: Child('child-summary') },
           { path: 'orders', name: 'customer-orders', component: Child('child-orders') },
+          {
+            path: 'calculations',
+            name: 'customer-calculations',
+            component: Child('child-calculations'),
+          },
         ],
       },
       { path: '/orders/new', name: 'order-new', component: Page },
@@ -141,14 +146,19 @@ describe('CustomerDetailView', () => {
     expect(exists(wrapper, 'customer-info-bar')).toBe(true)
   })
 
-  it('[CDV-05] 顧客カードに部店・口座番号・顧客名とタブ 3 つが出る', async () => {
+  it('[CDV-05] 顧客カードに部店・口座番号・顧客名とタブ 4 つが出る', async () => {
     const { wrapper } = await mountView('/customers/1/summary')
     await settle()
 
     expect(text(wrapper, 'customer-info-branch')).toBe(FIRST.部店コード)
     expect(text(wrapper, 'customer-info-account')).toBe(String(FIRST.口座番号))
     expect(text(wrapper, 'customer-info-name')).toBe(FIRST.顧客名)
-    expect(wrapper.findAll('[data-testid="customer-detail-tabs"] a')).toHaveLength(3)
+    expect(wrapper.findAll('[data-testid="customer-detail-tabs"] a').map((a) => a.text())).toEqual([
+      '外株預り',
+      '注文入力',
+      '注文照会',
+      '仮計算',
+    ])
   })
 
   it('[CDV-06] 子ルートは顧客を読み終えてから描く', async () => {
@@ -168,6 +178,7 @@ describe('CustomerDetailView', () => {
 
     expect(href(wrapper, 'customer-detail-tab-summary')).toBe('/customers/1/summary')
     expect(href(wrapper, 'customer-detail-tab-orders')).toBe('/customers/1/orders')
+    expect(href(wrapper, 'customer-detail-tab-calculations')).toBe('/customers/1/calculations')
     expect(href(wrapper, 'customer-detail-tab-order-entry')).toBe(
       router.resolve({
         path: '/orders/new',
@@ -191,6 +202,14 @@ describe('CustomerDetailView', () => {
     expect(isActive(orders.wrapper, 'summary')).toBe(false)
     expect(isActive(orders.wrapper, 'orders')).toBe(true)
     expect(isActive(orders.wrapper, 'order-entry')).toBe(false)
+    expect(isActive(orders.wrapper, 'calculations')).toBe(false)
+
+    const calculations = await mountView('/customers/1/calculations')
+    await settle()
+    expect(isActive(calculations.wrapper, 'summary')).toBe(false)
+    expect(isActive(calculations.wrapper, 'orders')).toBe(false)
+    expect(isActive(calculations.wrapper, 'calculations')).toBe(true)
+    expect(exists(calculations.wrapper, 'child-calculations')).toBe(true)
   })
 
   it('[CDV-09] 米国株評価額と評価損益は預りの合計', async () => {

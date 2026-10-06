@@ -229,7 +229,7 @@ const KNOWN_GAPS = [
     fixture: 'suspensionHistories',
     keys: ['操作者名'],
     reason: '画面モックの更新者列（コード＋氏名）に要る項目。SuspensionHistoryItem に無い',
-    request: '#39',
+    request: '#48',
   },
   /*
    * 一覧の *Item が ID を返すようになった（2026-09-18 の取り込み）。フロントが先行して

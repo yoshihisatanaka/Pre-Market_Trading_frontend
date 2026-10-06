@@ -42,11 +42,15 @@ const secondPage = marketHolidays.slice(PAGE_SIZE, PAGE_SIZE * 2)
 const ODD_OFFSET = 7
 const oddPage = marketHolidays.slice(ODD_OFFSET, ODD_OFFSET + PAGE_SIZE)
 
-// 絞り込みはフィクスチャ先頭の年をそのまま使う（年もハードコードしない）
+// 登録用の日付を作るための年。フィクスチャ先頭の年をそのまま使う（年もハードコードしない）
 const YEAR = String(marketHolidays[0].休場日).slice(0, 4)
-const DATE_FROM = `${YEAR}-01-01`
-const DATE_TO = `${YEAR}-12-31`
-const inYear = marketHolidays.filter((holiday) => String(holiday.休場日).startsWith(YEAR))
+
+/*
+ * 検索は画面モックどおり「日付」1 欄（その日だけを探す）。フィクスチャの 2 件目の日付を使い、
+ * その日の行（休場日は一意なので 1 件）を期待値にする。
+ */
+const FILTER_DATE = toIsoDate(marketHolidays[1].休場日)
+const onFilterDate = marketHolidays.filter((holiday) => toIsoDate(holiday.休場日) === FILTER_DATE)
 
 // 登録に使う「フィクスチャに無い日付」もフィクスチャから導く（既存日付と衝突したら別日になる）
 const existingDates = new Set(marketHolidays.map((holiday) => toIsoDate(holiday.休場日)))
@@ -88,13 +92,11 @@ const DELETE_TARGET_DATE = toIsoDate(DELETE_TARGET.休場日)
 const NOT_FOUND_MESSAGE = `指定された海外休場日が存在しません: ${DELETE_TARGET_ID}`
 
 /*
- * 「最終ページが 1 件だけ」を作るための絞り込み。
- * 一覧は降順なので、末尾から数えて PAGE_SIZE + 1 件目までを範囲にすると
- * 2 ページ目がちょうど 1 件になる。
+ * 「最終ページが 1 件だけ」を作るための一覧。検索は 1 日指定になり、絞り込みで
+ * 2 ページ目を作れなくなったので、フィクスチャの先頭 PAGE_SIZE + 1 件だけを返す応答に差し替える。
  */
-const LAST_PAGE_TARGET = marketHolidays[PAGE_SIZE]
-const LAST_PAGE_FROM = toIsoDate(LAST_PAGE_TARGET.休場日)
-const LAST_PAGE_TO = toIsoDate(marketHolidays[0].休場日)
+const LAST_PAGE_ROWS = marketHolidays.slice(0, PAGE_SIZE + 1)
+const LAST_PAGE_TARGET = LAST_PAGE_ROWS[PAGE_SIZE]
 
 const Page = { render: () => h('div') }
 
@@ -193,6 +195,36 @@ function gateListResponse() {
   return release
 }
 
+/**
+ * 渡した行だけを持つ一覧として振る舞うハンドラ（一覧の取得と削除）。
+ * 既定のフィクスチャでは作れない件数（最終ページが 1 件だけ）を再現するために使う。
+ *
+ * @param {object[]} initialRows バックエンドの生の形の行
+ */
+function serveOnly(initialRows) {
+  let current = [...initialRows]
+  server.use(
+    http.get('*/api/masters/market-holidays', ({ request }) => {
+      const offset = Number(new URL(request.url).searchParams.get('offset') ?? 0)
+      return HttpResponse.json({
+        total: current.length,
+        limit: PAGE_SIZE,
+        offset,
+        holidays: current.slice(offset, offset + PAGE_SIZE),
+      })
+    }),
+    http.delete('*/api/masters/market-holidays/:id', ({ params }) => {
+      const target = current.find((row) => toId(row) === params.id)
+      current = current.filter((row) => row !== target)
+      return HttpResponse.json({
+        success: true,
+        holiday: { ...target, 取消区分: 1 },
+        message: '海外休場日を削除しました',
+      })
+    }),
+  )
+}
+
 const deleteNotFoundHandler = () =>
   http.delete('*/api/masters/market-holidays/:id', () =>
     HttpResponse.json({ detail: NOT_FOUND_MESSAGE }, { status: 404 }),
@@ -261,7 +293,7 @@ describe('MarketHolidayListView', () => {
 
     expect(exists(wrapper, 'market-holidays-error')).toBe(true)
     expect(exists(wrapper, 'market-holidays-search')).toBe(true)
-    expect(exists(wrapper, 'market-holidays-date-from')).toBe(true)
+    expect(exists(wrapper, 'market-holidays-date')).toBe(true)
   })
 
   it('[MHL-06] offset 付きの URL で開くとそのページを復元する', async () => {
@@ -300,20 +332,21 @@ describe('MarketHolidayListView', () => {
     const { wrapper, router } = await mountView()
     await settle()
 
-    await wrapper.find('[data-testid="market-holidays-date-from"]').setValue(DATE_FROM)
-    await wrapper.find('[data-testid="market-holidays-date-to"]').setValue(DATE_TO)
+    await wrapper.find('[data-testid="market-holidays-date"]').setValue(FILTER_DATE)
     await wrapper.find('[data-testid="market-holidays-search"]').trigger('submit')
     await settle()
 
-    expect(router.currentRoute.value.query).toEqual({ date_from: DATE_FROM, date_to: DATE_TO })
-    expect(rows(wrapper)).toHaveLength(inYear.length)
-    expect(countText(wrapper)).toBe(`${inYear.length} 件`)
+    // 1 日指定なので URL には date だけが乗る（期間の date_from / date_to は使わない）
+    expect(router.currentRoute.value.query).toEqual({ date: FILTER_DATE })
+    expect(rows(wrapper)).toHaveLength(onFilterDate.length)
+    expect(rows(wrapper)[0].text()).toContain(FILTER_DATE)
+    expect(countText(wrapper)).toBe(`${onFilterDate.length} 件`)
   })
 
   it('[MHL-10] クリアで URL クエリが空になり全件に戻る', async () => {
-    const { wrapper, router } = await mountView({ date_from: DATE_FROM, date_to: DATE_TO })
+    const { wrapper, router } = await mountView({ date: FILTER_DATE })
     await settle()
-    expect(rows(wrapper)).toHaveLength(inYear.length)
+    expect(rows(wrapper)).toHaveLength(onFilterDate.length)
 
     await wrapper.find('[data-testid="market-holidays-search-clear"]').trigger('click')
     await settle()
@@ -323,11 +356,10 @@ describe('MarketHolidayListView', () => {
   })
 
   it('[MHL-11] URL の日付条件が入力欄に反映される', async () => {
-    const { wrapper } = await mountView({ date_from: DATE_FROM, date_to: DATE_TO })
+    const { wrapper } = await mountView({ date: FILTER_DATE })
     await settle()
 
-    expect(wrapper.find('[data-testid="market-holidays-date-from"]').element.value).toBe(DATE_FROM)
-    expect(wrapper.find('[data-testid="market-holidays-date-to"]').element.value).toBe(DATE_TO)
+    expect(wrapper.find('[data-testid="market-holidays-date"]').element.value).toBe(FILTER_DATE)
   })
 
   it('[MHL-13] 「新規追加」で空の追加モーダルが開く', async () => {
@@ -476,11 +508,8 @@ describe('MarketHolidayListView', () => {
   })
 
   it('[MHL-22] 最終ページの最後の 1 件を消すと 1 ページ前に戻る', async () => {
-    const { wrapper, router } = await mountView({
-      date_from: LAST_PAGE_FROM,
-      date_to: LAST_PAGE_TO,
-      offset: String(PAGE_SIZE),
-    })
+    serveOnly(LAST_PAGE_ROWS)
+    const { wrapper, router } = await mountView({ offset: String(PAGE_SIZE) })
     await settle()
     expect(rows(wrapper)).toHaveLength(1)
 
@@ -491,11 +520,8 @@ describe('MarketHolidayListView', () => {
     await settle()
     await settle()
 
-    // offset だけが消え、絞り込み条件は残る
-    expect(router.currentRoute.value.query).toEqual({
-      date_from: LAST_PAGE_FROM,
-      date_to: LAST_PAGE_TO,
-    })
+    // 1 ページ目に戻ったので offset が消える
+    expect(router.currentRoute.value.query).toEqual({})
     expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
     expect(countText(wrapper)).toBe(`${PAGE_SIZE} 件`)
   })

@@ -46,7 +46,7 @@ export const BLACKOUT_DATES_PAGE_SIZE = 50
 export const useBlackoutDatesStore = defineStore('blackoutDates', () =>
   useCrudList({
     pageSize: BLACKOUT_DATES_PAGE_SIZE,
-    filterKeys: ['dateFrom', 'dateTo'],
+    filterKeys: ['date'],
     fetchPage: fetchBlackoutDates,
     createItem: reloadMarketStatusAfter(createBlackoutDate),
     validateItem: validateBlackoutDate,

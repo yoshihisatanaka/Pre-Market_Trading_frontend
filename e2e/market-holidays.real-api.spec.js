@@ -187,9 +187,10 @@ test.describe('海外休場日マスタ（実 API 接続）', () => {
     // 期待値は書かず、1 行目に実際に出ている日付をそのまま条件にする
     const date = (await rowsOf(page).first().getByRole('cell').first().innerText()).trim()
 
-    await page.getByTestId('market-holidays-date-from').fill(date)
-    await page.getByTestId('market-holidays-date-to').fill(date)
+    await page.getByTestId('market-holidays-date').fill(date)
     await page.getByTestId('market-holidays-search-submit').click()
+
+    await expect(page).toHaveURL(/[?&]date=/)
 
     await expect(page.getByTestId('market-holidays-count')).toHaveText('1 件')
     await expect(rowsOf(page)).toHaveCount(1)

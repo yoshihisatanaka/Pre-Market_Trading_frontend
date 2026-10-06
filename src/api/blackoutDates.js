@@ -34,16 +34,27 @@ import { apiClient } from './client'
  * `limit` というクエリを持たない（応答の limit は常に 50）。ページャーの表示件数は
  * stores/blackoutDates.js の BLACKOUT_DATES_PAGE_SIZE 側で 50 に合わせてある。
  *
- * @param {{ limit?: number, offset?: number, dateFrom?: string, dateTo?: string }} [params]
- *   dateFrom / dateTo は 'YYYY-MM-DD'。空文字は「条件なし」としてリクエストに載せない
+ * 日付の条件は 2 通り。画面（受注不可日マスタ）は画面モックどおり 1 日を指す `date` を使い、
+ * 実 API の単一指定 `blackout_date` に乗せる。新規注文（stores/orderEntry.js）は先の期間の
+ * 受注不可日をまとめて読むので `dateFrom` / `dateTo`（`start_date` / `end_date`）を使う。
+ *
+ * @param {{ limit?: number, offset?: number, date?: string, dateFrom?: string,
+ *   dateTo?: string }} [params]
+ *   date / dateFrom / dateTo は 'YYYY-MM-DD'。空文字は「条件なし」としてリクエストに載せない
  * @returns {Promise<{ items: BlackoutDate[], total: number }>} 受注不可日の降順
  */
-export async function fetchBlackoutDates({ offset = 0, dateFrom = '', dateTo = '' } = {}) {
+export async function fetchBlackoutDates({
+  offset = 0,
+  date = '',
+  dateFrom = '',
+  dateTo = '',
+} = {}) {
   const { data } = await apiClient.get('/masters/blackout-dates', {
     // クエリ名と日付が integer であることを知ってよいのは、この層だけ。
     // 値が undefined のパラメータは axios が送らない
     params: {
       offset,
+      blackout_date: toApiDate(date),
       start_date: toApiDate(dateFrom),
       end_date: toApiDate(dateTo),
     },

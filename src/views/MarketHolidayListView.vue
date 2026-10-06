@@ -53,13 +53,13 @@ const columns = [
 
 /*
  * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
- * URL 上のクエリ名（date_from / date_to / holiday_type）は画面モックの form と同じ契約で、
- * この filters 定義にだけ現れる。
+ * 日付は画面モックどおり 1 欄（その日だけを探す）で、URL 上のクエリ名（date）も画面モックの form と
+ * 同じ契約。休場区分（holiday_type）は画面モックに無いが、実 API の区分で絞れるので残している。
+ * どちらもこの filters 定義にだけ現れる（実 API の start_date / end_date への読み替えは api 層が行う）。
  */
 const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
   filters: [
-    { key: 'dateFrom', query: 'date_from' },
-    { key: 'dateTo', query: 'date_to' },
+    { key: 'date', query: 'date' },
     // 未知のコード（?holiday_type=9 など）は条件なしとして捨てる
     {
       key: 'holidayType',
@@ -209,20 +209,12 @@ async function submitDelete() {
       @submit="submitSearch"
       @clear="clearSearch"
     >
-      <FormField v-slot="{ field }" label="日付（From）">
+      <FormField v-slot="{ field }" label="日付">
         <BaseInput
           v-bind="field"
-          v-model="inputs.dateFrom"
+          v-model="inputs.date"
           type="date"
-          data-testid="market-holidays-date-from"
-        />
-      </FormField>
-      <FormField v-slot="{ field }" label="日付（To）">
-        <BaseInput
-          v-bind="field"
-          v-model="inputs.dateTo"
-          type="date"
-          data-testid="market-holidays-date-to"
+          data-testid="market-holidays-date"
         />
       </FormField>
       <FormField v-slot="{ field }" label="短縮取引日">

@@ -30,27 +30,35 @@ import { apiClient } from './client'
  *
  * 取消済み（論理削除）の行は含めない。実 API の include_deleted は既定 false なので送らない。
  *
- * @param {{ limit?: number, offset?: number, dateFrom?: string, dateTo?: string,
- *   holidayType?: string }} [params]
- *   dateFrom / dateTo は 'YYYY-MM-DD'、holidayType は '0'（終日休場）/ '1'（短縮取引）。
+ * 日付の条件は 2 通り。画面（海外休場日マスタ）は画面モックどおり 1 日を指す `date` を使う。
+ * 実 API に単一指定のクエリが無いので、`start_date` と `end_date` の両方に同じ日を載せる
+ * （`date` が `dateFrom` / `dateTo` より優先）。新規注文（stores/orderEntry.js）は先の期間を
+ * まとめて読むので `dateFrom` / `dateTo` を使う。
+ *
+ * @param {{ limit?: number, offset?: number, date?: string, dateFrom?: string,
+ *   dateTo?: string, holidayType?: string }} [params]
+ *   date / dateFrom / dateTo は 'YYYY-MM-DD'、holidayType は '0'（終日休場）/ '1'（短縮取引）。
  *   空文字は「条件なし」としてリクエストに載せない
  * @returns {Promise<{ items: MarketHoliday[], total: number }>} 休場日の降順
  */
 export async function fetchMarketHolidays({
   limit = 50,
   offset = 0,
+  date = '',
   dateFrom = '',
   dateTo = '',
   holidayType = '',
 } = {}) {
+  const from = date || dateFrom
+  const to = date || dateTo
   const { data } = await apiClient.get('/masters/market-holidays', {
     // クエリ名と日付が integer であることを知ってよいのは、この層だけ。
     // 値が undefined のパラメータは axios が送らない
     params: {
       limit,
       offset,
-      start_date: toApiDate(dateFrom),
-      end_date: toApiDate(dateTo),
+      start_date: toApiDate(from),
+      end_date: toApiDate(to),
       holiday_type: holidayType || undefined,
     },
   })

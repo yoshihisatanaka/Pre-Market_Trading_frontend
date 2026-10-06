@@ -15,10 +15,12 @@
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
 | MHT-01 | 休場区分コード `'0'` | `formatMarketHolidayType(value)` | 選択肢に定義された `'0'` の表示名（終日休場）が返る | 実装済 |
-| MHT-02 | 休場区分コード `'1'` | 同上 | 選択肢に定義された `'1'` の表示名（短縮取引）が返る | 実装済 |
+| MHT-02 | 休場区分コード `'1'` | 同上 | 選択肢に定義された `'1'` の表示名（短縮取引日）が返る | 実装済 |
 | MHT-03 | 選択肢に無いコード `'9'` | 同上 | `—` が返る | 実装済 |
 | MHT-04 | 空文字 / `undefined` / `null` / 数値 `0` | 同上 | いずれも `—` が返る | 実装済 |
 | MHT-05 | 選択肢に定義された全コード | `isMarketHolidayType(value)` | すべて true になる | 実装済 |
 | MHT-06 | `'9'` / `''` / `undefined` / 数値 `0` | 同上 | すべて false になる | 実装済 |
 | MHT-07 | 既定値の定数 | `MARKET_HOLIDAY_TYPE_DEFAULT` を見る | 選択肢の先頭のコード（`'0'`）と一致し、`isMarketHolidayType` を通る | 実装済 |
 | MHT-08 | — | 選択肢のコードを `HOLIDAY_TYPE`（`HolidayTypeEnum` の写し）と比べる | 過不足なく一致する。表示名だけがフロント側の持ちもの | 実装済 |
+| MHT-09 | `'1'` / `'0'` / `'9'` / 空値 / 数値 | `isShortTradingDay(value)` | `'1'` だけ true。それ以外（終日休場・未知・空値・数値の 1）は false | 実装済 |
+| MHT-10 | `'1'` / `'0'` / `'9'` / 空値 / 数値 | `formatMarketHolidayEarlyClose(value)` | `'1'` は `MARKET_HOLIDAY_EARLY_CLOSE_LABEL`（13:00 ET 終了）、それ以外は `—` | 実装済 |

@@ -8,9 +8,9 @@ import { server } from '@/mocks/server'
 import { canceledMarketHolidays, marketHolidays } from '@/mocks/fixtures/marketHolidays'
 import { MARKET_HOLIDAYS_PAGE_SIZE } from '@/stores/marketHolidays'
 import {
-  MARKET_HOLIDAY_TYPE_DEFAULT,
+  MARKET_HOLIDAY_EARLY_CLOSE_LABEL,
   MARKET_HOLIDAY_TYPE_OPTIONS,
-  formatMarketHolidayType,
+  formatMarketHolidayEarlyClose,
 } from '@/utils/marketHolidayTypes'
 import MarketHolidayListView from './MarketHolidayListView.vue'
 
@@ -136,9 +136,11 @@ const countText = (wrapper) => wrapper.find('[data-testid="market-holidays-count
 const exists = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`).exists()
 const addDateInput = (wrapper) => wrapper.find('[data-testid="market-holidays-add-date"]')
 const addReasonInput = (wrapper) => wrapper.find('[data-testid="market-holidays-add-reason"]')
-const addTypeSelect = (wrapper) => wrapper.find('[data-testid="market-holidays-add-holiday-type"]')
+// 新規追加の「短縮取引日として登録する」チェック（画面モックの short_trading_day）
+const addShortTradingCheckbox = (wrapper) =>
+  wrapper.find('[data-testid="market-holidays-add-short-trading-day"]')
 const searchTypeSelect = (wrapper) => wrapper.find('[data-testid="market-holidays-holiday-type"]')
-// 一覧の休場区分セル（行ごとに 1 つ）
+// 一覧の短縮取引日セル（行ごとに 1 つ。短縮取引日は終了時刻のバッジ、終日休場は —）
 const typeCells = (wrapper) =>
   rows(wrapper).map((row) => row.find('.market-holiday-list__type').text())
 const headers = (wrapper) => wrapper.findAll('th').map((th) => th.text())
@@ -498,17 +500,19 @@ describe('MarketHolidayListView', () => {
     expect(countText(wrapper)).toBe(`${PAGE_SIZE} 件`)
   })
 
-  it('[MHL-23] 一覧に休場区分の列が出てコードではなく表示名が入る', async () => {
+  it('[MHL-23] 一覧に短縮取引日の列が出て、短縮取引日の行だけ終了時刻が入る', async () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(headers(wrapper)).toContain('休場区分')
+    expect(headers(wrapper)).toContain('短縮取引日')
     // 期待値はフィクスチャの生の値を変換して作る（表示名を並べ書きしない）
     expect(typeCells(wrapper)).toEqual(
-      firstPage.map((holiday) => formatMarketHolidayType(holiday.休場区分)),
+      firstPage.map((holiday) => formatMarketHolidayEarlyClose(holiday.休場区分)),
     )
-    // 生のコードがそのまま出ていないこと
+    // 生のコードがそのまま出ていないこと。終日休場の行は —
     expect(typeCells(wrapper)).not.toContain(SHORTENED.value)
+    expect(typeCells(wrapper)).toContain('—')
+    expect(typeCells(wrapper)).toContain(MARKET_HOLIDAY_EARLY_CLOSE_LABEL)
   })
 
   it('[MHL-24] 休場区分を選んで検索すると URL に条件が乗り絞り込まれる', async () => {
@@ -522,7 +526,7 @@ describe('MarketHolidayListView', () => {
     expect(router.currentRoute.value.query).toEqual({ holiday_type: SHORTENED.value })
     expect(rows(wrapper)).toHaveLength(shortenedHolidays.length)
     expect(countText(wrapper)).toBe(`${shortenedHolidays.length} 件`)
-    expect(new Set(typeCells(wrapper))).toEqual(new Set([SHORTENED.label]))
+    expect(new Set(typeCells(wrapper))).toEqual(new Set([MARKET_HOLIDAY_EARLY_CLOSE_LABEL]))
   })
 
   it('[MHL-25] URL の休場区分がセレクトと一覧に復元される', async () => {
@@ -543,27 +547,28 @@ describe('MarketHolidayListView', () => {
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
   })
 
-  it('[MHL-27] 追加モーダルの休場区分は既定値で開き、開き直すとリセットされる', async () => {
+  it('[MHL-27] 追加モーダルの短縮取引日チェックは外れた状態で開き、開き直すとリセットされる', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     await openAddModal(wrapper)
-    expect(addTypeSelect(wrapper).element.value).toBe(MARKET_HOLIDAY_TYPE_DEFAULT)
+    expect(addShortTradingCheckbox(wrapper).element.checked).toBe(false)
 
-    await addTypeSelect(wrapper).setValue(SHORTENED.value)
+    await addShortTradingCheckbox(wrapper).setValue(true)
+    expect(addShortTradingCheckbox(wrapper).element.checked).toBe(true)
     await wrapper.find('[data-testid="market-holidays-add-cancel"]').trigger('click')
     await openAddModal(wrapper)
 
-    expect(addTypeSelect(wrapper).element.value).toBe(MARKET_HOLIDAY_TYPE_DEFAULT)
+    expect(addShortTradingCheckbox(wrapper).element.checked).toBe(false)
   })
 
-  it('[MHL-28] 休場区分を選んで追加するとその区分で登録される', async () => {
+  it('[MHL-28] 短縮取引日にチェックして追加すると短縮取引で登録される', async () => {
     const { wrapper } = await mountView()
     await settle()
     await openAddModal(wrapper)
 
     await fillAdd(wrapper, NEW_DATE, NEW_REASON)
-    await addTypeSelect(wrapper).setValue(SHORTENED.value)
+    await addShortTradingCheckbox(wrapper).setValue(true)
     await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
     // POST → 一覧の再取得 → 再描画 の 2 往復を待つ
     await settle()
@@ -580,6 +585,7 @@ describe('MarketHolidayListView', () => {
 
     expect(rows(wrapper)).toHaveLength(shortenedHolidays.length + 1)
     expect(rows(wrapper).map((row) => row.text())).toContainEqual(expect.stringContaining(NEW_DATE))
+    expect(new Set(typeCells(wrapper))).toEqual(new Set([MARKET_HOLIDAY_EARLY_CLOSE_LABEL]))
   })
 
   it('[MHL-29] 取消済みの日付を追加すると警告が出てモーダルは開いたままになる', async () => {

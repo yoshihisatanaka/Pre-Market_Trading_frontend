@@ -14,7 +14,9 @@ import { toFileDownload } from './fileDownload'
  *
  * 画面モック（execution_management.html）との差で、この層が埋めていないもの:
  *   - 約定金額（円）: ExecutionItem は USD の `約定代金` しか返さない。円貨の項目は持たない
- *   - 一部出来の件数: ExecutionSummary に無い（件数 / 注文件数 / 売件数 / 買件数 / 数量 / 代金 / 手数料のみ）
+ *
+ * 件数カードの「一部出来」は ExecutionSummary の `一部出来件数`（処理状況 010 の**注文**の件数。
+ * 約定の行数ではない）から出す（2026-10-05 の取り込みで入った）。
  *
  * CSV 出力は一覧と同じ検索条件を受け、本文をファイルのまま（Blob）返す。
  * 列の並びと中身はバックエンドが決めるので、この層は変換しない。
@@ -58,10 +60,12 @@ import { toFileDownload } from './fileDownload'
  *   orderCount: number,
  *   buyCount: number,
  *   sellCount: number,
+ *   partialCount: number,
  *   totalQuantity: number,
  *   totalAmountUsd: number,
  *   totalFeeUsd: number,
  * }} ExecutionSummary
+ *   partialCount は一部出来（処理状況 010）の注文の件数。count（約定の行数）とは単位が違う
  */
 
 /** 売買区分のコード → アプリ内の向き（openapi.json の `side` の説明: 1:売 / 3:買） */
@@ -190,6 +194,7 @@ function toSummary(raw) {
     orderCount: raw?.注文件数 ?? 0,
     buyCount: raw?.買件数 ?? 0,
     sellCount: raw?.売件数 ?? 0,
+    partialCount: raw?.一部出来件数 ?? 0,
     totalQuantity: raw?.約定数量合計 ?? 0,
     totalAmountUsd: raw?.約定代金合計_USD ?? 0,
     totalFeeUsd: raw?.手数料合計_USD ?? 0,

@@ -47,6 +47,10 @@ const newest = sortedDesc[0]
 
 const BUY_COUNT = executions.filter((row) => row.売買区分 === '3').length
 const SELL_COUNT = executions.filter((row) => row.売買区分 === '1').length
+/** 一部出来の注文の件数（処理状況 010 の注文 ID の数。約定の行数ではない） */
+const PARTIAL_COUNT = new Set(
+  executions.filter((row) => row.処理状況 === '010').map((row) => row.注文ID),
+).size
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
@@ -376,14 +380,14 @@ describe('ExecutionListView', () => {
     expect(rows(wrapper).map((row) => cellText(row, COL.side))).toEqual(['買', '売', '—'])
   })
 
-  it('[EXV-13] 件数カードに集計の値を出し、一部出来は — のまま', async () => {
+  it('[EXV-13] 件数カードに集計の値を出し、一部出来は一部出来の注文の件数になる', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     expect(statValue(wrapper, 'executions-summary-count')).toBe(formatQuantity(TOTAL))
     expect(statValue(wrapper, 'executions-summary-buy')).toBe(formatQuantity(BUY_COUNT))
     expect(statValue(wrapper, 'executions-summary-sell')).toBe(formatQuantity(SELL_COUNT))
-    expect(statValue(wrapper, 'executions-summary-partial')).toBe('—')
+    expect(statValue(wrapper, 'executions-summary-partial')).toBe(formatQuantity(PARTIAL_COUNT))
   })
 
   it('[EXV-14] 約定単価は小数第 4 位、約定代金は第 2 位の「ドル」表記、約定日時は MM/DD HH:mm で出す', async () => {

@@ -22,9 +22,9 @@ import { toFileDownload } from './fileDownload'
  * CSV 出力は約定照会と同じ `GET /executions/export-csv` を、一覧と同じ条件（route=0 固定）で読む。
  *
  * 成熟度 A（パス・クエリ・レスポンスのスキーマが openapi.json にある。CSV 出力は B）。
- * ただし画面モックの次の 2 項目は仕様に無い:
+ * ただし画面モックの次の 1 項目は仕様に無い:
  *   - 約定金額（円）… ExecutionItem は 約定代金（USD）しか返さない
- *   - 件数カードの「一部出来」… ExecutionSummary に一部出来の件数が無い
+ * 件数カードの「一部出来」は ExecutionSummary の `一部出来件数`（処理状況 010 の注文の件数）から出す。
  */
 
 /** 注文ルート（預託先）のみずほ。`/masters/symbols` の預託先区分と同じコード */
@@ -66,8 +66,14 @@ const FILL_STATUS_BY_CODE = {
  */
 
 /**
- * @typedef {{ executionCount: number, buyCount: number, sellCount: number }} MizuhoExecutionSummary
- *   同じ検索条件での集計（ページに依らない）。件数カードに出す 3 つだけを運ぶ
+ * @typedef {{
+ *   executionCount: number,
+ *   buyCount: number,
+ *   sellCount: number,
+ *   partialCount: number,
+ * }} MizuhoExecutionSummary
+ *   同じ検索条件での集計（ページに依らない）。件数カードに出す 4 つだけを運ぶ。
+ *   partialCount は一部出来（処理状況 010）の注文の件数で、executionCount（約定の行数）とは単位が違う
  */
 
 /**
@@ -173,12 +179,13 @@ function toMizuhoExecution(raw) {
   }
 }
 
-/** ExecutionSummary → 件数カードの 3 つ。欠けていたら 0 件として扱う */
+/** ExecutionSummary → 件数カードの 4 つ。欠けていたら 0 件として扱う */
 function toSummary(raw) {
   return {
     executionCount: raw?.件数 ?? 0,
     buyCount: raw?.買件数 ?? 0,
     sellCount: raw?.売件数 ?? 0,
+    partialCount: raw?.一部出来件数 ?? 0,
   }
 }
 

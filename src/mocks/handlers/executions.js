@@ -146,6 +146,9 @@ function summarize(rows) {
     注文件数: new Set(rows.map((row) => row.注文ID)).size,
     売件数: rows.filter((row) => row.売買区分 === '1').length,
     買件数: rows.filter((row) => row.売買区分 === '3').length,
+    // 一部出来（処理状況 010）の注文の件数。約定の行数ではなく注文 ID で数える（仕様の説明どおり）
+    一部出来件数: new Set(rows.filter((row) => row.処理状況 === '010').map((row) => row.注文ID))
+      .size,
     約定数量合計: sum((row) => row.約定数量),
     // 浮動小数の足し算の誤差をセント単位で丸める
     約定代金合計_USD: Math.round(sum((row) => row.約定代金) * 100) / 100,

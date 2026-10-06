@@ -337,8 +337,14 @@ test.describe('約定照会', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    // ExecutionSummary に一部出来の件数が無いので、一部出来のカードは '—' のまま
-    const values = [formatQuantity(TOTAL), formatQuantity(byBuy.length), formatQuantity(bySell.length), '—']
+    // 一部出来は約定の行数ではなく一部出来の注文の件数（処理状況 010 の注文 ID の数）
+    const partialOrders = new Set(byPartial.map((row) => row.注文ID)).size
+    const values = [
+      formatQuantity(TOTAL),
+      formatQuantity(byBuy.length),
+      formatQuantity(bySell.length),
+      formatQuantity(partialOrders),
+    ]
 
     const cards = page.getByTestId(/^executions-summary-/)
     await expect(cards).toHaveCount(STAT_CARDS.length)

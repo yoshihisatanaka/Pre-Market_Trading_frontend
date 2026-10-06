@@ -223,7 +223,7 @@ describe('api/mizuhoExecutions', () => {
 
     const { summary } = await fetchMizuhoExecutions()
 
-    expect(summary).toEqual({ executionCount: 0, buyCount: 0, sellCount: 0 })
+    expect(summary).toEqual({ executionCount: 0, buyCount: 0, sellCount: 0, partialCount: 0 })
   })
 
   it('[MZE-11] CSV 出力は一覧と同じクエリに route=0 を載せ、limit / offset は送らない', async () => {

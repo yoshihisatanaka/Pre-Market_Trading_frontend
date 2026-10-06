@@ -232,8 +232,11 @@ test.describe('約定照会（実 API 接続）', () => {
     const buy = await statValue(page, 'executions-summary-buy', '買い約定')
     const sell = await statValue(page, 'executions-summary-sell', '売り約定')
     expect(buy + sell).toBeLessThanOrEqual(total)
-    // ExecutionSummary に一部出来の件数が無いので '—' のまま
-    expect(await statValue(page, 'executions-summary-partial', '一部出来')).toBeNull()
+    // 一部出来は注文の件数（ExecutionSummary の 一部出来件数）。約定 1 行は注文 1 件以上に属するので総約定件数以下
+    const partial = await statValue(page, 'executions-summary-partial', '一部出来')
+    expect(partial).not.toBeNull()
+    expect(partial).toBeGreaterThanOrEqual(0)
+    expect(partial).toBeLessThanOrEqual(total)
   })
 
   test('[EXR-02] 売買区分で絞り込むと、実 API へコードで送られ、件数カードと同じ件数が出る', async ({

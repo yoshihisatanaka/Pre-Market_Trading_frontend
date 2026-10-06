@@ -20,11 +20,16 @@ const PARTIAL_CODE = '010'
 const countOf = (predicate) => mizuhoExecutions.filter(predicate).length
 const idsOf = (predicate) => mizuhoExecutions.filter(predicate).map((row) => String(row.ID))
 
-/** 行の集合から期待する集計を作る（件数カードの 3 つ） */
+/** 行の集合から期待する集計を作る（件数カードの 4 つ。一部出来は注文 ID で数える） */
 const summaryOf = (predicate) => ({
   executionCount: countOf(predicate),
   buyCount: countOf((row) => predicate(row) && row.売買区分 === BUY),
   sellCount: countOf((row) => predicate(row) && row.売買区分 === SELL),
+  partialCount: new Set(
+    mizuhoExecutions
+      .filter((row) => predicate(row) && row.処理状況 === PARTIAL_CODE)
+      .map((row) => row.注文ID),
+  ).size,
 })
 
 const all = () => true
@@ -65,6 +70,9 @@ function gatedBySide() {
           件数: rows.length,
           買件数: side === BUY ? rows.length : 0,
           売件数: side === SELL ? rows.length : 0,
+          一部出来件数: new Set(
+            rows.filter((row) => row.処理状況 === PARTIAL_CODE).map((row) => row.注文ID),
+          ).size,
         },
       })
     }),
@@ -146,7 +154,12 @@ describe('stores/mizuhoExecutions', () => {
     await store.load()
 
     expect(store.isEmpty).toBe(true)
-    expect(store.summary).toEqual({ executionCount: 0, buyCount: 0, sellCount: 0 })
+    expect(store.summary).toEqual({
+      executionCount: 0,
+      buyCount: 0,
+      sellCount: 0,
+      partialCount: 0,
+    })
   })
 
   it('[MZS-06] 先に出した要求の応答が後から返っても、集計は最後の要求の値のまま', async () => {

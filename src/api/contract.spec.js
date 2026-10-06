@@ -658,6 +658,8 @@ const PROBES = [
     name: 'fetchBlackoutDates',
     run: () => fetchBlackoutDates({ dateFrom: '2026-01-01', dateTo: '2026-12-31' }),
   },
+  // 画面の検索欄（1 日）は単一指定の blackout_date に乗る
+  { name: 'fetchBlackoutDates (date)', run: () => fetchBlackoutDates({ date: '2026-12-30' }) },
   {
     name: 'validateBlackoutDate',
     run: () => validateBlackoutDate({ date: '2031-01-01', reason: 'x', id: '1' }),

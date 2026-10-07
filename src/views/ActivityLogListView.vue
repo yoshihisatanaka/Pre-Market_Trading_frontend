@@ -15,38 +15,40 @@ import { useListQuery } from '@/composables/useListQuery'
 import { useActivityLogTargetsStore } from '@/stores/activityLogTargets'
 import { useActivityLogsStore } from '@/stores/activityLogs'
 import { useCodesStore } from '@/stores/codes'
+import { useOperatorOptionsStore } from '@/stores/operatorOptions'
 import {
+  ACTIVITY_ACTOR_GROUP_OPTIONS,
   ACTIVITY_CATEGORY_OPTIONS,
   ACTIVITY_SORT_OPTIONS,
   categoryBadgeVariant,
   categoryLabel,
-  categoryOf,
   formatActivityAt,
+  isActivityActorGroup,
   isActivityCategory,
   isActivitySort,
   operationLabel,
+  resolveCategory,
   targetTypesFor,
 } from '@/utils/activityLogTypes'
 
 /*
- * 操作ログ（監査ログ）の一覧。各マスタと運用管理（発注停止・お知らせ）の変更履歴を横断して検索する。
+ * 操作ログ（監査ログ）の一覧。注文の受付・訂正・取消と、各マスタ・運用管理（発注停止・お知らせ）の
+ * 変更履歴を横断して検索する。
  * 検索条件と列の呼び名は画面モック（https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）に
  * 合わせ、実 API（openapi.json の ActivityLogItem と GET /operations/activity-logs のクエリ）に
  * 無いものはクエリに載せない。
  *
  * モックと実 API の言葉の対応（utils/activityLogTypes.js の冒頭も参照）:
- *   - 操作区分（業務操作 / マスタ更新 / 運用管理）… 実 API に無い。対象種別から導く区分で、
- *     検索では `target_types`（対象種別のカンマ区切り）に展開して送る。業務操作は注文の操作ログが
- *     実 API に無いので選択肢に出さない（docs/api/requests.md #38）
+ *   - 操作区分（業務操作 / マスタ更新 / 運用管理）… 実 API の `区分`。クエリには無いので、
+ *     検索では `target_types`（対象種別のカンマ区切り）に展開して送る（docs/api/requests.md #38）
  *   - 対象機能 … 実 API の対象種別（`target_types`）
  *   - 操作内容 … 実 API の操作区分（`operation`。登録 / 更新 / 削除 / 停止 …）
+ *   - 実行者区分 … 実 API の `actor_group`（営業員・IFA / 管理者・管理責任者）
  *   - 対象キー … 実 API の `target_key`（口座番号・銘柄コードなどの部分一致。モックの「対象ID・名称」の
  *     うち顧客名などの名称は実 API が対象キーに持たないので、名前は「対象キー」のまま）
  *
  * モックからの意図的なずれ:
- *   - モックにある 実行者区分 / 結果 の条件は実 API のクエリに無いので置かない
- *     （実行者区分は #38 で依頼中。結果 は「履歴は成功した変更しか残さない」ため追加しない回答）
- *   - 操作者はモックのように氏名付きの選択肢にできない（操作者の一覧 API が無い。#38）。コードの入力欄
+ *   - モックにある 結果 の条件は置かない（「履歴は成功した変更しか残さない」ため追加しない回答。#1）
  *   - 変更前／変更後の 1 行表示の代わりに、変更項目を一覧に出し、差分は「詳細」のダイアログで見せる
  *     （実 API の変更前後はレコード全体の JSON なので、1 セルには収まらない）
  *   - モックは全件を sticky ヘッダ付きのスクロール領域に出すが、ここは 50 件ごとのページャー
@@ -66,6 +68,15 @@ const { targets, options: targetOptions, error: targetsError } = storeToRefs(tar
  * onMounted ではなく setup で先に始める。
  */
 targetsStore.ensureLoaded()
+
+/*
+ * 操作者の選択肢（GET /masters/users。「社員コード 氏名」）。一度取れたら使い回す。
+ * URL クエリの操作者コードは検査しない（選択肢に無いコードでもサーバが完全一致で絞り込む。
+ * セレクトは「全て」の表示になる。対象機能と同じ扱い）。
+ */
+const operatorsStore = useOperatorOptionsStore()
+const { options: operatorOptions, error: operatorsError } = storeToRefs(operatorsStore)
+operatorsStore.ensureLoaded()
 
 /*
  * 操作内容の選択肢はコードマスタ `操作区分` から。
@@ -105,6 +116,7 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
     { key: 'dateFrom', query: 'start_date' },
     { key: 'dateTo', query: 'end_date' },
     { key: 'operator', query: 'operator' },
+    { key: 'actorGroup', query: 'actor_group', parse: (v) => (isActivityActorGroup(v) ? v : '') },
     { key: 'category', query: 'category', parse: (v) => (isActivityCategory(v) ? v : '') },
     { key: 'targetType', query: 'target_types' },
     { key: 'operation', query: 'operation', parse: (v) => (isActivityOperation(v) ? v : '') },
@@ -130,21 +142,42 @@ async function loadLogs({ category, targetType, ...rest }) {
   })
 }
 
+/** 対象種別コード → 区分（応答の 区分 を正とし、無ければ対象種別から導く） */
+const categoryByCode = computed(
+  () =>
+    new Map(
+      (targets.value ?? []).map((target) => [
+        target.code,
+        resolveCategory(target.category, target.code),
+      ]),
+    ),
+)
+
+/** 対象種別の区分。一覧に無いコード（URL で渡された値など）は対象種別から導く */
+function targetCategory(code) {
+  return categoryByCode.value.get(code) ?? resolveCategory('', code)
+}
+
 /*
  * 対象機能の選択肢は区分で絞る（運用管理を選べば発注停止・お知らせだけが並ぶ）。
  * 区分を変えたとき、いま選んでいる対象機能がその区分に無ければ外す。
  */
 const targetOptionsForCategory = computed(() =>
   inputs.category
-    ? targetOptions.value.filter((option) => categoryOf(option.value) === inputs.category)
+    ? targetOptions.value.filter((option) => targetCategory(option.value) === inputs.category)
     : targetOptions.value,
 )
 
 function onCategoryChange(category) {
   inputs.category = category
-  if (category && inputs.targetType && categoryOf(inputs.targetType) !== category) {
+  if (category && inputs.targetType && targetCategory(inputs.targetType) !== category) {
     inputs.targetType = ''
   }
+}
+
+/** 一覧の行の区分 */
+function rowCategory(row) {
+  return resolveCategory(row.category, row.targetType)
 }
 
 /** 詳細ダイアログに出している行。閉じている間は null */
@@ -185,12 +218,27 @@ function closeDetail() {
           data-testid="activity-logs-date-to"
         />
       </FormField>
-      <FormField v-slot="{ field }" label="操作者">
-        <BaseInput
+      <!-- 取得に失敗しても検索自体はできる（操作者なしで絞り込む）ので、欄の下に出すだけ -->
+      <FormField
+        v-slot="{ field }"
+        label="操作者"
+        :error="operatorsError ? `操作者を取得できませんでした（${operatorsError.message}）` : ''"
+      >
+        <BaseSelect
           v-bind="field"
           v-model="inputs.operator"
-          placeholder="操作者コード（完全一致）"
+          :options="operatorOptions"
+          placeholder="-- 全て --"
           data-testid="activity-logs-operator"
+        />
+      </FormField>
+      <FormField v-slot="{ field }" label="実行者区分">
+        <BaseSelect
+          v-bind="field"
+          v-model="inputs.actorGroup"
+          :options="ACTIVITY_ACTOR_GROUP_OPTIONS"
+          placeholder="-- 全て --"
+          data-testid="activity-logs-actor-group"
         />
       </FormField>
       <FormField v-slot="{ field }" label="操作区分">
@@ -263,11 +311,14 @@ function closeDetail() {
           <span class="activity-log-list__at">{{ formatActivityAt(row.at) }}</span>
         </template>
 
-        <!-- 区分は対象種別から導く（モックの .activity-kind。マスタ更新は緑、運用管理は灰） -->
+        <!--
+          区分は応答の 区分 / 区分名 を出し、無い応答では対象種別から導く
+          （モックの .activity-kind。業務操作は青、マスタ更新は緑、運用管理は灰）
+        -->
         <template #cell-category="{ row }">
           <div class="activity-log-list__center">
-            <BaseBadge :variant="categoryBadgeVariant(categoryOf(row.targetType))">
-              {{ categoryLabel(categoryOf(row.targetType)) }}
+            <BaseBadge :variant="categoryBadgeVariant(rowCategory(row))">
+              {{ row.categoryName || categoryLabel(rowCategory(row)) }}
             </BaseBadge>
           </div>
         </template>
@@ -280,7 +331,10 @@ function closeDetail() {
           </span>
         </template>
 
-        <!-- 対象機能（対象種別名）の下に操作内容（サーバの表示文。無ければ操作区分の名称） -->
+        <!--
+          対象機能（対象種別名）の下に操作内容（サーバの表示文。無ければ操作区分の名称）。
+          注文の行は変更前後のレコードを持たず、売買・数量・指成の変更はこの表示文の中にある
+        -->
         <template #cell-feature="{ row }">
           <span class="activity-log-list__sub">{{ row.feature || row.targetTypeName }}</span>
           <span>{{ row.operationText || operationName(row.operation) }}</span>

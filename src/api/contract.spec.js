@@ -259,7 +259,7 @@ const KNOWN_GAPS = [
    * 2026-09-18 の取り込みで全マスタに入った。先行実装の食い違いは解消したので行を外した。
    */
   /*
-   * 滞留注文抽出は API が 1 本も無い（成熟度 D）。形は src/mocks/fixtures/stalledOrders.js が
+   * 滞留注文抽出の検索 API は仕様に無い（成熟度 D）。形は src/mocks/fixtures/stalledOrders.js が
    * 契約提案で、MSW だけが応答する。一覧のパス自体が仕様に無いので kind: 'path' で載せる。
    */
   {
@@ -270,17 +270,9 @@ const KNOWN_GAPS = [
     request: '#1',
   },
   /*
-   * コンファメーション CSV の取込も同じく仕様に無い。パスと項目名（file）は docs/api/requests.md の
-   * 契約提案で、応答は既存の CsvImportResponse を流用する前提。MSW だけが応答する。
+   * コンファメーション CSV の取込（POST /operations/stalled-orders/confirmation-import）は
+   * 2026-10-07 の取り込みで仕様に入ったので行を外した。
    */
-  {
-    kind: 'path',
-    method: 'POST',
-    path: '/operations/stalled-orders/confirmation-import',
-    reason:
-      'コンファメーション CSV の取込 API が仕様に無い。MSW のハンドラを契約提案として先に置いている',
-    request: '#1',
-  },
   /*
    * 残高マスタの銘柄名の検索は画面モックにだけある条件で、src/api/balanceAdjustments.js の
    * 冒頭コメントの 1 番。MSW だけが解釈し、実 API は黙って無視する。

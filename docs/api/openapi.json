@@ -1671,7 +1671,7 @@
           "Orders"
         ],
         "summary": "Get Order Detail Endpoint",
-        "description": "単一注文詳細照会API\n- 注文基本情報\n- 約定実績一覧 (d_約定)\n- 状態遷移・イベント履歴一覧 (d_注文イベント)\n\n全店参照権限が無い操作者は、自部店の注文のみ参照できる（他店の注文は403）。",
+        "description": "単一注文詳細照会API\n- 注文基本情報\n- 約定実績一覧 (d_約定)\n- 状態遷移・イベント履歴一覧 (d_注文イベント)\n\n全店参照権限が無い操作者は、自部店の注文のみ参照できる（他店の注文は403）。\n預託先参照権限が無い操作者には 注文ルート／注文ルートコード／注文ルート名 を返さない（一覧と同じ出し分け）。",
         "operationId": "get_order_detail_endpoint_orders__order_id__get",
         "parameters": [
           {
@@ -6563,7 +6563,7 @@
           "MasterFx"
         ],
         "summary": "Update Fx Endpoint",
-        "description": "為替レート変更API（行IDで指定）\n\n- 楽観的ロック（更新日時チェック）対応\n- ユーザー操作フラグ=1、変更履歴(d_為替履歴)への差分記録",
+        "description": "為替レート変更API（行IDで指定）\n\n- 部分更新: リクエストに含めた項目のみ更新し、未指定の項目（源泉レート等）は既存値を維持\n- 楽観的ロック（更新日時チェック）対応\n- ユーザー操作フラグ=1、変更履歴(d_為替履歴)への差分記録",
         "operationId": "update_fx_endpoint_masters_fx__fx_id__put",
         "parameters": [
           {
@@ -6617,7 +6617,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FxRequest"
+                "$ref": "#/components/schemas/FxUpdateRequest"
               }
             }
           }
@@ -8044,10 +8044,10 @@
                   "type": "null"
                 }
               ],
-              "description": "CA種別コードフィルタ",
+              "description": "CA種別コードフィルタ（カンマ区切りで複数指定可。例: 110,112）",
               "title": "Ca Type"
             },
-            "description": "CA種別コードフィルタ"
+            "description": "CA種別コードフィルタ（カンマ区切りで複数指定可。例: 110,112）"
           },
           {
             "name": "include_deleted",
@@ -8291,10 +8291,10 @@
                   "type": "null"
                 }
               ],
-              "description": "CA種別コードフィルタ",
+              "description": "CA種別コードフィルタ（カンマ区切りで複数指定可。例: 110,112）",
               "title": "Ca Type"
             },
-            "description": "CA種別コードフィルタ"
+            "description": "CA種別コードフィルタ（カンマ区切りで複数指定可。例: 110,112）"
           },
           {
             "name": "include_deleted",
@@ -15315,6 +15315,24 @@
             "description": "対象キー部分一致（口座番号・銘柄コード等）"
           },
           {
+            "name": "actor_group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "実行者区分での絞り込み（sales_ifa: 営業員・IFA / manager: 管理者・管理責任者）",
+              "title": "Actor Group"
+            },
+            "description": "実行者区分での絞り込み（sales_ifa: 営業員・IFA / manager: 管理者・管理責任者）"
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,
@@ -15813,6 +15831,116 @@
           },
           "500": {
             "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/stalled-orders/confirmation-import": {
+      "post": {
+        "tags": [
+          "StalledOrders"
+        ],
+        "summary": "Import Confirmation Csv Endpoint",
+        "description": "確認 CSV（TWS の約定コンファメーション）取込 API\n\n- 列: order_id, confirmation_ref, confirmation_status, filled_quantity, average_price, confirmed_at, message\n- confirmation_status の対応: WORKING→003 / PARTIALLY_FILLED→010 / FILLED→011 / CANCELLED→034\n- filled_quantity は累計約定数量。既存の d_約定 累計との差分だけを追加登録する（ExecID=confirmation_ref で冪等）\n- 全行検証を行い、1 行でもエラーがあれば全行ロールバックし、行番号とエラー理由を返却する\n- 取込結果は d_注文イベント（CONFIRMATION_IMPORT）に記録する",
+        "operationId": "import_confirmation_csv_endpoint_operations_stalled_orders_confirmation_import_post",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_confirmation_csv_endpoint_operations_stalled_orders_confirmation_import_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "空ファイル・ヘッダ不一致・データ行なし",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未認証・セッション期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部サーバーエラー",
             "content": {
               "application/json": {
                 "schema": {
@@ -17714,7 +17842,7 @@
           "HoldingSearch"
         ],
         "summary": "Search Holdings Endpoint",
-        "description": "預り残高検索API\n\n- 参照テーブル: m_残高情報, m_口座情報, m_銘柄情報, m_為替, m_基準日, m_ca\n- 検索条件:\n  - 部店コード (完全一致)\n  - 口座番号 (完全一致)\n  - 顧客名・顧客名カナ (部分一致)\n  - 銘柄コード・ティッカー (完全一致)\n  - 銘柄名・銘柄名_英字 (部分一致)\n  - 特定預り区分 (完全一致)\n- 表示項目:\n  - 評価額_USD (前日終値 * 残高)\n  - 評価額_JPY (前日終値 * 残高 * 為替レート)\n  - 平均取得単価\n  - 取得金額 (平均取得単価 * 前日終値)\n  - 評価損益 (評価額_JPY - 取得金額)\n  - 評価損益率 ((取得金額 / 評価額_JPY) - 1 を % 表示)\n  - CA (CA種別名(分母 : 分子) ※効力発生日 <= 基準日 <= 支払日, 支払日 IS NOT NULL)",
+        "description": "預り残高検索API\n\n- 参照テーブル: m_残高情報, m_口座情報, m_銘柄情報, m_為替, m_基準日, m_ca\n- 検索条件:\n  - 部店コード (完全一致)\n  - 口座番号 (完全一致)\n  - 顧客名・顧客名カナ (部分一致)\n  - 銘柄コード・ティッカー (完全一致)\n  - 銘柄名・銘柄名_英字 (部分一致)\n  - 特定預り区分 (完全一致)\n- 表示項目:\n  - 前日終値 (USD)・適用為替レート (評価に使用した USD 最新レート)\n  - 評価額_USD (前日終値 * 残高)\n  - 評価額_JPY (前日終値 * 残高 * 為替レート)\n  - 平均取得単価 (USD)\n  - 取得金額 (平均取得単価 * 数量 * 為替レート。円換算投資元本)\n  - 評価損益 (評価額_JPY - 取得金額)\n  - 評価損益率 ((評価額_JPY / 取得金額) - 1 を % 表示。例 '+12.34%')\n  - 売却可能株数 (max(0, 残高 - 当日有効売注文数量)。/balances と同じ計算)\n  - ID (残高行ID)・口座ID (顧客詳細 /masters/customers/{account_id} のパスキー)\n  - CA (CA種別名(分母 : 分子) ※効力発生日 <= 基準日 <= 支払日, 支払日 IS NOT NULL)",
         "operationId": "search_holdings_endpoint_holdings_get",
         "parameters": [
           {
@@ -19685,12 +19813,24 @@
           "対象種別": {
             "type": "string",
             "title": "対象種別",
-            "description": "対象種別コード（customers, symbols, fx 等）"
+            "description": "対象種別コード（orders, customers, symbols, fx 等）"
           },
           "対象種別名": {
             "type": "string",
             "title": "対象種別名",
             "description": "対象種別名（画面表示用）"
+          },
+          "区分": {
+            "type": "string",
+            "title": "区分",
+            "description": "区分コード（business: 業務操作 / master: マスタ更新 / operation: 運用管理）",
+            "default": "master"
+          },
+          "区分名": {
+            "type": "string",
+            "title": "区分名",
+            "description": "区分名（画面表示用）",
+            "default": "マスタ更新"
           },
           "履歴ID": {
             "type": "integer",
@@ -19778,7 +19918,7 @@
               }
             ],
             "title": "操作内容",
-            "description": "操作内容の表示文（例: 「銘柄情報を更新」。CREATE=登録 / UPDATE=更新 / DELETE=削除 / BATCH=一括処理 / VWAP_BULK=VWAP対象一括更新）"
+            "description": "操作内容の表示文（例: 「銘柄情報を更新」。CREATE=登録 / UPDATE=更新 / DELETE=削除 / BATCH=一括処理 / VWAP_BULK=VWAP対象一括更新。対象種別 orders は注文イベントの内容文をそのまま返す）"
           },
           "操作日時": {
             "anyOf": [
@@ -19804,7 +19944,7 @@
               }
             ],
             "title": "変更前データ",
-            "description": "変更前レコードJSON"
+            "description": "変更前レコードJSON（対象種別 orders は変更前後JSONを持たないため null）"
           },
           "変更後データ": {
             "anyOf": [
@@ -19817,7 +19957,7 @@
               }
             ],
             "title": "変更後データ",
-            "description": "変更後レコードJSON"
+            "description": "変更後レコードJSON（対象種別 orders は null）"
           },
           "差分": {
             "additionalProperties": true,
@@ -19890,6 +20030,18 @@
             "type": "string",
             "title": "対象種別名",
             "description": "対象種別名（画面表示用）"
+          },
+          "区分": {
+            "type": "string",
+            "title": "区分",
+            "description": "区分コード（business: 業務操作 / master: マスタ更新 / operation: 運用管理）",
+            "default": "master"
+          },
+          "区分名": {
+            "type": "string",
+            "title": "区分名",
+            "description": "区分名（画面表示用）",
+            "default": "マスタ更新"
           },
           "対象キー項目": {
             "type": "string",
@@ -22103,6 +22255,21 @@
         ],
         "title": "Body_import_ca_csv_endpoint_masters_ca_import_csv_post"
       },
+      "Body_import_confirmation_csv_endpoint_operations_stalled_orders_confirmation_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "TWS 約定コンファメーション CSV（UTF-8。BOM の有無は不問）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_confirmation_csv_endpoint_operations_stalled_orders_confirmation_import_post"
+      },
       "Body_import_customers_csv_endpoint_masters_customers_import_csv_post": {
         "properties": {
           "file": {
@@ -24012,6 +24179,12 @@
             "title": "Nisa為替上乗せ率",
             "description": "NISA 計算用為替レート（外貨側）の上乗せ率（%）。適用為替 = ROUNDDOWN(為替 × (1 + 率/100), 2)"
           },
+          "NISA株当たり上乗せ円": {
+            "type": "number",
+            "title": "Nisa株当たり上乗せ円",
+            "description": "NISA買付余力チェックで 単価 × 為替レート に加算する 1 株あたりの上乗せ円（Phase 67）",
+            "default": 1.0
+          },
           "備考": {
             "anyOf": [
               {
@@ -24181,6 +24354,19 @@
               }
             ],
             "title": "Nisa為替上乗せ率"
+          },
+          "NISA株当たり上乗せ円": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nisa株当たり上乗せ円"
           },
           "備考": {
             "anyOf": [
@@ -25981,12 +26167,12 @@
           "顧客名": {
             "type": "string",
             "title": "顧客名",
-            "description": "顧客名"
+            "description": "顧客名（個人は姓名の間を全角スペース区切り）"
           },
           "顧客名カナ": {
             "type": "string",
             "title": "顧客名カナ",
-            "description": "顧客名カナ"
+            "description": "顧客名カナ（半角カナ・半角数字・ハイフン・半角スペースのみ。個人は姓名の間を半角スペース区切り）"
           },
           "生年月日": {
             "anyOf": [
@@ -25998,11 +26184,11 @@
               }
             ],
             "title": "生年月日",
-            "description": "生年月日 (個人: YYYYMMDD形式, 法人: '0')"
+            "description": "生年月日 (個人: YYYYMMDD形式で必須, 法人: '0' 固定)"
           },
           "コンプラランク": {
             "$ref": "#/components/schemas/ComplianceRankEnum",
-            "description": "コンプラランク"
+            "description": "コンプラランク（許容値: A〜J, X, Y, Z。A・B・Y・Z の口座は発注制限の対象）"
           },
           "投資方針": {
             "anyOf": [
@@ -26040,7 +26226,7 @@
           },
           "NISA契約": {
             "$ref": "#/components/schemas/NisaContractEnum",
-            "description": "NISA契約区分 (0/1/9)"
+            "description": "NISA契約区分 (0/1/9。法人は '0' 固定。0 のとき NISA買付可能額は 0 を指定)"
           },
           "NISA買付可能額_当年": {
             "type": "integer",
@@ -26111,7 +26297,7 @@
           },
           "特定口座区分": {
             "$ref": "#/components/schemas/SpecificAccountTypeEnum",
-            "description": "特定口座区分 (0/1/2/3)"
+            "description": "特定口座区分 (0/1/2/3。法人は '3' 固定)"
           },
           "口座区分": {
             "anyOf": [
@@ -27249,7 +27435,7 @@
           "口座番号"
         ],
         "title": "CustomerValidateRequest",
-        "description": "口座情報事前検証APIの入力モデル（口座番号のみ必須、他項目は任意）"
+        "description": "口座情報事前検証APIの入力モデル（口座番号のみ必須、他項目は任意）\n\n新規検証（is_update=False）では登録 API（CustomerRequest）の必須項目・業務ルール\n（コンプラランク許容値 A〜J/X/Y/Z、個人の氏名空白規則、法人の固定値 など）で検証される。\n未送信の金額項目（円貨預り金・外貨預り金・総預り資産・NISA買付可能額）は 0 として扱う。"
       },
       "CustomerValidationResponse": {
         "properties": {
@@ -30718,6 +30904,75 @@
         "title": "FxResponse",
         "description": "為替マスタ登録・更新・削除レスポンス"
       },
+      "FxUpdateRequest": {
+        "properties": {
+          "基準日": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 29991231.0,
+                "minimum": 19000101.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "基準日",
+            "description": "（互換用・無視される）基準日はパスの fx_id から解決"
+          },
+          "通貨コード": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "通貨コード",
+            "description": "（互換用・無視される）通貨コードはパスの fx_id から解決"
+          },
+          "為替レート": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "為替レート",
+            "description": "レート(円)（正の数）"
+          },
+          "源泉レート": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "源泉レート",
+            "description": "譲渡益税計算用の為替レート(円)。未指定時は既存値を維持、null 指定でクリア"
+          },
+          "更新日時": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "更新日時",
+            "description": "楽観ロック用: 取得時の更新日時（YYYY-MM-DD HH:MM:SS 形式）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "為替レート"
+        ],
+        "title": "FxUpdateRequest",
+        "description": "為替マスタ変更APIの入力モデル（部分更新: リクエストに含めた項目のみ更新）\n\n未指定の項目（源泉レート等）はDBの既存値を維持する。明示的に null を指定した項目のみクリアされる。\n基準日・通貨コードはパスの fx_id から解決されるため、本文で送っても無視される。"
+      },
       "FxValidationResponse": {
         "properties": {
           "valid": {
@@ -30837,6 +31092,30 @@
       },
       "HoldingItem": {
         "properties": {
+          "ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id",
+            "description": "残高情報の行ID（m_残高情報.ID）。業務上は (口座番号, 銘柄コード, 特定預り区分) で一意"
+          },
+          "口座ID": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "口座Id",
+            "description": "口座マスタID（m_口座情報.ID）。GET /masters/customers/{account_id} のパスキー"
+          },
           "部店コード": {
             "anyOf": [
               {
@@ -30922,7 +31201,7 @@
               }
             ],
             "title": "預り売買区分",
-            "description": "特定預り区分コード"
+            "description": "特定預り区分コード（0: 一般, 1: 特定。注文の預り売買区分とはコードの意味が逆なので注意。変換せずこの値のまま注文と突合する）"
           },
           "預り売買区分名": {
             "anyOf": [
@@ -30935,6 +31214,30 @@
             ],
             "title": "預り売買区分名",
             "description": "特定預り区分名称"
+          },
+          "前日終値": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "前日終値",
+            "description": "前日終値 (USD。画面の参考単価)"
+          },
+          "適用為替レート": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "適用為替レート",
+            "description": "評価に使用した為替レート（m_為替 の USD 最新基準日レート。画面の参考為替）"
           },
           "評価額_USD": {
             "anyOf": [
@@ -30970,7 +31273,7 @@
               }
             ],
             "title": "平均取得単価",
-            "description": "平均取得単価"
+            "description": "平均取得単価 (USD)"
           },
           "取得金額": {
             "anyOf": [
@@ -30982,7 +31285,7 @@
               }
             ],
             "title": "取得金額",
-            "description": "取得金額 = 平均取得単価 * 前日終値"
+            "description": "取得金額 (JPY) = 平均取得単価 * 数量 * 為替レート"
           },
           "評価損益": {
             "anyOf": [
@@ -31006,7 +31309,19 @@
               }
             ],
             "title": "評価損益率",
-            "description": "評価損益率 = (取得金額 / 評価額_JPY) - 1 (%表記)"
+            "description": "評価損益率 = (評価額_JPY / 取得金額) - 1 (%表記。例 '+12.34%' / '-5.20%')"
+          },
+          "売却可能株数": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "売却可能株数",
+            "description": "売却可能株数 = max(0, 残高 - 当日有効売注文数量)。GET /balances/{account_no} の 売却可能株数 と同じ計算"
           },
           "売却不可区分": {
             "type": "integer",
@@ -36233,7 +36548,7 @@
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "スライス有効フラグ",
-            "description": "1: 有効, 0: 無効",
+            "description": "1: 有効, 0: 無効（未指定時は既存値を維持）",
             "default": 1
           },
           "備考": {
@@ -36247,7 +36562,7 @@
               }
             ],
             "title": "備考",
-            "description": "備考"
+            "description": "備考（未指定時は既存値を維持）"
           },
           "更新日時": {
             "anyOf": [
@@ -36540,7 +36855,7 @@
               }
             ],
             "title": "変更前データ",
-            "description": "操作前の m_発注停止 行全体（キー: 停止対象, 発注停止フラグ, 停止理由, 更新者, 更新日時 など）"
+            "description": "操作前の m_発注停止 行全体のスナップショット。キー: ID, 停止対象, 発注停止フラグ, ユーザー操作フラグ, 停止理由, 停止日時, 停止者, 再開日時, 再開者, 作成者, 作成日時, 更新者, 更新日時。中の日時文字列は 'YYYY-MM-DD HH:MM:SS'（空白区切り）形式"
           },
           "変更後データ": {
             "anyOf": [
@@ -36553,7 +36868,7 @@
               }
             ],
             "title": "変更後データ",
-            "description": "操作後の m_発注停止 行全体（キーは変更前データと同じ）"
+            "description": "操作後の m_発注停止 行全体（キー・日時書式は変更前データと同じ。画面の「停止理由」はこの中の 停止理由 または 差分データ.停止理由 から取得できる）"
           },
           "差分データ": {
             "anyOf": [
@@ -36572,7 +36887,7 @@
             "type": "string",
             "format": "date-time",
             "title": "操作日時",
-            "description": "操作日時"
+            "description": "操作日時（レスポンスの datetime 項目は ISO 8601・T 区切りで直列化される）"
           }
         },
         "type": "object",
@@ -37430,7 +37745,7 @@
           "銘柄名"
         ],
         "title": "SymbolRequest",
-        "description": "銘柄情報登録・変更APIの入力モデル"
+        "description": "銘柄情報登録・変更APIの入力モデル\n\n取消済み（取消区分=1）の銘柄コードで新規登録（POST）すると、同じ行（同じID・元の作成日時）を\n取消区分=0 へ再有効化し、本文の値で全項目を上書きする（未送信の任意項目は null / 既定値に戻る）。\n事前検証（validate）でも取消済みコードは重複エラーにならない。"
       },
       "SymbolResponse": {
         "properties": {
@@ -38133,6 +38448,18 @@
               }
             ],
             "title": "Deposit Category Derived"
+          },
+          "calculation_estimate": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation Estimate"
           }
         },
         "type": "object",

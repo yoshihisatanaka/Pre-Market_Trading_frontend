@@ -2,7 +2,10 @@ import { expect, test } from '@playwright/test'
 import { clickSideMenuLink } from './helpers/sideMenu'
 import { activityLogs } from '../src/mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../src/mocks/fixtures/activityLogTargets'
+import { users } from '../src/mocks/fixtures/users'
 import {
+  ACTIVITY_ACTOR_GROUP_OPTIONS,
+  BUSINESS_TARGET_TYPES,
   OPERATION_TARGET_TYPES,
   categoryLabel,
   formatActivityAt,
@@ -10,10 +13,11 @@ import {
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/activity-logs.md（タイトル先頭の [AL-xx] が対応 ID）
-// 各マスタと運用管理の変更履歴を横断して読む画面。ページ位置と検索条件は URL クエリを正とするため、
-// URL と画面の同期と、行の「詳細」ダイアログをここで守る。
+// 注文の受付・訂正・取消と、各マスタ・運用管理の変更履歴を横断して読む画面。ページ位置と検索条件は
+// URL クエリを正とするため、URL と画面の同期と、行の「詳細」ダイアログをここで守る。
 // mockApi() は固定の body を返すだけで offset や検索条件のクエリを解釈しない。
-// ページングと絞り込み（AL-02〜AL-10 / AL-15 / AL-16 / AL-18）はクエリを実際に処理する既定ハンドラで検証する。
+// ページングと絞り込み（AL-02〜AL-10 / AL-15 / AL-16 / AL-18 / AL-21 / AL-22 / AL-24）は
+// クエリを実際に処理する既定ハンドラで検証する。
 
 const PATH = '/operations/activity-logs'
 
@@ -39,14 +43,39 @@ const bySymbols = activityLogs.filter((log) => log.対象種別 === symbolsTarge
 const OPERATOR = firstRow.操作者
 const byOperator = activityLogs.filter((log) => log.操作者 === OPERATOR)
 
+/** 操作者の選択肢の表示名（画面モックの「社員コード 氏名」） */
+const operatorLabel = (user) => `${user.操作者コード} ${user.氏名}`
+const operatorUser = users.find((user) => user.操作者コード === OPERATOR)
+
+/*
+ * 実行者区分 → ロールコード。src/mocks/handlers/activityLogs.js の ACTOR_GROUP_ROLES と同じ対応
+ * （ハンドラは export していないので再掲する）。操作者の無い行はどちらにも一致しない
+ */
+const ACTOR_GROUP_ROLES = { sales_ifa: ['sales', 'ifa'], manager: ['manager', 'supervisor'] }
+const roleOf = (operatorCode) => users.find((user) => user.操作者コード === operatorCode)?.ロールコード
+const byActorGroup = (group, logs = activityLogs) =>
+  logs.filter((log) => ACTOR_GROUP_ROLES[group].includes(roleOf(log.操作者)))
+const actorGroupLabel = (group) =>
+  ACTIVITY_ACTOR_GROUP_OPTIONS.find((option) => option.value === group).label
+
+/** 業務操作（注文）の行と、その対象種別 */
+const businessTargets = activityLogTargets.filter((target) =>
+  BUSINESS_TARGET_TYPES.includes(target.対象種別),
+)
+const byBusinessCategory = activityLogs.filter((log) =>
+  BUSINESS_TARGET_TYPES.includes(log.対象種別),
+)
+
+/** 正規表現の特殊文字を逃がす（操作内容の文をそのままパターンに埋めるため） */
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 /** 先頭行の対象キーの先頭 3 文字。部分一致で別の対象種別の行にも当たることを見る（AL-06） */
 const KEY_FRAGMENT = firstRow.対象キー.slice(0, 3)
 const byKeyFragment = activityLogs.filter((log) => (log.対象キー ?? '').includes(KEY_FRAGMENT))
 
-/** 期間。フィクスチャの 4 行目と 8 行目の日付（降順なので To が 4 行目） */
+/** 期間。フィクスチャに出てくる日付のうち新しい方から 2 日（降順なので To が最新の日） */
 const dateOf = (log) => log.操作日時.slice(0, 10)
-const DATE_TO = dateOf(activityLogs[3])
-const DATE_FROM = dateOf(activityLogs[7])
+const [DATE_TO, DATE_FROM] = [...new Set(activityLogs.map(dateOf))]
 const byPeriod = activityLogs.filter(
   (log) => dateOf(log) >= DATE_FROM && dateOf(log) <= DATE_TO,
 )
@@ -146,9 +175,12 @@ test.describe('操作ログ一覧', () => {
     await expect(page).toHaveURL(/operation=DELETE/)
     await expect(page.getByTestId('activity-logs-count')).toHaveText(`${byDelete.length} 件`)
     await expect(rowsOf(page)).toHaveCount(byDelete.length)
-    // 対象機能・操作のセルは「<対象機能>\n<操作内容>」。操作内容はサーバの表示文（…を削除）
+    // 対象機能・操作のセルは「<対象機能>\n<操作内容>」。操作内容はサーバの表示文
+    // （マスタは「…を削除」、注文は注文イベントの文「注文取消 …」）
     await expect(columnOf(page, '対象機能・操作')).toHaveText(
-      byDelete.map((log) => new RegExp(`${log.対象種別名}[\\s\\S]*削除`)),
+      byDelete.map(
+        (log) => new RegExp(`${log.対象種別名}[\\s\\S]*${escapeRegExp(log.操作内容)}`),
+      ),
     )
   })
 
@@ -179,7 +211,7 @@ test.describe('操作ログ一覧', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await page.getByTestId('activity-logs-operator').fill(OPERATOR)
+    await page.getByTestId('activity-logs-operator').selectOption({ label: operatorLabel(operatorUser) })
     await search(page)
 
     await expect(page.getByTestId('activity-logs-count')).toHaveText(`${byOperator.length} 件`)
@@ -473,5 +505,142 @@ test.describe('操作ログ一覧', () => {
     await expect(columnOf(page, '操作区分')).toHaveText(
       Array(byOperationCategory.length).fill(categoryLabel('operation')),
     )
+  })
+
+  test('[AL-19] 操作者の選択肢に操作者マスタの全員が「社員コード 氏名」で並ぶ', async ({ page }) => {
+    // 無効の操作者がフィクスチャに無いと「無効も含む」を確かめられない
+    expect(users.some((user) => user.有効フラグ === 0)).toBe(true)
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    // 先頭は「全て」の空選択肢
+    const options = page.getByTestId('activity-logs-operator').locator('option')
+    await expect(options).toHaveCount(users.length + 1)
+    await expect(options.first()).toHaveAttribute('value', '')
+    for (const user of users) {
+      await expect(options.filter({ hasText: operatorLabel(user) })).toHaveCount(1)
+    }
+  })
+
+  test('[AL-20] 操作者の取得に失敗しても一覧と検索は使える', async ({ page }) => {
+    await mockApi(page, [
+      { path: '*/api/masters/users', status: 500, body: { detail: ERROR_MESSAGE } },
+    ])
+    await page.goto(PATH)
+
+    await expect(page.getByTestId('activity-logs-search')).toContainText(
+      `操作者を取得できませんでした（${ERROR_MESSAGE}）`,
+    )
+    await expect(page.getByTestId('activity-logs-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    // 操作者なしで他の条件の検索はできる
+    await page.getByTestId('activity-logs-operation').selectOption({ label: '削除' })
+    await search(page)
+    await expect(page.getByTestId('activity-logs-count')).toHaveText(`${byDelete.length} 件`)
+  })
+
+  test('[AL-21] 実行者区分で絞り込むとその区分の操作者の行だけが出る', async ({ page }) => {
+    const GROUP = 'manager'
+    const byManager = byActorGroup(GROUP)
+    // 一致する行があり、全件ではないこと。一括処理（操作者なし）の行が外れること
+    expect(byManager.length).toBeGreaterThan(0)
+    expect(byManager.length).toBeLessThan(TOTAL)
+    expect(activityLogs.some((log) => log.操作者 === null)).toBe(true)
+    expect(byManager.every((log) => log.操作者 !== null)).toBe(true)
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('activity-logs-actor-group').selectOption({ label: actorGroupLabel(GROUP) })
+    await search(page)
+
+    await expect(page.getByTestId('activity-logs-count')).toHaveText(`${byManager.length} 件`)
+    expect(new URL(page.url()).searchParams.get('actor_group')).toBe(GROUP)
+    await expect(rowsOf(page)).toHaveCount(byManager.length)
+    // 操作者のセルは「<氏名>\n<実行者区分>・<コード>」
+    await expect(columnOf(page, '操作者')).toHaveText(
+      byManager.map((log) => new RegExp(`${log.実行者区分}・${log.操作者}$`)),
+    )
+  })
+
+  test('[AL-22] 操作区分で「業務操作」を選ぶと注文の行だけが出る', async ({ page }) => {
+    // 業務操作の行が 1 件以上あり、全件ではないこと（絞り込みが効いたと言えること）
+    expect(byBusinessCategory.length).toBeGreaterThan(0)
+    expect(byBusinessCategory.length).toBeLessThan(TOTAL)
+    // 注文の行は変更前後のレコードを持たない（変更項目が — になる前提）
+    expect(byBusinessCategory.every((log) => log.変更項目.length === 0)).toBe(true)
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('activity-logs-category').selectOption({ label: categoryLabel('business') })
+
+    // 対象機能の選択肢が業務操作の対象種別（+「全て」）になる
+    const options = page.getByTestId('activity-logs-target-type').locator('option')
+    await expect(options).toHaveCount(businessTargets.length + 1)
+    for (const target of businessTargets) {
+      await expect(options.filter({ hasText: target.対象種別名 })).toHaveCount(1)
+    }
+
+    await search(page)
+
+    const query = new URL(page.url()).searchParams
+    expect(query.get('category')).toBe('business')
+    expect(query.get('target_types')).toBeNull()
+
+    await expect(page.getByTestId('activity-logs-count')).toHaveText(
+      `${byBusinessCategory.length} 件`,
+    )
+    await expect(rowsOf(page)).toHaveCount(byBusinessCategory.length)
+    // バッジは応答の 区分名
+    await expect(columnOf(page, '操作区分')).toHaveText(byBusinessCategory.map((log) => log.区分名))
+    await expect(columnOf(page, '変更項目')).toHaveText(Array(byBusinessCategory.length).fill('—'))
+    await expect(columnOf(page, '対象機能・操作')).toHaveText(
+      byBusinessCategory.map(
+        (log) => new RegExp(`^${log.対象種別名}[\\s\\S]*${escapeRegExp(log.操作内容)}$`),
+      ),
+    )
+  })
+
+  test('[AL-23] 注文の行の詳細には操作内容の文が出て、差分と全項目の欄は出ない', async ({
+    page,
+  }) => {
+    const amended = byBusinessCategory.find((log) => log.操作区分 === 'UPDATE')
+    expect(amended).toBeDefined()
+    expect(amended.変更前データ).toBeNull()
+    expect(amended.変更後データ).toBeNull()
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await detailButtonOf(page, amended).click()
+
+    const dialog = page.getByRole('dialog', { name: '操作ログの詳細' })
+    await expect(dialog.getByTestId('activity-log-detail')).toBeVisible()
+    await expect(dialog.getByTestId('activity-log-detail-operation-text')).toHaveText(
+      amended.操作内容,
+    )
+    await expect(dialog.getByText('変更された項目はありません。')).toBeVisible()
+    await expect(dialog.getByTestId('activity-log-detail-changed-fields')).toHaveCount(0)
+    await expect(dialog.getByTestId('activity-log-detail-diff')).toHaveCount(0)
+    await expect(dialog.getByTestId('activity-log-detail-before')).toHaveCount(0)
+    await expect(dialog.getByTestId('activity-log-detail-after')).toHaveCount(0)
+  })
+
+  test('[AL-24] 実行者区分と操作区分を付けた URL を直接開くと欄と一覧に復元される', async ({
+    page,
+  }) => {
+    const expected = byActorGroup('sales_ifa', byBusinessCategory)
+    expect(expected.length).toBeGreaterThan(0)
+
+    await page.goto(`${PATH}?actor_group=sales_ifa&category=business`)
+
+    await expect(page.getByTestId('activity-logs-actor-group')).toHaveValue('sales_ifa')
+    await expect(page.getByTestId('activity-logs-category')).toHaveValue('business')
+    await expect(page.getByTestId('activity-logs-count')).toHaveText(`${expected.length} 件`)
+    await expect(rowsOf(page)).toHaveCount(expected.length)
+    await expect(columnOf(page, '対象キー')).toHaveText(expected.map((log) => log.対象キー))
   })
 })

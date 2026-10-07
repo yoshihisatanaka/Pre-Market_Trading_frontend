@@ -8,15 +8,18 @@ import { server } from '@/mocks/server'
 import { activityLogs } from '@/mocks/fixtures/activityLogs'
 import { activityLogTargets } from '@/mocks/fixtures/activityLogTargets'
 import { codeEntries } from '@/mocks/fixtures/codes'
+import { users } from '@/mocks/fixtures/users'
 import { ACTIVITY_LOGS_PAGE_SIZE } from '@/stores/activityLogs'
 import { useCodesStore } from '@/stores/codes'
 import {
+  ACTIVITY_ACTOR_GROUP_OPTIONS,
   ACTIVITY_CATEGORY_OPTIONS,
   OPERATION_TARGET_TYPES,
   categoryBadgeVariant,
   categoryLabel,
   categoryOf,
   formatActivityAt,
+  resolveCategory,
 } from '@/utils/activityLogTypes'
 import ActivityLogListView from './ActivityLogListView.vue'
 
@@ -30,6 +33,7 @@ import ActivityLogListView from './ActivityLogListView.vue'
 const PATH = '/operations/activity-logs'
 const LIST_PATH = '*/api/operations/activity-logs'
 const TARGETS_PATH = '*/api/operations/activity-logs/targets'
+const USERS_PATH = '*/api/masters/users'
 
 const PAGE_SIZE = ACTIVITY_LOGS_PAGE_SIZE
 const TOTAL = activityLogs.length
@@ -42,24 +46,38 @@ const PLACEHOLDER = '-- 全て --'
 const EMPTY = '—'
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
-/** 区分 → フィクスチャの対象種別コード（運用管理は固定の 2 種、マスタ更新はそれ以外） */
-const targetTypesOf = (category) =>
-  activityLogTargets
-    .map((raw) => raw.対象種別)
-    .filter((code) => OPERATION_TARGET_TYPES.includes(code) === (category === 'operation'))
+/** 区分 → フィクスチャの対象種別コード（応答の 区分 で分ける） */
+const targetTypesOf = (category, targets = activityLogTargets) =>
+  targets.filter((raw) => raw.区分 === category).map((raw) => raw.対象種別)
 
 const idOf = (row) => `${row.対象種別}:${row.履歴ID}`
 const dateOf = (row) => row.操作日時.slice(0, 10)
 
+/*
+ * 実行者区分 → ロールコード。モック（src/mocks/handlers/activityLogs.js）の読み方で、
+ * 期待値を users フィクスチャから導くために写す
+ */
+const ACTOR_GROUP_ROLES = {
+  sales_ifa: ['sales', 'ifa'],
+  manager: ['manager', 'supervisor'],
+}
+const roleOf = (operatorCode) => users.find((user) => user.操作者コード === operatorCode)?.ロールコード
+/** 操作者コード → 実行者区分（操作者が無い・マスタに無いときは undefined） */
+const actorGroupOf = (operatorCode) =>
+  Object.keys(ACTOR_GROUP_ROLES).find((group) =>
+    ACTOR_GROUP_ROLES[group].includes(roleOf(operatorCode)),
+  )
+
 /**
  * モックと同じ意味の絞り込み（期待値をフィクスチャから導くため）。
- * 期間は両端を含み、操作者・操作区分・対象種別は完全一致、対象キーは部分一致。
+ * 期間は両端を含み、操作者・実行者区分・操作区分・対象種別は完全一致、対象キーは部分一致。
  */
-function matches(row, { dateFrom, dateTo, operator, operation, targetTypes, targetKey }) {
+function matches(row, { dateFrom, dateTo, operator, actorGroup, operation, targetTypes, targetKey }) {
   return (
     (!dateFrom || dateOf(row) >= dateFrom) &&
     (!dateTo || dateOf(row) <= dateTo) &&
     (!operator || row.操作者 === operator) &&
+    (!actorGroup || actorGroupOf(row.操作者) === actorGroup) &&
     (!operation || row.操作区分 === operation) &&
     (!targetTypes?.length || targetTypes.includes(row.対象種別)) &&
     (!targetKey || (row.対象キー ?? '').includes(targetKey))
@@ -161,7 +179,7 @@ describe('ActivityLogListView', () => {
 
     const cells = cellsOf(rows(wrapper)[0]).map((cell) => cell.text())
     expect(cells[0]).toBe(formatActivityAt(head.操作日時))
-    expect(cells[1]).toBe(categoryLabel(categoryOf(head.対象種別)))
+    expect(cells[1]).toBe(head.区分名)
     // 操作者は氏名と、実行者区分・コードの 2 段
     expect(cells[2]).toContain(head.操作者名)
     expect(cells[2]).toContain(`${head.実行者区分}・${head.操作者}`)
@@ -201,20 +219,22 @@ describe('ActivityLogListView', () => {
     expect(cells[4].text()).toBe(EMPTY)
   })
 
-  it('[ALV-05] 操作区分は対象種別から導いた区分のバッジで、区分ごとの色で出る', async () => {
+  it('[ALV-05] 操作区分は応答の区分名のバッジで、区分ごとの色で出る', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     const seen = new Set()
     rows(wrapper).forEach((row, index) => {
-      const category = categoryOf(firstPage[index].対象種別)
+      const raw = firstPage[index]
+      const category = resolveCategory(raw.区分, raw.対象種別)
       const badge = cellsOf(row)[1].find('[data-variant]')
-      expect(badge.text()).toBe(categoryLabel(category))
+      expect(badge.text()).toBe(raw.区分名)
       expect(badge.attributes('data-variant')).toBe(categoryBadgeVariant(category))
       seen.add(category)
     })
-    // 1 ページ目に両方の区分が出ていないと、色の出し分けを確かめたことにならない
+    // 1 ページ目に 3 区分が出ていないと、色の出し分けを確かめたことにならない
     expect([...seen].sort()).toEqual(ACTIVITY_CATEGORY_OPTIONS.map(({ value }) => value).sort())
+    expect(categoryBadgeVariant('business')).toBe('info')
     expect(categoryBadgeVariant('master')).toBe('success')
     expect(categoryBadgeVariant('operation')).toBe('gray')
   })
@@ -320,6 +340,8 @@ describe('ActivityLogListView', () => {
       dateFrom: dateOf(oldest),
       dateTo: dateOf(head),
       operator: sample.操作者,
+      // 操作者と矛盾しない実行者区分にする（矛盾させると 0 件になり並びを確かめられない）
+      actorGroup: actorGroupOf(sample.操作者),
       operation: sample.操作区分,
       targetTypes: [sample.対象種別],
       // 水増しの行（口座番号 12301xx）にも当たる長さの部分一致にする
@@ -333,6 +355,7 @@ describe('ActivityLogListView', () => {
         start_date: conditions.dateFrom,
         end_date: conditions.dateTo,
         operator: conditions.operator,
+        actor_group: conditions.actorGroup,
         category: 'master',
         operation: conditions.operation,
         target_types: sample.対象種別,
@@ -345,6 +368,7 @@ describe('ActivityLogListView', () => {
     expect(find(wrapper, 'activity-logs-date-from').element.value).toBe(conditions.dateFrom)
     expect(find(wrapper, 'activity-logs-date-to').element.value).toBe(conditions.dateTo)
     expect(find(wrapper, 'activity-logs-operator').element.value).toBe(conditions.operator)
+    expect(find(wrapper, 'activity-logs-actor-group').element.value).toBe(conditions.actorGroup)
     expect(find(wrapper, 'activity-logs-category').element.value).toBe('master')
     expect(find(wrapper, 'activity-logs-operation').element.value).toBe(conditions.operation)
     expect(find(wrapper, 'activity-logs-target-type').element.value).toBe(sample.対象種別)
@@ -355,14 +379,15 @@ describe('ActivityLogListView', () => {
     expect(shownIds(wrapper)).toEqual(expected.slice(0, PAGE_SIZE).map(idOf))
   })
 
-  it('[ALV-13] 選択肢に無い操作内容・区分・並び順は空に落ちる', async () => {
+  it('[ALV-13] 選択肢に無い操作内容・区分・実行者区分・並び順は空に落ちる', async () => {
     const { wrapper } = await mountView({
-      query: { operation: 'PURGE', category: 'business', sort: 'desc' },
+      query: { operation: 'PURGE', category: 'BUSINESS', actor_group: 'sales', sort: 'desc' },
     })
     await settle()
 
     expect(find(wrapper, 'activity-logs-operation').element.value).toBe('')
     expect(find(wrapper, 'activity-logs-category').element.value).toBe('')
+    expect(find(wrapper, 'activity-logs-actor-group').element.value).toBe('')
     expect(sortButton(wrapper, '').attributes('aria-pressed')).toBe('true')
     expect(sortButton(wrapper, 'asc').attributes('aria-pressed')).toBe('false')
     // 条件なし・既定の並び（新しい順）の全件
@@ -370,7 +395,7 @@ describe('ActivityLogListView', () => {
     expect(shownIds(wrapper)).toEqual(firstPage.map(idOf))
   })
 
-  it('[ALV-14] 対象機能の選択肢は API から、操作内容はコードマスタ 操作区分、操作区分は固定の 2 種', async () => {
+  it('[ALV-14] 対象機能の選択肢は API から、操作内容はコードマスタ 操作区分、操作区分は固定の 3 種', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -382,7 +407,8 @@ describe('ActivityLogListView', () => {
       { value: '', label: PLACEHOLDER },
       ...codeEntries('操作区分').map(({ code, label }) => ({ value: code, label })),
     ])
-    // 業務操作は実 API に無いので、マスタ更新 / 運用管理 の 2 つだけ
+    // 業務操作 / マスタ更新 / 運用管理 の 3 つ
+    expect(ACTIVITY_CATEGORY_OPTIONS).toHaveLength(3)
     expect(optionsOf(wrapper, 'activity-logs-category')).toEqual([
       { value: '', label: PLACEHOLDER },
       ...ACTIVITY_CATEGORY_OPTIONS,
@@ -475,7 +501,7 @@ describe('ActivityLogListView', () => {
     const { wrapper, router } = await mountView()
     await settle()
 
-    for (const category of ['operation', 'master']) {
+    for (const { value: category } of ACTIVITY_CATEGORY_OPTIONS) {
       const targetTypes = targetTypesOf(category)
       const expected = activityLogs.filter((row) => matches(row, { targetTypes }))
       expect(expected.length).toBeGreaterThan(0)
@@ -535,5 +561,125 @@ describe('ActivityLogListView', () => {
 
     expect(countText(wrapper)).toContain(String(expected.length))
     expect(shownIds(wrapper)).toEqual(expected.slice(0, PAGE_SIZE).map(idOf))
+  })
+
+  it('[ALV-23] 操作者の選択肢は無効な操作者も含めて「社員コード 氏名」で並ぶ', async () => {
+    // 無効な操作者がフィクスチャにいないと、このシナリオは意味を失う
+    expect(users.some((user) => user.有効フラグ !== 1)).toBe(true)
+    const { wrapper } = await mountView()
+    await settle()
+
+    expect(optionsOf(wrapper, 'activity-logs-operator')).toEqual([
+      { value: '', label: PLACEHOLDER },
+      ...users.map((user) => ({
+        value: user.操作者コード,
+        label: user.氏名 ? `${user.操作者コード} ${user.氏名}` : user.操作者コード,
+      })),
+    ])
+  })
+
+  it('[ALV-24] 操作者を取得できなくても欄の下に理由を出し、検索はできる', async () => {
+    server.use(errorHandler(USERS_PATH))
+    const { wrapper, router } = await mountView()
+    await settle()
+
+    const select = find(wrapper, 'activity-logs-operator')
+    const describedBy = select.attributes('aria-describedby')
+    expect(describedBy).toBeTruthy()
+    expect(wrapper.find(`[id="${describedBy}"]`).text()).toBe(
+      `操作者を取得できませんでした（${ERROR_MESSAGE}）`,
+    )
+    expect(optionsOf(wrapper, 'activity-logs-operator')).toEqual([
+      { value: '', label: PLACEHOLDER },
+    ])
+    expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
+
+    await find(wrapper, 'activity-logs-operation').setValue('DELETE')
+    await find(wrapper, 'activity-logs-search').trigger('submit')
+    await settle()
+
+    expect(router.currentRoute.value.query).toEqual({ operation: 'DELETE' })
+    expect(shownIds(wrapper)).toEqual(
+      activityLogs.filter((row) => row.操作区分 === 'DELETE').map(idOf),
+    )
+  })
+
+  it('[ALV-25] 実行者区分で検索すると URL に actor_group が乗り、そのロールの行だけになる', async () => {
+    const actorGroup = 'manager'
+    const expected = activityLogs.filter((row) => matches(row, { actorGroup }))
+    expect(expected.length).toBeGreaterThan(0)
+    expect(expected.length).toBeLessThan(TOTAL)
+
+    const { wrapper, router } = await mountView()
+    await settle()
+
+    expect(optionsOf(wrapper, 'activity-logs-actor-group')).toEqual([
+      { value: '', label: PLACEHOLDER },
+      ...ACTIVITY_ACTOR_GROUP_OPTIONS,
+    ])
+
+    await find(wrapper, 'activity-logs-actor-group').setValue(actorGroup)
+    await find(wrapper, 'activity-logs-search').trigger('submit')
+    await settle()
+
+    expect(router.currentRoute.value.query).toEqual({ actor_group: actorGroup })
+    expect(countText(wrapper)).toContain(String(expected.length))
+    expect(shownIds(wrapper)).toEqual(expected.slice(0, PAGE_SIZE).map(idOf))
+  })
+
+  it('[ALV-26] 区分のバッジは応答の区分名をそのまま出す', async () => {
+    const renamed = firstPage.map((row) => ({ ...row, 区分名: `${row.区分名}（応答）` }))
+    server.use(http.get(LIST_PATH, () => HttpResponse.json(listBody(renamed))))
+    const { wrapper } = await mountView()
+    await settle()
+
+    rows(wrapper).forEach((row, index) => {
+      const badge = cellsOf(row)[1].find('[data-variant]')
+      expect(badge.text()).toBe(renamed[index].区分名)
+      expect(badge.attributes('data-variant')).toBe(categoryBadgeVariant(renamed[index].区分))
+    })
+  })
+
+  it('[ALV-27] 区分を持たない応答は対象種別から区分を導いてバッジに出す', async () => {
+    // 3 区分から 1 行ずつ取り、区分 / 区分名 を落とす
+    const samples = ACTIVITY_CATEGORY_OPTIONS.map(({ value }) =>
+      activityLogs.find((row) => row.区分 === value),
+    ).map((row) => {
+      const copy = { ...row }
+      delete copy.区分
+      delete copy.区分名
+      return copy
+    })
+    server.use(http.get(LIST_PATH, () => HttpResponse.json(listBody(samples))))
+    const { wrapper } = await mountView()
+    await settle()
+
+    expect(rows(wrapper)).toHaveLength(samples.length)
+    rows(wrapper).forEach((row, index) => {
+      const category = categoryOf(samples[index].対象種別)
+      const badge = cellsOf(row)[1].find('[data-variant]')
+      expect(badge.text()).toBe(categoryLabel(category))
+      expect(badge.attributes('data-variant')).toBe(categoryBadgeVariant(category))
+    })
+  })
+
+  it('[ALV-28] 対象機能の選択肢は応答の区分で絞る', async () => {
+    // コードからはマスタ更新と導かれる対象種別を、応答が運用管理と言っている
+    const promoted = targetTypesOf('master')[0]
+    expect(OPERATION_TARGET_TYPES).not.toContain(promoted)
+    const targets = activityLogTargets.map((raw) =>
+      raw.対象種別 === promoted ? { ...raw, 区分: 'operation', 区分名: '運用管理' } : raw,
+    )
+    server.use(http.get(TARGETS_PATH, () => HttpResponse.json({ targets })))
+    const { wrapper } = await mountView()
+    await settle()
+
+    await find(wrapper, 'activity-logs-category').setValue('operation')
+
+    expect(optionsOf(wrapper, 'activity-logs-target-type').map(({ value }) => value)).toEqual([
+      '',
+      ...targetTypesOf('operation', targets),
+    ])
+    expect(targetTypesOf('operation', targets)).toContain(promoted)
   })
 })

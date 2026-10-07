@@ -1,7 +1,21 @@
 import { http, HttpResponse } from 'msw'
 import { activityLogs } from '../fixtures/activityLogs'
 import { activityLogTargets } from '../fixtures/activityLogTargets'
+import { users } from '../fixtures/users'
 import { toNonNegativeInt } from './_shared'
+
+/*
+ * 実行者区分（actor_group）→ m_操作者 のロールコード。実 API もロールコードで絞り込む
+ * （2026-10-06 の回答 #38 ③）。どのロールがどちらに入るかは選択肢の名前（営業員・IFA /
+ * 管理者・管理責任者）から読んだもので、バックエンドの対応表は受け取っていない。
+ */
+const ACTOR_GROUP_ROLES = {
+  sales_ifa: ['sales', 'ifa'],
+  manager: ['manager', 'supervisor'],
+}
+
+/** 操作者コード → ロールコード */
+const ROLE_BY_OPERATOR = Object.fromEntries(users.map((user) => [user.操作者コード, user.ロールコード]))
 
 /*
  * 操作ログ。クエリ名と応答の形は openapi.json の `GET /operations/activity-logs` /
@@ -21,6 +35,7 @@ export const activityLogHandlers = [
     const dateFrom = toIsoDate(params.get('start_date') ?? '')
     const dateTo = toIsoDate(params.get('end_date') ?? '')
     const operator = params.get('operator') ?? ''
+    const actorGroup = params.get('actor_group') ?? ''
     const operation = params.get('operation') ?? ''
     const targetTypes = (params.get('target_types') ?? '').split(',').filter(Boolean)
     const targetKey = params.get('target_key') ?? ''
@@ -37,6 +52,9 @@ export const activityLogHandlers = [
         (!dateTo || date <= dateTo) &&
         // 操作者・操作区分は完全一致、対象キーは部分一致（仕様の説明どおり）
         (!operator || log.操作者 === operator) &&
+        // 知らない実行者区分はどの行にも一致しない。操作者の無い行（一括処理）も一致しない
+        (!actorGroup ||
+          (ACTOR_GROUP_ROLES[actorGroup] ?? []).includes(ROLE_BY_OPERATOR[log.操作者])) &&
         (!operation || log.操作区分 === operation) &&
         (targetTypes.length === 0 || targetTypes.includes(log.対象種別)) &&
         (!targetKey || (log.対象キー ?? '').includes(targetKey))

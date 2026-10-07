@@ -29,3 +29,4 @@ MSW の既定ハンドラ（`src/mocks/handlers/activityLogs.js`）に当てて�
 | ALS-12 | 既定モック。絞り込んだ状態を読み込み済み | `reload()` を呼ぶ | 同じ条件・同じ `offset` のまま読み直す | 実装済 |
 | ALS-13 | 既定モック | ストアの公開名を読む | `create` / `update` / `remove` とその状態（`creating` / `deleting`）を持たない | 実装済 |
 | ALS-14 | API の応答が遅い | 2 ページ目 → 1 ページ目の順に `load()` を続けて呼び、先に投げたほうを遅く返す | 最後に投げた `load()` の結果が残る | 実装済 |
+| ALS-15 | 既定モック（操作者のロールは `src/mocks/fixtures/users.js`） | `load({ actorGroup: 'manager' })` を呼ぶ | 操作者のロールが管理者・管理責任者の行だけが返り（一括処理の行は含まない）、`actorGroup` がストアに残る | 実装済 |

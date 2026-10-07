@@ -85,15 +85,46 @@ const orderedAt = (row) => `${row.受注日}T${row.受注時刻}`
 const byOrderedAtDesc = (a, b) => orderedAt(b).localeCompare(orderedAt(a)) || b.ID - a.ID
 const hashIds = (rows) => rows.map((row) => `#${row.ID}`)
 
-// 取込の成功: 注文エラーの 1 件目を約定で消し、2 件目を注文中へ移す
+/*
+ * 取込は実 API に素通しする（MSW のハンドラは消した）ので、取込を押すテストは必ず応答を差し込む。
+ * 文言・行エラーはサーバが返すものなので、ここで決めた応答がそのまま画面に出ることを見る。
+ */
+// 取込の成功: 注文エラーの 1 件目を約定で消し、2 件目を注文中へ移した、という体の応答
 const CLOSED_TARGET = stalledOrderErrors[0]
 const WORKING_TARGET = stalledOrderErrors[1]
 const IMPORT_SUCCESS_MESSAGE =
   'コンファメーションを 2 件取り込みました（約定・取消で除外 1 件 / 注文中 1 件）。'
+const importSuccessBody = {
+  success: true,
+  total_count: 2,
+  success_count: 2,
+  error_count: 0,
+  errors: [],
+  message: IMPORT_SUCCESS_MESSAGE,
+}
 // 滞留一覧に無い注文 ID
 const UNKNOWN_ID = 999
 const IMPORT_ROW_ERROR_MESSAGE =
   '1 行にエラーがあるため、取り込みませんでした。CSV を直して取り込み直してください。'
+const IMPORT_ROW_ERROR_REASON = `注文ID「${UNKNOWN_ID}」は滞留注文にありません。`
+const importRowErrorBody = {
+  success: false,
+  total_count: 1,
+  success_count: 0,
+  error_count: 1,
+  errors: [
+    {
+      line_number: 2,
+      errors: [IMPORT_ROW_ERROR_REASON],
+      row_data: { order_id: String(UNKNOWN_ID), confirmation_status: 'FILLED' },
+    },
+  ],
+  message: IMPORT_ROW_ERROR_MESSAGE,
+}
+
+/** 取込の応答を差し込む */
+const importResponds = (body, status = 200) =>
+  server.use(http.post(IMPORT_PATH, () => HttpResponse.json(body, { status })))
 
 // コンファメーション CSV のヘッダはサンプルの 1 行目から取る
 const CONFIRMATION_HEADER = buildConfirmationSampleCsv().slice(1).split('\r\n')[0]
@@ -444,13 +475,21 @@ describe('StalledOrderListView', () => {
     await selectFile(wrapper, file)
     expect(dropZone(wrapper).text()).toContain(file.name)
 
-    await submitImport(wrapper)
-
-    expect(byTestId(wrapper, 'stalled-orders-import-notice').text()).toBe(IMPORT_SUCCESS_MESSAGE)
+    // 取込の後の一覧の GET を差し替え、その内容が出れば「成功後に引き直した」とわかる
     const remainingErrors = stalledOrderErrors.filter(
       (row) => row !== CLOSED_TARGET && row !== WORKING_TARGET,
     )
     const nextWorking = [...stalledWorkingOrders, WORKING_TARGET].sort(byOrderedAtDesc)
+    server.use(
+      http.get(LIST_PATH, () =>
+        HttpResponse.json({ 注文エラー: remainingErrors, 注文中: nextWorking }),
+      ),
+    )
+    importResponds(importSuccessBody)
+
+    await submitImport(wrapper)
+
+    expect(byTestId(wrapper, 'stalled-orders-import-notice').text()).toBe(IMPORT_SUCCESS_MESSAGE)
     expect(tableIds(wrapper, 'stalled-order-errors-table')).toEqual(hashIds(remainingErrors))
     expect(tableIds(wrapper, 'stalled-working-orders-table')).toEqual(hashIds(nextWorking))
     expect(countText(wrapper, 'stalled-order-errors')).toBe(`${remainingErrors.length} 件`)
@@ -466,6 +505,7 @@ describe('StalledOrderListView', () => {
     await settle()
     const file = rowErrorFile()
     await selectFile(wrapper, file)
+    importResponds(importRowErrorBody)
 
     await submitImport(wrapper)
 
@@ -474,9 +514,9 @@ describe('StalledOrderListView', () => {
     const rows = errors.findAll('[data-testid="data-table-row"]')
     expect(rows).toHaveLength(1)
     expect(rows[0].findAll('td').map((td) => td.text())).toEqual([
-      '2',
+      String(importRowErrorBody.errors[0].line_number),
       String(UNKNOWN_ID),
-      `注文ID「${UNKNOWN_ID}」は滞留注文にありません。`,
+      IMPORT_ROW_ERROR_REASON,
     ])
     expect(exists(wrapper, 'stalled-orders-import-notice')).toBe(false)
     expect(countText(wrapper, 'stalled-order-errors')).toBe(`${stalledOrderErrors.length} 件`)
@@ -488,13 +528,15 @@ describe('StalledOrderListView', () => {
   it('[SOV-23] ファイルごと拒否される（400）とその理由が出て、ファイルの選択は残る', async () => {
     const { wrapper } = await mountView()
     await settle()
-    // 既定のモックはヘッダ違いを 400 で拒否する
     const file = confirmationFile([confirmationLine(CLOSED_TARGET.ID, 'FILLED')], 'id,status')
     await selectFile(wrapper, file)
+    // ヘッダ違いはサーバが 400 で拒否する
+    const detail = `ヘッダが違います。1 行目を ${CONFIRMATION_HEADER} にしてください。`
+    importResponds({ detail }, 400)
 
     await submitImport(wrapper)
 
-    expect(byTestId(wrapper, 'stalled-orders-import-error').text()).toContain('ヘッダが違います。')
+    expect(byTestId(wrapper, 'stalled-orders-import-error').text()).toContain(detail)
     expect(exists(wrapper, 'stalled-orders-import-notice')).toBe(false)
     expect(exists(wrapper, 'stalled-orders-import-errors')).toBe(false)
     expect(dropZone(wrapper).text()).toContain(file.name)
@@ -520,6 +562,7 @@ describe('StalledOrderListView', () => {
     const { wrapper } = await mountView()
     await settle()
     await selectFile(wrapper, rowErrorFile())
+    importResponds(importRowErrorBody)
     await submitImport(wrapper)
     expect(exists(wrapper, 'stalled-orders-import-errors')).toBe(true)
     const release = gateImport()

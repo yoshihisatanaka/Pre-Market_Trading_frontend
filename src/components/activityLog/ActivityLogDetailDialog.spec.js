@@ -24,6 +24,7 @@ const updateLog = {
   targetId: 'AAPL',
   targetKey: 'AAPL',
   operation: 'UPDATE',
+  operationText: '銘柄マスタを更新',
   operator: '005',
   at: '2026-09-16T10:40:00',
   before: { 銘柄コード: 'AAPL', 規制区分: '0', 付加情報: { 市場: 'NASDAQ' } },
@@ -60,6 +61,22 @@ const deleteLog = {
     { field: '銘柄名', before: 'ツイッター', after: null },
   ],
   changedFields: ['銘柄コード', '銘柄名'],
+}
+
+/** 注文の行（変更前後のレコードを持たず、変更の中身は操作内容の文にある） */
+const orderLog = {
+  ...updateLog,
+  id: 'orders:2',
+  historyId: 2,
+  targetType: 'orders',
+  targetTypeName: '注文',
+  targetId: '101',
+  targetKey: '101',
+  operationText: '注文訂正 注文ID 101 数量 100→80',
+  before: null,
+  after: null,
+  diff: [],
+  changedFields: [],
 }
 
 function mountDialog(props = {}) {
@@ -214,5 +231,27 @@ describe('ActivityLogDetailDialog', () => {
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
     expect(find(wrapper, 'activity-log-detail').exists()).toBe(false)
     expect(find(wrapper, 'activity-log-detail-close').exists()).toBe(true)
+  })
+
+  it('[ALD-14] 操作内容の文を概要に出す', () => {
+    const wrapper = mountDialog()
+
+    expect(find(wrapper, 'activity-log-detail-operation-text').text()).toBe(updateLog.operationText)
+    expect(summaryOf(wrapper)['操作内容'].text()).toBe(updateLog.operationText)
+  })
+
+  it('[ALD-15] 操作内容が空なら — を出す', () => {
+    const wrapper = mountDialog({ log: { ...updateLog, operationText: '' } })
+
+    expect(find(wrapper, 'activity-log-detail-operation-text').text()).toBe(EMPTY)
+  })
+
+  it('[ALD-16] 注文の行は変更前後と差分の表を出さず、操作内容の文で中身を見せる', () => {
+    const wrapper = mountDialog({ log: orderLog })
+
+    expect(find(wrapper, 'activity-log-detail-before').exists()).toBe(false)
+    expect(find(wrapper, 'activity-log-detail-after').exists()).toBe(false)
+    expect(find(wrapper, 'activity-log-detail-diff').exists()).toBe(false)
+    expect(find(wrapper, 'activity-log-detail-operation-text').text()).toBe(orderLog.operationText)
   })
 })

@@ -9,8 +9,10 @@
 守りたいのは**変換がこの層に閉じていること**で、日本語キー → camelCase、
 売買区分のコード → `'buy'` / `'sell'`、別項目の受注日・受注時刻 → 1 本の日時、の 3 つ。
 
-コンファメーション CSV の取込（`importConfirmationCsv(file)`）も未実装で、パス・項目名・応答は
-`docs/api/requests.md` の契約提案（応答は既存の `CsvImportResponse`）。SOA-12 以降がこちら。
+コンファメーション CSV の取込（`importConfirmationCsv(file)`）は契約提案のまま 2026-10-07 の取り込みで仕様に入った
+（`POST /operations/stalled-orders/confirmation-import`。応答は既存の `CsvImportResponse`）。SOA-12 以降がこちら。
+MSW のハンドラは消して実 API へ素通しにしたので、**取込のテストは毎回 `server.use()` で応答を差し込む**
+（`vitest.setup.js` は `onUnhandledRequest: 'error'`）。
 
 **jsdom の FormData は MSW(node) を通らない。** jsdom の FormData を載せた POST は、MSW の XHR
 インターセプタが Fetch の `Request` に変換できず、本文を読まないハンドラでも応答しないまま止まる

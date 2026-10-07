@@ -20,3 +20,4 @@
 | ALT-05 | API の応答が遅い | `ensureLoaded()` を 2 回続けて呼ぶ（1 回目の応答前） | 取得中は `loading` が `true`。リクエストは 1 本だけで、2 回目も同じ取得の完了を待てる（Promise が返る）。完了後に選択肢が入り `loading` が `false` になる | 実装済 |
 | ALT-06 | API が 500 を返す | `ensureLoaded()` を呼ぶ | `error` に理由が入り、`options` は空配列のまま | 実装済 |
 | ALT-07 | 1 回目だけ API が 500、以降は既定 | `ensureLoaded()` を 2 回呼ぶ | 2 回目で読み直し、選択肢が入って `error` が消える | 実装済 |
+| ALT-08 | 既定モック（区分 / 区分名 が載ったフィクスチャ） | `ensureLoaded()` の後に `targets` を読む | 各行の `category` / `categoryName` がフィクスチャの 区分 / 区分名 になる（画面が対象機能の選択肢を区分で絞るのに使う） | 実装済 |

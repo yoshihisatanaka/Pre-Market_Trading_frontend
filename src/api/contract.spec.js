@@ -1,5 +1,6 @@
 import { File as NodeFile } from 'node:buffer'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { http, HttpResponse } from 'msw'
 import openapi from '../../docs/api/openapi.json'
 import { server } from '../mocks/server'
 import { branchListResponse, handlerListResponse } from '../mocks/fixtures/codes'
@@ -14,6 +15,7 @@ import { calculationSetting } from '../mocks/fixtures/calculationSettings'
 import { canceledFeePreferences, feePreferences } from '../mocks/fixtures/feePreferences'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../mocks/fixtures/activityLogTargets'
+import { users } from '../mocks/fixtures/users'
 import { rolePermissions } from '../mocks/fixtures/permissions'
 import {
   noOperationOperator,
@@ -106,6 +108,7 @@ import {
   validateFeePreference,
 } from './feePreferences'
 import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
+import { fetchUsers } from './users'
 import { fetchStalledOrders, importConfirmationCsv } from './stalledOrders'
 import { fetchPermissions, updateRolePermission } from './permissions'
 import { fetchCurrentOperator } from './auth'
@@ -219,16 +222,9 @@ const KNOWN_GAPS = [
   /*
    * 操作ログは 2026-09-24 に ActivityLogItem の形へ張り替えた。画面モックにあった 5 項目を
    * フィクスチャに契約提案として載せていたが、操作者名 / 実行者区分 / 対象機能 / 操作内容 の 4 項目は
-   * 2026-09-30 の取り込みで仕様に入ったので外した。残るのは 結果 だけ（src/api/activityLogs.js は読まない）。
+   * 2026-09-30 の取り込みで仕様に入った。残った 結果 は「追加しない」と回答があった（#1 ③。
+   * 履歴は成功した変更しか残さない）ので、2026-10-07 にフィクスチャから消して行を外した。
    */
-  {
-    kind: 'fixture',
-    fixture: 'activityLogs',
-    keys: ['結果'],
-    reason:
-      '画面モックにあった項目。ActivityLogItem に無いので画面には出さず、フィクスチャに契約提案として残している',
-    request: '#1',
-  },
   /*
    * 障害管理の履歴の更新者は、画面モックがコードの下に氏名を出す。SuspensionHistoryItem には
    * 操作者（コード）しか無いので、氏名をフィクスチャに契約提案として載せている（src/api/incidents.js は
@@ -261,6 +257,8 @@ const KNOWN_GAPS = [
   /*
    * 滞留注文抽出の検索 API は仕様に無い（成熟度 D）。形は src/mocks/fixtures/stalledOrders.js が
    * 契約提案で、MSW だけが応答する。一覧のパス自体が仕様に無いので kind: 'path' で載せる。
+   * 9/30 に (b)「既存の GET /orders を拡張する」で決着したが、src/api/stalledOrders.js はまだこのパスを
+   * 送っている（GET /orders の 2 回呼びへの書き直しが残作業）ので、行は残す。
    */
   {
     kind: 'path',
@@ -346,6 +344,7 @@ const FIXTURES = [
   },
   { name: 'activityLogs', schema: 'ActivityLogItem', rows: activityLogs },
   { name: 'activityLogTargets', schema: 'ActivityLogTargetItem', rows: activityLogTargets },
+  { name: 'users', schema: 'OperatorItem', rows: users },
   { name: 'permissions', schema: 'RolePermissionItem', rows: rolePermissions },
   {
     name: 'currentOperator',
@@ -755,6 +754,7 @@ const PROBES = [
         dateFrom: '2026-01-01',
         dateTo: '2026-12-31',
         operator: '001',
+        actorGroup: 'manager',
         operation: 'UPDATE',
         targetTypes: ['customers'],
         targetKey: 'x',
@@ -763,6 +763,11 @@ const PROBES = [
   },
   { name: 'fetchActivityLogTargets', run: () => fetchActivityLogTargets() },
   {
+    name: 'fetchUsers',
+    run: () =>
+      fetchUsers({ role: 'sales', branchCode: '123', includeInactive: true, limit: 200, offset: 0 }),
+  },
+  {
     name: 'fetchStalledOrders',
     run: () => fetchStalledOrders({ branchCode: '123', accountNumber: '1234567', symbol: 'AAPL' }),
   },
@@ -770,9 +775,18 @@ const PROBES = [
     name: 'importConfirmationCsv',
     /*
      * jsdom の FormData は MSW(node) が Request に変換できず POST が止まる。
-     * この呼び出しの間だけ Node（undici）の FormData と File に差し替える（stalledOrders.spec.js と同じ回避）
+     * この呼び出しの間だけ Node（undici）の FormData と File に差し替える（stalledOrders.spec.js と同じ回避）。
+     * 取込は実 API に入って MSW のハンドラを消したので、この 1 回だけ応答を差し込む
+     * （無いと未定義のリクエストとして vitest.setup.js の onUnhandledRequest: 'error' に掛かる）
      */
     run: async () => {
+      server.use(
+        http.post(
+          '*/api/operations/stalled-orders/confirmation-import',
+          () => HttpResponse.json({ detail: 'データ行がありません。' }, { status: 400 }),
+          { once: true },
+        ),
+      )
       const form = await new Response('', {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       }).formData()

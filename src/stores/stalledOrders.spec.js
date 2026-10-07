@@ -70,6 +70,14 @@ function gate(method, path, body) {
 
 const emptyList = () => http.get(LIST_PATH, () => HttpResponse.json({ 注文エラー: [], 注文中: [] }))
 
+/**
+ * 取込の応答（CsvImportResponse の生の形）を差し込む。取込は実 API に素通しするので、
+ * 呼ぶテストは必ずこれか個別の server.use で応答を用意する（onUnhandledRequest: 'error'）。
+ *
+ * @param {object} body 返す本文
+ */
+const importResponds = (body) => server.use(http.post(IMPORT_PATH, () => HttpResponse.json(body)))
+
 // シナリオ: docs/unit/stores-stalled-orders.md
 describe('useStalledOrdersStore', () => {
   it('[SOS-01] load 前は 2 本とも空配列', () => {
@@ -171,16 +179,35 @@ describe('useStalledOrdersStore', () => {
   it('[SOS-09] 取込が成功すると直前の検索条件で引き直して結果を返す', async () => {
     const store = useStalledOrdersStore()
     await store.load({ branchCode: BRANCH })
+    expect(ids(store.orderErrors)).toEqual(rawIds(branchErrors))
+
+    // 取込の後の一覧は、約定した 1 件が消えた応答に差し替える（反映の中身はバックエンドの責務）
+    const remaining = branchErrors.filter((row) => row !== CLOSED_TARGET)
+    const queries = []
+    server.use(
+      http.get(LIST_PATH, ({ request }) => {
+        queries.push(Object.fromEntries(new URL(request.url).searchParams))
+        return HttpResponse.json({ 注文エラー: remaining, 注文中: [] })
+      }),
+    )
+    importResponds({
+      success: true,
+      total_count: 1,
+      success_count: 1,
+      error_count: 0,
+      errors: [],
+      message: 'コンファメーションを 1 件取り込みました。',
+    })
 
     const result = await store.importConfirmation(
       confirmationFile([confirmationLine(CLOSED_TARGET.ID, 'FILLED')]),
     )
 
     expect(result).toMatchObject({ success: true, successCount: 1 })
-    // 引き直しも部店 123 の条件で、約定した 1 件だけが消えている
-    expect(ids(store.orderErrors)).toEqual(
-      rawIds(branchErrors.filter((row) => row !== CLOSED_TARGET)),
-    )
+    // 引き直しも部店 123 の条件で、差し替えた応答の内容が入る
+    expect(queries).toEqual([{ branch_code: BRANCH }])
+    expect(ids(store.orderErrors)).toEqual(rawIds(remaining))
+    expect(store.workingOrders).toEqual([])
     expect(store.importError).toBeNull()
   })
 
@@ -189,10 +216,23 @@ describe('useStalledOrdersStore', () => {
     await store.load()
     // 引き直しが起きたことを見分けられるよう、次の一覧は 0 件にしておく
     server.use(emptyList())
+    const line = confirmationLine(UNKNOWN_ID, 'FILLED')
+    importResponds({
+      success: false,
+      total_count: 1,
+      success_count: 0,
+      error_count: 1,
+      errors: [
+        {
+          line_number: 2,
+          errors: [`注文ID「${UNKNOWN_ID}」は滞留注文にありません。`],
+          row_data: { order_id: String(UNKNOWN_ID), confirmation_status: 'FILLED' },
+        },
+      ],
+      message: '1 行にエラーがあるため、取り込みませんでした。',
+    })
 
-    const result = await store.importConfirmation(
-      confirmationFile([confirmationLine(UNKNOWN_ID, 'FILLED')]),
-    )
+    const result = await store.importConfirmation(confirmationFile([line]))
 
     expect(result.success).toBe(false)
     expect(result.errors.map((item) => item.orderId)).toEqual([String(UNKNOWN_ID)])

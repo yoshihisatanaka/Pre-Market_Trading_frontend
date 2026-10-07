@@ -17,7 +17,8 @@ import { permissionHandlers, resetPermissionRows } from './permissions'
 import { marketStatusHandlers } from './marketStatus'
 import { announcementHandlers, resetAnnouncementState } from './announcements'
 import { bannerHandlers } from './banner'
-import { stalledOrderHandlers, resetStalledOrderState } from './stalledOrders'
+import { stalledOrderHandlers } from './stalledOrders'
+import { userHandlers } from './users'
 import { incidentHandlers, resetIncidentState } from './incidents'
 import { mizuhoExecutionHandlers } from './mizuhoExecutions'
 import { closingHandlers, resetClosingState } from './closing'
@@ -58,6 +59,7 @@ import { holdingHandlers } from './holdings'
  *   /orders/csv-template     … 同じくテンプレート（text/csv・BOM 付き・Content-Disposition 付き）
  *   /orders/validate-csv     … 同じく事前検証。アップロードされた CSV を実際に読んで行ごとに判定する
  *   /orders/bulk-create      … 同じく一括受付。送った並びで連番の注文 ID を返す（状態は持たない）
+ *   /masters/users           … 操作者の一覧（操作ログの操作者プルダウン用）。日本語キー / include_inactive
  * マスタ系のパスは 2026-09-15 の OpenAPI 取り込みで /masters/ 配下へ移った。
  * 実 API に当てて動かすときは環境変数 VITE_ENABLE_MSW を false にする（README「バックエンドとの連携」）。
  */
@@ -98,7 +100,6 @@ export function resetMockState() {
   resetFeePreferenceRows()
   resetPermissionRows()
   resetAnnouncementState()
-  resetStalledOrderState()
   resetIncidentState()
   resetClosingState()
   resetMizuhoOrderState()
@@ -130,6 +131,7 @@ export const handlers = [
   ...calculationHandlers,
   ...feePreferenceHandlers,
   ...activityLogHandlers,
+  ...userHandlers,
   ...permissionHandlers,
   ...marketStatusHandlers,
   ...announcementHandlers,

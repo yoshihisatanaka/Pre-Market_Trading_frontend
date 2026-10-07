@@ -41,6 +41,7 @@ import { parseOrderEntryQuery } from '@/utils/orderEntryQuery'
  * 初期値にするだけで、顧客と銘柄は口座番号・ティッカーを打ったときと同じ照会で引き当てる。
  * 顧客詳細からの導線（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）は、この画面を顧客詳細の
  * 子ルート（/customers/:customerId/order-entry）として描く。大きな顧客カードとタブ（モックの customer_context）は親の CustomerDetailView が持つ。
+ * そのときはフォームの上の顧客バーを出さない（モックも customer_context では出さない。氏名・預り金が二重になる）。
  */
 
 /** 照会を始めるまでの待ち（モックと同じ 400ms。打っている途中の値で API を叩かない） */
@@ -180,6 +181,9 @@ const currentSymbolLookup = computed(() =>
 
 const customer = computed(() => currentCustomerLookup.value?.customer ?? null)
 const symbol = computed(() => currentSymbolLookup.value?.symbol ?? null)
+
+/** 顧客詳細の子ルートとして描いている（顧客カードは親が出す） */
+const inCustomerDetail = computed(() => route.name === 'customer-order-entry')
 
 /*
  * 照会結果のヒント。照会の失敗は何も出さない（モックと同じ。入力は続けられ、送信時に理由が出る）。
@@ -478,7 +482,7 @@ operatorStore.ensureLoaded().then(() => {
           @submit="submitInput"
         >
           <template #customer>
-            <OrderCustomerBar v-if="customer" :customer="customer" />
+            <OrderCustomerBar v-if="customer && !inCustomerDetail" :customer="customer" />
           </template>
         </OrderEntryForm>
       </template>

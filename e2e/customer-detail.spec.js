@@ -150,7 +150,8 @@ const ORDER_ENTRY_URL = new RegExp(`/customers/${YAMADA.ID}/order-entry\\?`)
 
 /**
  * 注文入力タブに移り、顧客カードとタブを残したまま新規注文の入力フォームが出て、
- * 部店・口座番号が引き継がれている
+ * 部店・口座番号が引き継がれている。顧客は口座番号の横に出て、フォームの上の顧客バーは
+ * 顧客カードと二重になるので出さない
  */
 async function expectOrderEntryCustomer(page) {
   await expect(page).toHaveURL(ORDER_ENTRY_URL)
@@ -162,7 +163,8 @@ async function expectOrderEntryCustomer(page) {
   await expect(page.getByTestId('order-entry-form')).toBeVisible()
   await expect(page.getByTestId('order-entry-branch')).toHaveValue(YAMADA.部店コード)
   await expect(page.getByTestId('order-entry-account')).toHaveValue(String(YAMADA.口座番号))
-  await expect(page.getByTestId('order-entry-customer-name')).toHaveText(YAMADA.顧客名)
+  await expect(page.getByTestId('order-entry-account-hint')).toHaveText(YAMADA.顧客名)
+  await expect(page.getByTestId('order-entry-customer-bar')).toHaveCount(0)
 }
 
 /** 仮計算の入力（CDT-39〜44 で共通） */

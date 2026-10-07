@@ -145,8 +145,10 @@ test.describe('操作ログ（実 API 接続）', () => {
     // 対象機能の選択肢は API の件数 +「全て」
     const options = page.getByTestId('activity-logs-target-type').locator('option')
     await expect(options).toHaveCount(targets.length + 1)
+    // 完全一致で数える（「注文」が「滞留注文…」の選択肢にも部分一致するため。#38 で orders が入った）
     for (const target of targets) {
-      await expect(options.filter({ hasText: target['対象種別名'] })).toHaveCount(1)
+      const name = target['対象種別名'].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      await expect(options.filter({ hasText: new RegExp(`^\\s*${name}\\s*$`) })).toHaveCount(1)
     }
 
     // 4 状態のうちローディング・エラーは残らない

@@ -56,7 +56,7 @@ async function firstCellText(page, column) {
   return (text ?? '').trim()
 }
 
-/** 顧客名のリンク（testid は customer-search-detail-<行 ID>） */
+/** 顧客名（testid は customer-search-detail-<行 ID>）。押下は行に伝わり顧客詳細へ移る */
 function detailLinksOf(page) {
   return page
     .getByTestId('customer-search-table')

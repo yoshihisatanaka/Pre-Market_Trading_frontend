@@ -5,6 +5,7 @@ import { server } from '@/mocks/server'
 import { blackoutDates, canceledBlackoutDates } from '@/mocks/fixtures/blackoutDates'
 import { BLACKOUT_DATES_PAGE_SIZE, useBlackoutDatesStore } from './blackoutDates'
 import { useMarketStatusStore } from './marketStatus'
+import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
 
 /*
  * フィクスチャはバックエンドの生の形（日本語キー / 受注不可日は YYYYMMDD の integer）なので、
@@ -240,7 +241,7 @@ describe('useBlackoutDatesStore', () => {
     expect(ids(store.items)).toEqual(expectedIds(secondPage))
   })
 
-  it('[BDS-10] limit は表示件数の定数だがリクエストには載らない', async () => {
+  it('[BDS-10] limit は既定の表示件数で、リクエストにも載る', async () => {
     let sentParams = null
     server.use(
       http.get('*/api/masters/blackout-dates', ({ request }) => {
@@ -252,10 +253,10 @@ describe('useBlackoutDatesStore', () => {
 
     await store.load()
 
-    // ページャーの表示には使うが、実 API の一覧は 1 ページ 50 件で固定されていて
-    // limit というクエリを持たない（api 層が落としている）
+    // 50 件固定の特例はやめ、全画面共通の DEFAULT_PAGE_SIZE に従う（#21）
+    expect(PAGE_SIZE).toBe(DEFAULT_PAGE_SIZE)
     expect(store.limit).toBe(PAGE_SIZE)
-    expect(sentParams.has('limit')).toBe(false)
+    expect(sentParams.get('limit')).toBe(String(PAGE_SIZE))
   })
 
   it('[BDS-11] create が成功すると一覧が読み直され登録した日付が現れる', async () => {

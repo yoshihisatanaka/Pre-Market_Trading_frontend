@@ -119,14 +119,13 @@ describe('api/blackoutDates', () => {
     expect(lastRequest.params.has('blackout_date')).toBe(false)
   })
 
-  it('[BDA-03] limit は渡されても送らない（実 API が受け付けない）', async () => {
+  it('[BDA-03] limit と offset は渡した値で送る', async () => {
     record('get', '*/api/masters/blackout-dates', listBody([]))
 
-    // ストア（useCrudList）は表示件数を limit として渡してくるが、
-    // 実 API の一覧は 1 ページ 50 件で固定されていて limit というクエリを持たない
-    await fetchBlackoutDates({ limit: 50, offset: 50 })
+    // ストア（useCrudList）が表示件数を limit として渡してくる（#21 で実 API に入った）
+    await fetchBlackoutDates({ limit: 20, offset: 50 })
 
-    expect(lastRequest.params.has('limit')).toBe(false)
+    expect(lastRequest.params.get('limit')).toBe('20')
     expect(lastRequest.params.get('offset')).toBe('50')
   })
 

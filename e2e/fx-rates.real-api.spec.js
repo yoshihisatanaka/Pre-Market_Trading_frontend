@@ -514,7 +514,7 @@ test.describe('為替マスタ（実 API 接続）', () => {
     expect(now.源泉レート).toBeCloseTo(withholdingOf(RATE.alt), 2)
   })
 
-  test('[FXR-08] 源泉レートを入れ直さずに公示レートだけ変えると、源泉レートは元の値のまま残る', async ({
+  test('[FXR-08] 公示レートだけ変えても源泉レートが残る（画面からも、源泉レートを送らない PUT でも）', async ({
     page,
     playwright,
   }) => {
@@ -549,6 +549,19 @@ test.describe('為替マスタ（実 API 接続）', () => {
     await expectCards(page, RATE.keep, kept)
 
     await expectApiRate(api, RATE.keep, kept)
+
+    /*
+     * PUT は FxUpdateRequest の部分更新で、本文に含めなかった 源泉レート は残る（#34 で確定）。
+     * 画面は源泉レートを常に送るので、キーごと落とした本文は API 直接で確かめる
+     */
+    const active = await fetchTodayActive(api)
+    const res2 = await api.put(`${API_PATH}/${active.ID}`, {
+      data: { 基準日: TODAY_API, 通貨コード: CURRENCY_CODE, 為替レート: RATE.alt },
+    })
+    expect(res2.ok(), `源泉レート抜きの PUT が通らない: ${res2.status()} ${await res2.text()}`).toBe(
+      true,
+    )
+    await expectApiRate(api, RATE.alt, kept)
     await api.dispose()
   })
 })

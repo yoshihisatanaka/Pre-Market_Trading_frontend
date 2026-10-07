@@ -118,6 +118,8 @@ test.describe('手数料優遇マスタ（実 API 接続）', () => {
   skipUnlessRealApi(test)
 
   test.beforeAll(async ({ playwright }) => {
+    // 顧客の全件を引くので既定の 30 秒では足りない（2026-10-07 実測で超過）
+    test.setTimeout(180_000)
     const api = await apiContext(playwright)
     const removed = await cleanupMarkedRows(api)
     if (removed.length > 0) console.log(`[beforeAll] 前回の残骸を削除した: ${removed.join(', ')}`)
@@ -129,6 +131,7 @@ test.describe('手数料優遇マスタ（実 API 接続）', () => {
 
   test.afterAll(async ({ playwright }) => {
     // 試験用の行を有効なまま残さない（論理削除なので行自体は DB に残る）
+    test.setTimeout(180_000)
     const api = await apiContext(playwright)
     const removed = await cleanupMarkedRows(api)
     if (removed.length > 0) console.log(`[afterAll] 試験用の行を削除した: ${removed.join(', ')}`)

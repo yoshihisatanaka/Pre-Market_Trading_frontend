@@ -22,3 +22,4 @@
 | NOC-10 | 既定 | フォームを submit する | `submit` が 1 回 emit される | 実装済 |
 | NOC-11 | expiryOptions 2 件 | マウントする | 期間指定の選択肢がその 2 件の表示名で並ぶ | 実装済 |
 | NOC-12 | `customer` スロットに内容 | マウントする | フォーム内にスロットの内容が描かれる | 実装済 |
+| NOC-13 | — | 受注者に `'T001'` を入れる | 欄の `maxlength` が `ORDER_PERSON_MAX_LENGTH`（4）で、値が `orderPerson` に入る | 実装済 |

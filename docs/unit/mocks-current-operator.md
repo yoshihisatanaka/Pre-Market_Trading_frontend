@@ -16,3 +16,4 @@
 | MCO-02 | なし | 知らないコード（`test-user`）・空文字・`null`・`undefined` で `currentOperatorFor()` | どれも `supervisorOperator` | 実装済 |
 | MCO-03 | 既定の handlers | `X-User-Code: <salesOperator のコード>` を付けて `GET /api/auth/me` | 本文が `salesOperator` | 実装済 |
 | MCO-04 | 既定の handlers | `X-User-Code` を付けずに `GET /api/auth/me` | 本文が `supervisorOperator` | 実装済 |
+| MCO-05 | `devOperators` の 4 人 | それぞれの `権限.depositary` を見る | ロールが `manager` / `supervisor` のときだけ true、`sales` / `ifa` は false（バックエンドの預託先参照権限の既定と同じ） | 実装済 |

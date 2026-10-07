@@ -205,7 +205,7 @@ describe('OrderAmendView', () => {
     expect(find(wrapper, 'order-amend-description').text()).toContain(`注文ID #${raw.ID}`)
     expect(summaryPairs(wrapper)).toEqual([
       ['注文ID', `#${raw.ID}`],
-      ['顧客', `部店 ${raw.部店} ／ 口座 ${raw.口座番号}`],
+      ['顧客', `${raw.顧客名} 部店 ${raw.部店} ／ 口座 ${raw.口座番号}`],
       ['銘柄', raw.Ticker],
       ['売買', SIDE_LABELS[raw.売買区分]],
       [
@@ -216,9 +216,30 @@ describe('OrderAmendView', () => {
       ['出来数量', `${formatQuantity(raw.出来数量)}株`],
       ['受注日時', formatMonthDayTime(`${raw.受注日}T${raw.受注時刻}`)],
     ])
+    expect(find(wrapper, 'order-amend-customer').text()).toBe(
+      `${raw.顧客名} 部店 ${raw.部店} ／ 口座 ${raw.口座番号}`,
+    )
     expect(find(wrapper, 'order-amend-original').text()).toBe('3,000株 ／ 成行')
-    expect(find(wrapper, 'order-amend-status').text()).toBe(orderStatusLabel(raw.処理状況))
+    // 状況はサーバの 処理状況名
+    expect(find(wrapper, 'order-amend-status').text()).toBe(raw.処理状況名)
     expect(find(wrapper, 'order-amend-status').text()).toBe('一部出来')
+  })
+
+  it('[OAV-25] 顧客名・処理状況名の無い応答（古いサーバ）では、顧客は部店・口座だけ、状況はコードの名前', async () => {
+    const raw = PARTIAL
+    const legacy = Object.fromEntries(
+      Object.entries(raw).filter(([key]) => !['顧客名', '処理状況名'].includes(key)),
+    )
+    server.use(
+      http.get(DETAIL, () => HttpResponse.json({ order: legacy, executions: [], events: [] })),
+    )
+    const { wrapper } = await mountView(raw.ID)
+    await settle()
+
+    expect(find(wrapper, 'order-amend-customer').text()).toBe(
+      `部店 ${raw.部店} ／ 口座 ${raw.口座番号}`,
+    )
+    expect(find(wrapper, 'order-amend-status').text()).toBe(orderStatusLabel(raw.処理状況))
   })
 
   it('[OAV-06] 入力欄は注文の現在値で埋まる', async () => {

@@ -10,7 +10,8 @@ import {
   ORDER_METHOD_OPTIONS,
   ORDER_TYPE,
   optionLabel,
-  SECURITIES_DELIVERY_OTHER,
+  ORDER_PERSON_MAX_LENGTH,
+  SECURITIES_DELIVERY_DEFAULT,
   SETTLEMENT_CURRENCY_OPTIONS,
   SIDE,
   SIDE_SHORT_LABELS,
@@ -69,6 +70,7 @@ const MESSAGES = {
   orderDateTooOld: '受注日が7日間以前の注文は入力できません。',
   orderTimeFormat: '受注時刻は数値4桁（hhnn）で入力してください。',
   orderPersonRequired: '受注者を入力してください。',
+  orderPersonTooLong: `受注者は${ORDER_PERSON_MAX_LENGTH}文字以内で入力してください。`,
 }
 
 function pad2(value) {
@@ -287,8 +289,24 @@ export function validateOrderForm(form, { symbol, symbolLookupFailed = false, to
       form.vwap === VWAP.VWAP && symbol && symbol.vwapTarget !== '1' ? MESSAGES.vwapNotTarget : '',
     orderDate: orderDate.error ?? '',
     orderTime: isOrderTime(form.orderTime) ? '' : MESSAGES.orderTimeFormat,
-    orderPerson: form.orderPerson.trim() ? '' : MESSAGES.orderPersonRequired,
+    orderPerson: orderPersonError(form.orderPerson),
   }
+}
+
+/** 受注者の入力の不備（無ければ ''）。サーバは 1〜4 文字を受ける（OrderRequest.受注者） */
+function orderPersonError(text) {
+  const value = String(text ?? '').trim()
+  if (!value) return MESSAGES.orderPersonRequired
+  return value.length > ORDER_PERSON_MAX_LENGTH ? MESSAGES.orderPersonTooLong : ''
+}
+
+/**
+ * 受注者の初期値。ログイン中の社員コードが受注者に入る長さ（4 文字以内）のときだけ使う。
+ * 長いコードを入れておくと、開いた直後から検証で止まる値を既定にしてしまうので空にして入力させる。
+ */
+export function defaultOrderPerson(operatorCode) {
+  const code = String(operatorCode ?? '').trim()
+  return code.length <= ORDER_PERSON_MAX_LENGTH ? code : ''
 }
 
 /** validateOrderForm の結果に不備が 1 つでもあるか */
@@ -300,7 +318,7 @@ export function hasOrderFormErrors(errors) {
  * 送る注文（src/api/orderEntry.js の OrderInput）を組み立てる。
  * validateOrderForm を通ったフォームにだけ使う（数量・日付は変換できる前提）。
  *
- * 画面に欄の無い 取引（委託）と 証券受渡方法（他社保管）はここで固定値を入れる。
+ * 画面に欄の無い 取引（委託）と 証券受渡方法（当社保管）はここで固定値を入れる。
  *
  * @param {ReturnType<typeof createOrderForm>} form
  * @param {{ symbol: { symbolCode: string }, today: Date, createdBy: string }} context
@@ -321,7 +339,7 @@ export function buildOrderInput(form, { symbol, today, createdBy }) {
     expiryDate: form.expiryDate,
     settlementCurrency: form.settlementCurrency,
     depositCategory: form.depositCategory,
-    securitiesDelivery: SECURITIES_DELIVERY_OTHER,
+    securitiesDelivery: SECURITIES_DELIVERY_DEFAULT,
     transactionType: TRANSACTION_TYPE_CONSIGNMENT,
     solicitation: form.solicitation,
     orderMethod: form.orderMethod,

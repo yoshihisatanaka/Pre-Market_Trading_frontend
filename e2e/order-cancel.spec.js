@@ -25,20 +25,25 @@ const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 const SIDE_LABELS = { 1: '売り', 3: '買い' }
 
 /*
- * 処理状況コード → 名前。src/utils/orderTypes.js の ORDER_STATUS_NAMES の写し（使う分だけ）。
- * あのファイルは '@/utils/format' を import しており Playwright から読めないので再掲する。
+ * 状況の表示は注文詳細の応答の 処理状況名（サーバの名前）を使う。注文詳細は一覧と同じ派生項目を持つので、
+ * 期待値はフィクスチャの行の 処理状況名 から引く（アプリのコード表 src/utils/orderTypes.js の写しは使わない）。
  */
-const STATUS_LABELS = { '000': '未発注', '010': '一部出来', '011': '全部出来' }
+const statusNameOf = (row) => row.処理状況名
 
-// 使う注文。#36 は #30 の最新版（未発注）、#35 は一部出来、#41 は全部出来
+// 使う注文。#36 は #30 の最新版（未発注）、#35 は一部出来、#41 は全部出来、
+// #40 は注文エラー（処理状況 101。取消できる）、#39 は取消済（出来有。取消できない）
 const PENDING = latestVersionOf(30)
 const PARTIAL = fixtureRow(35)
 const FILLED = fixtureRow(41)
+const ORDER_ERROR = fixtureRow(40)
+
+/** アプリのコード表（src/utils/orderTypes.js）での 101 の名前。サーバの名前とは違う（OCN-11） */
+const APP_ORDER_ERROR_LABEL = 'Dream発注失敗'
 
 const cancelPath = (id) => `/orders/${id}/cancel`
 
-/** 取消対象（未約定残）の株数 */
-const cancelQuantityOf = (row) => row.数量 - row.出来数量
+/** 取消対象（未約定残）の株数。数量 − 出来数量（有効残数量は注文エラーで 0 になるので使わない） */
+const cancelQuantityOf = (row) => Math.max(row.数量 - row.出来数量, 0)
 
 /** 画面の要約で出す価格（「成行」「指値 143.50 ドル」） */
 function priceLabel(row) {
@@ -54,9 +59,7 @@ test.describe('注文取消', () => {
     await expect(page).toHaveURL(new RegExp(`${cancelPath(PARTIAL.ID)}$`))
     await expect(page.getByRole('heading', { name: '注文取消', exact: true })).toBeVisible()
     await expect(page.getByTestId('order-cancel-order-id')).toHaveText(`注文ID #${PARTIAL.ID}`)
-    await expect(page.getByTestId('order-cancel-status')).toHaveText(
-      STATUS_LABELS[PARTIAL.処理状況],
-    )
+    await expect(page.getByTestId('order-cancel-status')).toHaveText(statusNameOf(PARTIAL))
     await expect(page.getByTestId('order-cancel-summary').getByRole('definition')).toHaveText([
       PARTIAL.銘柄コード,
       SIDE_LABELS[PARTIAL.売買区分],
@@ -133,7 +136,7 @@ test.describe('注文取消', () => {
     await page.goto(cancelPath(FILLED.ID))
 
     await expect(page.getByTestId('order-cancel-locked')).toHaveText(
-      `この注文は取消できません（処理状況: ${STATUS_LABELS[FILLED.処理状況]}）。`,
+      `この注文は取消できません（処理状況: ${statusNameOf(FILLED)}）。`,
     )
     await expect(page.getByTestId('order-cancel-submit')).toHaveCount(0)
     await expect(page.getByTestId('order-cancel-back')).toBeVisible()
@@ -210,5 +213,34 @@ test.describe('注文取消', () => {
     await expect(page).toHaveURL(new RegExp(`${INQUIRY_PATH}\\?symbol=${SYMBOL}$`))
     await expect(page.getByTestId('order-inquiry-symbol')).toHaveValue(SYMBOL)
     await expect(rowsOf(page)).toHaveCount(1)
+  })
+
+  test('[OCN-11] 状況はサーバの処理状況名で出す（注文エラーは「発注失敗」）', async ({ page }) => {
+    // 前提: サーバの名前とアプリのコード表の名前が違う注文でないと、どちらを出したか判らない
+    expect(ORDER_ERROR.処理状況).toBe('101')
+    expect(statusNameOf(ORDER_ERROR)).not.toBe(APP_ORDER_ERROR_LABEL)
+
+    await page.goto(cancelPath(ORDER_ERROR.ID))
+
+    await expect(page.getByTestId('order-cancel-order-id')).toHaveText(`注文ID #${ORDER_ERROR.ID}`)
+    await expect(page.getByTestId('order-cancel-status')).toHaveText(statusNameOf(ORDER_ERROR))
+    await expect(page.getByTestId('order-cancel-locked')).toHaveCount(0)
+    await expect(page.getByTestId('order-cancel-submit')).toBeVisible()
+  })
+
+  test('[OCN-12] 取消対象（未約定残）は数量 − 出来数量で、注文エラーの有効残数量 0 は使わない', async ({
+    page,
+  }) => {
+    // 前提: 取消できるのに有効残数量が 0 の注文（数量 − 出来数量 と食い違う）
+    expect(ORDER_ERROR.有効残数量).toBe(0)
+    expect(cancelQuantityOf(ORDER_ERROR)).toBeGreaterThan(0)
+
+    await page.goto(cancelPath(ORDER_ERROR.ID))
+
+    await expect(page.getByTestId('order-cancel-order-id')).toHaveText(`注文ID #${ORDER_ERROR.ID}`)
+    await expect(page.getByTestId('order-cancel-quantity')).toHaveText(
+      `${formatQuantity(cancelQuantityOf(ORDER_ERROR))}株`,
+    )
+    await expect(page.getByTestId('order-cancel-submit')).toBeVisible()
   })
 })

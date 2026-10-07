@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { orderListResponse } from '../fixtures/orders'
 import { orderInquiryFxRate, orderInquiryRows } from '../fixtures/orderInquiry'
-import { detailError, nowIsoTimestamp, toNonNegativeInt } from './_shared'
+import { detailError, nowIsoTimestamp, toNonNegativeInt, toStatusList } from './_shared'
 
 /*
  * `GET /orders` は 2 つの画面が叩いている。
@@ -32,23 +32,6 @@ const CANCEL_REQUEST = ['003', '010', '131', '133', '141']
 const STATUS_NAMES = { '000': '未発注', '030': '未取消', '034': '取消済', '040': '訂正待ち' }
 const DISPLAY_NAMES = { '000': '未出来', '030': '取消中', '034': '取消済', '040': '訂正待ち' }
 
-/** d_注文 に列が無く、一覧（OrderItemResponse）だけが付ける派生項目。詳細の `order` からは落とす */
-const DERIVED_KEYS = [
-  '顧客名',
-  '部店名',
-  '売買区分名',
-  '注文ルート名',
-  '処理状況名',
-  '表示状況名',
-  '出来数量',
-  '取消数量',
-  '有効残数量',
-  '出来有無',
-  '集計対象',
-  '約定代金',
-  '約定代金_JPY',
-]
-
 let rows = structuredClone(orderInquiryRows)
 
 /** モックの注文をフィクスチャの内容に戻す（テスト間で訂正・取消の結果を持ち越さない） */
@@ -75,9 +58,13 @@ function setStatus(row, status) {
   }
 }
 
-/** 一覧の行 → 詳細の `order`（d_注文 の行の形。派生項目を持たない） */
+/**
+ * 一覧の行 → 詳細の `order`（OrderRecord）。一覧と同じ派生項目（顧客名・処理状況名・出来数量・
+ * 有効残数量 など）を持つ（docs/api/requests.md #3 ②）。注文ルート は DB の生値のままで、
+ * 正規化したコードは 注文ルートコード に入る（フィクスチャの 注文ルート はコードなので同じ値を写す）
+ */
 function toDetailOrder(row) {
-  return Object.fromEntries(Object.entries(row).filter(([key]) => !DERIVED_KEYS.includes(key)))
+  return { ...row, 注文ルートコード: row.注文ルート ?? null }
 }
 
 /** 一覧の行 → 詳細の `executions`（d_約定 の行）。出来数量ぶんを 1 件の約定にまとめて返す */
@@ -103,18 +90,20 @@ export const orderHandlers = [
     const branchCode = (params.get('branch_code') ?? '').trim()
     const accountNo = (params.get('account_no') ?? '').trim()
     const symbol = (params.get('symbol') ?? '').trim().toUpperCase()
-    const status = (params.get('status') ?? '').trim()
+    // 処理状況はカンマ区切りで複数指定できる（例: 032,034）
+    const statuses = toStatusList(params.get('status'))
     const limit = toNonNegativeInt(params.get('limit'), 50)
     const offset = toNonNegativeInt(params.get('offset'), 0)
 
-    // 部店・口座番号・処理状況は完全一致、銘柄は銘柄コードか Ticker の部分一致（大小文字を問わない）
+    // 部店・口座番号は完全一致、処理状況はカンマ区切りのどれかに一致、
+    // 銘柄は銘柄コードか Ticker の部分一致（大小文字を問わない）
     const matches = (row) =>
       (!branchCode || row.部店 === branchCode) &&
       (!accountNo || String(row.口座番号) === accountNo) &&
       (!symbol ||
         row.銘柄コード.toUpperCase().includes(symbol) ||
         (row.Ticker ?? '').toUpperCase().includes(symbol)) &&
-      (!status || row.処理状況 === status)
+      (statuses.length === 0 || statuses.includes(row.処理状況))
 
     const sorted = [...rows.filter(matches)].sort((a, b) =>
       params.get('sort') === 'asc' ? a.ID - b.ID : b.ID - a.ID,
@@ -136,7 +125,7 @@ export const orderHandlers = [
   /*
    * 1 件の詳細。同じ形のパス（/orders/csv-spec・/orders/dream-status など）も当たるので、
    * 数字でない ID は何も返さずに後ろのハンドラへ流す（MSW は undefined を「次へ」と扱う）。
-   * 実 API の `order` は d_注文 の行そのもの（`SELECT *`）なので、一覧の派生項目を落として返す。
+   * 実 API の `order` は d_注文 の行に一覧と同じ派生項目を足したもの（toDetailOrder）。
    */
   http.get('*/api/orders/:orderId', ({ params }) => {
     if (!/^\d+$/.test(params.orderId)) return undefined

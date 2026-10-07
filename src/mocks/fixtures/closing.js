@@ -1,8 +1,8 @@
 /*
  * みずほ注文締の締め状態。`GET /closing/status?closing_type=MIZUHO` の実 API と同じ形
- * （docs/api/openapi.json の ClosingStatusResponse。キーは日本語）。
+ * （docs/api/openapi.json の ClosingStatusResponse。キーは日本語。history は ClosingHistoryItem の配列で新しい順）。
  *
- * 既定は公開モックと同じく「受付中」で、状態変更の記録が無い（更新日時・実行者が null）。
+ * 既定は公開モックと同じく「受付中」で、状態変更の記録が無い（更新日時・実行者が null、history が空）。
  * 締め状態名の文言は仕様に enum が無いので仮置き（画面は 締め状態 のフラグだけを見る）。
  */
 
@@ -13,9 +13,13 @@ export const mizuhoClosingStatus = {
   締め状態名: '未締め',
   更新日時: null,
   実行者: null,
+  history: [],
 }
 
-/** 締め済み。単体テスト・E2E が server.use() / mockApi() で差し替えて使う */
+/**
+ * 締め済み。単体テスト・E2E が server.use() / mockApi() で差し替えて使う。
+ * 履歴は 締め（15:10・006）← 解除（14:55・007）← 締め（14:30・006）の 3 件（新しい順）
+ */
 export const closedMizuhoClosingStatus = {
   基準日: 20260928,
   締め種別: 'MIZUHO',
@@ -23,4 +27,36 @@ export const closedMizuhoClosingStatus = {
   締め状態名: '締め済',
   更新日時: '2026-09-28T15:10:00',
   実行者: '006',
+  history: [
+    {
+      ID: 3,
+      基準日: '20260928',
+      締め種別: 'MIZUHO',
+      操作区分: 'CLOSE',
+      締め状態: 1,
+      締め状態名: '締め済',
+      実行者: '006',
+      操作日時: '2026-09-28T15:10:00',
+    },
+    {
+      ID: 2,
+      基準日: '20260928',
+      締め種別: 'MIZUHO',
+      操作区分: 'RESET',
+      締め状態: 0,
+      締め状態名: '未締め(解除)',
+      実行者: '007',
+      操作日時: '2026-09-28T14:55:00',
+    },
+    {
+      ID: 1,
+      基準日: '20260928',
+      締め種別: 'MIZUHO',
+      操作区分: 'CLOSE',
+      締め状態: 1,
+      締め状態名: '締め済',
+      実行者: '006',
+      操作日時: '2026-09-28T14:30:00',
+    },
+  ],
 }

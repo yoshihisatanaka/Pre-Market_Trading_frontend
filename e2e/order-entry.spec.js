@@ -23,6 +23,7 @@ import { mockApi } from './helpers/mockApi'
 // 入口は顧客 ID 1 の顧客詳細の注文入力タブをクエリなしで直接開く（部店・口座番号は空のまま）。
 // /orders/new は口座番号のクエリが無いと顧客検索へ回る（NO-31）ので入口には使わない。
 // 既定モックは確定のたびに注文 ID を FIRST_ORDER_ID から採番する（ページを開くたびに初期化）。
+// 受注者は必須・4 文字以内で、MSW 版では空で始まる（NO-32 / NO-33）。確認へ進む行は fillOrder が受注者を入れる。
 
 const PATH = '/customers/1/order-entry'
 const ORDER_NEW_PATH = '/orders/new'
@@ -30,6 +31,15 @@ const ORDER_NEW_PATH = '/orders/new'
 const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 
 const BRANCH = '123'
+
+/*
+ * 受注者（必須・4 文字以内。src/utils/orderEntryOptions.js の ORDER_PERSON_MAX_LENGTH と同じ値）。
+ * 初期値は社員コードが 4 文字以内のときだけ入るが、MSW の /auth/me の操作者コード
+ * （src/mocks/fixtures/currentOperator.js）はどれも 5 文字以上なので、MSW 版では空で始まる。
+ * 確認画面へ進む行はこの値を入れてから送信する
+ */
+const ORDER_PERSON = '001'
+const ORDER_PERSON_MAX_LENGTH = 4
 
 // フィクスチャはバックエンドの生の形（日本語キー・口座番号は integer）
 const customerOf = (accountNumber) => customers.find((row) => row.口座番号 === accountNumber)
@@ -72,16 +82,23 @@ function sideButton(page, name) {
   return page.getByTestId('order-entry-side').getByRole('button', { name, exact: true })
 }
 
-/** 部店・口座番号・ティッカー・売買・数量を入れる（ほかは既定値のまま） */
+/** 部店・口座番号・ティッカー・売買・数量・受注者を入れる（ほかは既定値のまま） */
 async function fillOrder(
   page,
-  { account = String(PLAIN.口座番号), ticker = AAPL.Ticker, side = '買い', quantity = '10' } = {},
+  {
+    account = String(PLAIN.口座番号),
+    ticker = AAPL.Ticker,
+    side = '買い',
+    quantity = '10',
+    orderPerson = ORDER_PERSON,
+  } = {},
 ) {
   await page.getByTestId('order-entry-branch').fill(BRANCH)
   await page.getByTestId('order-entry-account').fill(account)
   await page.getByTestId('order-entry-ticker').fill(ticker)
   if (side) await sideButton(page, side).click()
   if (quantity) await page.getByTestId('order-entry-quantity').fill(quantity)
+  if (orderPerson) await page.getByTestId('order-entry-order-person').fill(orderPerson)
 }
 
 async function submitInput(page) {
@@ -305,6 +322,33 @@ test.describe('新規注文 入力の不備とサーバの判定', () => {
     await expect(page.getByTestId('order-entry-warnings')).toHaveCount(0)
   })
 
+  test('[NO-32] 受注者は空で始まり、4 文字までしか入らない', async ({ page }) => {
+    await openForm(page)
+
+    const orderPerson = page.getByTestId('order-entry-order-person')
+    await expect(orderPerson).toHaveValue('')
+    await expect(orderPerson).toHaveAttribute('maxlength', String(ORDER_PERSON_MAX_LENGTH))
+
+    // 1 文字ずつ打つ（利用者の入力と同じく maxlength で止まる）
+    await orderPerson.pressSequentially('12345')
+    await expect(orderPerson).toHaveValue('1234')
+  })
+
+  test('[NO-33] 受注者が空のまま送信すると受注者の下に理由が出て止まる', async ({ page }) => {
+    await openForm(page)
+    await fillOrder(page, { orderPerson: '' })
+    await submitInput(page)
+
+    await expect(
+      page.getByTestId('order-entry-form').getByRole('alert').filter({
+        hasText: '受注者を入力してください。',
+      }),
+    ).toBeVisible()
+    await expectStillInput(page)
+    await expect(page.getByTestId('order-entry-errors')).toHaveCount(0)
+    await expect(page.getByTestId('order-entry-warnings')).toHaveCount(0)
+  })
+
   test('[NO-14] 買いで成長投資枠を選ぶと預り売買区分の下に理由が出る', async ({ page }) => {
     await openForm(page)
     await fillOrder(page)
@@ -422,6 +466,7 @@ test.describe('新規注文 確認', () => {
     await expect(page.getByTestId('order-readback-market-expiry')).toHaveText(
       `レギュラー ／ ${expiryLabel}`,
     )
+    await expect(page.getByTestId('order-readback-order-person')).toHaveText(ORDER_PERSON)
 
     // 成行の概算は 前日終値 × 数量、円貨は為替マスタの直近レートを掛ける
     const usd = Math.round(quantity * AAPL.前日終値 * 100) / 100
@@ -508,10 +553,13 @@ test.describe('新規注文 確定と次の注文', () => {
     await expect(page.getByTestId('order-entry-account')).toHaveValue(String(PLAIN.口座番号))
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue('')
     await expect(page.getByTestId('order-entry-quantity')).toHaveValue('')
+    // 受注者は社員コードの初期値に戻る（MSW の操作者コードは 5 文字以上なので空）
+    await expect(page.getByTestId('order-entry-order-person')).toHaveValue('')
 
     await page.getByTestId('order-entry-ticker').fill(AAPL.Ticker)
     await sideButton(page, '買い').click()
     await page.getByTestId('order-entry-quantity').fill('10')
+    await page.getByTestId('order-entry-order-person').fill(ORDER_PERSON)
     await submitInput(page)
     await expect(page.getByTestId('order-entry-confirm')).toBeVisible()
     await confirmOrder(page)

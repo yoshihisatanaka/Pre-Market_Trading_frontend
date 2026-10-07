@@ -11,6 +11,7 @@ const latestUsdFxRate = fxRates.at(-1)
 import { FIRST_ORDER_ID } from '@/mocks/fixtures/orderEntry'
 import { HOLIDAY_TYPE } from '@/utils/apiEnums'
 import { CALENDAR_LOOKAHEAD_DAYS } from '@/utils/orderEntryForm'
+import { ORDER_PERSON_MAX_LENGTH, SECURITIES_DELIVERY_DEFAULT } from '@/utils/orderEntryOptions'
 import { useOrderEntryStore } from './orderEntry'
 
 /*
@@ -56,7 +57,7 @@ function order(overrides = {}) {
     expiryDate: '2026-09-29',
     settlementCurrency: '0',
     depositCategory: '0',
-    securitiesDelivery: '500',
+    securitiesDelivery: SECURITIES_DELIVERY_DEFAULT,
     transactionType: '100',
     solicitation: '1',
     orderMethod: '3',
@@ -66,7 +67,8 @@ function order(overrides = {}) {
     vwap: false,
     orderDate: '2026-09-29',
     orderTime: '10:30',
-    orderPerson: 'test-user',
+    // 受注者は 1〜4 文字（MSW も 4 文字を超えると 422 を返す）
+    orderPerson: 'T'.padEnd(ORDER_PERSON_MAX_LENGTH, '0'),
     forced: false,
     createdBy: 'test-user',
     ...overrides,

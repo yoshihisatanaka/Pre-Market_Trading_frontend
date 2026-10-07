@@ -30,3 +30,4 @@
 | COS-10 | `/auth/me` が `salesOperator`（master なし・order あり）を返す | `ensureLoaded()` を待つ | `can('master')` が false、`can('order')` が true（権限ごとにフラグどおり読む） | 実装済 |
 | COS-11 | `/auth/me` の応答が遅い | `ensureLoaded()` を await せずに `loading` を読む | 呼んだ直後は true、完了後に false | 実装済 |
 | COS-12 | 既定モックで読み終えたあと | 定義に無い権限キー（`'unknown'`）で `can()` を呼ぶ | false（知らない権限を持っているとは読まない） | 実装済 |
+| COS-13 | 既定モック（supervisorOperator・`depositary: true`）/ `/auth/me` が `salesOperator`（`depositary: false`） | `ensureLoaded()` を待つ | `can('depositary')` が true / false（預託先参照権限もフラグどおり読む） | 実装済 |

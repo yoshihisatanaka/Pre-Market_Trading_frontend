@@ -24,6 +24,17 @@ export function toNonNegativeInt(value, fallback) {
 }
 
 /**
+ * `status` のカンマ区切り（GET /orders・GET /executions の処理状況。例: 032,034）→ コードの配列。
+ * 空の要素は落とす。指定が無ければ []
+ */
+export function toStatusList(value) {
+  return (value ?? '')
+    .split(',')
+    .map((code) => code.trim())
+    .filter(Boolean)
+}
+
+/**
  * 実 API の ErrorResponse（`{ detail: string }`）と同じ形で返す。
  * 実 API 側は共通のモデルなので、マスタごとに分けず 1 つで使う。
  */

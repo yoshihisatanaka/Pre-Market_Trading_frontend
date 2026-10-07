@@ -67,7 +67,13 @@ const summaryItems = computed(() => {
     { label: '注文ID', value: `#${target.id}` },
     {
       label: '顧客',
-      value: `部店 ${target.branchCode || '—'} ／ 口座 ${target.accountNumber || '—'}`,
+      value: [
+        target.customerName,
+        `部店 ${target.branchCode || '—'} ／ 口座 ${target.accountNumber || '—'}`,
+      ]
+        .filter(Boolean)
+        .join(' '),
+      testid: 'order-amend-customer',
     },
     { label: '銘柄', value: target.symbol || '—' },
     { label: '売買', value: sideLabels[target.side] ?? '—' },
@@ -126,6 +132,9 @@ const marketScopeOptions = computed(() => {
   }
   return [...MARKET_SCOPE_OPTIONS, { value: current, label: current }]
 })
+
+/** 処理状況の名前。サーバの 処理状況名 を使い、無い応答のときだけコードの写しで引く */
+const statusLabel = computed(() => order.value?.statusName || orderStatusLabel(order.value?.status))
 
 /** 訂正できない状況のときは、フォームを押せなくして理由を出す */
 const locked = computed(() => !order.value?.amendable)
@@ -274,7 +283,7 @@ function goBack() {
       <BaseCard title="訂正対象注文">
         <template #header-actions>
           <BaseBadge variant="info" data-testid="order-amend-status">
-            {{ orderStatusLabel(order.status) }}
+            {{ statusLabel }}
           </BaseBadge>
         </template>
 
@@ -287,7 +296,7 @@ function goBack() {
         </template>
 
         <BaseAlert v-if="locked" variant="warning" data-testid="order-amend-locked">
-          この注文は訂正できません（処理状況: {{ orderStatusLabel(order.status) }}）。
+          この注文は訂正できません（処理状況: {{ statusLabel }}）。
         </BaseAlert>
 
         <form v-else class="order-amend__form" data-testid="order-amend-form" @submit.prevent="submit">

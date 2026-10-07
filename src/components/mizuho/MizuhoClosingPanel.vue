@@ -58,10 +58,12 @@ const stateDescription = computed(() =>
 )
 
 /*
- * 状態変更履歴。実 API は最後の 1 回の変更（更新日時 / 実行者）しか返さないので 1 行だけ出す。
- * 何をしたかは今の状態から決まる（締め済なら最後の変更は締め、受付中なら締め解除）。
+ * 状態変更履歴。src/api/closing.js の ClosingStatus.history（新しい順。件数は api 層が決める）を
+ * 1 行ずつ出す。
  */
-const historyAction = computed(() => (closed.value ? '締め実行' : '締め解除'))
+const HISTORY_ACTION_LABELS = { close: '締め実行', reopen: '締め解除' }
+
+const history = computed(() => props.status?.history ?? [])
 
 /*
  * カードの色は「データあり」のときだけ状態で変える（読めていない間は中立の色）。
@@ -141,15 +143,18 @@ const cardClass = computed(() => ({
 
       <div class="mizuho-closing__history">
         <p class="mizuho-closing__history-title">状態変更履歴</p>
-        <p
-          v-if="status.updatedAt"
-          class="mizuho-closing__history-row"
-          data-testid="mizuho-closing-history-row"
-        >
-          <strong>{{ formatDateTime(status.updatedAt) }}</strong>
-          <span>{{ historyAction }}</span>
-          <span>{{ status.operator || '—' }}</span>
-        </p>
+        <template v-if="history.length">
+          <p
+            v-for="(entry, index) in history"
+            :key="entry.id || `entry-${index}`"
+            class="mizuho-closing__history-row"
+            data-testid="mizuho-closing-history-row"
+          >
+            <strong>{{ formatDateTime(entry.operatedAt) }}</strong>
+            <span>{{ HISTORY_ACTION_LABELS[entry.action] ?? '—' }}</span>
+            <span>{{ entry.operator || '—' }}</span>
+          </p>
+        </template>
         <p v-else class="mizuho-closing__history-row" data-testid="mizuho-closing-history-empty">
           状態変更履歴はありません
         </p>

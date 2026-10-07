@@ -50,7 +50,7 @@ const SIDES = {
   buy: { code: '3', option: '買い', cell: '買', card: 'executions-summary-buy', label: '買い約定' },
 }
 
-/** 列の並び（src/views/ExecutionListView.vue の BASE_COLUMNS と、見られるロールだけの「預託先」） */
+/** 列の並び（src/views/ExecutionListView.vue の BASE_COLUMNS と、預託先参照権限があるときだけの「預託先」） */
 const BASE_COLUMNS = [
   '約定ID',
   '注文ID',
@@ -62,13 +62,11 @@ const BASE_COLUMNS = [
   '約定数量',
   '約定単価(USD)',
   '約定代金(USD)',
+  '約定金額(円)',
   '約定日時',
   '出来状況',
 ]
 const ROUTE_COLUMN = '預託先'
-
-// 預託先を見られるロール（ExecutionListView.vue の ROUTE_VIEWER_ROLES）
-const ROUTE_VIEWER_ROLES = ['manager', 'supervisor']
 
 // 出来状況の表示名（ExecutionListView.vue の STATUS_DISPLAY）。知らないコードは応答の 処理状況名
 const STATUS_LABELS = {
@@ -376,14 +374,14 @@ test.describe('約定照会（実 API 接続）', () => {
     await expect(page.getByTestId('executions-side')).toHaveValue('')
   })
 
-  test('[EXR-09] 預託先の欄と列が /auth/me のロールに従って出し分けられる', async ({ page }) => {
+  test('[EXR-09] 預託先の欄と列が /auth/me の預託先参照権限に従って出し分けられる', async ({ page }) => {
     // /auth/me は起動時に main.js が引く。goto の前から待ち受ける
     const me = waitForApi(page, AUTH_ME_PATH)
     await openList(page)
     const res = await me
     expect(res.ok(), `${AUTH_ME_PATH} が ${res.status()} を返した`).toBe(true)
-    const role = (await res.json())?.ロールコード ?? ''
-    const canViewRoute = ROUTE_VIEWER_ROLES.includes(role)
+    // ロールではなく権限で決まる（ExecutionListView.vue の can('depositary')）
+    const canViewRoute = (await res.json())?.権限?.depositary === true
 
     await expect(page.getByTestId('executions-route')).toHaveCount(canViewRoute ? 1 : 0)
     // 見出しは 0 件でも出るとは限らない（表を出さない）ので、1 件以上のときだけ見る

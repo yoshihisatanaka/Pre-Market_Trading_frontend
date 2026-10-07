@@ -11,6 +11,7 @@ import { mizuhoOrders } from '@/mocks/fixtures/mizuhoOrders'
 import { codeEntries } from '@/mocks/fixtures/codes'
 import { useCodesStore } from '@/stores/codes'
 import { downloadBlob } from '@/utils/download'
+import { formatJpyUnit } from '@/utils/format'
 import MizuhoOperationsView from './MizuhoOperationsView.vue'
 
 /*
@@ -587,6 +588,43 @@ describe('MizuhoOperationsView', () => {
 
     expect(exists(second.wrapper, 'mizuho-executions-export-error')).toBe(false)
     expect(rows(second.wrapper)).toHaveLength(TOTAL)
+  })
+
+  it('[MZV-24] 状態変更履歴は応答の history を新しい順に 1 行ずつ出し、空なら「ありません」を出す', async () => {
+    // 既定モック（受付中・履歴なし）
+    const open = await mountView()
+    await settle()
+    expect(mizuhoClosingStatus.history).toHaveLength(0)
+    expect(exists(open.wrapper, 'mizuho-closing-history-empty')).toBe(true)
+    expect(exists(open.wrapper, 'mizuho-closing-history-row')).toBe(false)
+    open.wrapper.unmount()
+
+    // 締め済（履歴あり）
+    server.use(http.get(STATUS_PATH, () => HttpResponse.json(closedMizuhoClosingStatus)))
+    const { wrapper } = await mountView()
+    await settle()
+
+    const historyRows = wrapper.findAll('[data-testid="mizuho-closing-history-row"]')
+    expect(historyRows).toHaveLength(closedMizuhoClosingStatus.history.length)
+    const ACTION_LABELS = { CLOSE: '締め実行', RESET: '締め解除' }
+    closedMizuhoClosingStatus.history.forEach((entry, index) => {
+      expect(historyRows[index].text()).toContain(ACTION_LABELS[entry.操作区分])
+      expect(historyRows[index].text()).toContain(entry.実行者)
+    })
+    expect(exists(wrapper, 'mizuho-closing-history-empty')).toBe(false)
+  })
+
+  it('[MZV-25] 約定金額(円) の列に 約定代金_JPY を円表記で出す', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    const headers = find(wrapper, 'mizuho-executions-table')
+      .findAll('th')
+      .map((th) => th.text())
+    const column = headers.indexOf('約定金額(円)')
+    expect(column).toBeGreaterThanOrEqual(0)
+    expect(head.約定代金_JPY).toEqual(expect.any(Number))
+    expect(rows(wrapper)[0].findAll('td')[column].text()).toBe(formatJpyUnit(head.約定代金_JPY))
   })
 
   it('[MZV-23] 出来状況の選択肢はコードマスタ 約定出来状況 から来て、値は処理状況コード', async () => {

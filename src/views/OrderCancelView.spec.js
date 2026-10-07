@@ -25,6 +25,7 @@ const PENDING = byId(36) // 000 未発注
 const WORKING = byId(34) // 003 注文中
 const PARTIAL = byId(35) // 010 一部出来
 const FILLED = byId(41) // 011 全部出来（取消できない）
+const ERROR_ORDER = orderInquiryRows.find((row) => row.処理状況 === '101') // 101 注文エラー（取消できる）
 const MISSING_ID = Math.max(...orderInquiryRows.map((row) => row.ID)) + 100
 
 // 取消画面の売買は「買い / 売り」
@@ -163,7 +164,39 @@ describe('OrderCancelView', () => {
       ['市場区分', marketScopeLabel(raw.発注範囲)],
     ])
     expect(find(wrapper, 'order-cancel-quantity').text()).toBe('1,800株')
+    // 状況はサーバの 処理状況名（この行はコードの写しと同じ語）
+    expect(find(wrapper, 'order-cancel-status').text()).toBe(raw.処理状況名)
     expect(find(wrapper, 'order-cancel-status').text()).toBe(orderStatusLabel(raw.処理状況))
+  })
+
+  it('[OCV-16] 注文エラー（101）は状況にサーバの処理状況名を出し、取消対象は 数量 − 出来数量（有効残数量 0 を使わない）', async () => {
+    const raw = ERROR_ORDER
+    // サーバの名前とアプリの写しが違う行でないと「サーバの名前を使う」ことを確かめられない
+    expect(raw.処理状況名).not.toBe(orderStatusLabel(raw.処理状況))
+    expect(raw.有効残数量).toBe(0)
+    const { wrapper } = await mountView(raw.ID)
+    await settle()
+
+    expect(find(wrapper, 'order-cancel-status').text()).toBe(raw.処理状況名)
+    expect(exists(wrapper, 'order-cancel-locked')).toBe(false)
+    expect(find(wrapper, 'order-cancel-quantity').text()).toBe(
+      `${formatQuantity(raw.数量 - raw.出来数量)}株`,
+    )
+  })
+
+  it('[OCV-17] 処理状況名の無い応答（古いサーバ）では、状況はコードの写しの名前を出す', async () => {
+    const legacy = Object.fromEntries(
+      Object.entries(ERROR_ORDER).filter(([key]) => key !== '処理状況名'),
+    )
+    server.use(
+      http.get(DETAIL, () => HttpResponse.json({ order: legacy, executions: [], events: [] })),
+    )
+    const { wrapper } = await mountView(ERROR_ORDER.ID)
+    await settle()
+
+    expect(find(wrapper, 'order-cancel-status').text()).toBe(
+      orderStatusLabel(ERROR_ORDER.処理状況),
+    )
   })
 
   it('[OCV-06] 出来の有無で取消後の扱いの説明が変わる', async () => {
@@ -198,7 +231,8 @@ describe('OrderCancelView', () => {
     server.use(
       http.get(DETAIL, () =>
         HttpResponse.json({
-          order: { ...PENDING, 処理状況: INTERRUPTED },
+          // 処理状況名もサーバが付けるので、コードと揃えて差し替える
+          order: { ...PENDING, 処理状況: INTERRUPTED, 処理状況名: orderStatusLabel(INTERRUPTED) },
           executions: [],
           events: [],
         }),

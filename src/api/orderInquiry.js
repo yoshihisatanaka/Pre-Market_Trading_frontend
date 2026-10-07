@@ -19,8 +19,9 @@ import { ApiError, apiClient } from './client'
  *   - 取消・訂正の可否は 処理状況 のコードで決まる（下の CANCELABLE / AMENDABLE）
  *   - 訂正と自動分割（スライス）は別々の行で返る。画面は元注文ごとの 1 行に畳んで出すので、
  *     この層で `元注文ID` を手がかりにまとめる（groupOrders）
- *   - 出来状況の絞り込みは、処理状況コードをそのまま `status` に載せる。選択肢は
- *     コードマスタの `注文照会出来状況`（src/mocks/fixtures/codes.js）
+ *   - 出来状況の絞り込みは、コードマスタの `注文照会出来状況` のコードで受け、`status`
+ *     （カンマ区切りで複数指定可）に載せる。取消済（034）は 032,034、注文エラー（101）は 101,103 に
+ *     広げる（コードマスタの選択肢は代表の 1 コードしか持たない。docs/api/requests.md #28 ①）
  *
  * 仕様に書かれておらず、**推定で置いているもの**（処理をつなぐ前にバックエンドへ確かめる）:
  *   - `元注文ID` は訂正・分割の起点（最初の注文）を指す。訂正を重ねても孫ではなく起点を指す
@@ -70,18 +71,23 @@ import { ApiError, apiClient } from './client'
  * 訂正・取消の画面が読む 1 注文（`GET /orders/{order_id}`）のアプリ内モデル。
  *
  * @typedef {{
- *   id: string, branchCode: string, accountNumber: string, symbol: string,
+ *   id: string, branchCode: string, accountNumber: string, customerName: string, symbol: string,
  *   side: 'buy'|'sell'|'', quantity: number|null, orderType: string, limitPrice: number|null,
- *   marketScope: string, vwap: boolean, status: string, filledQuantity: number,
+ *   marketScope: string, vwap: boolean, status: string, statusName: string,
+ *   filledQuantity: number,
  *   orderedAt: string, amendable: boolean, cancelable: boolean,
  * }} OrderDetail
- *   symbol は Ticker（無ければ銘柄コード）。status は処理状況コード（名前は画面が
- *   src/utils/orderTypes.js で引く）。filledQuantity は約定の合計で、約定が無ければ 0。
+ *   symbol は Ticker（無ければ銘柄コード）。status は処理状況コード、statusName はサーバの
+ *   処理状況名（無い応答では ''。画面が src/utils/orderTypes.js で引く）。
+ *   filledQuantity はサーバの 出来数量（無い応答では約定の合計。約定が無ければ 0）。
+ *   有効残数量 は運ばない。注文エラー（101 / 103）は取消できるのに 0 で返り、取消画面の
+ *   「取消対象（未約定残）」には使えない（画面は 数量 − 出来数量 で出す）。
  *
- * 一覧の OrderInquiryOrder より項目が少ないのは、実 API の `order` が d_注文 の行そのもの
- * （バックエンドの get_order_detail は `SELECT * FROM d_注文`）で、一覧が付ける派生項目
- * （顧客名 / 表示状況名 / 出来数量 / 有効残数量 / 約定代金）を持たないため。openapi の `order` は
- * 型が付いていない（`additionalProperties: true`）ので、キーは実装から読んだ（docs/api/requests.md #3）。
+ * `order`（OrderRecord）は 2026-10-06 の回答で一覧と同じ派生項目（顧客名・処理状況名・表示状況名・
+ * 出来数量・有効残数量 など）を持つようになった（docs/api/requests.md #3 ②）。派生項目の無い応答
+ * （古いサーバ）でも画面が止まらないよう、無いときだけ従来の計算に落とす。
+ * 注文ルート は DB の生値、注文ルートコード が正規化したコード（預託先参照権限が無いと null）。
+ * この画面は預託先を使わないので運ばない。
  */
 
 /**
@@ -117,6 +123,12 @@ const SLICE_CHILD = 'SLICE_CHILD'
 const CANCELABLE = new Set(['000', '003', '010', '131', '133', '101', '103', '141'])
 const AMENDABLE = new Set(['000', '003', '010'])
 
+/**
+ * 出来状況の選択肢のコード（コードマスタ `注文照会出来状況`）→ `status` に載せる処理状況コード。
+ * 取消済と注文エラーは処理状況が 2 つずつあるので、代表のコードを両方に広げる
+ */
+const STATUS_QUERY = { '034': '032,034', 101: '101,103' }
+
 /** 訂正の結果の mode → アプリ内の名前 */
 const AMEND_MODES = { IN_PLACE: 'inPlace', CANCEL_REPLACE: 'cancelReplace' }
 
@@ -147,10 +159,9 @@ const STATUS_TONES = {
  *   branchCode?: string, accountNumber?: string, symbol?: string, executionStatus?: string,
  * }} [params]
  *   空文字は「条件なし」としてリクエストに載せない。
- *   executionStatus（出来状況）は処理状況コード（コードマスタ `注文照会出来状況` のコード）で受け、
- *   そのまま `status` に載せる。`status` はコードを 1 つしか受けない（2026-09-25 実測で
- *   `?status=101,003` は 400）ので、取消済は 034 だけ・注文エラーは 101 だけで絞る
- *   （032 / 103 を拾えないことは docs/api/requests.md に依頼してある）
+ *   executionStatus（出来状況）は処理状況コード（コードマスタ `注文照会出来状況` のコード）で受ける。
+ *   `status` はカンマ区切りで複数のコードを受けるので、取消済（034）は 032,034、
+ *   注文エラー（101）は 101,103 に広げて送る（STATUS_QUERY）。ほかのコードはそのまま送る
  * @returns {Promise<{ items: OrderInquiryGroup[], total: number }>}
  */
 export async function fetchOrderInquiry({
@@ -169,7 +180,7 @@ export async function fetchOrderInquiry({
       branch_code: branchCode || undefined,
       account_no: toAccountNo(accountNumber),
       symbol: symbol || undefined,
-      status: executionStatus || undefined,
+      status: executionStatus ? (STATUS_QUERY[executionStatus] ?? executionStatus) : undefined,
     },
   })
 
@@ -234,7 +245,7 @@ export async function amendOrder({ id, quantity, orderType, limitPrice, marketSc
  *
  * 本文（OrderCancelRequest）は任意で、何も載せない。
  *   理由   … 取消に理由は持たせない（2026-09-29 決定。API からも削除される予定）
- *   取消者 … 送らない（未指定時の既定は "user"。操作者から解決されるかは docs/api/requests.md で確認中）
+ *   取消者 … 送らない（サーバが認証情報の操作者で記録し、本文の値は無視する。docs/api/requests.md #28 ③）
  *
  * @param {{ id: string }} params
  * @returns {Promise<CancelResult>} 受け付けられなければ ApiError（400 は理由付き）
@@ -292,25 +303,29 @@ function toOrder(raw) {
 }
 
 /**
- * 注文詳細の `order`（d_注文 の行）と `executions`（d_約定 の行）→ アプリ内モデル。
+ * 注文詳細の `order`（OrderRecord）と `executions`（d_約定 の行）→ アプリ内モデル。
  *
- * d_注文 の列名は一覧の OrderItemResponse と同じ日本語名なので、読み方も toOrder に揃える。
+ * 列名は一覧の OrderItemResponse と同じ日本語名なので、読み方も toOrder に揃える。
  * 違うのは次の 2 点。
- *   - 出来数量の列が無いので、約定の `約定数量` を合計する
- *   - `指値単価` は decimal(15,4) で、型の無い `order` を通ると数値の文字列（'410.0000'）で
- *     来うる。数値と数値の文字列の両方を受ける
+ *   - 派生項目（出来数量 / 処理状況名 / 顧客名）はサーバの値を使い、無い応答のときだけ
+ *     出来数量を約定の `約定数量` の合計で代える（名前は代えずに空にし、画面が補う）
+ *   - `指値単価` は decimal(15,4) で、数値の文字列（'410.0000'）で来うる。数値と数値の文字列の両方を受ける
  */
 function toOrderDetail(raw, executions) {
   const status = raw?.処理状況 ?? ''
-  const filledQuantity = (Array.isArray(executions) ? executions : []).reduce(
-    (sum, execution) => sum + (toDecimalOrNull(execution?.約定数量) ?? 0),
-    0,
-  )
+  const serverFilled = toDecimalOrNull(raw?.出来数量)
+  const filledQuantity =
+    serverFilled ??
+    (Array.isArray(executions) ? executions : []).reduce(
+      (sum, execution) => sum + (toDecimalOrNull(execution?.約定数量) ?? 0),
+      0,
+    )
 
   return {
     id: toIdString(raw?.ID),
     branchCode: raw?.部店 ?? '',
     accountNumber: raw?.口座番号 == null ? '' : String(raw.口座番号),
+    customerName: raw?.顧客名 ?? '',
     symbol: raw?.Ticker || raw?.銘柄コード || '',
     side: SIDES[raw?.売買区分] ?? '',
     quantity: toDecimalOrNull(raw?.数量),
@@ -319,6 +334,9 @@ function toOrderDetail(raw, executions) {
     marketScope: raw?.発注範囲 ?? '',
     vwap: Number(raw?.VWAP区分) === 1,
     status,
+    // 処理状況名（未発注 / 注文中 …）。表示状況名（未出来 / 取消中 …）は一覧の出来状況の語で、
+    // 訂正・取消の画面が出す「処理状況」とは別の語なので使わない
+    statusName: raw?.処理状況名 ?? '',
     filledQuantity,
     orderedAt: toOrderedAt(raw?.受注日, raw?.受注時刻),
     amendable: AMENDABLE.has(status),

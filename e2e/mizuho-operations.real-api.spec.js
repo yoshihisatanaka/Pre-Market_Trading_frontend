@@ -307,8 +307,10 @@ async function operateClosing(page, action) {
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expectClosingCard(page, action === 'close')
   await expect(page.getByTestId('mizuho-operations-notice')).toContainText(spec.notice)
-  // 操作の応答には 更新日時 / 実行者 が載るので、履歴の 1 行がこの操作で出る
-  await expect(page.getByTestId('mizuho-closing-history-row')).toContainText(spec.historyAfter)
+  // 状態変更履歴は新しい順（history[]）なので、先頭の行がこの操作になる
+  await expect(page.getByTestId('mizuho-closing-history-row').first()).toContainText(
+    spec.historyAfter,
+  )
   return JSON.parse(body)
 }
 

@@ -535,7 +535,7 @@ const PROBE_ORDER = {
   expiryDate: '2026-09-30',
   settlementCurrency: '0',
   depositCategory: '0',
-  securitiesDelivery: '500',
+  securitiesDelivery: '100',
   transactionType: '100',
   solicitation: '1',
   orderMethod: '3',

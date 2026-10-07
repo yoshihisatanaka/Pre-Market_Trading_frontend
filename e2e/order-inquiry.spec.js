@@ -30,12 +30,22 @@ const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 
 const allRowIds = expectedRowIds(orderInquiryRows)
 
-/** 処理状況コードで絞った生の行（既定ハンドラは完全一致で絞る） */
-const withStatus = (code) => orderInquiryRows.filter((row) => row.処理状況 === code)
+/*
+ * 選択肢のコード → API の status に載る処理状況コード。src/api/orderInquiry.js の STATUS_QUERY の写し
+ * （api 層は import.meta.env を辿る api/client.js に依存しており Playwright からは import できない）。
+ * 取消済（034）は 032,034、注文エラー（101）は 101,103 に広げて送る。既定モックに 032 / 103 の行は無い
+ */
+const STATUS_QUERY = { '034': ['032', '034'], 101: ['101', '103'] }
+
+/** 処理状況コードで絞った生の行（既定ハンドラはカンマ区切りのどれかと完全一致で絞る） */
+const withStatus = (code) => {
+  const codes = STATUS_QUERY[code] ?? [code]
+  return orderInquiryRows.filter((row) => codes.includes(row.処理状況))
+}
 
 /*
  * 出来状況（画面の名称）→ 処理状況コード。選択肢はコードマスタ 注文照会出来状況
- * （src/mocks/fixtures/codes.js）で、コードは URL の status と API の status にそのまま載る。
+ * （src/mocks/fixtures/codes.js）で、コードは URL の status にそのまま載る（API へは STATUS_QUERY で広げる）。
  * 「取消済」だけは選択肢の名称が「取消済（出来有・無）」で、表の出来状況は「取消済」で始まる。
  */
 const EXECUTION_STATUS_CODES = {

@@ -5,7 +5,7 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { noOperationOperator } from '@/mocks/fixtures/currentOperator'
+import { noOperationOperator, supervisorOperator } from '@/mocks/fixtures/currentOperator'
 import { customers } from '@/mocks/fixtures/customers'
 import { symbols } from '@/mocks/fixtures/symbols'
 import { fxRates } from '@/mocks/fixtures/fxRates'
@@ -15,8 +15,14 @@ const latestUsdFxRate = fxRates.at(-1)
 import { FIRST_ORDER_ID, orderMessages } from '@/mocks/fixtures/orderEntry'
 import { codeEntries } from '@/mocks/fixtures/codes'
 import { useCodesStore } from '@/stores/codes'
+import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { EXPIRY_OPTION_COUNT } from '@/utils/orderEntryForm'
-import { DEPOSIT_CATEGORY, ORDER_FORM_DEFAULTS, SIDE } from '@/utils/orderEntryOptions'
+import {
+  DEPOSIT_CATEGORY,
+  ORDER_FORM_DEFAULTS,
+  ORDER_PERSON_MAX_LENGTH,
+  SIDE,
+} from '@/utils/orderEntryOptions'
 import OrderEntryView from './OrderEntryView.vue'
 
 // シナリオ: docs/unit/views-order-entry-view.md（タイトル先頭の [NOV-xx] が対応 ID）
@@ -33,6 +39,12 @@ const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 const plainCustomer = customers.find((row) => row.口座番号 === 1230004)
 const cautionCustomer = customers.find((row) => row.口座番号 === 1230001)
 const aapl = symbols.find((row) => row.Ticker === 'AAPL')
+
+/*
+ * 受注者（1〜4 文字）。単体テストの社員コード（VITE_USER_CODE / /auth/me の操作者コード）は
+ * どれも 5 文字以上で受注者の初期値にならないので、送信まで進む行は手で入れる
+ */
+const ORDER_PERSON = 'T'.padEnd(ORDER_PERSON_MAX_LENGTH, '0')
 
 const Page = { render: () => h('div') }
 
@@ -52,7 +64,14 @@ async function mountView(query = {}) {
   const wrapper = mount(OrderEntryView, {
     global: { plugins: [pinia, router], stubs: { teleport: true } },
   })
-  return { wrapper, router }
+  return { wrapper, router, pinia }
+}
+
+/** /auth/me を読み終えるまで待つ（受注者の初期値はそのあとで決まる） */
+async function operatorReady(pinia) {
+  const operator = useCurrentOperatorStore(pinia)
+  await until(() => operator.operator !== null || operator.error !== null)
+  await flushPromises()
 }
 
 /** 条件が満たされるまで待つ（照会の待ち・事前検証・登録と非同期が重なるため） */
@@ -97,12 +116,16 @@ async function formReady(wrapper) {
 }
 
 /** 注文を一通り入れる（売買を省くと未選択のまま） */
-async function fillOrder(wrapper, { customer = plainCustomer, ticker = 'AAPL', side = '3' } = {}) {
+async function fillOrder(
+  wrapper,
+  { customer = plainCustomer, ticker = 'AAPL', side = '3', orderPerson = ORDER_PERSON } = {},
+) {
   await byTestId(wrapper, 'order-entry-branch').setValue(customer.部店コード)
   await byTestId(wrapper, 'order-entry-account').setValue(String(customer.口座番号))
   await byTestId(wrapper, 'order-entry-ticker').setValue(ticker)
   if (side) await byTestId(wrapper, 'order-entry-side').find(`[data-value="${side}"]`).trigger('click')
   await byTestId(wrapper, 'order-entry-quantity').setValue('10')
+  await byTestId(wrapper, 'order-entry-order-person').setValue(orderPerson)
 }
 
 async function submit(wrapper) {
@@ -171,9 +194,15 @@ describe('OrderEntryView', () => {
   })
 
   it('[NOV-05] フォームの初期表示', async () => {
-    const { wrapper } = await mountView()
+    const { wrapper, pinia } = await mountView()
     await formReady(wrapper)
-    await until(() => byTestId(wrapper, 'order-entry-order-person').element.value !== '')
+    await operatorReady(pinia)
+
+    // 既定モックの社員コード（admin）は 5 文字で受注者に入らないので、空のまま始まる
+    expect(useCurrentOperatorStore(pinia).operator.operatorCode.length).toBeGreaterThan(
+      ORDER_PERSON_MAX_LENGTH,
+    )
+    expect(byTestId(wrapper, 'order-entry-order-person').element.value).toBe('')
 
     const options = byTestId(wrapper, 'order-entry-expiry').findAll('option')
     expect(options).toHaveLength(EXPIRY_OPTION_COUNT)
@@ -181,6 +210,34 @@ describe('OrderEntryView', () => {
     expect(byTestId(wrapper, 'order-entry-expiry').element.value).toBe(options[0].element.value)
     expect(byTestId(wrapper, 'order-entry-no-permission').exists()).toBe(false)
     expect(byTestId(wrapper, 'order-entry-suspended').exists()).toBe(false)
+  })
+
+  it('[NOV-25] 社員コードが受注者の最大文字数以内なら受注者の初期値に入る', async () => {
+    const shortCode = 'A'.padEnd(ORDER_PERSON_MAX_LENGTH, '1')
+    server.use(
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json({ ...supervisorOperator, 操作者コード: shortCode }),
+      ),
+    )
+    const { wrapper, pinia } = await mountView()
+    await formReady(wrapper)
+    await operatorReady(pinia)
+
+    await until(() => byTestId(wrapper, 'order-entry-order-person').element.value === shortCode)
+  })
+
+  it('[NOV-26] 受注者が最大文字数を超えると文言を出し、事前検証を呼ばない', async () => {
+    const bodies = recordBodies('post', VALIDATE_PATH)
+    const { wrapper } = await mountView()
+    await formReady(wrapper)
+    await fillOrder(wrapper, { orderPerson: 'X'.repeat(ORDER_PERSON_MAX_LENGTH + 1) })
+    await submit(wrapper)
+
+    await until(() =>
+      wrapper.text().includes(`受注者は${ORDER_PERSON_MAX_LENGTH}文字以内で入力してください。`),
+    )
+    expect(bodies).toHaveLength(0)
+    expect(byTestId(wrapper, 'order-entry-confirm').exists()).toBe(false)
   })
 
   it('[NOV-06] 発注権限が無ければ帯を出して送信を止める', async () => {
@@ -238,6 +295,7 @@ describe('OrderEntryView', () => {
     await toConfirm(wrapper)
     expect(bodies).toHaveLength(1)
     expect(bodies[0].銘柄コード).toBe(aapl.銘柄コード)
+    expect(bodies[0].受注者).toBe(ORDER_PERSON)
   })
 
   it('[NOV-10] 売買区分が未選択なら事前検証を呼ばない', async () => {

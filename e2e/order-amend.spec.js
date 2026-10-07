@@ -27,10 +27,10 @@ const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 const SIDE_LABELS = { 1: '売', 3: '買' }
 
 /*
- * 処理状況コード → 名前。src/utils/orderTypes.js の ORDER_STATUS_NAMES の写し（使う分だけ）。
- * あのファイルは '@/utils/format' を import しており Playwright から読めないので再掲する。
+ * 状況の表示は注文詳細の応答の 処理状況名（サーバの名前）を使う。注文詳細は一覧と同じ派生項目を持つので、
+ * 期待値はフィクスチャの行の 処理状況名 から引く（アプリのコード表 src/utils/orderTypes.js の写しは使わない）。
  */
-const STATUS_LABELS = { '000': '未発注', '003': '注文中', '010': '一部出来', '011': '全部出来' }
+const statusNameOf = (row) => row.処理状況名
 
 // 使う注文。#36 は #30 の最新版（未発注）、#34 は注文中、#35 は一部出来、#41 は全部出来
 const PENDING = latestVersionOf(30)
@@ -73,10 +73,13 @@ test.describe('注文訂正', () => {
 
     await expect(page).toHaveURL(new RegExp(`${amendPath(PENDING.ID)}$`))
     await expect(page.getByRole('heading', { name: '外株注文訂正', exact: true })).toBeVisible()
-    await expect(page.getByTestId('order-amend-status')).toHaveText(STATUS_LABELS[PENDING.処理状況])
+    await expect(page.getByTestId('order-amend-status')).toHaveText(statusNameOf(PENDING))
+    await expect(page.getByTestId('order-amend-customer')).toHaveText(
+      `${PENDING.顧客名} 部店 ${PENDING.部店} ／ 口座 ${PENDING.口座番号}`,
+    )
     await expect(page.getByTestId('order-amend-summary').getByRole('definition')).toHaveText([
       `#${PENDING.ID}`,
-      `部店 ${PENDING.部店} ／ 口座 ${PENDING.口座番号}`,
+      `${PENDING.顧客名} 部店 ${PENDING.部店} ／ 口座 ${PENDING.口座番号}`,
       PENDING.銘柄コード,
       SIDE_LABELS[PENDING.売買区分],
       originalLabel(PENDING),
@@ -100,7 +103,7 @@ test.describe('注文訂正', () => {
   }) => {
     await openAmend(page, PARTIAL)
 
-    await expect(page.getByTestId('order-amend-status')).toHaveText(STATUS_LABELS[PARTIAL.処理状況])
+    await expect(page.getByTestId('order-amend-status')).toHaveText(statusNameOf(PARTIAL))
     const summary = page.getByTestId('order-amend-summary')
     await expect(summary).toContainText(PARTIAL.銘柄コード)
     await expect(page.getByTestId('order-amend-original')).toHaveText(originalLabel(PARTIAL))
@@ -155,7 +158,7 @@ test.describe('注文訂正', () => {
     await page.goto(amendPath(FILLED.ID))
 
     await expect(page.getByTestId('order-amend-locked')).toHaveText(
-      `この注文は訂正できません（処理状況: ${STATUS_LABELS[FILLED.処理状況]}）。`,
+      `この注文は訂正できません（処理状況: ${statusNameOf(FILLED)}）。`,
     )
     await expect(page.getByTestId('order-amend-form')).toHaveCount(0)
     await expect(page.getByTestId('order-amend-submit')).toHaveCount(0)

@@ -3,7 +3,7 @@ import { h, reactive } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { buildExpiryOptions, createOrderForm } from '@/utils/orderEntryForm'
-import { ORDER_TYPE, SIDE } from '@/utils/orderEntryOptions'
+import { ORDER_PERSON_MAX_LENGTH, ORDER_TYPE, SIDE } from '@/utils/orderEntryOptions'
 import OrderEntryForm from './OrderEntryForm.vue'
 
 /*
@@ -35,6 +35,15 @@ const segment = (wrapper, testid, value) => wrapper.find(`[data-testid="${testid
 
 // シナリオ: docs/unit/components-orders-order-entry-form.md
 describe('OrderEntryForm', () => {
+  it('[NOC-13] 受注者の欄は最大文字数までしか打てず、入力が orderPerson に入る', async () => {
+    const { wrapper, form } = mountForm()
+    const input = find(wrapper, 'order-entry-order-person')
+
+    expect(input.attributes('maxlength')).toBe(String(ORDER_PERSON_MAX_LENGTH))
+    await input.setValue('T001')
+    expect(form.orderPerson).toBe('T001')
+  })
+
   it('[NOC-01] 売買区分でフォームの色が変わる', async () => {
     const { wrapper, form } = mountForm()
     const root = find(wrapper, 'order-entry-form')

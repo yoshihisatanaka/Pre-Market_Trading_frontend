@@ -16,7 +16,7 @@ import {
 import { useCodesStore } from '@/stores/codes'
 import { EXECUTIONS_PAGE_SIZE } from '@/stores/executions'
 import { downloadBlob } from '@/utils/download'
-import { formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
+import { formatJpyUnit, formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
 import ExecutionListView from './ExecutionListView.vue'
 
 /*
@@ -63,8 +63,9 @@ const COL = {
   side: 5,
   price: 8,
   amountUsd: 9,
-  executedAt: 10,
-  status: 11,
+  amountJpy: 10,
+  executedAt: 11,
+  status: 12,
 }
 
 /** 件数カード（testid → ラベル） */
@@ -410,6 +411,61 @@ describe('ExecutionListView', () => {
     // 生の文字列（'YYYY-MM-DDTHH:MM:SS'）の月日・時分と一致する
     const raw = newest.約定日時
     expect(executedAt).toBe(`${raw.slice(5, 7)}/${raw.slice(8, 10)} ${raw.slice(11, 16)}`)
+  })
+
+  it('[EXV-23] 約定代金(USD) の右に 約定金額(円) を出し、為替未登録（null）は — にする', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+
+    const labels = headers(wrapper)
+    expect(labels[COL.amountUsd]).toBe('約定代金(USD)')
+    expect(labels[COL.amountJpy]).toBe('約定金額(円)')
+
+    // 1 ページ目の中から、円貨のある行と為替未登録（null）の行を 1 つずつ引く
+    const firstPage = sortedDesc.slice(0, PAGE_SIZE)
+    const rowOf = (raw) =>
+      rows(wrapper).find((row) => cellText(row, COL.id) === `#${raw.ID}`)
+    const withJpy = firstPage.find((raw) => raw.約定代金_JPY !== null)
+    const withoutJpy = firstPage.find((raw) => raw.約定代金_JPY === null)
+
+    expect(cellText(rowOf(withJpy), COL.amountJpy)).toBe(formatJpyUnit(withJpy.約定代金_JPY))
+    expect(cellText(rowOf(withJpy), COL.amountJpy)).toMatch(/ 円$/)
+    expect(cellText(rowOf(withoutJpy), COL.amountJpy)).toBe('—')
+  })
+
+  it('[EXV-24] 預託先の出し分けはロールではなく預託先参照権限（permissions.depositary）で決まる', async () => {
+    const withDepositary = (operator, depositary) => ({
+      ...operator,
+      権限: { ...operator.権限, depositary },
+    })
+    const cases = [
+      // 管理責任者でも権限が無ければ出さない
+      ['supervisor without depositary', withDepositary(supervisorOperator, false), false],
+      // 営業員でも権限があれば出す
+      ['sales with depositary', withDepositary(salesOperator, true), true],
+    ]
+    for (const [label, operator, visible] of cases) {
+      server.use(meAs(operator))
+      const { wrapper } = await mountView()
+      await settle()
+      await settle()
+
+      expect(exists(wrapper, 'executions-route'), label).toBe(visible)
+      expect(headers(wrapper).includes('預託先'), label).toBe(visible)
+      wrapper.unmount()
+    }
+  })
+
+  it('[EXV-25] 預託先参照権限があっても、注文ルートが null の応答なら預託先の列は — で壊れない', async () => {
+    server.use(rowsHandler([{ ...newest, 注文ルート: null, 注文ルート名: null }]))
+    const { wrapper } = await mountView()
+    await settle()
+    await settle()
+
+    expect(exists(wrapper, 'executions-error')).toBe(false)
+    expect(headers(wrapper).at(-1)).toBe('預託先')
+    expect(rows(wrapper)).toHaveLength(1)
+    expect(rows(wrapper)[0].findAll('td').at(-1).text()).toBe('—')
   })
 
   it('[EXV-15] 管理者・管理責任者には預託先の検索欄と列を出す', async () => {

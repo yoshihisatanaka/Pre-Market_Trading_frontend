@@ -40,6 +40,15 @@ const respondRows = (rows) => recordList({ orders: rows, total: rows.length })
 /** 一覧の 1 行（既定は #36 を土台に、元注文・種別を外した独立の行） */
 const row = (overrides) => ({ ...byId(36), 元注文ID: null, 注文種別: null, ...overrides })
 
+/** 一覧・詳細にだけ付く派生項目（古いサーバの詳細 `order` は d_注文 の行そのままで持たない） */
+const DERIVED_KEYS = ['顧客名', '処理状況名', '表示状況名', '出来数量', '有効残数量', '約定代金']
+
+/** 派生項目の無い詳細の `order`（古いサーバの形） */
+const legacyRow = (overrides) =>
+  Object.fromEntries(
+    Object.entries(row(overrides)).filter(([key]) => !DERIVED_KEYS.includes(key)),
+  )
+
 /** 詳細の GET が指定の本文を返すようにする */
 function respondDetail(body) {
   server.use(http.get(DETAIL, () => HttpResponse.json(body)))
@@ -117,17 +126,21 @@ describe('api/orderInquiry', () => {
     expect(seen[0].has('account_no')).toBe(false)
   })
 
-  it('[OIA-05] 出来状況（処理状況コード）はそのまま status で送られる', async () => {
+  it('[OIA-05] 出来状況は status で送り、取消済は 032,034・注文エラーは 101,103 に広げる', async () => {
     const seen = recordList()
     // 選択肢はコードマスタ 注文照会出来状況（000 / 003 / 010 / 011 / 034 / 101）
     const codes = codeEntries('注文照会出来状況').map(({ code }) => code)
+    // 代表の 1 コード → 同じ出来状況の処理状況コード（取消済・注文エラーは 2 つずつある）
+    const WIDENED = { '034': '032,034', 101: '101,103' }
 
     for (const executionStatus of codes) {
       await fetchOrderInquiry({ executionStatus })
     }
 
-    expect(seen.map((params) => params.get('status'))).toEqual(codes)
-    expect(codes.length).toBeGreaterThan(0)
+    expect(codes).toEqual(expect.arrayContaining(Object.keys(WIDENED)))
+    expect(seen.map((params) => params.get('status'))).toEqual(
+      codes.map((code) => WIDENED[code] ?? code),
+    )
   })
 
   it('[OIA-06] 売買区分 1 / 3 / その他は sell / buy / 空文字になる', async () => {
@@ -236,7 +249,7 @@ describe('api/orderInquiry', () => {
     expect(seen[1].has('status')).toBe(false)
   })
 
-  it('[OIA-15] 詳細は d_注文 の行と約定から OrderDetail に変換される', async () => {
+  it('[OIA-15] 詳細は注文の行（派生項目付き）から OrderDetail に変換される', async () => {
     const raw = byId(35)
     const sides = { 1: 'sell', 3: 'buy' }
 
@@ -246,6 +259,8 @@ describe('api/orderInquiry', () => {
       id: String(raw.ID),
       branchCode: raw.部店,
       accountNumber: String(raw.口座番号),
+      customerName: raw.顧客名,
+      statusName: raw.処理状況名,
       symbol: raw.Ticker,
       side: sides[raw.売買区分],
       quantity: raw.数量,
@@ -269,15 +284,41 @@ describe('api/orderInquiry', () => {
     expect((await fetchOrderDetail('36')).symbol).toBe('BRKB')
   })
 
-  it('[OIA-17] 出来数量は約定の合計で、約定が無ければ 0', async () => {
-    respondDetail({ order: row(), executions: [{ 約定数量: 30 }, { 約定数量: '20' }] })
+  it('[OIA-17] 派生項目の無い応答では、出来数量は約定の合計で、約定が無ければ 0', async () => {
+    respondDetail({ order: legacyRow(), executions: [{ 約定数量: 30 }, { 約定数量: '20' }] })
     expect((await fetchOrderDetail('36')).filledQuantity).toBe(50)
 
-    respondDetail({ order: row(), executions: [] })
+    respondDetail({ order: legacyRow(), executions: [] })
     expect((await fetchOrderDetail('36')).filledQuantity).toBe(0)
 
-    respondDetail({ order: row() })
+    respondDetail({ order: legacyRow() })
     expect((await fetchOrderDetail('36')).filledQuantity).toBe(0)
+  })
+
+  it('[OIA-31] 出来数量はサーバの値（数値か数値の文字列）を約定の合計より優先する', async () => {
+    const executions = [{ 約定数量: 30 }, { 約定数量: '20' }]
+
+    respondDetail({ order: row({ 出来数量: 70 }), executions })
+    expect((await fetchOrderDetail('36')).filledQuantity).toBe(70)
+
+    respondDetail({ order: row({ 出来数量: '70.0000' }), executions })
+    expect((await fetchOrderDetail('36')).filledQuantity).toBe(70)
+
+    // 0 は「無い」ではない（約定の合計に落とさない）
+    respondDetail({ order: row({ 出来数量: 0 }), executions })
+    expect((await fetchOrderDetail('36')).filledQuantity).toBe(0)
+  })
+
+  it('[OIA-32] 顧客名・処理状況名はサーバの値を運び、無い応答では空文字になる', async () => {
+    respondDetail({ order: row({ 顧客名: '山田 太郎', 処理状況名: '未発注' }), executions: [] })
+    const detail = await fetchOrderDetail('36')
+    expect(detail.customerName).toBe('山田 太郎')
+    expect(detail.statusName).toBe('未発注')
+
+    respondDetail({ order: legacyRow(), executions: [] })
+    const legacy = await fetchOrderDetail('36')
+    expect(legacy.customerName).toBe('')
+    expect(legacy.statusName).toBe('')
   })
 
   it('[OIA-18] 指値単価は数値の文字列でも数値になり、null は null のまま', async () => {

@@ -159,8 +159,8 @@ fixture の写しは `src/mocks/fixtures/codes.js` の `CODES_JSON` に移した
 契約テストの `KNOWN_GAPS` から取込の行を外した。**MSW の取込ハンドラは残す**: 一覧がまだ同じファイルの
 モック（`GET /operations/stalled-orders`）で、取込はその一覧を書き換えるため、取込だけ実 API に素通しすると
 モックの一覧と噛み合わない。一覧を `GET /orders` の 2 回呼び（#1 ①）に切り替える日に
-`src/mocks/handlers/stalledOrders.js` ごと消す。なお MSW は `PARTIALLY_FILLED` を提案時のまま注文中（003）へ
-移すが、仕様では 010（一部約定）になり、一覧の `status=003` には載らない。以下は起票時の記録として残す。
+`src/mocks/handlers/stalledOrders.js` ごと消す。MSW も仕様に合わせ、`PARTIALLY_FILLED`（010）は
+注文中（003）へ移さず滞留一覧から外す（2026-10-07）。以下は起票時の記録として残す。
 
 2026-09-28 にフロントが先に形を決め、MSW（`src/mocks/handlers/stalledOrders.js`）と
 `src/api/stalledOrders.js` の `importConfirmationCsv` をこの形で実装した。バックエンドが同じ形で作れば

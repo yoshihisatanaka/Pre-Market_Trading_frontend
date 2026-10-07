@@ -139,11 +139,11 @@ const CONFIRMATION_HEADER = [
 
 /*
  * confirmation_status の値（仕様の 4 値。処理状況は FILLED→011 / CANCELLED→034 /
- * WORKING→003 / PARTIALLY_FILLED→010）。約定・取消は滞留一覧から外し、未約定のものは注文中へ移す。
- * 仕様では PARTIALLY_FILLED は 010（一部約定）になるが、このモックは提案時のまま注文中（003）へ移す。
+ * WORKING→003 / PARTIALLY_FILLED→010）。注文中へ移すのは 003 になる WORKING だけで、
+ * 一部約定（010）は注文エラーにも注文中（status=003）にも載らないので、約定・取消と同じく一覧から外す。
  */
-const CLOSED_STATUSES = ['FILLED', 'CANCELLED']
-const WORKING_STATUSES = ['WORKING', 'PARTIALLY_FILLED']
+const CLOSED_STATUSES = ['FILLED', 'CANCELLED', 'PARTIALLY_FILLED']
+const WORKING_STATUSES = ['WORKING']
 
 /** 注文中へ移した行に付ける値（fixtures/stalledOrders.js の注文中の行と同じ） */
 const WORKING_STATE = {
@@ -184,7 +184,7 @@ function rowProblems(rowData, seenOrderIds) {
 }
 
 /**
- * 1 行を一覧へ反映する。約定・取消は 2 本から外し、未約定は注文中へ移す。
+ * 1 行を一覧へ反映する。約定（一部約定を含む）・取消は 2 本から外し、未約定は注文中へ移す。
  * @returns {'closed'|'working'} どちらに振り分けたか（応答の文言に使う）
  */
 function applyConfirmation(rowData) {

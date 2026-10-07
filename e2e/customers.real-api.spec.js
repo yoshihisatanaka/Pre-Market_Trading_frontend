@@ -623,7 +623,13 @@ test.describe('顧客マスタ（実 API 接続）', () => {
     expect(now.顧客名).toBe(ALT_NAME)
   })
 
-  test('[CUR-12] 取消済みの口座番号を追加すると再有効化の警告が出る', async ({ page, playwright }) => {
+  /*
+   * 実 API の事前検証（POST /masters/customers/validate）は取消済みの口座番号でも警告を返さず、
+   * 画面はそのまま登録へ進んで再有効化される（2026-10-07 実測。休場日・受注不可日は警告を返す）。
+   * 警告を返すのが仕様かをバックエンドに確認する（docs/api/requests.md #50。経緯は docs/e2e/customers-real-api.md）。
+   * 回答が来たら test.fixme を test に戻すか、期待値を回答に合わせる。CUR-13 も同じ前提なので一緒に止める
+   */
+  test.fixme('[CUR-12] 取消済みの口座番号を追加すると再有効化の警告が出る', async ({ page, playwright }) => {
     // 画面に削除の導線は無いので、取消済みの口座は API で作る
     const api = await apiContext(playwright)
     const res = await api.delete(`${API_PATH}/${createdId}`)
@@ -648,7 +654,8 @@ test.describe('顧客マスタ（実 API 接続）', () => {
     await expect(page.getByTestId('customers-count')).toHaveText(`${before} 件`)
   })
 
-  test('[CUR-13] 警告のあと押し直すと再有効化され、行は二重にならない', async ({
+  // CUR-12 と同じ理由で止めている（警告が出ないと前提が成り立たない）
+  test.fixme('[CUR-13] 警告のあと押し直すと再有効化され、行は二重にならない', async ({
     page,
     playwright,
   }) => {

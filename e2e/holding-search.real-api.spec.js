@@ -155,6 +155,8 @@ function expectedOrderQuery(holding, side) {
     ['side', side],
     // 買付に成長投資枠は選べないので、「買い」は成長投資枠の明細でも預り区分を引き継がない
     ['deposit', side === 'buy' && deposit === GROWTH_DEPOSIT ? '' : deposit],
+    // 「売り」だけ売却可能株数を数量として引き継ぐ（正の整数のときだけ。#36 ⑤・src/utils/orderEntryQuery.js）
+    ['quantity', side === 'sell' && holding.売却可能株数 > 0 ? String(holding.売却可能株数) : ''],
   ]
   return Object.fromEntries(entries.filter(([, value]) => value))
 }
@@ -203,6 +205,29 @@ async function openListForOrder(page, playwright) {
 }
 
 /**
+ * 表示中の明細のうち、口座番号（と部店）が顧客マスタで引ける行を表示順に返す
+ * （stores/holdingSearch.js の findCustomerId と同じ照合）。保有のある口座が顧客マスタに無いことがある（#32）
+ *
+ * @returns {Promise<{ index: number, accountNumber: string, customerId: string }[]>}
+ */
+async function rowsInCustomerMaster(page, customers) {
+  const shown = await rowsOf(page).count()
+  const found = []
+  for (let i = 0; i < shown; i += 1) {
+    const accountNumber = await cellText(page, '口座番号', i)
+    const branchText = await cellText(page, '部店', i)
+    const branchCode = branchText === EMPTY_CELL ? '' : branchText
+    const customer = customers.find(
+      (row) =>
+        String(row.口座番号 ?? '') === accountNumber &&
+        (!branchCode || row.部店コード === branchCode),
+    )
+    if (customer) found.push({ index: i, accountNumber, customerId: String(customer.ID) })
+  }
+  return found
+}
+
+/**
  * 顧客詳細の注文入力タブ（/customers/<id>/order-entry）に移ったあとの共通の期待値。顧客カードとタブ・
  * URL のクエリ・入力欄の初期値・口座番号とティッカーの照会結果。
  * 照会の期待値は stores/orderEntry.js（findCustomer / findSymbol）と同じ照合を実 API で引いて決める。
@@ -242,8 +267,10 @@ async function expectOrderEntryPrefilled(page, api, expected) {
       deposit.getByRole('button', { name: DEPOSIT_LABELS[GROWTH_DEPOSIT], exact: true }),
     ).toHaveAttribute('aria-pressed', 'false')
   }
-  // 数量は渡さない（GET /holdings に売却可能数量が無い。src/utils/orderEntryQuery.js）
-  await expect(page.getByTestId('order-entry-quantity')).toHaveValue('')
+  // 数量は「売り」でだけクエリの売却可能株数が 3 桁区切りで入る。「買い」は空
+  await expect(page.getByTestId('order-entry-quantity')).toHaveValue(
+    expected.quantity ? Number(expected.quantity).toLocaleString('ja-JP') : '',
+  )
 
   // 口座番号の照会。保有のある口座が顧客マスタに無いと「該当なし」（docs/api/requests.md #32）。
   // 照会に失敗したときは何も出ない（それも食い違いとしてここで落ちる）
@@ -431,20 +458,7 @@ test.describe('預り検索（実 API 接続）', () => {
 
     await openListOrSkip(page)
 
-    // 表示中の明細から、顧客マスタで引ける行を探す（stores/holdingSearch.js の findCustomerId と同じ照合）
-    const shown = await rowsOf(page).count()
-    let target = null
-    for (let i = 0; i < shown && !target; i += 1) {
-      const accountNumber = await cellText(page, '口座番号', i)
-      const branchText = await cellText(page, '部店', i)
-      const branchCode = branchText === EMPTY_CELL ? '' : branchText
-      const customer = customers.find(
-        (row) =>
-          String(row.口座番号 ?? '') === accountNumber &&
-          (!branchCode || row.部店コード === branchCode),
-      )
-      if (customer) target = { index: i, accountNumber, customerId: String(customer.ID) }
-    }
+    const [target] = await rowsInCustomerMaster(page, customers)
     test.skip(!target, '表示中の明細に顧客マスタにある口座が無い（docs/api/requests.md #32）')
 
     const lookup = waitForApiRequest(page, CUSTOMERS_API_PATH, 'account_no', target.accountNumber)
@@ -457,15 +471,20 @@ test.describe('預り検索（実 API 接続）', () => {
     await expect(page.getByTestId('holding-search-customer-error')).toHaveCount(0)
   })
 
-  test('[HSR-09] 1 行目の「買い」で新規注文へ移り、実 API のその明細の顧客・銘柄が引き継がれる', async ({
+  test('[HSR-09] 顧客マスタにある口座の明細の「買い」で新規注文へ移り、実 API のその明細の顧客・銘柄が引き継がれる', async ({
     page,
     playwright,
   }) => {
     const { api, holdings } = await openListForOrder(page, playwright)
     try {
-      const holding = await holdingOfRow(page, holdings, 0)
+      // 新規注文は顧客詳細のタブなので、顧客マスタで引けない口座の明細では移れない（#32）
+      const customers = await fetchAll(api, CUSTOMERS_API_PATH, CUSTOMERS_LIST_KEY)
+      const [target] = await rowsInCustomerMaster(page, customers)
+      test.skip(!target, '表示中の明細に顧客マスタにある口座が無い（docs/api/requests.md #32）')
 
-      await rowsOf(page).first().getByTestId('holding-search-buy').click()
+      const holding = await holdingOfRow(page, holdings, target.index)
+
+      await rowsOf(page).nth(target.index).getByTestId('holding-search-buy').click()
 
       await expectOrderEntryPrefilled(page, api, expectedOrderQuery(holding, 'buy'))
     } finally {
@@ -479,13 +498,19 @@ test.describe('預り検索（実 API 接続）', () => {
   }) => {
     const { api, holdings } = await openListForOrder(page, playwright)
     try {
-      // 「売り」が押せる最初の明細（売却不可の明細は押せない button になっている）
-      const shown = await rowsOf(page).count()
+      // 顧客マスタにある口座の明細のうち、「売り」が押せる最初の明細
+      // （売却不可の明細は押せない button になっている。顧客マスタに無い口座では移れない。#32）
+      const customers = await fetchAll(api, CUSTOMERS_API_PATH, CUSTOMERS_LIST_KEY)
+      const candidates = await rowsInCustomerMaster(page, customers)
+      test.skip(candidates.length === 0, '表示中の明細に顧客マスタにある口座が無い（docs/api/requests.md #32）')
       let index = -1
-      for (let i = 0; i < shown && index < 0; i += 1) {
-        if (await rowsOf(page).nth(i).getByTestId('holding-search-sell').isEnabled()) index = i
+      for (const { index: i } of candidates) {
+        if (await rowsOf(page).nth(i).getByTestId('holding-search-sell').isEnabled()) {
+          index = i
+          break
+        }
       }
-      test.skip(index < 0, '表示中に「売り」が押せる明細が無い')
+      test.skip(index < 0, '顧客マスタにある口座の明細に「売り」が押せるものが無い')
 
       const holding = await holdingOfRow(page, holdings, index)
       // 押せるのは実 API で売却不可でない明細だけ

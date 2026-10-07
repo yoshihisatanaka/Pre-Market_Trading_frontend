@@ -11,6 +11,7 @@ import { canceledMarketHolidays, marketHolidays } from '../mocks/fixtures/market
 import { sliceCriteriaSetting } from '../mocks/fixtures/sliceCriteria'
 import { canceledFxRates, fxRates } from '../mocks/fixtures/fxRates'
 import { calculationSetting } from '../mocks/fixtures/calculationSettings'
+import { canceledFeePreferences, feePreferences } from '../mocks/fixtures/feePreferences'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../mocks/fixtures/activityLogTargets'
 import { rolePermissions } from '../mocks/fixtures/permissions'
@@ -96,6 +97,13 @@ import {
   validateFxRate,
 } from './fxRates'
 import { fetchCalculationSettings, updateCalculationSettings } from './calculationSettings'
+import {
+  createFeePreference,
+  deleteFeePreference,
+  fetchFeePreferences,
+  updateFeePreference,
+  validateFeePreference,
+} from './feePreferences'
 import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
 import { fetchStalledOrders, importConfirmationCsv } from './stalledOrders'
 import { fetchPermissions, updateRolePermission } from './permissions'
@@ -346,6 +354,11 @@ const FIXTURES = [
   { name: 'sliceCriteria', schema: 'SliceSettingResponse', rows: [sliceCriteriaSetting] },
   { name: 'fxRates', schema: 'FxItem', rows: [...fxRates, ...canceledFxRates] },
   { name: 'calculationSettings', schema: 'CalculationSettingItem', rows: [calculationSetting] },
+  {
+    name: 'feePreferences',
+    schema: 'FeePreferenceItem',
+    rows: [...feePreferences, ...canceledFeePreferences],
+  },
   { name: 'activityLogs', schema: 'ActivityLogItem', rows: activityLogs },
   { name: 'activityLogTargets', schema: 'ActivityLogTargetItem', rows: activityLogTargets },
   { name: 'permissions', schema: 'RolePermissionItem', rows: rolePermissions },
@@ -728,6 +741,23 @@ const PROBES = [
         updatedAt: '',
       }),
   },
+  {
+    name: 'fetchFeePreferences',
+    run: () => fetchFeePreferences({ branchCode: '123', accountNumber: '1230001', feePattern: 'A' }),
+  },
+  {
+    name: 'validateFeePreference',
+    run: () => validateFeePreference({ id: '1', accountNumber: '1230001', feeMultiplier: '80' }),
+  },
+  {
+    name: 'createFeePreference',
+    run: () => createFeePreference({ accountNumber: '1230014', fxSpread: '0' }),
+  },
+  {
+    name: 'updateFeePreference',
+    run: () => updateFeePreference({ id: '1', accountNumber: '1230001', updatedAt: '' }),
+  },
+  { name: 'deleteFeePreference', run: () => deleteFeePreference('1') },
   {
     name: 'fetchActivityLogs',
     run: () =>

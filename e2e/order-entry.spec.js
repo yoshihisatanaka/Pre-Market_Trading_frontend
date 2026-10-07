@@ -22,6 +22,7 @@ import { mockApi } from './helpers/mockApi'
 // （画面の入力不備 / サーバの errors / サーバの warnings）、確定から次の注文までを実ブラウザで守る。
 // 入口は顧客 ID 1 の顧客詳細の注文入力タブをクエリなしで直接開く（部店・口座番号は空のまま）。
 // /orders/new は口座番号のクエリが無いと顧客検索へ回る（NO-31）ので入口には使わない。
+// ただし顧客バーはタブの中では出さない（NO-34）ので、バーを見る行（NO-07〜09）だけ openStandaloneForm で開く。
 // 既定モックは確定のたびに注文 ID を FIRST_ORDER_ID から採番する（ページを開くたびに初期化）。
 // 受注者は必須・4 文字以内で、MSW 版では空で始まる（NO-32 / NO-33）。確認へ進む行は fillOrder が受注者を入れる。
 
@@ -76,6 +77,17 @@ function toApiDate(date) {
 async function openForm(page) {
   await page.goto(PATH)
   await expect(page.getByTestId('order-entry-form')).toBeVisible()
+}
+
+/**
+ * 顧客詳細を通らない入口（/orders/new）で開く。フォームの上の顧客バーはこちらでだけ出る
+ * （顧客詳細のタブの中では顧客カードと二重になるので出さない）。/orders/new は口座番号のクエリが
+ * 無いと顧客検索へ回るので、打ち直す前の顧客を付けて開く
+ */
+async function openStandaloneForm(page, customer) {
+  await page.goto(`${ORDER_NEW_PATH}?branch_code=${BRANCH}&account_number=${customer.口座番号}`)
+  await expect(page.getByTestId('order-entry-form')).toBeVisible()
+  await expect(page.getByTestId('order-entry-customer-name')).toHaveText(customer.顧客名)
 }
 
 function sideButton(page, name) {
@@ -238,8 +250,7 @@ test.describe('新規注文 表示', () => {
 
 test.describe('新規注文 顧客・銘柄の照会', () => {
   test('[NO-07] 口座番号を入れると顧客名と顧客バーが出る', async ({ page }) => {
-    await openForm(page)
-    await page.getByTestId('order-entry-branch').fill(BRANCH)
+    await openStandaloneForm(page, CAUTION)
     await page.getByTestId('order-entry-account').fill(String(PLAIN.口座番号))
 
     await expect(page.getByTestId('order-entry-account-hint')).toHaveText(PLAIN.顧客名)
@@ -250,8 +261,7 @@ test.describe('新規注文 顧客・銘柄の照会', () => {
   })
 
   test('[NO-08] コンプラランク A の顧客は顧客バーに要注意が出る', async ({ page }) => {
-    await openForm(page)
-    await page.getByTestId('order-entry-branch').fill(BRANCH)
+    await openStandaloneForm(page, PLAIN)
     await page.getByTestId('order-entry-account').fill(String(CAUTION.口座番号))
 
     await expect(page.getByTestId('order-entry-customer-name')).toHaveText(CAUTION.顧客名)
@@ -261,8 +271,7 @@ test.describe('新規注文 顧客・銘柄の照会', () => {
   })
 
   test('[NO-09] 全取引停止の顧客は顧客バーに全取引停止が出る', async ({ page }) => {
-    await openForm(page)
-    await page.getByTestId('order-entry-branch').fill(BRANCH)
+    await openStandaloneForm(page, PLAIN)
     await page.getByTestId('order-entry-account').fill(String(SUSPENDED.口座番号))
 
     await expect(page.getByTestId('order-entry-customer-name')).toHaveText(SUSPENDED.顧客名)
@@ -276,6 +285,16 @@ test.describe('新規注文 顧客・銘柄の照会', () => {
     await page.getByTestId('order-entry-account').fill('1239999')
 
     await expect(page.getByTestId('order-entry-account-hint')).toHaveText('該当なし')
+    await expect(page.getByTestId('order-entry-customer-bar')).toHaveCount(0)
+  })
+
+  test('[NO-34] 顧客詳細のタブの中では口座番号を入れても顧客バーは出ない', async ({ page }) => {
+    await openForm(page)
+    await page.getByTestId('order-entry-branch').fill(BRANCH)
+    await page.getByTestId('order-entry-account').fill(String(PLAIN.口座番号))
+
+    // 照会が済んだのを口座番号の横で確かめてから、バーが無いことを見る
+    await expect(page.getByTestId('order-entry-account-hint')).toHaveText(PLAIN.顧客名)
     await expect(page.getByTestId('order-entry-customer-bar')).toHaveCount(0)
   })
 

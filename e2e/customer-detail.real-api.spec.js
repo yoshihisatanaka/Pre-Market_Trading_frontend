@@ -151,9 +151,10 @@ async function followOrderEntryLink(page, link, customer) {
   await expect(page.getByTestId('order-entry-form')).toBeVisible()
   await expect(page.getByTestId('order-entry-branch')).toHaveValue(customer.branchCode)
   await expect(page.getByTestId('order-entry-account')).toHaveValue(customer.accountNumber)
-  // 口座番号の横の照会結果と顧客バー。顧客カードと同じ顧客を引けている
+  // 口座番号の横の照会結果。顧客カードと同じ顧客を引けている
+  // （フォームの上の顧客バーは顧客カードと二重になるので出さない）
   await expect(page.getByTestId('order-entry-account-hint')).toHaveText(customer.customerName)
-  await expect(page.getByTestId('order-entry-customer-name')).toHaveText(customer.customerName)
+  await expect(page.getByTestId('order-entry-customer-bar')).toHaveCount(0)
   await expect(page.getByTestId('order-entry-error')).toHaveCount(0)
 
   return queryOf(page)

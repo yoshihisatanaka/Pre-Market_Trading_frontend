@@ -28,6 +28,7 @@ import OrderEntryView from './OrderEntryView.vue'
 // シナリオ: docs/unit/views-order-entry-view.md（タイトル先頭の [NOV-xx] が対応 ID）
 
 const PATH = '/orders/new'
+const CUSTOMER_DETAIL_PATH = '/customers/1/order-entry'
 const BLACKOUT_PATH = '*/api/masters/blackout-dates'
 const SUSPENSION_PATH = '*/api/operations/order-suspensions'
 const VALIDATE_PATH = '*/api/orders/validate'
@@ -48,16 +49,21 @@ const ORDER_PERSON = 'T'.padEnd(ORDER_PERSON_MAX_LENGTH, '0')
 
 const Page = { render: () => h('div') }
 
-/** @param {Record<string, string>} [query] 顧客詳細からの引き継ぎ（NOV-22〜24）。既定はクエリなし */
-async function mountView(query = {}) {
+/**
+ * @param {Record<string, string>} [query] 顧客詳細からの引き継ぎ（NOV-22〜24）。既定はクエリなし
+ * @param {string} [path] 既定は /orders/new。顧客詳細の子ルートとして描くときは CUSTOMER_DETAIL_PATH（NOV-28）
+ */
+async function mountView(query = {}, path = PATH) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: PATH, component: Page },
+      // 画面はルート名で顧客詳細の子ルートかを見分ける（router/index.js と同じ名前）
+      { path: '/customers/:customerId/order-entry', name: 'customer-order-entry', component: Page },
       { path: '/:pathMatch(.*)*', component: Page },
     ],
   })
-  await router.push({ path: PATH, query })
+  await router.push({ path, query })
   // App.vue はコードマスタを読み終えてから画面を描く。それに合わせて先に読んでおく
   const pinia = createPinia()
   await useCodesStore(pinia).load()
@@ -559,5 +565,18 @@ describe('OrderEntryView', () => {
     await formReady(unreadable.wrapper)
 
     expect(byTestId(unreadable.wrapper, 'order-entry-quantity').element.value).toBe('')
+  })
+
+  it('[NOV-28] 顧客詳細の子ルートでは顧客バーを出さない（顧客カードは親が出す）', async () => {
+    const { wrapper } = await mountView(handoverQuery(), CUSTOMER_DETAIL_PATH)
+    await formReady(wrapper)
+
+    // 照会が済んだことは口座番号の横の顧客名で見る
+    await until(
+      () =>
+        byTestId(wrapper, 'order-entry-account-hint').exists() &&
+        byTestId(wrapper, 'order-entry-account-hint').text() === cautionCustomer.顧客名,
+    )
+    expect(byTestId(wrapper, 'order-entry-customer-bar').exists()).toBe(false)
   })
 })

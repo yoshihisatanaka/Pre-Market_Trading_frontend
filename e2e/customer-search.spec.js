@@ -5,7 +5,7 @@ import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/customer-search.md（タイトル先頭の [CSE-nn] が対応 ID）
 // 顧客検索は読むだけの検索一覧。ページ位置と検索条件は URL クエリを正とするため、
-// URL と画面の同期と、顧客名から顧客詳細へ移る導線をここで守る。
+// URL と画面の同期と、行のクリックから顧客詳細へ移る導線をここで守る。
 // mockApi() は固定の body を返すだけでクエリを解釈しない。ページングと絞り込みは
 // クエリを実際に処理する既定ハンドラ（src/mocks/handlers/customers.js）で検証する。
 
@@ -303,10 +303,11 @@ test.describe('顧客検索', () => {
     await expect(cellOf(rowOf(page, active), '取引規制')).toHaveText('-')
   })
 
-  test('[CSE-13] 顧客名のリンクから顧客詳細へ移る', async ({ page }) => {
+  test('[CSE-13] 行を click すると顧客詳細へ移る', async ({ page }) => {
     await openList(page)
 
-    await page.getByTestId(`customer-search-detail-${firstRow.ID}`).click()
+    // 顧客名ではないセルを押す。モックと同じく行全体が押下を受ける
+    await cellOf(rowOf(page, firstRow), '口座番号').click()
 
     await expect(page).toHaveURL(new RegExp(`/customers/${firstRow.ID}/summary$`))
     await expect(pageHeading(page, '顧客詳細')).toBeVisible()

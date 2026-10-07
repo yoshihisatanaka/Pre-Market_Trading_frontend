@@ -16,7 +16,14 @@ const holding = (overrides = {}) => ({
   ...overrides,
 })
 
-const EMPTY = { branchCode: '', accountNumber: '', ticker: '', side: '', depositCategory: '' }
+const EMPTY = {
+  branchCode: '',
+  accountNumber: '',
+  ticker: '',
+  side: '',
+  depositCategory: '',
+  quantity: '',
+}
 
 // シナリオ: docs/unit/utils-order-entry-query.md
 describe('utils/orderEntryQuery', () => {
@@ -116,6 +123,7 @@ describe('utils/orderEntryQuery', () => {
         ticker: ' aapl ',
         side: 'sell',
         deposit: DEPOSIT_CATEGORY.GROWTH,
+        quantity: ' 80 ',
       }),
     ).toEqual({
       branchCode: '123',
@@ -123,6 +131,7 @@ describe('utils/orderEntryQuery', () => {
       ticker: 'AAPL',
       side: SIDE.SELL,
       depositCategory: DEPOSIT_CATEGORY.GROWTH,
+      quantity: '80',
     })
     expect(parseOrderEntryQuery({ side: 'buy' }).side).toBe(SIDE.BUY)
   })
@@ -135,6 +144,7 @@ describe('utils/orderEntryQuery', () => {
         deposit: SPECIFIC_DEPOSIT.NISA,
         ticker: ['a', 'b'],
         branch_code: ['123'],
+        quantity: 'abc',
       }),
     ).toEqual(EMPTY)
     expect(parseOrderEntryQuery()).toEqual(EMPTY)
@@ -148,7 +158,48 @@ describe('utils/orderEntryQuery', () => {
       side: SIDE.SELL,
       depositCategory: DEPOSIT_CATEGORY.GENERAL,
     }
+    const quantity = 1500
 
-    expect(parseOrderEntryQuery(buildOrderEntryQuery(values))).toEqual(values)
+    expect(parseOrderEntryQuery(buildOrderEntryQuery(values))).toEqual({ ...values, quantity: '' })
+    expect(parseOrderEntryQuery(buildOrderEntryQuery({ ...values, quantity }))).toEqual({
+      ...values,
+      quantity: String(quantity),
+    })
+  })
+
+  it('[OEQ-11] 預りの「売り」は売却可能株数を数量として引き継ぎ、「買い」は引き継がない', () => {
+    const SELLABLE = 80
+    const row = holding({ sellableQuantity: SELLABLE })
+
+    expect(holdingOrderQuery(CUSTOMER, row, SIDE.SELL).quantity).toBe(String(SELLABLE))
+    expect(holdingOrderQuery(CUSTOMER, row, SIDE.BUY)).not.toHaveProperty('quantity')
+    for (const sellableQuantity of [0, null, undefined]) {
+      expect(
+        holdingOrderQuery(CUSTOMER, holding({ sellableQuantity }), SIDE.SELL),
+        String(sellableQuantity),
+      ).not.toHaveProperty('quantity')
+    }
+  })
+
+  it('[OEQ-12] 数量は正の整数のときだけ載せる', () => {
+    expect(buildOrderEntryQuery({ quantity: 80 })).toEqual({ quantity: '80' })
+    for (const quantity of [0, -1, 1.5, Number.NaN, '80', null]) {
+      expect(buildOrderEntryQuery({ quantity }), String(quantity)).toEqual({})
+    }
+  })
+
+  it('[OEQ-13] 数量のクエリは正の整数の数字列だけを読み、先頭の 0 を落とす', () => {
+    const cases = [
+      ['80', '80'],
+      ['080', '80'],
+      ['0', ''],
+      ['-1', ''],
+      ['1.5', ''],
+      ['1,000', ''],
+      ['99999999999999999999', ''],
+    ]
+    for (const [input, expected] of cases) {
+      expect(parseOrderEntryQuery({ quantity: input }).quantity, input).toBe(expected)
+    }
   })
 })

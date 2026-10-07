@@ -49,6 +49,19 @@ const emptyHoldings = () =>
   http.get(HOLDINGS, () =>
     HttpResponse.json({ total: 0, limit: PAGE_SIZE, offset: 0, holdings: [] }),
   )
+/**
+ * 口座ID の無い 1 ページ目（Phase 66 より前のバックエンド・顧客マスタに無い口座）。
+ * 顧客詳細へ移るときに顧客マスタを引き直す道を通すのに使う
+ */
+const holdingsWithoutCustomerId = () =>
+  http.get(HOLDINGS, () =>
+    HttpResponse.json({
+      total: TOTAL,
+      limit: PAGE_SIZE,
+      offset: 0,
+      holdings: firstPage.map((row) => ({ ...row, 口座ID: null })),
+    }),
+  )
 
 /** 送られたリクエストのクエリを控える（応答は既定ハンドラに任せる） */
 function recordQueries(path) {
@@ -389,10 +402,8 @@ describe('HoldingSearchView', () => {
     expect(head.CA).toBeNull()
     const cells = rows(wrapper)[0].findAll('td')
     expect(cells[COLUMN.quantity].text()).toBe(`${head.数量.toLocaleString('ja-JP')}株`)
-    expect(cells[COLUMN.referencePrice].text()).toBe(
-      `${decimal2(head.評価額_USD / head.数量)} ドル`,
-    )
-    expect(cells[COLUMN.referenceFxRate].text()).toBe(decimal2(head.評価額_JPY / head.評価額_USD))
+    expect(cells[COLUMN.referencePrice].text()).toBe(`${decimal2(head.前日終値)} ドル`)
+    expect(cells[COLUMN.referenceFxRate].text()).toBe(decimal2(head.適用為替レート))
     const valuation = cells[COLUMN.valuation].findAll('span').map((span) => span.text())
     expect(valuation).toEqual([jpyText(head.取得金額), jpyText(head.評価額_JPY)])
     expect(cells[COLUMN.specificDeposit].text()).toBe(head.預り売買区分名)
@@ -426,8 +437,23 @@ describe('HoldingSearchView', () => {
     expect(zero.classes()).not.toContain('is-loss')
   })
 
-  it('[HSV-15] 顧客名を押すと顧客マスタを引き、その顧客の顧客詳細へ移る', async () => {
+  it('[HSV-15] 顧客名を押すと明細の口座ID でその顧客の顧客詳細へ移り、顧客マスタは引かない', async () => {
+    expect(head.口座ID).toBe(headCustomer.ID)
+    const queries = recordQueries(CUSTOMERS)
+    const { wrapper, router } = await mountView()
+    await settle()
+
+    await rows(wrapper)[0].find('[data-testid="holding-search-customer-link"]').trigger('click')
+    await settle()
+
+    expect(queries).toHaveLength(0)
+    expect(router.currentRoute.value.name).toBe('customer-summary')
+    expect(router.currentRoute.value.params.customerId).toBe(String(head.口座ID))
+  })
+
+  it('[HSV-30] 口座ID の無い明細の顧客名は顧客マスタを引き、その顧客の顧客詳細へ移る', async () => {
     expect(headCustomer).toBeTruthy()
+    server.use(holdingsWithoutCustomerId())
     const queries = recordQueries(CUSTOMERS)
     const { wrapper, router } = await mountView()
     await settle()
@@ -442,8 +468,8 @@ describe('HoldingSearchView', () => {
     expect(router.currentRoute.value.params.customerId).toBe(String(headCustomer.ID))
   })
 
-  it('[HSV-16] 顧客マスタが 500 のときは理由の帯を出し、ルートは変わらない', async () => {
-    server.use(errorHandler(CUSTOMERS))
+  it('[HSV-16] 口座ID の無い明細で顧客マスタが 500 のときは理由の帯を出し、ルートは変わらない', async () => {
+    server.use(holdingsWithoutCustomerId(), errorHandler(CUSTOMERS))
     const { wrapper, router } = await mountView()
     await settle()
 
@@ -458,8 +484,9 @@ describe('HoldingSearchView', () => {
     expect(rows(wrapper)).toHaveLength(Math.min(PAGE_SIZE, TOTAL))
   })
 
-  it('[HSV-17] 顧客マスタに居ないときは口座番号入りの理由を出し、ルートは変わらない', async () => {
+  it('[HSV-17] 口座ID の無い明細が顧客マスタに居ないときは口座番号入りの理由を出し、ルートは変わらない', async () => {
     server.use(
+      holdingsWithoutCustomerId(),
       http.get(CUSTOMERS, () =>
         HttpResponse.json({ total: 0, limit: 10, offset: 0, customers: [] }),
       ),
@@ -478,7 +505,7 @@ describe('HoldingSearchView', () => {
   })
 
   it('[HSV-18] 顧客を引けなかった帯は検索し直すと消える', async () => {
-    server.use(errorHandler(CUSTOMERS))
+    server.use(holdingsWithoutCustomerId(), errorHandler(CUSTOMERS))
     const { wrapper } = await mountView()
     await settle()
     await rows(wrapper)[0].find('[data-testid="holding-search-customer-link"]').trigger('click')
@@ -491,7 +518,8 @@ describe('HoldingSearchView', () => {
     expect(exists(wrapper, 'holding-search-customer-error')).toBe(false)
   })
 
-  it('[HSV-19] 顧客を引いているあいだは顧客名のボタンがすべて押せない', async () => {
+  it('[HSV-19] 口座ID の無い明細で顧客を引いているあいだは顧客名のボタンがすべて押せない', async () => {
+    server.use(holdingsWithoutCustomerId())
     const release = gate(CUSTOMERS)
     const { wrapper } = await mountView()
     await settle()
@@ -508,9 +536,11 @@ describe('HoldingSearchView', () => {
     await settle()
   })
 
-  it('[HSV-20] 「買い」「売り」は顧客マスタを引き、顧客詳細の注文入力タブへ顧客・銘柄・売買・預り区分を引き継ぐ', async () => {
+  it('[HSV-20] 「買い」「売り」は口座ID で顧客詳細の注文入力タブへ移り、顧客・銘柄・売買・預り区分（売りは売却可能株数も）を引き継ぐ', async () => {
+    // 預りの特定預り区分 1（特定）は注文の預り売買区分 0（特定）に読み替わる
     expect(head.預り売買区分).toBe('1')
-    expect(headCustomer).toBeTruthy()
+    // 売却可能株数は数量と違う（当日の売注文がある）明細で確かめる
+    expect(head.売却可能株数).toBeLessThan(head.数量)
     const base = {
       branch_code: head.部店コード,
       account_number: String(head.口座番号),
@@ -518,9 +548,9 @@ describe('HoldingSearchView', () => {
       deposit: DEPOSIT_CATEGORY.SPECIFIC,
     }
 
-    for (const [testid, side] of [
-      ['holding-search-buy', 'buy'],
-      ['holding-search-sell', 'sell'],
+    for (const [testid, side, extra] of [
+      ['holding-search-buy', 'buy', {}],
+      ['holding-search-sell', 'sell', { quantity: String(head.売却可能株数) }],
     ]) {
       const queries = recordQueries(CUSTOMERS)
       const { wrapper, router } = await mountView()
@@ -529,18 +559,16 @@ describe('HoldingSearchView', () => {
       await rows(wrapper)[0].find(`[data-testid="${testid}"]`).trigger('click')
       await settle()
 
-      expect(queries).toHaveLength(1)
-      expect(queries[0].get('branch_code')).toBe(head.部店コード)
-      expect(queries[0].get('account_no')).toBe(String(head.口座番号))
+      expect(queries).toHaveLength(0)
       expect(router.currentRoute.value.name).toBe('customer-order-entry')
-      expect(router.currentRoute.value.params.customerId).toBe(String(headCustomer.ID))
-      expect(router.currentRoute.value.query).toEqual({ ...base, side })
+      expect(router.currentRoute.value.params.customerId).toBe(String(head.口座ID))
+      expect(router.currentRoute.value.query).toEqual({ ...base, side, ...extra })
       wrapper.unmount()
     }
   })
 
-  it('[HSV-26] 「買い」で顧客マスタが 500 のときは理由の帯を出し、ルートは変わらない', async () => {
-    server.use(errorHandler(CUSTOMERS))
+  it('[HSV-26] 口座ID の無い明細の「買い」で顧客マスタが 500 のときは理由の帯を出し、ルートは変わらない', async () => {
+    server.use(holdingsWithoutCustomerId(), errorHandler(CUSTOMERS))
     const { wrapper, router } = await mountView()
     await settle()
 
@@ -625,8 +653,7 @@ describe('HoldingSearchView', () => {
     expect(options.slice(1)).toEqual(expected)
   })
 
-  it('[HSV-27] 「仮計算」を押すと顧客マスタを引き、銘柄・売り・預り区分を仮計算タブへ引き継ぐ', async () => {
-    expect(headCustomer).toBeTruthy()
+  it('[HSV-27] 「仮計算」を押すと口座ID で仮計算タブへ移り、銘柄・売り・預り区分を引き継ぐ', async () => {
     const queries = recordQueries(CUSTOMERS)
     const { wrapper, router } = await mountView()
     await settle()
@@ -634,12 +661,10 @@ describe('HoldingSearchView', () => {
     await rows(wrapper)[0].find('[data-testid="holding-search-calculation"]').trigger('click')
     await settle()
 
-    expect(queries).toHaveLength(1)
-    expect(queries[0].get('branch_code')).toBe(head.部店コード)
-    expect(queries[0].get('account_no')).toBe(String(head.口座番号))
+    expect(queries).toHaveLength(0)
     const route = router.currentRoute.value
     expect(route.name).toBe('customer-calculations')
-    expect(route.params.customerId).toBe(String(headCustomer.ID))
+    expect(route.params.customerId).toBe(String(head.口座ID))
     expect(route.query).toEqual({
       symbol: head.ティッカー,
       side: 'sell',
@@ -647,8 +672,8 @@ describe('HoldingSearchView', () => {
     })
   })
 
-  it('[HSV-28] 顧客マスタが 500 のときは「仮計算」でも理由の帯を出し、ルートは変わらない', async () => {
-    server.use(errorHandler(CUSTOMERS))
+  it('[HSV-28] 口座ID の無い明細で顧客マスタが 500 のときは「仮計算」でも理由の帯を出し、ルートは変わらない', async () => {
+    server.use(holdingsWithoutCustomerId(), errorHandler(CUSTOMERS))
     const { wrapper, router } = await mountView()
     await settle()
 
@@ -659,7 +684,8 @@ describe('HoldingSearchView', () => {
     expect(router.currentRoute.value.path).toBe(PATH)
   })
 
-  it('[HSV-29] 顧客を引いているあいだは「仮計算」がすべて押せない', async () => {
+  it('[HSV-29] 口座ID の無い明細で顧客を引いているあいだは「仮計算」がすべて押せない', async () => {
+    server.use(holdingsWithoutCustomerId())
     const release = gate(CUSTOMERS)
     const { wrapper } = await mountView()
     await settle()

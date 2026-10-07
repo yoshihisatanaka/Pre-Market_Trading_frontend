@@ -106,7 +106,7 @@ describe('api/holdings', () => {
     expect(lastRequest.params.get('offset')).toBe('50')
   })
 
-  it('[HLA-06] HoldingItem をアプリ内モデルに変換し、行キーを 3 項目から作る', async () => {
+  it('[HLA-06] HoldingItem をアプリ内モデルに変換し、行 ID と口座ID を文字列にする', async () => {
     const TOTAL = 999
     record({ total: TOTAL, limit: 50, offset: 0, holdings: [holdingItem] })
 
@@ -114,7 +114,9 @@ describe('api/holdings', () => {
 
     expect(total).toBe(TOTAL)
     expect(items[0]).toMatchObject({
-      id: `${holdingItem.口座番号}:${holdingItem.銘柄コード}:${holdingItem.預り売買区分}`,
+      id: String(holdingItem.ID),
+      customerId: String(holdingItem.口座ID),
+      sellableQuantity: holdingItem.売却可能株数,
       branchCode: holdingItem.部店コード,
       accountNumber: String(holdingItem.口座番号),
       customerName: holdingItem.顧客名,
@@ -134,27 +136,62 @@ describe('api/holdings', () => {
     expect(typeof items[0].accountNumber).toBe('string')
   })
 
-  it('[HLA-07] 参考単価と参考為替を評価額から戻す', async () => {
-    const item = await convert(holdingItem)
+  it('[HLA-07] 参考単価は前日終値、参考為替は適用為替レートをそのまま使う', async () => {
+    // 評価額からの逆算と区別できる値にする
+    const item = await convert({ ...holdingItem, 前日終値: 123.45, 適用為替レート: 151.23 })
+
+    expect(item.referencePrice).toBe(123.45)
+    expect(item.referenceFxRate).toBe(151.23)
+  })
+
+  /** Phase 66 より前の形（#36 で足された 5 項目が無い）の明細 */
+  const legacyItem = () => {
+    const row = { ...holdingItem }
+    for (const key of ['ID', '口座ID', '前日終値', '適用為替レート', '売却可能株数']) delete row[key]
+    return row
+  }
+
+  it('[HLA-14] 前日終値・適用為替レートが無い応答では評価額から戻す', async () => {
+    const item = await convert(legacyItem())
 
     expect(item.referencePrice).toBeCloseTo(holdingItem.評価額_USD / holdingItem.数量, 10)
     expect(item.referenceFxRate).toBeCloseTo(holdingItem.評価額_JPY / holdingItem.評価額_USD, 10)
+
+    const nulls = await convert({ ...holdingItem, 前日終値: null, 適用為替レート: null })
+    expect(nulls.referencePrice).toBeCloseTo(holdingItem.評価額_USD / holdingItem.数量, 10)
+    expect(nulls.referenceFxRate).toBeCloseTo(holdingItem.評価額_JPY / holdingItem.評価額_USD, 10)
   })
 
-  it('[HLA-08] 割れないときの参考単価・参考為替は null', async () => {
-    const zeroQuantity = await convert({ ...holdingItem, 数量: 0 })
+  it('[HLA-15] ID・口座ID・売却可能株数が無い応答では 3 項目の行キー・空の customerId・null', async () => {
+    const item = await convert(legacyItem())
+
+    expect(item.id).toBe(
+      `${holdingItem.口座番号}:${holdingItem.銘柄コード}:${holdingItem.預り売買区分}`,
+    )
+    expect(item.customerId).toBe('')
+    expect(item.sellableQuantity).toBeNull()
+  })
+
+  it('[HLA-08] 前日終値・適用為替レートが無く、割れないときの参考単価・参考為替は null', async () => {
+    const base = legacyItem()
+    const zeroQuantity = await convert({ ...base, 数量: 0 })
     expect(zeroQuantity.referencePrice).toBeNull()
 
-    const noUsd = await convert({ ...holdingItem, 評価額_USD: null })
+    const noUsd = await convert({ ...base, 評価額_USD: null })
     expect(noUsd.referencePrice).toBeNull()
     expect(noUsd.referenceFxRate).toBeNull()
 
-    const zeroUsd = await convert({ ...holdingItem, 評価額_USD: 0 })
+    const zeroUsd = await convert({ ...base, 評価額_USD: 0 })
     expect(zeroUsd.referenceFxRate).toBeNull()
   })
 
   it('[HLA-09] 評価損益率の % 表記を数値に直し、読めない値は null にする', async () => {
     const cases = [
+      // 確定した書式（#36 ④）
+      ['+12.34%', 12.34],
+      ['-5.20%', -5.2],
+      ['+0.00%', 0],
+      // 緩く読む書式
       ['12.34%', 12.34],
       ['-5%', -5],
       ['+3.2%', 3.2],

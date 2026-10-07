@@ -191,7 +191,8 @@ describe('api/calculations', () => {
       spread: raw.スプレッド,
       spreadSource: raw.スプレッド取得元,
       holdingQuantity: aaplHolding.数量,
-      averageCost: aaplHolding.平均取得単価,
+      // 預りの平均取得単価は USD。モックの仮計算は預りの適用為替で円にして返す
+      averageCost: Math.round(aaplHolding.平均取得単価 * aaplHolding.適用為替レート),
       localFeeSource: raw.手数料パラメータ.現地手数料出所,
       localTaxSource: raw.手数料パラメータ.現地取引税出所,
       feePattern: raw.手数料パラメータ.手数料パターン,

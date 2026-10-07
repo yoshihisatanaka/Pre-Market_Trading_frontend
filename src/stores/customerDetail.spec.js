@@ -38,7 +38,7 @@ const MISSING_ID = String(Math.max(...customers.map((row) => row.ID)) + 1)
 const idOf = (customer) => String(customer.ID)
 /** 預りの行キー（口座番号:銘柄コード:預り売買区分。src/api/holdings.js の Holding の id） */
 const holdingIdsOf = (customer) =>
-  holdingsOf(customer.口座番号).map((h) => `${h.口座番号}:${h.銘柄コード}:${h.預り売買区分}`)
+  holdingsOf(customer.口座番号).map((h) => String(h.ID))
 const sumOf = (rows, key) => rows.reduce((total, row) => total + row[key], 0)
 
 /** 顧客 1 件の応答を差し替える。respond は行 ID を受けて Response を返す */

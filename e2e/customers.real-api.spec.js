@@ -64,14 +64,35 @@ const COLUMNS = [
 const ACCOUNT_MIN = RESERVED_YEAR * 1000
 const ACCOUNT_MAX = ACCOUNT_MIN + 999
 
-// 顧客名の目印。編集（CUR-10 / 11）でもこの接頭辞は保つ
+/*
+ * 登録は個人（法人区分の既定）で行う。業務規則は openapi.json の CustomerRequest / CustomerValidateRequest の
+ * description と docs/api/requests.md #45 の回答（2026-10-06）:
+ *   顧客名     … 個人は姓名の間を全角スペースで区切る
+ *   顧客名カナ … 半角カナ・半角数字・ハイフン・半角スペースだけ。個人は姓名の間を半角スペースで区切る
+ *   生年月日   … 個人は YYYYMMDD で必須（法人は '0' 固定。法人は NISA契約 '0'・特定口座区分 '3' も固定）
+ *   コンプラランク … A〜J, X, Y, Z（A・B・Y・Z は発注制限の対象）。発注制限の無い C を選ぶ
+ *   NISA契約 0 のとき NISA買付可能額は 0
+ * 画面の入力検証はこの規則を持たない（サーバの事前検証に任せる）ので、spec の側で規則どおりの値を入れる。
+ */
+// 顧客名の目印。編集（CUR-10 / 11）でもこの接頭辞は保ち、姓名の間は全角スペース
 const NAME_PREFIX = 'E2E実API確認'
-const TEST_NAME = `${NAME_PREFIX} 顧客`
-const EDITED_NAME = `${NAME_PREFIX} 変更後`
-const ALT_NAME = `${NAME_PREFIX} 別経路`
-const CONFLICT_NAME = `${NAME_PREFIX} 画面`
-// 顧客名カナ。MSW 版（CU-16）と同じ半角カナ。実 API が全角を求めるなら検証モードで直す
-const TEST_KANA = 'ﾃｽﾄ'
+// 全角スペース（U+3000）。直に書くと ESLint の no-irregular-whitespace に掛かるのでエスケープで書く
+const FULL_WIDTH_SPACE = '　'
+const TEST_NAME = `${NAME_PREFIX}${FULL_WIDTH_SPACE}顧客`
+const EDITED_NAME = `${NAME_PREFIX}${FULL_WIDTH_SPACE}変更後`
+const ALT_NAME = `${NAME_PREFIX}${FULL_WIDTH_SPACE}別経路`
+const CONFLICT_NAME = `${NAME_PREFIX}${FULL_WIDTH_SPACE}画面`
+// 顧客名カナ。半角カナで、姓名の間は半角スペース
+const TEST_KANA = 'ﾃｽﾄ ｺｷｬｸ'
+// 生年月日（個人は YYYYMMDD 必須。画面では任意項目なので REQUIRED_BLANK_FIELDS に入らない）
+const TEST_BIRTH_DATE = '19800101'
+// コンプラランク。発注制限の対象（A・B・Y・Z）を避ける。選択肢に無ければ空でない先頭を使う
+const TEST_COMPLIANCE_RANK = 'C'
+/*
+ * 画面では任意の金額項目。未送信は事前検証では 0 扱いだが（#45 ①）、登録でも同じとは書かれていないので
+ * 0 を明示する（NISA契約 0 のとき NISA買付可能額は 0、預り金の合計は総預り資産 0 以下）
+ */
+const ZERO_AMOUNT_KEYS = ['cashJpy', 'cashUsd', 'growthQuota', 'growthQuotaNext']
 
 /** 新規追加で開いたとき値を持たない必須項目（src/utils/customerFields.js が正） */
 const REQUIRED_BLANK_FIELDS = CUSTOMER_FIELDS.filter(
@@ -176,21 +197,29 @@ async function firstBranchAndHandler(page) {
 /**
  * 新規追加のダイアログを開き、値を持たない必須項目をすべて埋めて送信する。
  * 項目は増える前提なので、項目の表から埋める（CU-16 の fillRequired と同じ考え方）。
- * 部店・扱者は渡された値、ほかのプルダウンは空でない最初の選択肢、数値は下限、文字は試験用の値。
+ * 部店・扱者は渡された値、コンプラランクは TEST_COMPLIANCE_RANK、ほかのプルダウンは空でない最初の選択肢、
+ * 数値は下限、文字は試験用の値。そのあと、画面では任意だが業務規則で要る項目（生年月日・金額の 0）を埋める。
  */
 async function submitAdd(page, { branchCode, handlerCode }) {
   await page.getByTestId('customers-add').click()
   const dialog = addDialogOf(page)
   await expect(dialog).toBeVisible()
 
-  const texts = { accountNumber: String(testAccount), customerName: TEST_NAME, customerNameKana: TEST_KANA }
-  const selects = { branchCode, handlerCode }
+  const texts = {
+    accountNumber: String(testAccount),
+    customerName: TEST_NAME,
+    customerNameKana: TEST_KANA,
+  }
+  const selects = { branchCode, handlerCode, complianceRank: TEST_COMPLIANCE_RANK }
   for (const field of REQUIRED_BLANK_FIELDS) {
     const input = dialog.getByTestId(`customers-add-${field.testid}`)
     if (field.control === 'select') {
-      const value =
-        selects[field.key] ||
-        (await input.locator('option:not([value=""])').first().getAttribute('value'))
+      const preferred = selects[field.key]
+      const available =
+        preferred && (await input.locator(`option[value="${preferred}"]`).count()) > 0
+      const value = available
+        ? preferred
+        : await input.locator('option:not([value=""])').first().getAttribute('value')
       await input.selectOption(value)
     } else if (field.key in texts) {
       await input.fill(texts[field.key])
@@ -199,6 +228,11 @@ async function submitAdd(page, { branchCode, handlerCode }) {
     } else {
       await input.fill('ﾃｽﾄ')
     }
+  }
+  await dialog.getByTestId('customers-add-birth-date').fill(TEST_BIRTH_DATE)
+  for (const key of ZERO_AMOUNT_KEYS) {
+    const field = CUSTOMER_FIELDS.find((item) => item.key === key)
+    await dialog.getByTestId(`customers-add-${field.testid}`).fill('0')
   }
   await dialog.getByTestId('customers-add-submit').click()
 }

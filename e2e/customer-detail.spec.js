@@ -59,7 +59,7 @@ const CUSTOMER_QUERY = {
  */
 const DEPOSIT_FOR = {
   1: { query: '0', label: '特定' }, // 特定 → 特定
-  0: { query: '1', label: '一般' }, // 非特定 → 一般
+  0: { query: '1', label: '一般' }, // 一般 → 一般（コードは逆向き。#36 ⑥）
   6: { query: '6', label: '成長投資枠' },
 }
 
@@ -505,7 +505,9 @@ test.describe('顧客詳細 外株預り', () => {
     )
   })
 
-  test('[CDT-19] 非特定の「売り」は売りと預り区分「一般」を引き継ぐ', async ({ page }) => {
+  test('[CDT-19] 一般（特定預り区分 0）の「売り」は売り・預り区分「一般」・売却可能株数を引き継ぐ', async ({
+    page,
+  }) => {
     const deposit = DEPOSIT_FOR[TSLA.預り売買区分]
 
     await openSummary(page)
@@ -517,8 +519,12 @@ test.describe('顧客詳細 外株預り', () => {
       ticker: TSLA.ティッカー,
       side: 'sell',
       deposit: deposit.query,
+      quantity: String(TSLA.売却可能株数),
     })
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(TSLA.ティッカー)
+    await expect(page.getByTestId('order-entry-quantity')).toHaveValue(
+      TSLA.売却可能株数.toLocaleString('ja-JP'),
+    )
     await expect(toggleButton(page, 'order-entry-side', '売り')).toHaveAttribute(
       'aria-pressed',
       'true',

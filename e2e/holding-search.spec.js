@@ -108,7 +108,7 @@ function signedJpy(value) {
   return formatJpyUnit(0)
 }
 
-/** 符号付きの率。フィクスチャは '13.58%' の形の文字列 */
+/** 符号付きの率。フィクスチャは '+13.58%' / '-5.20%' の形の文字列（#36 ④） */
 function signedPercent(text) {
   const value = Number(text.replace('%', ''))
   if (value > 0) return `+${value.toFixed(2)}%`
@@ -403,8 +403,18 @@ test.describe('預り検索', () => {
     await expect(page.getByTestId('customer-info-name')).toHaveText(firstRow.顧客名)
   })
 
-  test('[HSE-16] 顧客を引けないと理由を出して一覧に留まる', async ({ page }) => {
+  test('[HSE-16] 口座ID の無い明細で顧客を引けないと理由を出して一覧に留まる', async ({ page }) => {
+    // 口座ID のある明細は顧客マスタを引かずに移るので、口座ID の無い 1 ページ目を返させる
     await mockApi(page, [
+      {
+        path: '*/api/holdings',
+        body: {
+          total: TOTAL,
+          limit: PAGE_SIZE,
+          offset: 0,
+          holdings: firstPage.map((row) => ({ ...row, 口座ID: null })),
+        },
+      },
       { path: '*/api/masters/customers', status: 500, body: { detail: SERVER_ERROR } },
     ])
     await openList(page)
@@ -443,9 +453,11 @@ test.describe('預り検索', () => {
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(firstRow.ティッカー)
   })
 
-  test('[HSE-18] 売却不可の明細は「売り」が押せず、売却できる明細の「売り」で注文入力タブへ移る', async ({
+  test('[HSE-18] 売却不可の明細は「売り」が押せず、売却できる明細の「売り」で注文入力タブへ売却可能株数を引き継ぐ', async ({
     page,
   }) => {
+    // 保有数量と売却可能株数が違う明細で確かめる（当日の売注文がある）
+    expect(SELLABLE_ROW.売却可能株数).toBeLessThan(SELLABLE_ROW.数量)
     await openList(page)
 
     await expect(rowOf(page, SELL_PROHIBITED_ROW).getByTestId('holding-search-sell')).toBeDisabled()
@@ -454,12 +466,17 @@ test.describe('預り検索', () => {
     await expect(sell).toBeEnabled()
     await sell.click()
 
-    await expect(page).toHaveURL(/\/customers\/\d+\/order-entry\?/)
+    await expect(page).toHaveURL(new RegExp(`/customers/${SELLABLE_ROW.口座ID}/order-entry\\?`))
     await expect(page.getByTestId('customer-info-name')).toHaveText(SELLABLE_ROW.顧客名)
     const query = queryOf(page)
     expect(query.side).toBe('sell')
     expect(query.ticker).toBe(SELLABLE_ROW.ティッカー)
     expect(query.account_number).toBe(String(SELLABLE_ROW.口座番号))
+    expect(query.deposit).toBe(DEPOSIT_QUERY_FOR[SELLABLE_ROW.預り売買区分])
+    expect(query.quantity).toBe(String(SELLABLE_ROW.売却可能株数))
+    await expect(page.getByTestId('order-entry-quantity')).toHaveValue(
+      SELLABLE_ROW.売却可能株数.toLocaleString('ja-JP'),
+    )
   })
 
   test('[HSE-19] 発注権限が無いと操作は「閲覧のみ」で、顧客名のリンクと「仮計算」は出る', async ({

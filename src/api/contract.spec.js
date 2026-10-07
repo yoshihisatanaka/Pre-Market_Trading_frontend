@@ -287,6 +287,18 @@ const KNOWN_GAPS = [
     request: '#13',
   },
   /*
+   * 預りの 5 項目は #36 の回答（2026-10-06、Phase 66）で HoldingItem に入った。この行を足した時点の
+   * docs/api/openapi.json は 2026-10-02 の取り込みで、まだ載っていない（新しい取り込みは未コミット）。
+   * 取り込みがコミットされたら CON-07 が落ちるので、そのときこの行を外す。
+   */
+  {
+    kind: 'fixture',
+    fixture: 'holdings',
+    keys: ['ID', '口座ID', '前日終値', '適用為替レート', '売却可能株数'],
+    reason: '#36 の回答で HoldingItem に足された項目。取り込み済みの openapi.json がまだ古い',
+    request: '#36',
+  },
+  /*
    * CSV一括注文のプレビューに出す顧客名（CsvOrderRowResult.customer_name。#27）は
    * 2026-09-30 の取り込みで仕様に入ったので、orderCsvValidateRows / orderCsvValidate /
    * orderCsvValidateWithErrors の 3 行をまとめて外した。

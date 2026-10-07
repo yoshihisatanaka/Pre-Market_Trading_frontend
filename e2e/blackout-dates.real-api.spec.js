@@ -333,13 +333,11 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
   })
 
   /*
-   * 実 API の事前検証は blackout_date_id を付けると、本文の 受注不可日 が ID の指す日付と
-   * 違うだけで 400 を返す（PUT 自体は日付の変更を受け付ける）。バックエンド対応待ち
-   * （docs/api/requests.md の依頼 #18、docs/e2e/blackout-dates-real-api.md に経緯）。
-   * 対応したら test.fixme を test に戻し、文書の状態を実装済にする。
-   * 戻るまでは rowDate が testDate のままなので、BDR-08 / 09 は testDate の行を追う。
+   * 以前は実 API の事前検証が日付の変更を 400 で弾くため test.fixme にしていた
+   * （docs/api/requests.md の依頼 #18。2026-09-30 に validate が日付の変更を受けるようになった）。
+   * ここで行が spareDate へ移り、BDR-08 / 09 はその日付の行を追う。
    */
-  test.fixme('[BDR-07] 日付を変更すると、その行が新しい日付に移る', async ({ page }) => {
+  test('[BDR-07] 日付を変更すると、その行が新しい日付に移る', async ({ page }) => {
     await openList(page)
     const before = await countOf(page)
     const fromIso = toIsoDate(testDate)

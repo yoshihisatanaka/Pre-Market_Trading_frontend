@@ -22,7 +22,7 @@
 | BDS-07 | 初回の `load()` が 500 で失敗している | 2 回目の `load()` が成功する | `error` が null に戻り、`items` に結果が入る | 実装済 |
 | BDS-08 | `load({ offset: 表示件数, date })` 済み（1 日指定なので、その位置に行は無い） | `reload()` を呼ぶ | `offset` / `date` が保たれ、`total` はその日の件数のまま、`items` は空のまま（1 ページ目・全件に戻らない） | 実装済 |
 | BDS-09 | 1 ページ目の応答だけが遅れて返る | 1 ページ目 → 2 ページ目の順に `load()` を呼び、両方の完了を待つ | 後から届いた古い応答で `items` が 1 ページ目に巻き戻らない | 実装済 |
-| BDS-10 | 既定モック | `load()` を呼ぶ | `limit` が表示件数の定数と一致する。ただしリクエストには `limit` を載せない（実 API の一覧は 1 ページ 50 件で固定されていてクエリを持たない） | 実装済 |
+| BDS-10 | 既定モック | `load()` を呼ぶ | 表示件数の定数が `DEFAULT_PAGE_SIZE` と一致し、`limit` がその値になる。リクエストにも `limit` が同じ値で載る（#21） | 実装済 |
 | BDS-11 | 既定モック、`load()` 済み | 一覧に無い日付で `create({ date, reason })` を呼ぶ | 事前検証を通って登録され、登録した 1 件が返る。日付・理由は渡した値。`createError` は null、`validationErrors` は空。`total` が 1 増え、その日付が `items` に入る | 実装済 |
 | BDS-12 | 既定モック、`load()` 済み | すでに登録済みの日付で `create()` を呼ぶ | 戻り値が null。`validationErrors` にサーバが返した理由（重複を知らせる文言）が入り、`createError` は null のまま。`items` / `total` は変わらない | 実装済 |
 | BDS-13 | 事前検証が不合格になる入力 | `create()` を呼ぶ | 登録の API（`POST /masters/blackout-dates`）は 1 度も呼ばれない | 実装済 |

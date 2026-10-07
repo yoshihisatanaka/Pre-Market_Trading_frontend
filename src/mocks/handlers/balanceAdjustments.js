@@ -34,9 +34,8 @@ export const balanceAdjustmentHandlers = [
    * `customer_name` は 顧客名 / 顧客名カナ への部分一致。
    * `branch_code` と `account_no` は完全一致。
    *
-   * **`symbol_name`（銘柄名）は `/masters/balance-adjustments` に無いクエリ。**
-   * 画面モックの検索欄を成立させるためにここだけが解釈する（実 API に切り替えると
-   * この欄は黙って効かなくなる。仕様追加を依頼する対象 → src/api/balanceAdjustments.js）。
+   * `symbol_name_ja` は 銘柄名、`symbol_name_en` は 銘柄名_英字 への部分一致（別パラメータで、
+   * 両方指定すると AND）。画面は `symbol_name_ja` だけを送る（→ src/api/balanceAdjustments.js）。
    *
    * 事前検証・削除・更新履歴・CSV 入出力は画面が使わないのでモックしない。
    */
@@ -47,7 +46,8 @@ export const balanceAdjustmentHandlers = [
     // DB 照合は大文字小文字を区別しないので、モックも大文字に寄せてから比べる
     const symbol = (params.get('symbol') ?? '').trim().toUpperCase()
     const customerName = (params.get('customer_name') ?? '').trim()
-    const symbolName = (params.get('symbol_name') ?? '').trim().toUpperCase()
+    const symbolNameJa = (params.get('symbol_name_ja') ?? '').trim().toUpperCase()
+    const symbolNameEn = (params.get('symbol_name_en') ?? '').trim().toUpperCase()
     const includeDeleted = params.get('include_deleted') === 'true'
     const limit = toNonNegativeInt(params.get('limit'), BALANCE_ADJUSTMENTS_DEFAULT_LIMIT)
     const offset = toNonNegativeInt(params.get('offset'), 0)
@@ -64,7 +64,8 @@ export const balanceAdjustmentHandlers = [
           (!customerName ||
             (row.顧客名 ?? '').includes(customerName) ||
             (row.顧客名カナ ?? '').includes(customerName)) &&
-          (!symbolName || (row.銘柄名 ?? '').toUpperCase().includes(symbolName)),
+          (!symbolNameJa || (row.銘柄名 ?? '').toUpperCase().includes(symbolNameJa)) &&
+          (!symbolNameEn || (row.銘柄名_英字 ?? '').toUpperCase().includes(symbolNameEn)),
       )
       /*
        * 実 API の ORDER BY は仕様に書かれていないので、口座番号 → 銘柄コード の昇順を仮に置く。

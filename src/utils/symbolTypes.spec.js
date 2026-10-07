@@ -82,4 +82,10 @@ describe('symbolTypes', () => {
       expect(is(Number(options[0].value)), name).toBe(false)
     }
   })
+
+  it('[STT-06] 預託先区分と VWAP対象区分は画面モックの順に並ぶ', () => {
+    // コード順ではない（#42）。表示名で並びを固定する
+    expect(ORDER_ROUTE_OPTIONS.map((option) => option.label)).toEqual(['IB証券', 'みずほ証券'])
+    expect(VWAP_TARGET_OPTIONS.map((option) => option.label)).toEqual(['対象', '対象外'])
+  })
 })

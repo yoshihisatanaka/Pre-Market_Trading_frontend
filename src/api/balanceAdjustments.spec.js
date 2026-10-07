@@ -135,7 +135,7 @@ describe('api/balanceAdjustments', () => {
   })
 
   describe('fetchBalanceAdjustments: クエリ', () => {
-    it('[BLA-04] 検索条件は branch_code / account_no / customer_name / symbol / symbol_name で送る', async () => {
+    it('[BLA-04] 検索条件は branch_code / account_no / customer_name / symbol / symbol_name_ja で送る', async () => {
       record('get', LIST_PATH, listBody([]))
 
       await fetchBalanceAdjustments({
@@ -151,8 +151,10 @@ describe('api/balanceAdjustments', () => {
       expect(lastRequest.params.get('account_no')).toBe(String(ITEM.口座番号))
       expect(lastRequest.params.get('customer_name')).toBe(ITEM.顧客名)
       expect(lastRequest.params.get('symbol')).toBe(ITEM.Ticker)
-      // 実 API に無いクエリだが、綴りを決めて送る（モックだけが解釈する）
-      expect(lastRequest.params.get('symbol_name')).toBe(ITEM.銘柄名)
+      // 銘柄名は日本語名にだけ送る（両方送ると AND になるため。#13）
+      expect(lastRequest.params.get('symbol_name_ja')).toBe(ITEM.銘柄名)
+      expect(lastRequest.params.has('symbol_name_en')).toBe(false)
+      expect(lastRequest.params.has('symbol_name')).toBe(false)
       // アプリ内モデルの名前では送っていないこと
       for (const key of ['branchCode', 'accountNumber', 'customerName', 'ticker', 'symbolName']) {
         expect(lastRequest.params.has(key)).toBe(false)

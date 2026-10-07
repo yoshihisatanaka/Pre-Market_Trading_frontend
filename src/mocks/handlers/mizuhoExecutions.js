@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { mizuhoExecutions } from '../fixtures/mizuhoExecutions'
-import { toNonNegativeInt } from './_shared'
+import { toNonNegativeInt, toStatusList } from './_shared'
 import { toExecutionsCsvResponse } from './executions'
 
 /** 注文ルート（預託先）のみずほ。実 API は名称（'みずほ'）でも受け付ける */
@@ -68,14 +68,15 @@ export const mizuhoExecutionHandlers = [
 
 /*
  * 検索条件（一覧と CSV 出力で共通のクエリ）に合う行を返す。
- * 部店・売買区分・処理状況は完全一致、銘柄は銘柄コードか Ticker への完全一致
+ * 部店・売買区分は完全一致、処理状況はカンマ区切りのどれかに一致、銘柄は銘柄コードか Ticker への完全一致
  * （大文字小文字を区別しない）、約定日は日付部分での範囲。
  */
 function filterMizuhoExecutions(params) {
   const branchCode = params.get('branch_code') ?? ''
   const symbol = (params.get('symbol') ?? '').trim().toUpperCase()
   const side = params.get('side') ?? ''
-  const status = params.get('status') ?? ''
+  // 処理状況はカンマ区切りで複数指定できる（例: 032,034）
+  const statuses = toStatusList(params.get('status'))
   const startDate = toIsoDate(params.get('start_date'))
   const endDate = toIsoDate(params.get('end_date'))
 
@@ -85,7 +86,7 @@ function filterMizuhoExecutions(params) {
       (!branchCode || row.部店 === branchCode) &&
       (!symbol || row.銘柄コード === symbol || row.Ticker === symbol) &&
       (!side || row.売買区分 === side) &&
-      (!status || row.処理状況 === status) &&
+      (statuses.length === 0 || statuses.includes(row.処理状況)) &&
       (!startDate || executedOn >= startDate) &&
       (!endDate || executedOn <= endDate)
     )

@@ -4,13 +4,13 @@ import { apiClient } from './client'
  * 新規注文（外株注文入力）の事前検証と登録（実 API `POST /orders/validate` / `POST /orders`）。
  *
  * 成熟度 B。パスと本文（OrderRequest）・応答（OrderValidationResponse / OrderCreateResponse）は
- * 仕様にあるが、次は未確定で問い合わせている（docs/api/requests.md #24）。
- *   - 業務エラー（残高不足・売買規制・発注停止中など）を 200 の valid:false / success:false で返すのか、
- *     4xx で返すのか（仕様が宣言している応答は 200 と 422 だけ）
- *   - 強制区分 の値の体系（0 / 1 だけか）と、警告を強制区分付きの検証でどう返すか
- *   - 作成者・受注者 をフロントが埋めるのか、認証情報から解決されるのか
- *   - 預り売買区分 の 0 / 1 の向き（csv-spec と残高マスタの 特定預り区分 で逆）
- * どちらの返し方でも画面が止まらないよう、200 の不合格は例外にせず、4xx / 5xx は ApiError として
+ * 仕様にある。送信の約束は 2026-10-06 の回答で決まった（docs/api/requests.md #24）。
+ *   - 検証は常に 200 の valid:false / errors。登録は再検証で引っかかると 400（ErrorResponse）
+ *   - 強制区分 は 0 / 1。強制付きで検証し直しても warnings は残ったまま valid:true になる
+ *   - 作成者 はサーバが認証情報の操作者で上書きする（本文の値は無視）。受注者 は本文必須で 1〜4 文字
+ *   - 預り売買区分 は 0=特定・1=一般（「一般」を 1 で送る）
+ *   - 証券受渡方法 の既定は 100（当社保管）
+ * 200 の不合格は例外にせず、4xx / 5xx は ApiError として
  * 呼び出し側（stores/orderEntry.js の useAsync）の error に入れる。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり。
@@ -136,7 +136,8 @@ function toOrderRequest(order) {
     金銭受渡方法: order.cashDelivery,
     受注日: toApiDate(order.orderDate),
     受注時刻: order.orderTime,
-    // 任意項目。空欄は null で送る（空文字の社員コードを作らない）
+    // 必須（1〜4 文字）。画面の検証が空と 5 文字以上を止める。空が来たら空文字ではなく null で送り、
+    // サーバの 422 で落とす（空文字の社員コードを作らない）
     受注者: order.orderPerson || null,
     強制区分: order.forced ? 1 : 0,
     発注範囲: order.executionScope,

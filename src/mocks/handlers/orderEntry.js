@@ -19,10 +19,13 @@ import { requestValidationError } from './_shared'
  *   warnings … 全取引停止の顧客 / コンプラランク A・B・Y・Z / 概算 5,000 万円超（大口取引）
  * 顧客と銘柄はフィクスチャの初期値で引く（マスタ画面で登録した行は対象外。画面をまたぐ再現は要らない）。
  *
- * 業務エラーは 200 で返す（valid:false / success:false）。実 API が 4xx で返すのかは未確定
- * （docs/api/requests.md #24）で、画面はどちらでも止まる作りにしてある。
- * 本文の必須項目が欠けたときだけ FastAPI と同じ 422 にする。
+ * 業務エラーは 200 で返す（valid:false / success:false）。実 API は登録の再検証の不合格を 400 で返す
+ * （docs/api/requests.md #24 ①）が、モックは 200 のままにしている（画面はどちらでも止まる）。
+ * 本文の必須項目が欠けたときと、受注者が 4 文字を超えたときだけ FastAPI と同じ 422 にする。
  */
+
+/** 受注者の最大文字数（OrderRequest.受注者 の maxLength） */
+const ORDER_PERSON_MAX_LENGTH = 4
 
 let nextOrderId = FIRST_ORDER_ID
 
@@ -31,7 +34,10 @@ export function resetOrderEntryState() {
   nextOrderId = FIRST_ORDER_ID
 }
 
-/** OrderRequest の required（openapi.json） */
+/**
+ * OrderRequest の required（openapi.json）。証券受渡方法・預り売買区分 は既定値を持ち、
+ * 作成者 はサーバが認証情報で上書きするので required ではない
+ */
 const REQUIRED_KEYS = [
   '部店',
   '口座番号',
@@ -40,8 +46,6 @@ const REQUIRED_KEYS = [
   '数量',
   '指成区分',
   '決済通貨区分',
-  '証券受渡方法',
-  '預り売買区分',
   '取引',
   '勧誘区分',
   '受注方法',
@@ -50,17 +54,25 @@ const REQUIRED_KEYS = [
   '金銭受渡方法',
   '受注日',
   '受注時刻',
+  '受注者',
   '発注範囲',
-  '作成者',
 ]
 
 const SIDE_BUY = '3'
 const DEPOSIT_GROWTH = '6'
 
-/** 本文の必須項目の欠け（FastAPI の 422）。欠けが無ければ null */
+/** 本文の必須項目の欠けと受注者の長さ（FastAPI の 422）。不備が無ければ null */
 function missingField(body) {
   const key = REQUIRED_KEYS.find((name) => body?.[name] === undefined || body?.[name] === null)
-  return key ? requestValidationError(['body', key], 'Field required', 'missing') : null
+  if (key) return requestValidationError(['body', key], 'Field required', 'missing')
+  if (String(body.受注者).length > ORDER_PERSON_MAX_LENGTH) {
+    return requestValidationError(
+      ['body', '受注者'],
+      `String should have at most ${ORDER_PERSON_MAX_LENGTH} characters`,
+      'string_too_long',
+    )
+  }
+  return null
 }
 
 /** 注文 1 件を検証する（事前検証と登録で同じ規則） */

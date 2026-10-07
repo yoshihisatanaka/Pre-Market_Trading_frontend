@@ -13,6 +13,9 @@
 const SIDE_NAMES = { 3: '買', 1: '売' }
 const STATUS_NAMES = { '011': '全部出来', '010': '一部出来', '032': '取消済', '034': '取消済' }
 
+/** 約定代金_JPY（円貨の概算）に使う USD/JPY。実 API は直近の USD レートを掛ける */
+export const MIZUHO_EXECUTION_FX_RATE = 150
+
 /**
  * 1 行ぶんの ExecutionItem。画面ごとに違う値だけを受け取り、みずほの行で共通の値
  * （注文ルート・決済通貨・IB 側の ID が無いこと）はここで埋める。
@@ -34,6 +37,8 @@ function execution({
   executedPrice,
   executedAt,
 }) {
+  const amount = Math.round(executedQuantity * executedPrice * 100) / 100
+
   return {
     ID: id,
     注文ID: orderId,
@@ -60,7 +65,8 @@ function execution({
     ExecID: null,
     約定数量: executedQuantity,
     約定単価: executedPrice,
-    約定代金: Math.round(executedQuantity * executedPrice * 100) / 100,
+    約定代金: amount,
+    約定代金_JPY: Math.round(amount * MIZUHO_EXECUTION_FX_RATE),
     約定日時: executedAt,
     決済通貨区分: '0',
     手数料: null,

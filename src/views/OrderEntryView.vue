@@ -19,6 +19,7 @@ import {
   buildOrderInput,
   buildOrderReadback,
   createOrderForm,
+  defaultOrderPerson,
   hasOrderFormErrors,
   validateOrderForm,
 } from '@/utils/orderEntryForm'
@@ -123,7 +124,7 @@ const isEmpty = computed(
 /** 新しいフォーム。期間指定は先頭（当日中）を入れておく */
 function newForm(customer = {}) {
   return {
-    ...createOrderForm({ orderPerson: operatorCode.value, ...customer }),
+    ...createOrderForm({ orderPerson: defaultOrderPerson(operatorCode.value), ...customer }),
     expiryDate: expiryOptions.value[0]?.value ?? '',
   }
 }
@@ -413,8 +414,9 @@ store.loadContext(today)
 if (customerKey.value.accountNumber) store.lookupCustomer(customerKey.value)
 if (tickerKey.value) store.lookupSymbol(tickerKey.value)
 // 起動時に main.js が読み始めているので、たいていは読み終えている。受注者が空なら埋める
+// （社員コードが 5 文字以上なら空のまま。受注者は 4 文字までなので手で入れてもらう）
 operatorStore.ensureLoaded().then(() => {
-  if (!form.value.orderPerson) form.value.orderPerson = operatorCode.value
+  if (!form.value.orderPerson) form.value.orderPerson = defaultOrderPerson(operatorCode.value)
 })
 </script>
 

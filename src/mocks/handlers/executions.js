@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { executions } from '../fixtures/executions'
-import { toNonNegativeInt } from './_shared'
+import { toNonNegativeInt, toStatusList } from './_shared'
 
 /*
  * 約定照会。クエリ名と応答の形は openapi.json の `GET /executions`（ExecutionListResponse）と
@@ -102,7 +102,8 @@ function filterExecutions(params) {
   const symbol = (params.get('symbol') ?? '').trim().toUpperCase()
   const side = params.get('side') ?? ''
   const route = params.get('route') ?? ''
-  const status = params.get('status') ?? ''
+  // 処理状況はカンマ区切りで複数指定できる（GET /orders と同じ。例: 032,034）
+  const statuses = toStatusList(params.get('status'))
   // 仕様は YYYY-MM-DD と YYYYMMDD の両方を受けるので、比較の前にハイフン付きへ揃える
   const dateFrom = toIsoDate(params.get('start_date') ?? '')
   const dateTo = toIsoDate(params.get('end_date') ?? '')
@@ -122,7 +123,7 @@ function filterExecutions(params) {
       (!side || row.売買区分 === side) &&
       // 預託先はコード値・名称のどちらでも指定できる（仕様の説明どおり）
       (!route || row.注文ルート === route || row.注文ルート名 === route) &&
-      (!status || row.処理状況 === status) &&
+      (statuses.length === 0 || statuses.includes(row.処理状況)) &&
       (!dateFrom || date >= dateFrom) &&
       (!dateTo || date <= dateTo)
     )

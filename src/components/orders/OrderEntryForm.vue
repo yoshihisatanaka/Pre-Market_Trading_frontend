@@ -24,6 +24,7 @@ import {
   FUND_NATURE_OPTIONS,
   ORDER_CHANNEL_OPTIONS,
   ORDER_METHOD_OPTIONS,
+  ORDER_PERSON_MAX_LENGTH,
   ORDER_TYPE,
   ORDER_TYPE_OPTIONS,
   SETTLEMENT_CURRENCY_OPTIONS,
@@ -344,6 +345,7 @@ function selectOrderType(value) {
             v-model="form.orderPerson"
             variant="underline"
             class="order-entry-form__short"
+            :maxlength="ORDER_PERSON_MAX_LENGTH"
             autocomplete="off"
             data-testid="order-entry-order-person"
           />

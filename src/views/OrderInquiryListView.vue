@@ -39,7 +39,7 @@ const operatorPending = computed(() => !operator.operator && !operator.error)
 
 /*
  * 出来状況の選択肢はコードマスタ `注文照会出来状況` から。値は処理状況コードで、
- * URL クエリ（status）にも API の status にもそのまま載る。
+ * URL クエリ（status）にはそのまま載る。API へは取消済・注文エラーを api 層が 2 コードに広げて送る。
  * App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で選択肢は揃っている。
  */
 const codes = useCodesStore()

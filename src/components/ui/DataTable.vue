@@ -3,7 +3,7 @@
  * 汎用テーブル。ドメイン知識を持たせないこと（注文固有の表示は呼び出し側の slot で行う）。
  * 列ごとの見た目を変えたいときは `cell-<列key>` の slot を使う。
  */
-defineProps({
+const props = defineProps({
   columns: {
     type: Array,
     required: true,
@@ -32,7 +32,27 @@ defineProps({
     type: Function,
     default: null,
   },
+  /*
+   * 行全体をクリックできるようにする。押された行を `row-click` で渡すだけで、
+   * どこへ移るかは呼び出し側が決める。キーボードでも辿れるよう行にフォーカスが乗り、Enter でも発火する。
+   * 行の中にボタンやリンクを置く表では使わない（押下が行にも伝わって二重に動く）。
+   */
+  clickable: {
+    type: Boolean,
+    default: false,
+  },
 })
+
+const emit = defineEmits(['row-click'])
+
+function onRowClick(row) {
+  if (props.clickable) emit('row-click', row)
+}
+
+// セルの中身からのキー入力は拾わない（行そのものにフォーカスがあるときだけ）
+function onRowEnter(event, row) {
+  if (event.target === event.currentTarget) onRowClick(row)
+}
 </script>
 
 <template>
@@ -49,8 +69,11 @@ defineProps({
         <tr
           v-for="row in rows"
           :key="row[rowKey]"
-          :class="rowClass ? rowClass(row) : null"
+          :class="[rowClass ? rowClass(row) : null, { 'is-clickable': clickable }]"
+          :tabindex="clickable ? 0 : undefined"
           data-testid="data-table-row"
+          @click="onRowClick(row)"
+          @keydown.enter="onRowEnter($event, row)"
         >
           <td v-for="column in columns" :key="column.key" :class="{ numeric: column.numeric }">
             <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]">
@@ -103,12 +126,22 @@ tbody tr:last-child td {
 
 /*
  * 行ホバー。モック（docs/mock/ の `tr:hover td`）に合わせ、背景だけを一段沈ませる。
- * transition もカーソル変更も付けない（行はクリックできない）。
+ * transition は付けない。カーソルは clickable の行だけ指にする（モックの `cursor:pointer`）。
  * tr ではなく td に塗るのもモックと同じ。ただしこれは行ごとの色
  * （呼び出し側が :deep で当てる tr.is-user-modified など）をホバー中だけ隠すので、
  * 行に色を付けている画面は、そのホバー色も対で指定すること。
  */
 tbody tr:hover td {
   background-color: var(--color-surface-muted);
+}
+
+tbody tr.is-clickable {
+  cursor: pointer;
+}
+
+/* キーボードで行に乗ったときだけ見せる（マウスのクリックでは出さない） */
+tbody tr.is-clickable:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
 }
 </style>

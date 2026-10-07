@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -16,7 +17,7 @@ import { formatJpyUnit, formatUsdUnit } from '@/utils/format'
 
 /*
  * 顧客検索（画面モック customer_search.html）。部店・扱者・口座番号・顧客名で顧客を探し、
- * 顧客名から顧客詳細（/customers/:customerId/summary）へ移る。一覧は読むだけ。
+ * 行のクリックで顧客詳細（/customers/:customerId/summary）へ移る。一覧は読むだけ。
  *
  * 読む API は顧客マスタと同じ `GET /masters/customers`（2026-09-28 決定）。ストアは別に持つ
  * （stores/customerSearch.js の冒頭）。モックと同じく、開いた時点で条件なしの一覧を出す。
@@ -73,9 +74,11 @@ function ageLabel(row) {
   return row.age ? `${row.age}歳` : '—'
 }
 
-/** 顧客詳細の外株預りへのリンク先。行のキーと同じく主キー（id）で指す */
-function detailRoute(row) {
-  return { name: 'customer-summary', params: { customerId: row.id } }
+const router = useRouter()
+
+/** 行のクリックで顧客詳細の外株預りへ移る。行のキーと同じく主キー（id）で指す */
+function openDetail(row) {
+  router.push({ name: 'customer-summary', params: { customerId: row.id } })
 }
 </script>
 
@@ -142,8 +145,18 @@ function detailRoute(row) {
       @reload="store.reload()"
       @update:offset="goToOffset"
     >
-      <!-- 行のキーは DataTable の既定（id）に任せる。主キーは口座番号ではない -->
-      <DataTable flat data-testid="customer-search-table" :columns="columns" :rows="items">
+      <!--
+        行のキーは DataTable の既定（id）に任せる。主キーは口座番号ではない。
+        モックと同じく行全体がクリックで顧客詳細へのリンクになる（clickable。Enter でも移る）
+      -->
+      <DataTable
+        flat
+        clickable
+        data-testid="customer-search-table"
+        :columns="columns"
+        :rows="items"
+        @row-click="openDetail"
+      >
         <template #cell-branchCode="{ row }">{{ row.branchCode || '—' }}</template>
 
         <!-- 扱者はコードを上に、名前を下に添える 2 段表示（モックの sales-rep-code / sales-rep-name） -->
@@ -156,16 +169,15 @@ function detailRoute(row) {
 
         <template #cell-accountNumber="{ row }">{{ row.accountNumber || '—' }}</template>
 
-        <!-- 顧客名から顧客詳細へ移る（モックは行全体がリンク。キーボードでも辿れるようリンクにする） -->
+        <!--
+          顧客名はモックと同じく素の文字で出す（押下は行が受ける）。
+          testid は E2E が行の主キー（id）を読み取るのに使う
+        -->
         <template #cell-customerName="{ row }">
           <div class="customer-search__stack">
-            <RouterLink
-              :to="detailRoute(row)"
-              class="customer-search__link"
-              :data-testid="`customer-search-detail-${row.id}`"
-            >
+            <span :data-testid="`customer-search-detail-${row.id}`">
               {{ row.customerName || '—' }}
-            </RouterLink>
+            </span>
             <span v-if="row.customerNameKana" class="customer-search__secondary">
               {{ row.customerNameKana }}
             </span>
@@ -226,10 +238,5 @@ function detailRoute(row) {
 .customer-search__secondary {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
-}
-
-.customer-search__link {
-  color: var(--color-link);
-  font-weight: 500;
 }
 </style>

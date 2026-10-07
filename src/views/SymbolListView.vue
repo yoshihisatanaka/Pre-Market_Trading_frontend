@@ -165,12 +165,13 @@ function emptyForm() {
     name: '',
     nameEn: '',
     /*
-     * 区分 3 つは未選択を作らず、実 API の既定と同じ '0' から始める
+     * 区分 3 つは未選択を作らず、選択肢の先頭（取引可 / IB証券 / 対象）から始める
      * （注文ルートは型宣言が null を許さない。理由は api 層の toSymbolRequest）。
+     * 並びは #42 で画面モック順に固定したので、先頭を引けば並びと初期値がずれない。
      */
-    regulation: '0',
-    orderRoute: '0',
-    vwapTarget: '0',
+    regulation: REGULATION_OPTIONS[0].value,
+    orderRoute: ORDER_ROUTE_OPTIONS[0].value,
+    vwapTarget: VWAP_TARGET_OPTIONS[0].value,
     // 数値 2 つは入力欄が文字列を持つ。数値への変換は api 層に任せる
     previousClose: '',
     averageVolume: '',

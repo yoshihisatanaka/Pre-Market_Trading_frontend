@@ -27,7 +27,7 @@ export const REGULATION_OPTIONS = [
 /*
  * 預託先区分と VWAP対象区分の**並びはコード順ではなく画面モックの順**（IB → みずほ / 対象 → 対象外）。
  * docs/api/requests.md #42 の回答で、この順に固定すると決まった（`GET /codes` の形は変わらない）。
- * 並びと既定値は別で、新規追加の既定値は実 API の既定と同じ '0'（みずほ / 対象外）のまま
+ * 新規追加の初期値は各定数の先頭（IB / 対象）で、並びを変えると初期値も一緒に変わる
  * （src/views/SymbolListView.vue の emptyForm）。
  */
 

@@ -693,16 +693,20 @@ describe('SymbolListView', () => {
     expect(addInput(wrapper, 'note').element.value).toBe('')
   })
 
-  it('[STV-25] 区分 3 つは未選択を作らず実 API の既定から始まる', async () => {
+  it('[STV-25] 区分 3 つは未選択を作らず選択肢の先頭から始まる', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     await openAddModal(wrapper)
 
-    // 注文ルートは null を送れないので、未選択の選択肢そのものを置かない
-    for (const name of ['regulation', 'order-route', 'vwap-target']) {
-      expect(addInput(wrapper, name).element.value).toBe('0')
-      expect(addInput(wrapper, name).findAll('option[value=""]')).toHaveLength(0)
+    // 取引可 / IB証券 / 対象。並び（#42）の先頭と初期値が一致する
+    const expected = { regulation: '0', 'order-route': '1', 'vwap-target': '1' }
+    for (const [name, value] of Object.entries(expected)) {
+      const select = addInput(wrapper, name)
+      expect(select.element.value).toBe(value)
+      expect(select.findAll('option')[0].element.value).toBe(value)
+      // 注文ルートは null を送れないので、未選択の選択肢そのものを置かない
+      expect(select.findAll('option[value=""]')).toHaveLength(0)
     }
   })
 

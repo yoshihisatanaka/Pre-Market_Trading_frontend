@@ -274,18 +274,9 @@ const KNOWN_GAPS = [
    * 2026-10-07 の取り込みで仕様に入ったので行を外した。
    */
   /*
-   * 残高マスタの銘柄名の検索は画面モックにだけある条件で、src/api/balanceAdjustments.js の
-   * 冒頭コメントの 1 番。MSW だけが解釈し、実 API は黙って無視する。
-   * 4 番（売却不可区分）は 2026-09-25 の取り込みで仕様に入ったので行を外した。
+   * 残高マスタの銘柄名の検索（#13）は仕様に symbol_name_ja / symbol_name_en が入ったので、
+   * symbol_name_ja に送り替えて行を外した（2026-10-07）。
    */
-  {
-    kind: 'query',
-    method: 'GET',
-    template: '/masters/balance-adjustments',
-    names: ['symbol_name'],
-    reason: '画面モックの「銘柄名」検索。実 API は無視するので絞り込みが黙って効かない',
-    request: '#13',
-  },
   /*
    * CSV一括注文のプレビューに出す顧客名（CsvOrderRowResult.customer_name。#27）は
    * 2026-09-30 の取り込みで仕様に入ったので、orderCsvValidateRows / orderCsvValidate /

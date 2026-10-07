@@ -8,7 +8,7 @@ import { apiClient } from './client'
  *   - 受注不可日は integer の YYYYMMDD（20260101）。アプリ内は 'YYYY-MM-DD'
  *   - 主キーが integer の `ID`。アプリ内は文字列の `id`（src/api/ca.js と同じ扱い）。
  *     **受注不可日は主キーではない** — 一意制約を持つ業務上の日付
- *   - 一覧は受注不可日の降順で、1 ページ 50 件固定（`limit` を受け付けない）
+ *   - 一覧は受注不可日の降順
  *   - 削除は論理削除（取消区分=1）。一覧は既定で取消済みを返さない
  *   - 対象市場に相当する項目が無い（一覧にも列を出さない）
  * 更新系は `X-User-Code` ヘッダが必須。付与は client.js の interceptor が全 API 共通で行う。
@@ -30,9 +30,8 @@ import { apiClient } from './client'
  *
  * 取消済み（論理削除）の行は含めない。実 API の include_deleted は既定 false なので送らない。
  *
- * `limit` は受け取るが送らない。実 API の一覧は 1 ページ 50 件で固定されており
- * `limit` というクエリを持たない（応答の limit は常に 50）。ページャーの表示件数は
- * stores/blackoutDates.js の BLACKOUT_DATES_PAGE_SIZE 側で 50 に合わせてある。
+ * `limit` は 1〜200 で既定 50（#21 で 2026-09-30 に入った）。ページャーの表示件数は
+ * stores/blackoutDates.js の BLACKOUT_DATES_PAGE_SIZE が決め、その値がここへ渡ってくる。
  *
  * 日付の条件は 2 通り。画面（受注不可日マスタ）は画面モックどおり 1 日を指す `date` を使い、
  * 実 API の単一指定 `blackout_date` に乗せる。新規注文（stores/orderEntry.js）は先の期間の
@@ -44,6 +43,7 @@ import { apiClient } from './client'
  * @returns {Promise<{ items: BlackoutDate[], total: number }>} 受注不可日の降順
  */
 export async function fetchBlackoutDates({
+  limit = 50,
   offset = 0,
   date = '',
   dateFrom = '',
@@ -53,6 +53,7 @@ export async function fetchBlackoutDates({
     // クエリ名と日付が integer であることを知ってよいのは、この層だけ。
     // 値が undefined のパラメータは axios が送らない
     params: {
+      limit,
       offset,
       blackout_date: toApiDate(date),
       start_date: toApiDate(dateFrom),

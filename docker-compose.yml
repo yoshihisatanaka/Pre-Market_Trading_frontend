@@ -33,6 +33,11 @@ services:
     # VITE_* は Vite 自身が .env から読み込むため、ここでは渡さない。
     # compose の environment: を併記すると env_file より優先され、
     # .env での切り替え（VITE_ENABLE_MSW など）が効かなくなる。
+    environment:
+      # libuv のスレッドプール（既定 4 本）を usePolling の監視が使い続け、proxy の
+      # host.docker.internal の名前解決が後ろで待たされる。/api が 1 本ずつ処理され、
+      # 6 並列で 1.9〜5.9 秒かかっていたのが 16 本で約 0.45 秒になった（2026-10-07 実測）
+      - UV_THREADPOOL_SIZE=16
 
   # Playwright はブラウザ同梱の公式イメージを使う（alpine では動作しない）
   # イメージのタグと package.json の @playwright/test は必ず同じバージョンに揃えること

@@ -3,30 +3,28 @@ import { apiClient } from './client'
 /*
  * 預り残高の検索（実 API `GET /holdings`。m_残高情報 に口座・銘柄・為替・CA を結合した明細）。
  *
- * 成熟度 B（パスとスキーマ HoldingItem はあるが、下に挙げる値の意味が仕様の説明だけでは定まらない）。
  * 顧客詳細の外株預り（/customers/:customerId/summary）が 1 顧客ぶんを読む。
  * 預り検索（/customers/holdings。stores/holdingSearch.js）は同じ関数で顧客横断に読む。
+ * 項目の意味は docs/api/requests.md #36 の回答（2026-10-06、Phase 66）で確定した。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり。
  *   - プロパティ名が日本語（口座番号 / 銘柄コード / 評価額_JPY …）
  *   - クエリ名は英語の snake_case（branch_code / account_no / symbol / symbol_name / specific_deposit）
  *   - 口座番号は integer で、クエリ名は `account_no`。アプリ内は文字列
+ *   - 行 ID（m_残高情報.ID）と 口座ID（m_口座情報.ID。顧客詳細のパスキー）は integer。アプリ内は文字列
  *   - 売却不可区分は 0 / 1 の integer。アプリ内は boolean
- *   - 評価損益率は「% 表記」の文字列。アプリ内は数値（12.34 なら 12.34%）
- *   - **行に ID が無い**。口座番号・銘柄コード・預り売買区分 を合わせて行のキーにする
- *     （残高明細はこの 3 つで 1 行。src/api/balanceAdjustments.js の残高マスタと同じ粒度）
- *   - `預り売買区分` は名前に反して**特定預り区分のコード**（0 非特定 / 1 特定 / 4 NISA / 6 成長投資枠 /
- *     8 継続管理勘定。HoldingItem の説明「特定預り区分コード」）。注文の 預り売買区分
+ *   - 評価損益率は「% 表記」の文字列（'+12.34%' / '-5.20%'）。アプリ内は数値（12.34 なら 12.34%）
+ *   - `預り売買区分` は名前に反して**特定預り区分のコード**（0 一般 / 1 特定 / 4 NISA / 6 成長投資枠 /
+ *     8 継続管理勘定。HoldingItem の説明「注文の預り売買区分とはコードの意味が逆」）。注文の 預り売買区分
  *     （0 特定 / 1 一般 / 6 成長投資枠）とは向きが違うので、注文へ渡すときは
  *     src/utils/orderEntryQuery.js の toDepositCategory で読み替える
+ *   - 金額の単位: 前日終値・平均取得単価・評価額_USD は USD、取得金額・評価額_JPY・評価損益は円
  *
- * 仕様に書かれておらず、**推定で置いているもの**（docs/api/requests.md #36 で確認中）:
- *   - 参考単価（前日終値）と参考為替は項目として返らない。説明の式
- *     「評価額_USD = 前日終値 × 残高」「評価額_JPY = 前日終値 × 残高 × 為替レート」から
- *     referencePrice = 評価額_USD ÷ 数量、referenceFxRate = 評価額_JPY ÷ 評価額_USD で戻している
- *   - 取得金額・評価損益は円建てとして扱う（「評価損益 = 評価額_JPY − 取得金額」から）
- *   - 評価損益率は説明の式「(取得金額 / 評価額_JPY) − 1」だと損益と符号が逆になる。式の書き誤りと
- *     みなし、サーバの値をそのまま出す（フロントで計算し直さない）
+ * 項目が無い応答（Phase 66 より前のバックエンド）にも落ちずに読めるようにしてある:
+ *   - ID が無ければ 口座番号・銘柄コード・預り売買区分 を ':' でつないで行キーにする（この 3 つで一意）
+ *   - 前日終値・適用為替レートが無ければ、説明の式から referencePrice = 評価額_USD ÷ 数量、
+ *     referenceFxRate = 評価額_JPY ÷ 評価額_USD で戻す
+ *   - 口座ID・売却可能株数が無ければ値なし（'' / null）
  */
 
 /**
@@ -34,6 +32,7 @@ import { apiClient } from './client'
  *
  * @typedef {{
  *   id: string,
+ *   customerId: string,
  *   branchCode: string,
  *   accountNumber: string,
  *   customerName: string,
@@ -42,6 +41,7 @@ import { apiClient } from './client'
  *   ticker: string,
  *   symbolName: string,
  *   quantity: number|null,
+ *   sellableQuantity: number|null,
  *   specificDeposit: string,
  *   specificDepositName: string,
  *   valueUsd: number|null,
@@ -55,8 +55,11 @@ import { apiClient } from './client'
  *   sellProhibited: boolean,
  *   corporateAction: string,
  * }} Holding
- *   id は 口座番号・銘柄コード・預り売買区分 を ':' でつないだ行キー（実 API に ID が無いため）。
+ *   id は行 ID（応答に無ければ 口座番号・銘柄コード・預り売買区分 を ':' でつないだ行キー）。
+ *   customerId は顧客マスタの行 ID（顧客詳細のパスキー）。応答に無ければ ''。
+ *   sellableQuantity は売却可能株数（残高 − 当日有効な売注文の数量。0 未満にはならない）。
  *   specificDeposit は特定預り区分のコード、specificDepositName はサーバが付ける名前。
+ *   referencePrice は前日終値（USD）、referenceFxRate は評価に使った為替レート。
  *   金額は数値のまま返す（桁区切りと単位の付与は画面の仕事）。null は「値が無い」。
  *   profitLossRate は % の数値（-3.5 なら -3.5%）。
  *   corporateAction は CA 発生中の銘柄だけ埋まる（例: '株式分割(1 : 2)'）。無ければ ''。
@@ -122,7 +125,9 @@ function toHolding(raw) {
   const valueJpy = toNumberOrNull(raw?.評価額_JPY)
 
   return {
-    id: [accountNumber, symbolCode, specificDeposit].join(':'),
+    // 冒頭の「項目が無い応答」の 1 番
+    id: raw?.ID == null ? [accountNumber, symbolCode, specificDeposit].join(':') : String(raw.ID),
+    customerId: raw?.口座ID == null ? '' : String(raw.口座ID),
     branchCode: raw?.部店コード ?? '',
     accountNumber,
     customerName: raw?.顧客名 ?? '',
@@ -131,6 +136,7 @@ function toHolding(raw) {
     ticker: raw?.ティッカー ?? '',
     symbolName: raw?.銘柄名 ?? '',
     quantity,
+    sellableQuantity: toNumberOrNull(raw?.売却可能株数),
     specificDeposit,
     specificDepositName: raw?.預り売買区分名 ?? '',
     valueUsd,
@@ -139,9 +145,9 @@ function toHolding(raw) {
     costJpy: toNumberOrNull(raw?.取得金額),
     profitLossJpy: toNumberOrNull(raw?.評価損益),
     profitLossRate: toPercent(raw?.評価損益率),
-    // 冒頭の「推定で置いているもの」の 1 番。割れないとき（数量 0・評価額なし）は値なし
-    referencePrice: divide(valueUsd, quantity),
-    referenceFxRate: divide(valueJpy, valueUsd),
+    // 項目が無い応答では冒頭の 2 番の逆算に落とす。割れないとき（数量 0・評価額なし）は値なし
+    referencePrice: toNumberOrNull(raw?.前日終値) ?? divide(valueUsd, quantity),
+    referenceFxRate: toNumberOrNull(raw?.適用為替レート) ?? divide(valueJpy, valueUsd),
     // 1 だけが売却不可（説明「1=この明細は売却不可（画面の売ボタンを無効化する）」）
     sellProhibited: raw?.売却不可区分 === 1,
     corporateAction: raw?.CA ?? '',
@@ -159,8 +165,9 @@ function toAccountNo(value) {
 }
 
 /**
- * 「% 表記」の文字列 → 数値（'12.34%' → 12.34、'-5%' → -5）。
- * 書式は仕様に例が無いので、% と前後の空白・桁区切り・先頭の + を許して読む。読めなければ null。
+ * 「% 表記」の文字列 → 数値（'+12.34%' → 12.34、'-5.20%' → -5.2）。
+ * 書式は '+12.34%' / '-5.20%' と確定した（#36 ④）が、% と前後の空白・桁区切り・+ の有無は緩く読む。
+ * 読めなければ null。
  */
 function toPercent(value) {
   if (typeof value === 'number') return toNumberOrNull(value)

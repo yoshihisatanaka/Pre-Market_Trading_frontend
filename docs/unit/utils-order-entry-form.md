@@ -42,3 +42,4 @@
 | NOF-29 | 引き継ぐ預り区分が空文字 | `createOrderForm({ depositCategory: '' })` | `depositCategory` は `ORDER_FORM_DEFAULTS` の既定のまま（空で上書きしない） | 実装済 |
 | NOF-30 | ほかは埋まったフォーム | 受注者を 4 文字・前後に空白付きの 4 文字・`ORDER_PERSON_MAX_LENGTH` + 1 文字・空白だけ にして `validateOrderForm()` | 4 文字は前後の空白があっても `''`、5 文字は「受注者は4文字以内で入力してください。」、空白だけは「受注者を入力してください。」 | 実装済 |
 | NOF-31 | — | `defaultOrderPerson()` を 4 文字・前後に空白付きの 4 文字・5 文字・`null`・`undefined` で呼ぶ | 4 文字は前後の空白を落としてそのまま、5 文字以上と `null` / `undefined` は `''`（開いた直後から検証で止まる値を初期値にしない） | 実装済 |
+| NOF-32 | 預りの「売り」から売却可能株数 `'1500'` を引き継ぐ / 引き継がない | `createOrderForm({ quantity: '1500' })` / `createOrderForm()` | 前者の `quantity` は入力欄と同じ 3 桁区切りの `'1,500'`、後者は `''` | 実装済 |

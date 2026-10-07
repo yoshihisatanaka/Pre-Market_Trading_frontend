@@ -360,6 +360,13 @@ describe('orderEntryForm', () => {
     expect(form.depositCategory).toBe(ORDER_FORM_DEFAULTS.depositCategory)
   })
 
+  it('[NOF-32] createOrderForm は引き継いだ数量を入力欄と同じ 3 桁区切りにする', () => {
+    const now = new Date(2026, 8, 29, 9, 5)
+
+    expect(createOrderForm({ now, quantity: '1500' }).quantity).toBe('1,500')
+    expect(createOrderForm({ now }).quantity).toBe('')
+  })
+
   it('[NOF-21] 概算は外貨を小数第 2 位、円貨を円未満で四捨五入する', () => {
     expect(estimateOrderAmount({ quantity: 7, unitPrice: 1.2345, fxRate: 150.25 })).toEqual({
       usd: 8.64,

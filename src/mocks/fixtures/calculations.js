@@ -264,7 +264,8 @@ export function buildCalculationResponse(
       row.預り売買区分 === deposit,
   )
   const heldQuantity = holding ? holding.数量 : null
-  const averageCost = holding ? holding.平均取得単価 : null
+  // 預りの平均取得単価は USD（#36 ②）。ここの計算は円の単価で行うので、預りの適用為替で円にする
+  const averageCost = holding ? Math.round(holding.平均取得単価 * holding.適用為替レート) : null
   if (holding && isSell && quantity > heldQuantity) {
     warnings.push(calculationMessages.overHolding(quantity, heldQuantity))
   } else if (!holding && (isSell || deposit === DEPOSIT_SPECIFIC)) {

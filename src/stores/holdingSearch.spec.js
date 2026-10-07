@@ -17,11 +17,12 @@ const PAGE_SIZE = HOLDING_SEARCH_PAGE_SIZE
 const TOTAL = holdings.length
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
-/** api 層が付ける行キー（口座番号・銘柄コード・預り売買区分） */
-const keyOf = (row) => [String(row.口座番号), row.銘柄コード, row.預り売買区分].join(':')
+/** api 層が付ける行キー（明細の行 ID） */
+const keyOf = (row) => String(row.ID)
 const idsOf = (store) => store.items.map((item) => item.id)
 
 const head = holdings[0]
+/** 口座ID の無い明細（顧客マスタを引き直す道を通る） */
 const headHolding = { branchCode: head.部店コード, accountNumber: String(head.口座番号) }
 const headCustomer = customers.find(
   (row) => row.口座番号 === head.口座番号 && row.部店コード === head.部店コード,
@@ -143,7 +144,21 @@ describe('stores/holdingSearch', () => {
     expect(store.isEmpty).toBe(true)
   })
 
-  it('[HSS-07] 明細の部店・口座番号で顧客マスタを引き、その顧客の ID を返す', async () => {
+  it('[HSS-12] 明細に customerId があれば顧客マスタを引かずにそれを返す', async () => {
+    const queries = recordQueries(CUSTOMERS)
+    const store = useHoldingSearchStore()
+    const customerId = String(head.口座ID)
+
+    const pending = store.openCustomer({ ...headHolding, customerId })
+    expect(store.customerLookupPending).toBe(false)
+    const id = await pending
+
+    expect(id).toBe(customerId)
+    expect(queries).toHaveLength(0)
+    expect(store.customerLookupError).toBeNull()
+  })
+
+  it('[HSS-07] 口座ID の無い明細は部店・口座番号で顧客マスタを引き、その顧客の ID を返す', async () => {
     expect(headCustomer).toBeTruthy()
     const queries = recordQueries(CUSTOMERS)
     const store = useHoldingSearchStore()

@@ -199,6 +199,7 @@ describe('CustomerSummaryView', () => {
     const { wrapper } = await mountView('/customers/1/summary')
     await settle()
 
+    const nvda = FIRST_HOLDINGS.find((holding) => holding.ティッカー === 'NVDA')
     const row = rowOf(wrapper, 'NVDA')
     expect(linkOf(row.find('[data-testid="customer-holdings-buy"]')).query).toEqual({
       ...FIRST_KEY,
@@ -210,6 +211,28 @@ describe('CustomerSummaryView', () => {
       ticker: 'NVDA',
       side: 'sell',
       deposit: DEPOSIT_CATEGORY.GROWTH,
+      quantity: String(nvda.売却可能株数),
+    })
+  })
+
+  it('[CSM-15] 特定預りの「売り」は注文の特定に読み替え、売却可能株数を数量として引き継ぐ', async () => {
+    const aapl = FIRST_HOLDINGS.find((holding) => holding.ティッカー === 'AAPL')
+    // 預りの特定預り区分 1（特定）。保有数量と売却可能株数が違う明細で確かめる
+    expect(aapl.預り売買区分).toBe(SPECIFIC_DEPOSIT.SPECIFIC)
+    expect(aapl.売却可能株数).toBeLessThan(aapl.数量)
+    const { wrapper } = await mountView('/customers/1/summary')
+    await settle()
+
+    const sell = rowOf(wrapper, 'AAPL').find('[data-testid="customer-holdings-sell"]')
+    expect(linkOf(sell)).toEqual({
+      path: '/customers/1/order-entry',
+      query: {
+        ...FIRST_KEY,
+        ticker: 'AAPL',
+        side: 'sell',
+        deposit: DEPOSIT_CATEGORY.SPECIFIC,
+        quantity: String(aapl.売却可能株数),
+      },
     })
   })
 

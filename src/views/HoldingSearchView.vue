@@ -26,13 +26,13 @@ import { formatSignedJpyUnit, formatSignedPercent, profitLossTone } from '@/util
  * 顧客検索と同じく、開いた時点で条件なしの一覧を出す（モックの画面アクセス時の表示。2026-10-02 確認）。
  *
  * 行の操作は顧客詳細の外株預り（views/CustomerSummaryView.vue）と同じ:
- *   - 顧客名 … 顧客詳細（/customers/:customerId/summary）へ移る。HoldingItem に顧客の ID が無いので、
- *              押したときに顧客マスタを引いてから移る（stores/holdingSearch.js の openCustomer）
+ *   - 顧客名 … 顧客詳細（/customers/:customerId/summary）へ移る。移る先の ID は明細の 口座ID を使う
+ *              （無い明細だけ押したときに顧客マスタを引く。stores/holdingSearch.js の openCustomer）
  *   - 買い / 売り … 顧客詳細の注文入力タブ（/customers/:customerId/order-entry。モックの customer_context）へ
- *              顧客・銘柄・売買・預り区分を URL クエリで引き継ぐ（utils/orderEntryQuery.js）。顧客名と同じく
- *              押したときに顧客マスタの行 ID を引いてから移る。発注権限の無い利用者には出さない
+ *              顧客・銘柄・売買・預り区分（売りは売却可能株数も）を URL クエリで引き継ぐ
+ *              （utils/orderEntryQuery.js）。移る先の ID は顧客名と同じ。発注権限の無い利用者には出さない
  *   - 仮計算 … 顧客詳細の仮計算タブ（/customers/:customerId/calculations）へ銘柄・売り・預り区分を
- *              引き継いで移る（utils/calculationQuery.js）。顧客名と同じく、押したときに顧客マスタを引く。
+ *              引き継いで移る（utils/calculationQuery.js）。移る先の ID は顧客名と同じ。
  *              発注ではないので、発注権限の無い利用者にも出す
  */
 
@@ -130,7 +130,7 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
 const router = useRouter()
 
 /**
- * 顧客マスタの行 ID を引いてから顧客詳細のタブへ移る。引けなければ理由を帯に出す。
+ * 顧客マスタの行 ID を得てから顧客詳細のタブへ移る。得られなければ理由を帯に出す。
  * 顧客名は外株預りへ、「仮計算」は銘柄・売り・預り区分を引き継いで仮計算へ。
  */
 async function openCustomer(row, name = 'customer-summary', query = {}) {
@@ -248,7 +248,7 @@ function profitLossClass(row) {
       @reload="store.reload()"
       @update:offset="goToOffset"
     >
-      <!-- 行のキーは DataTable の既定（id。口座番号・銘柄コード・預り区分をつないだもの）に任せる -->
+      <!-- 行のキーは DataTable の既定（id。明細の行 ID）に任せる -->
       <DataTable flat data-testid="holding-search-table" :columns="columns" :rows="items">
         <template #cell-branchCode="{ row }">{{ row.branchCode || '—' }}</template>
         <template #cell-accountNumber="{ row }">{{ row.accountNumber || '—' }}</template>

@@ -546,4 +546,18 @@ describe('OrderEntryView', () => {
     )
     expect(byTestId(wrapper, 'order-entry-customer-bar').exists()).toBe(false)
   })
+
+  it('[NOV-27] 預りの「売り」から引き継いだ数量（売却可能株数）が注文数量に入る', async () => {
+    const sold = await mountView({ ...handoverQuery(), side: 'sell', quantity: '1500' })
+    await formReady(sold.wrapper)
+
+    expect(selectedValue(sold.wrapper, 'order-entry-side')).toBe(SIDE.SELL)
+    expect(byTestId(sold.wrapper, 'order-entry-quantity').element.value).toBe('1,500')
+    sold.wrapper.unmount()
+
+    const unreadable = await mountView({ ...handoverQuery(), side: 'sell', quantity: 'abc' })
+    await formReady(unreadable.wrapper)
+
+    expect(byTestId(unreadable.wrapper, 'order-entry-quantity').element.value).toBe('')
+  })
 })

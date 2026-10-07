@@ -62,9 +62,13 @@ function bumpSpread(spread, steps = 1) {
   return Number((Number(spread.toFixed(DIGITS.spread)) + 0.0001 * steps).toFixed(DIGITS.spread))
 }
 
-/** 0〜1 の比率を、既定値と区別できるよう少しだけずらす（上限 1 を超えない向きに） */
+/**
+ * 0〜1 の比率を、既定値と区別できるようずらす（上限 1 を超えない向きに）。
+ * 幅は DB の桁数より粗くする。実 API は 消費税率 に 0.10001 を送ると 200 のまま 0.1 に丸めて保存した
+ * （2026-10-07 実測。桁数は openapi.json に書かれていない）ので、0.00001 刻みでは区別がつかない
+ */
 function nudgeRate(rate) {
-  const step = 0.00001
+  const step = 0.01
   return Number((rate + step <= 1 ? rate + step : rate - step).toFixed(10))
 }
 
@@ -247,7 +251,7 @@ test.describe('仮計算マスタ（実 API 接続）', () => {
       備考: NOTE_MARKER,
     })
     for (const key of HIDDEN_RATE_KEYS) {
-      expect(seeded[key], `${key} の下ごしらえが効いていない`).toBeCloseTo(nudgeRate(current[key]), 10)
+      expect(seeded[key], `${key} の下ごしらえが効いていない`).toBeCloseTo(nudgeRate(current[key]), 4)
     }
     expect(seeded['備考']).toBe(NOTE_MARKER)
 

@@ -10,19 +10,24 @@ import { symbols } from './symbols'
  * 顧客と銘柄は顧客マスタ・銘柄マスタのフィクスチャから引く（顧客詳細で開いた顧客の預りが出るように、
  * 口座番号・顧客名・銘柄コード・銘柄名を同じ出どころにする）。
  *
- * 金額は HoldingItem の説明の式で組み立てる。冒頭の FX_RATE は為替（1 ドル 150 円。注文照会の
- * fixtures/orderInquiry.js の適用為替レートと同じ）。
+ * 金額は HoldingItem の説明の式で組み立てる（docs/api/requests.md #36 の回答で確定）。冒頭の
+ * HOLDINGS_FX_RATE は 適用為替レート（1 ドル 150 円。注文照会の fixtures/orderInquiry.js と同じ）。
  *   評価額_USD = 前日終値 × 数量（小数第 2 位で丸め）
  *   評価額_JPY = 前日終値 × 数量 × 為替（円未満を四捨五入）
- *   取得金額   = 平均取得単価（円）× 数量
+ *   取得金額   = 平均取得単価（USD）× 数量 × 為替（円未満を四捨五入）
  *   評価損益   = 評価額_JPY − 取得金額
- *   評価損益率 = 評価損益 ÷ 取得金額（小数第 2 位までの % 表記。説明の式は符号が逆に見えるので、
- *               損益と符号が揃う形で置く。docs/api/requests.md #36）
+ *   評価損益率 = (評価額_JPY ÷ 取得金額) − 1（小数第 2 位までの % 表記。'+12.34%' / '-5.20%' の形）
+ *
+ * 預り売買区分 は名前に反して残高の**特定預り区分**のコード（0 一般 / 1 特定 / 6 成長投資枠。
+ * 注文の 預り売買区分 とは 0 / 1 が逆）。名前はコードマスタの 特定預り区分 から引く。
+ * ID は行 ID（m_残高情報.ID。配列の並び順に 1 から振る）、口座ID は顧客マスタの ID。
+ * 売却可能株数 は既定で数量と同じ（当日の売注文なし）。
  *
  * 画面で確かめたい条件を必ず 1 件は含める（口座 1230001 の山田 太郎にまとめてある）。
  *   - 評価益・評価損・損益 0 の 3 通り（損益の色分け）
- *   - 特定預り区分 1 特定 / 0 非特定 / 6 成長投資枠
+ *   - 特定預り区分 1 特定 / 0 一般 / 6 成長投資枠
  *   - 売却不可区分 1（売りボタンが押せない）
+ *   - 売却可能株数が数量より少ない（当日の売注文がある。「売り」で引き継ぐ数量が数量と違う）
  *   - CA 発生中（警告の帯と行の印）
  * 口座 1230002 は 1 銘柄だけ、1230006 は CA の無い 2 銘柄、部店 123 のほかの顧客は保有なし（空の状態）。
  *
@@ -46,13 +51,23 @@ function findSymbol(ticker) {
   return symbol
 }
 
-/** 1 明細の HoldingItem を組み立てる */
+/** 評価損益率の % 表記。0 以上に + を付ける（'+12.34%' / '-5.20%'） */
+function percentText(ratio) {
+  const text = (ratio * 100).toFixed(2)
+  return `${ratio >= 0 ? '+' : ''}${text}%`
+}
+
+/**
+ * 1 明細の HoldingItem を組み立てる（ID は配列にしてから振る）。
+ * averageCost は平均取得単価（USD）、sellable は売却可能株数（省略時は数量と同じ）。
+ */
 function holding({
   accountNo,
   ticker,
   quantity,
   deposit,
   averageCost,
+  sellable = quantity,
   sellProhibited = false,
   ca = null,
 }) {
@@ -60,10 +75,11 @@ function holding({
   const symbol = findSymbol(ticker)
   const close = symbol.前日終値
   const valueJpy = Math.round(close * quantity * HOLDINGS_FX_RATE)
-  const cost = averageCost * quantity
+  const cost = Math.round(averageCost * quantity * HOLDINGS_FX_RATE)
   const profitLoss = valueJpy - cost
 
   return {
+    口座ID: customer.ID,
     部店コード: customer.部店コード,
     口座番号: customer.口座番号,
     顧客名: customer.顧客名,
@@ -74,12 +90,15 @@ function holding({
     数量: quantity,
     預り売買区分: deposit,
     預り売買区分名: SPECIFIC_DEPOSIT_NAMES[deposit] ?? null,
+    前日終値: close,
+    適用為替レート: HOLDINGS_FX_RATE,
     評価額_USD: Math.round(close * quantity * 100) / 100,
     評価額_JPY: valueJpy,
     平均取得単価: averageCost,
     取得金額: cost,
     評価損益: profitLoss,
-    評価損益率: `${((profitLoss / cost) * 100).toFixed(2)}%`,
+    評価損益率: percentText(valueJpy / cost - 1),
+    売却可能株数: sellable,
     売却不可区分: sellProhibited ? 1 : 0,
     CA: ca,
   }
@@ -91,59 +110,66 @@ const BULK_TICKERS = ['META', 'JPM', 'V', 'AAPL', 'MSFT', 'GOOGL', 'AMZN']
 
 /**
  * 機械生成の明細。1 顧客に隣り合う 2 銘柄を、特定預り・CA なし・売却可で持たせる。
- * 平均取得単価は前日終値の円換算から 1 銘柄目は 10% 安く（評価益）、2 銘柄目は 10% 高く（評価損）置く。
+ * 平均取得単価は前日終値から 1 銘柄目は 10% 安く（評価益）、2 銘柄目は 10% 高く（評価損）置く。
  */
 const bulkHoldings = customers
   .filter((customer) => BULK_BRANCHES.includes(customer.部店コード))
   .flatMap((customer, index) =>
     [0, 1].map((shift) => {
       const ticker = BULK_TICKERS[(index + shift) % BULK_TICKERS.length]
-      const yenClose = findSymbol(ticker).前日終値 * HOLDINGS_FX_RATE
+      const close = findSymbol(ticker).前日終値
       return holding({
         accountNo: customer.口座番号,
         ticker,
         quantity: 10 * (index + 1),
         deposit: '1',
-        averageCost: Math.round(yenClose * (shift === 0 ? 0.9 : 1.1)),
+        averageCost: Math.round(close * (shift === 0 ? 0.9 : 1.1) * 100) / 100,
       })
     }),
   )
 
 export const holdings = [
-  // 山田 太郎（部店 123）。評価益
-  holding({ accountNo: 1230001, ticker: 'AAPL', quantity: 100, deposit: '1', averageCost: 30_000 }),
+  // 山田 太郎（部店 123）。評価益。当日の売注文が 20 株あり、売却可能株数は 80
+  holding({
+    accountNo: 1230001,
+    ticker: 'AAPL',
+    quantity: 100,
+    deposit: '1',
+    averageCost: 200,
+    sellable: 80,
+  }),
   // 評価損。売却不可（売りボタンが押せない）
   holding({
     accountNo: 1230001,
     ticker: 'MSFT',
     quantity: 50,
     deposit: '1',
-    averageCost: 66_000,
+    averageCost: 440,
     sellProhibited: true,
   }),
   // 成長投資枠
-  holding({ accountNo: 1230001, ticker: 'NVDA', quantity: 200, deposit: '6', averageCost: 16_000 }),
-  // 非特定。損益 0。CA 発生中
+  holding({ accountNo: 1230001, ticker: 'NVDA', quantity: 200, deposit: '6', averageCost: 107 }),
+  // 一般。損益 0（平均取得単価 = 前日終値）。CA 発生中
   holding({
     accountNo: 1230001,
     ticker: 'TSLA',
     quantity: 30,
     deposit: '0',
-    averageCost: 37_347,
+    averageCost: findSymbol('TSLA').前日終値,
     ca: '株式分割(1 : 3)',
   }),
   // 佐藤 花子（部店 123）。1 銘柄だけ・評価損
-  holding({ accountNo: 1230002, ticker: 'AMZN', quantity: 40, deposit: '1', averageCost: 36_000 }),
+  holding({ accountNo: 1230002, ticker: 'AMZN', quantity: 40, deposit: '1', averageCost: 240 }),
   // 渡辺 良子（部店 123）。CA の無い 2 銘柄
   holding({
     accountNo: 1230006,
     ticker: 'GOOGL',
     quantity: 300,
     deposit: '1',
-    averageCost: 25_000,
+    averageCost: 167,
   }),
-  holding({ accountNo: 1230006, ticker: 'AAPL', quantity: 500, deposit: '6', averageCost: 32_000 }),
+  holding({ accountNo: 1230006, ticker: 'AAPL', quantity: 500, deposit: '6', averageCost: 213 }),
   // 別の部店（234）の顧客。部店での絞り込みを確かめる
-  holding({ accountNo: 2340001, ticker: 'AAPL', quantity: 10, deposit: '1', averageCost: 33_000 }),
+  holding({ accountNo: 2340001, ticker: 'AAPL', quantity: 10, deposit: '1', averageCost: 220 }),
   ...bulkHoldings,
-]
+].map((row, index) => ({ ID: index + 1, ...row }))

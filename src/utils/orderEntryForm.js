@@ -103,11 +103,12 @@ function daysBetween(from, to) {
  *
  * @param {{
  *   now?: Date, orderPerson?: string, branchCode?: string, accountNumber?: string,
- *   ticker?: string, side?: string, depositCategory?: string,
+ *   ticker?: string, side?: string, depositCategory?: string, quantity?: string,
  * }} [options]
  *   branchCode / accountNumber は「同じ顧客で新規注文」で引き継ぐときに渡す。
- *   ticker / side / depositCategory は顧客詳細の預りの「買い」「売り」から引き継ぐときに渡す
- *   （utils/orderEntryQuery.js の parseOrderEntryQuery の結果）。空なら既定のまま
+ *   ticker / side / depositCategory / quantity は顧客詳細・預り検索の預りの「買い」「売り」から
+ *   引き継ぐときに渡す（utils/orderEntryQuery.js の parseOrderEntryQuery の結果。quantity は売りの
+ *   売却可能株数）。空なら既定のまま
  */
 export function createOrderForm({
   now = new Date(),
@@ -117,6 +118,7 @@ export function createOrderForm({
   ticker = '',
   side = '',
   depositCategory = '',
+  quantity = '',
 } = {}) {
   return {
     branchCode,
@@ -124,7 +126,8 @@ export function createOrderForm({
     ticker,
     // 売買区分は既定を持たない（モックも未選択から始まる。押し間違いを防ぐため）
     side,
-    quantity: '',
+    // 入力欄と同じ 3 桁区切りにする
+    quantity: formatQuantityInput(quantity),
     limitPrice: '',
     expiryDate: '',
     orderDate: `${pad2(now.getMonth() + 1)}/${pad2(now.getDate())}`,

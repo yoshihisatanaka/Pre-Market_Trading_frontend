@@ -19,7 +19,8 @@ import { formatSignedJpyUnit, formatSignedPercent, profitLossTone } from '@/util
  * この画面が描かれるのは顧客を読み終えてからなので、customer は常に居る。
  *
  * 行の「買い」「売り」と「新規注文」は、注文入力タブ（/customers/:customerId/order-entry）へ
- * 顧客・銘柄・売買・預り区分を URL クエリで引き継いで移る（utils/orderEntryQuery.js）。発注権限（GET /auth/me の order）の
+ * 顧客・銘柄・売買・預り区分（「売り」は売却可能株数も）を URL クエリで引き継いで移る（utils/orderEntryQuery.js）。
+ * 発注権限（GET /auth/me の order）の
  * 無い利用者には出さない（注文照会の「新規注文」「訂正」「取消」と同じ扱い）。
  *
  * 「仮計算」は顧客詳細の仮計算タブ（/customers/:customerId/calculations）へ移る。見出しのものは買いで始め、

@@ -31,11 +31,11 @@ const CUSTOMER_LOOKUP_LIMIT = 10
  * 取得・競合防止の足回りは useCrudList が持つ（公開される名前もそちらの JSDoc）。
  * **一覧は読むだけ**なので createItem / updateItem / deleteItem は渡さない。
  *
- * もう 1 つ、顧客名・買い / 売りから顧客詳細へ移るための「顧客マスタの行 ID を引く」（openCustomer）を持つ。
- * 顧客詳細のルート（/customers/:customerId/summary）は顧客マスタの行 ID で顧客を指すが、
- * `HoldingItem` には ID が無く、部店コードと口座番号しか返らない。そこで押されたときに
- * `GET /masters/customers` を部店コード・口座番号で引いて ID を得る
- * （docs/api/requests.md #36 ⑦ で HoldingItem への顧客の ID の追加を依頼中。入ったらこの処理は消す）。
+ * もう 1 つ、顧客名・買い / 売りから顧客詳細へ移るための「顧客マスタの行 ID を得る」（openCustomer）を持つ。
+ * 顧客詳細のルート（/customers/:customerId/summary）は顧客マスタの行 ID で顧客を指す。
+ * `HoldingItem` は 口座ID（= その行 ID。docs/api/requests.md #36 ⑦）を返すので、明細にあればそれをそのまま使い、
+ * 通信しない。口座ID の無い明細（Phase 66 より前のバックエンド・顧客マスタに無い口座）のときだけ、
+ * `GET /masters/customers` を部店コード・口座番号で引いて ID を得る。
  */
 export const useHoldingSearchStore = defineStore('holdingSearch', () => {
   const list = useCrudList({
@@ -75,12 +75,17 @@ export const useHoldingSearchStore = defineStore('holdingSearch', () => {
   } = useAsync(findCustomerId)
 
   /**
-   * 預りの 1 明細から、その顧客の顧客マスタの行 ID を引く。
+   * 預りの 1 明細から、その顧客の顧客マスタの行 ID を得る。明細に customerId があれば引かずに返す。
    *
-   * @param {{ branchCode: string, accountNumber: string }} holding src/api/holdings.js の Holding
+   * @param {{ customerId?: string, branchCode: string, accountNumber: string }} holding
+   *   src/api/holdings.js の Holding
    * @returns {Promise<string|null>} 行 ID。引けなかったときは null（理由は customerLookupError）
    */
-  function openCustomer({ branchCode, accountNumber }) {
+  async function openCustomer({ customerId = '', branchCode, accountNumber }) {
+    if (customerId) {
+      customerLookupError.value = null
+      return customerId
+    }
     return executeCustomerLookup({ branchCode, accountNumber })
   }
 

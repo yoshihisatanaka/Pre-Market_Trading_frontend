@@ -128,7 +128,7 @@ function newForm(customer = {}) {
   }
 }
 
-// 顧客詳細から入ったときは、URL クエリで引き継いだ顧客・銘柄・売買・預り区分を初期値にする
+// 顧客詳細から入ったときは、URL クエリで引き継いだ顧客・銘柄・売買・預り区分・数量を初期値にする
 const form = ref(newForm(parseOrderEntryQuery(route.query)))
 
 // 休日を読み終えたら期間指定の先頭を入れる（開いた直後は選択肢がまだ無い）

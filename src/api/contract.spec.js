@@ -53,6 +53,7 @@ import {
   orderCsvValidateWithErrorsResponse,
 } from '../mocks/fixtures/orderCsv'
 import { orderCreateExamples, orderValidationExamples } from '../mocks/fixtures/orderEntry'
+import { calculationExamples } from '../mocks/fixtures/calculations'
 import { fetchOrders } from './orders'
 import { amendOrder, cancelOrder, fetchOrderDetail, fetchOrderInquiry } from './orderInquiry'
 import { fetchBranches, fetchCodes, fetchHandlers } from './codes'
@@ -127,6 +128,7 @@ import {
   validateOrderCsv,
 } from './orderCsv'
 import { createOrder, validateOrder } from './orderEntry'
+import { calculate } from './calculations'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -418,6 +420,11 @@ const FIXTURES = [
     rows: [...orderCsvValidateResponse.rows, ...orderCsvValidateWithErrorsResponse.rows],
   },
   { name: 'bulkOrderCreate', schema: 'BulkOrderCreateResponse', rows: [bulkOrderCreateResponse] },
+  /*
+   * 仮計算の応答はレスポンス全体が対象（MSW のハンドラが同じ組み立てで返す）。
+   * 外貨 / 円貨 / 手数料パラメータ / 計算パラメータは $ref 経由で入れ子まで型検査される
+   */
+  { name: 'calculation', schema: 'CalculationResponse', rows: calculationExamples },
 ]
 
 function describeSchema(schema) {
@@ -909,6 +916,32 @@ const PROBES = [
     },
   },
   { name: 'bulkCreateOrders', run: () => bulkCreateOrders([], { createdBy: '001' }) },
+  {
+    name: 'calculate',
+    run: () =>
+      calculate({
+        accountNumber: '1230001',
+        symbol: 'AAPL',
+        side: '1',
+        quantity: 10,
+        unitPrice: 230.5,
+        specificDeposit: '1',
+        fxRate: null,
+        localFee1: null,
+        localFee2: null,
+        localTax1: null,
+        localTax2: null,
+        localTax3: null,
+        otherCost1: null,
+        otherCost2: null,
+        feePattern: null,
+        feeMultiplier: null,
+        basisPoints: null,
+        taxExempt: false,
+        feeMin: null,
+        feeMax: null,
+      }),
+  },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

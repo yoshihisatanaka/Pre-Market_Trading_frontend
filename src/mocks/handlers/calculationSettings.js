@@ -10,6 +10,11 @@ export function resetCalculationSettingsRow() {
   calculationSettingRow = { ...calculationSetting }
 }
 
+/** いまの仮計算マスタ（仮計算のモック handlers/calculations.js が、画面で変えた値で計算するため） */
+export function currentCalculationSetting() {
+  return calculationSettingRow
+}
+
 export const calculationSettingsHandlers = [
   // 仮計算マスタ。1 件だけの設定なので一覧ではない
   http.get('*/api/masters/calculation-settings', () => HttpResponse.json(calculationSettingRow)),

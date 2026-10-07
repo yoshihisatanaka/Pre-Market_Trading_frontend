@@ -1,6 +1,8 @@
 <script setup>
-import { computed, reactive } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
@@ -8,112 +10,117 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSegmentedControl from '@/components/ui/BaseSegmentedControl.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import FormField from '@/components/ui/FormField.vue'
-import { SPECIFIC_DEPOSIT } from '@/utils/apiEnums'
+import { useCalculationStore } from '@/stores/calculation'
+import { useCustomerDetailStore } from '@/stores/customerDetail'
+import {
+  buildCalculationInput,
+  buildCalculationSummary,
+  buildPendingSummary,
+  createCalculationForm,
+  hasCalculationFormErrors,
+  validateCalculationForm,
+} from '@/utils/calculationForm'
 import {
   CALCULATION_DEPOSIT_OPTIONS,
   FEE_PATTERN_OPTIONS,
   LOCAL_FEE_CATEGORY_OPTIONS,
 } from '@/utils/calculationOptions'
 import { parseCalculationQuery } from '@/utils/calculationQuery'
-import { SIDE, SIDE_OPTIONS } from '@/utils/orderEntryOptions'
+import { SIDE_OPTIONS } from '@/utils/orderEntryOptions'
 
 /*
  * 顧客詳細の仮計算タブ（画面モック provisional_calculation.html）。
  * 顧客カードとタブは枠（views/CustomerDetailView.vue）が描くので、ここは入力フォームと結果のカードだけを持つ。
+ * 枠は顧客を読み終えてからこの画面を描くので、口座番号は枠のストア（stores/customerDetail.js）から取る。
  *
- * **いまは見た目だけ。** 入力欄は値を持つだけで、「仮計算を実行」は何もしない（`POST /calculations` は未接続）。
- * 結果のカードは枠だけを出し、金額は「—」で埋める。読み込みが無いので 4 状態もまだ無い
- * （つなぐときに、実行中 / エラー / 未実行 / 結果あり として足す）。
+ * 「仮計算を実行」で入力を検証し、通れば `POST /calculations` を呼ぶ（stores/calculation.js）。
+ * 計算はすべてサーバが行い、ここは返った値を出すだけ（表示の組み立ては utils/calculationForm.js）。
+ * 結果のカードは 4 状態を出し分ける。
+ *   未実行   … 見出しが「未実行」、金額は「—」（見出しと行は入力中の売買・預り区分に合わせる）
+ *   計算中   … 見出しが「計算中…」、ボタンは押せない
+ *   エラー   … 理由の帯（口座・銘柄が無い、金額帯が無いなどの 400 と、通信・サーバ障害）
+ *   結果あり … 応答の金額。サーバの warnings（残高を超える売り数量など）は注意の帯に出す
+ * 入力の不備は項目の直下に出し、API は呼ばない（新規注文の画面と同じ）。
  *
  * 外株預り・預り検索の行の「仮計算」からは、銘柄・売買・預り区分が URL クエリで引き継がれる
  * （utils/calculationQuery.js）。タブと外株預りの見出しの「仮計算」から入ったときは買いで始まる（モックと同じ）。
  *
- * モックとの差・つなぐときに決めること:
- *   - 国内約定日・現地手数料区分は CalculationRequest に対応する項目が無い（docs/api/requests.md #47 で依頼中）
- *   - 結果の行はモックの並び。応答（CalculationResponse）は 外貨 / 円貨 の 2 ブロックで、行との対応はまだ決めていない
+ * モックとの差:
+ *   - 国内約定日・現地手数料区分は CalculationRequest に対応する項目が無いので送らない（docs/api/requests.md #47 で依頼中）。
+ *     国内約定日の形式だけは画面で見る
+ *   - 結果の行はモックの並びに応答の値を当てる。応答に無い円換算の内訳（約定金額・現地費用・スプレッド）の 3 行は
+ *     「円換算精算金額」と「適用為替」に、NISA の上乗せ額の行は「NISA使用予定額」に置き換えた
+ *   - 為替・単価・数量・手数料条件に既定値を入れない（モックは顧客属性のモック設定と時価で埋めていた）。
+ *     空欄はサーバが為替マスタ・手数料優遇マスタ・仮計算マスタで補完する
  *   - 預りから売りで入ったときに預り区分をその明細に固定する（モックのスクリプト）のは、預りの明細を引けるようになってから
  */
 
 const route = useRoute()
 
-/** 結果のカードの金額。仮計算をつなぐまでは全部これ */
-const PLACEHOLDER = '—'
+// view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
+const store = useCalculationStore()
+const { result, error, loading } = storeToRefs(store)
 
-/** 国内約定日の既定は今日（モックと同じ YYYYMMDD） */
-function todayYmd() {
-  const now = new Date()
-  const pad = (value) => String(value).padStart(2, '0')
-  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
-}
+const { customer } = storeToRefs(useCustomerDetailStore())
 
 // 引き継ぎは開いたときに 1 回だけ読む（入力を始めたあとで URL に合わせて書き換えない）
-const initial = parseCalculationQuery(route.query)
+const form = ref(createCalculationForm(parseCalculationQuery(route.query)))
 
-const form = reactive({
-  symbol: initial.symbol,
-  side: initial.side || SIDE.BUY,
-  specificDeposit: initial.specificDeposit || SPECIFIC_DEPOSIT.SPECIFIC,
-  quantity: '',
-  fxRate: '',
-  unitPrice: '',
-  domesticTradeDate: todayYmd(),
-  localFee1: '',
-  localFee2: '',
-  localFeeCategory: LOCAL_FEE_CATEGORY_OPTIONS[0].value,
-  localTax1: '',
-  localTax2: '',
-  localTax3: '',
-  otherCost1: '',
-  otherCost2: '',
-  taxExempt: false,
-  feePattern: '',
-  feeMultiplier: '',
-  basisPoints: '',
-  feeFrom: '',
-  feeTo: '',
+/** 項目ごとの入力の不備 */
+const fieldErrors = ref({})
+
+/** 結果が無いあいだの見出しの状態 */
+const pendingStatus = computed(() => {
+  if (loading.value) return '計算中…'
+  return error.value ? '計算できませんでした' : '未実行'
 })
 
-const isSell = computed(() => form.side === SIDE.SELL)
-
-/** 成長投資枠の買付だけ、NISA 用の為替（上乗せ後）と上乗せ額の行を足す（モックと同じ） */
-const isNisaBuy = computed(
-  () => form.side === SIDE.BUY && form.specificDeposit === SPECIFIC_DEPOSIT.GROWTH_QUOTA,
+/** 結果のカードに出す文字列。結果が無いあいだは入力中の売買・預り区分で見出しと行を決める */
+const summary = computed(() =>
+  result.value
+    ? buildCalculationSummary(result.value)
+    : buildPendingSummary({
+        side: form.value.side,
+        specificDeposit: form.value.specificDeposit,
+        status: pendingStatus.value,
+      }),
 )
 
-const estimateLabel = computed(() => (isSell.value ? '売却概算' : '買付概算'))
-const totalLabel = computed(() => (isSell.value ? '概算受取金額' : '概算必要金額'))
+const warnings = computed(() => result.value?.warnings ?? [])
 
-/** 結果の明細行（モックの並び）。金額はまだ出さないので見出しだけ */
-const resultRows = computed(() => [
-  { key: 'grossUsd', label: '外貨約定代金' },
-  { key: 'localCostUsd', label: '現地費用合計' },
-  { key: 'exchangeTax', label: '取引所税' },
-  { key: 'grossJpy', label: '円換算約定金額' },
-  { key: 'localCostJpy', label: '円換算現地費用' },
-  { key: 'spreadJpy', label: '円換算スプレッド' },
-  ...(isNisaBuy.value
-    ? [
-        { key: 'nisaFxRate', label: 'NISA仮計算適用為替' },
-        { key: 'nisaFxBuffer', label: 'NISA仮計算用為替上乗せ' },
-      ]
-    : []),
-  { key: 'domesticFee', label: '国内手数料' },
-  { key: 'consumptionTax', label: '消費税' },
-])
+async function submit() {
+  // ボタンは :disabled で塞いであるが、入力欄での Enter でも submit は飛ぶ
+  if (loading.value) return
+
+  fieldErrors.value = validateCalculationForm(form.value)
+  if (hasCalculationFormErrors(fieldErrors.value)) return
+
+  await store.run(
+    buildCalculationInput(form.value, { accountNumber: customer.value?.accountNumber ?? '' }),
+  )
+}
 
 const backRoute = computed(() => ({
   name: 'customer-summary',
   params: { customerId: String(route.params.customerId ?? '') },
 }))
+
+// 前回この画面で出した結果やエラーを持ち越さない（Pinia は画面をまたいで残る）
+store.reset()
 </script>
 
 <template>
   <div class="customer-calc">
     <!--
       novalidate: required は必須マークと aria のためのもの。ブラウザ標準の吹き出し（英語）は出さない。
-      送信はまだ何もしない（上のコメント）
+      検証は送信時に画面が行い、不備は項目の直下に出す
     -->
-    <form class="customer-calc__form" data-testid="customer-calc-form" novalidate @submit.prevent>
+    <form
+      class="customer-calc__form"
+      data-testid="customer-calc-form"
+      novalidate
+      @submit.prevent="submit"
+    >
       <section class="customer-calc__section">
         <div class="customer-calc__fields is-primary">
           <FormField
@@ -121,6 +128,7 @@ const backRoute = computed(() => ({
             label="銘柄コード／ティッカー"
             required
             hint="銘柄コードまたはティッカーで検索"
+            :error="fieldErrors.symbol"
             class="customer-calc__symbol"
           >
             <BaseInput
@@ -152,7 +160,13 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="数量" required hint="1株単位">
+          <FormField
+            v-slot="{ field }"
+            label="数量"
+            required
+            hint="1株単位"
+            :error="fieldErrors.quantity"
+          >
             <BaseInput
               v-bind="field"
               v-model="form.quantity"
@@ -165,7 +179,12 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="為替（USD/JPY）" hint="未入力時は補完">
+          <FormField
+            v-slot="{ field }"
+            label="為替（USD/JPY）"
+            hint="未入力時は補完"
+            :error="fieldErrors.fxRate"
+          >
             <BaseInput
               v-bind="field"
               v-model="form.fxRate"
@@ -176,7 +195,7 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="単価（USD）" required>
+          <FormField v-slot="{ field }" label="単価（USD）" required :error="fieldErrors.unitPrice">
             <BaseInput
               v-bind="field"
               v-model="form.unitPrice"
@@ -188,7 +207,12 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="国内約定日" hint="YYYYMMDD">
+          <FormField
+            v-slot="{ field }"
+            label="国内約定日"
+            hint="YYYYMMDD"
+            :error="fieldErrors.domesticTradeDate"
+          >
             <BaseInput
               v-bind="field"
               v-model="form.domesticTradeDate"
@@ -210,6 +234,7 @@ const backRoute = computed(() => ({
             v-slot="{ field }"
             label="現地手数料（外貨）①"
             hint="未入力時は仮計算マスタで自動計算"
+            :error="fieldErrors.localFee1"
             class="customer-calc__wide"
           >
             <BaseInput
@@ -222,7 +247,12 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="現地手数料（外貨）②" class="customer-calc__wide">
+          <FormField
+            v-slot="{ field }"
+            label="現地手数料（外貨）②"
+            :error="fieldErrors.localFee2"
+            class="customer-calc__wide"
+          >
             <BaseInput
               v-bind="field"
               v-model="form.localFee2"
@@ -251,6 +281,7 @@ const backRoute = computed(() => ({
             v-slot="{ field }"
             label="現地取引税（外貨）①"
             hint="3項目とも未入力時は取引所税を自動計算"
+            :error="fieldErrors.localTax1"
           >
             <BaseInput
               v-bind="field"
@@ -262,7 +293,7 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="現地取引税（外貨）②">
+          <FormField v-slot="{ field }" label="現地取引税（外貨）②" :error="fieldErrors.localTax2">
             <BaseInput
               v-bind="field"
               v-model="form.localTax2"
@@ -273,7 +304,7 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="現地取引税（外貨）③">
+          <FormField v-slot="{ field }" label="現地取引税（外貨）③" :error="fieldErrors.localTax3">
             <BaseInput
               v-bind="field"
               v-model="form.localTax3"
@@ -284,7 +315,11 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="その他諸経費（外貨）①">
+          <FormField
+            v-slot="{ field }"
+            label="その他諸経費（外貨）①"
+            :error="fieldErrors.otherCost1"
+          >
             <BaseInput
               v-bind="field"
               v-model="form.otherCost1"
@@ -295,7 +330,11 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="その他諸経費（外貨）②">
+          <FormField
+            v-slot="{ field }"
+            label="その他諸経費（外貨）②"
+            :error="fieldErrors.otherCost2"
+          >
             <BaseInput
               v-bind="field"
               v-model="form.otherCost2"
@@ -338,7 +377,7 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="手数料掛目（%）">
+          <FormField v-slot="{ field }" label="手数料掛目（%）" :error="fieldErrors.feeMultiplier">
             <BaseInput
               v-bind="field"
               v-model="form.feeMultiplier"
@@ -349,7 +388,12 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="ベイシスポイント" hint="0〜999.99">
+          <FormField
+            v-slot="{ field }"
+            label="ベイシスポイント"
+            hint="0〜999.99"
+            :error="fieldErrors.basisPoints"
+          >
             <BaseInput
               v-bind="field"
               v-model="form.basisPoints"
@@ -360,7 +404,12 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="手数料 From" hint="円・下限額">
+          <FormField
+            v-slot="{ field }"
+            label="手数料 From"
+            hint="円・下限額"
+            :error="fieldErrors.feeFrom"
+          >
             <BaseInput
               v-bind="field"
               v-model="form.feeFrom"
@@ -371,7 +420,7 @@ const backRoute = computed(() => ({
             />
           </FormField>
 
-          <FormField v-slot="{ field }" label="手数料 To" hint="円・上限額">
+          <FormField v-slot="{ field }" label="手数料 To" hint="円・上限額" :error="fieldErrors.feeTo">
             <BaseInput
               v-bind="field"
               v-model="form.feeTo"
@@ -388,43 +437,75 @@ const backRoute = computed(() => ({
         <RouterLink :to="backRoute" class="customer-calc__back" data-testid="customer-calc-back">
           戻る
         </RouterLink>
-        <BaseButton type="submit" class="customer-calc__submit" data-testid="customer-calc-submit">
+        <BaseButton
+          type="submit"
+          class="customer-calc__submit"
+          :disabled="loading"
+          :loading="loading"
+          data-testid="customer-calc-submit"
+        >
           仮計算を実行
         </BaseButton>
       </div>
     </form>
 
-    <BaseCard title="仮計算結果" flush aria-live="polite" data-testid="customer-calc-result">
+    <!--
+      ローディング / エラー / 空（未実行）/ データあり の 4 状態。
+      結果が無いあいだも枠と行の見出しは出し、金額を「—」にする（モックの結果欄の並びを先に見せる）
+    -->
+    <BaseCard
+      title="仮計算結果"
+      flush
+      aria-live="polite"
+      :aria-busy="loading || undefined"
+      data-testid="customer-calc-result"
+    >
       <p class="customer-calc__caption" data-testid="customer-calc-result-caption">
-        {{ estimateLabel }} ／ 未実行
+        {{ summary.caption }}
       </p>
+
+      <div v-if="error || warnings.length" class="customer-calc__alerts">
+        <BaseAlert v-if="error" variant="error" data-testid="customer-calc-error">
+          {{ error.message }}
+        </BaseAlert>
+        <BaseAlert v-if="warnings.length" variant="warning" data-testid="customer-calc-warnings">
+          <ul class="customer-calc__warnings">
+            <li v-for="warning in warnings" :key="warning">{{ warning }}</li>
+          </ul>
+        </BaseAlert>
+      </div>
 
       <div class="customer-calc__result">
         <dl class="customer-calc__rows" data-testid="customer-calc-result-rows">
-          <div v-for="row in resultRows" :key="row.key" class="customer-calc__row">
+          <div v-for="row in summary.rows" :key="row.key" class="customer-calc__row">
             <dt>{{ row.label }}</dt>
-            <dd>{{ PLACEHOLDER }}</dd>
+            <dd :data-testid="`customer-calc-row-${row.key}`">{{ row.value }}</dd>
           </div>
         </dl>
 
         <div class="customer-calc__summary">
           <p class="customer-calc__total">
-            <span data-testid="customer-calc-total-label">{{ totalLabel }}</span>
-            <strong data-testid="customer-calc-total">{{ PLACEHOLDER }}</strong>
+            <span data-testid="customer-calc-total-label">{{ summary.totalLabel }}</span>
+            <strong data-testid="customer-calc-total">{{ summary.total }}</strong>
           </p>
-          <!-- 取得金額と比べる損益は、預りを売るときだけ意味がある（モックも売却概算でだけ出す） -->
-          <p v-if="isSell" class="customer-calc__profit-loss" data-testid="customer-calc-profit-loss">
+          <!-- 取得金額と比べる損益は、特定預りを売るときだけ返る（モックも売却概算でだけ出す） -->
+          <p
+            v-if="summary.profitLoss"
+            class="customer-calc__profit-loss"
+            data-testid="customer-calc-profit-loss"
+          >
             <span>概算損益（取得金額対比）</span>
-            <strong>{{ PLACEHOLDER }}</strong>
+            <strong
+              :class="summary.profitLoss.tone && `is-${summary.profitLoss.tone}`"
+              data-testid="customer-calc-profit-loss-value"
+            >
+              {{ summary.profitLoss.value }}
+            </strong>
           </p>
         </div>
       </div>
 
-      <p class="customer-calc__source">
-        仮計算マスタ：取引所税 {{ PLACEHOLDER }}% ／ スプレッド {{ PLACEHOLDER }}円/USD ／ 現地手数料率
-        {{ PLACEHOLDER }}% ／ NISA仮計算用為替上乗せ率
-        {{ PLACEHOLDER }}%。手入力した現地費用・取引税は自動補完より優先します。成長投資枠の買付概算は通常為替に上乗せ率を加えて計算します。実際の約定・受渡・手数料・税額を確定するものではありません。
-      </p>
+      <p class="customer-calc__source" data-testid="customer-calc-source">{{ summary.source }}</p>
     </BaseCard>
   </div>
 </template>
@@ -550,6 +631,19 @@ const backRoute = computed(() => ({
   font-size: var(--font-size-xs);
 }
 
+/* エラーとサーバの注意（モックの .calc-alert）。見出しと明細のあいだに置く */
+.customer-calc__alerts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) 0;
+}
+
+.customer-calc__warnings {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
 .customer-calc__result {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 270px;
@@ -626,6 +720,14 @@ const backRoute = computed(() => ({
 
 .customer-calc__profit-loss strong {
   font-size: var(--font-size-md);
+}
+
+.customer-calc__profit-loss strong.is-profit {
+  color: var(--color-profit);
+}
+
+.customer-calc__profit-loss strong.is-loss {
+  color: var(--color-loss);
 }
 
 .customer-calc__source {

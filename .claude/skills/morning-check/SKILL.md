@@ -47,9 +47,12 @@ docker compose run --rm frontend npm run verify
 
 ```powershell
 (cd ../Pre-Market_Trading && docker compose ps --services --filter status=running)
-docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test --grep real-api
+docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test --grep real-api --workers=1
 ```
 
+- **`--workers=1` を外さない。** 並列で流すと、実 API の応答待ちで一覧が出きらずに
+  `element not found` で落ちる行が 20 本前後出て、退行と見分けがつかなくなる
+  （2026-10-07 実測。6 並列で 29 失敗、1 並列で 9 失敗・約 6 分。原因は特定していない）
 - `api` が動いていない、または前提を整えてもらえない日は **この段をスキップと明記**する（黙って飛ばさない）
 - 落ちたテストは「昨日まで通っていた（退行）」か「もとから保留・未対応」かを `git log` と
   `docs/e2e/*-real-api.md` の状態列で分ける

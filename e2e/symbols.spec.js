@@ -452,8 +452,8 @@ test.describe('銘柄マスタ 新規追加', () => {
       await expect(page.getByTestId(`symbols-add-${name}`)).toHaveValue('')
     }
     await expect(page.getByTestId('symbols-add-regulation')).toHaveValue('0')
-    await expect(page.getByTestId('symbols-add-order-route')).toHaveValue('0')
-    await expect(page.getByTestId('symbols-add-vwap-target')).toHaveValue('0')
+    await expect(page.getByTestId('symbols-add-order-route')).toHaveValue('1')
+    await expect(page.getByTestId('symbols-add-vwap-target')).toHaveValue('1')
 
     // 入力項目は 10（input 7 + select 3）。市場名・前日出来高・Pre区分 は持たない
     const form = dialog.getByTestId('symbols-add-form')
@@ -595,8 +595,9 @@ test.describe('銘柄マスタ 新規追加', () => {
     await fillRequired(page)
     await page.getByTestId('symbols-add-name-en').fill('Test Inc.')
     await page.getByTestId('symbols-add-regulation').selectOption('1')
-    await page.getByTestId('symbols-add-order-route').selectOption('1')
-    await page.getByTestId('symbols-add-vwap-target').selectOption('1')
+    // 初期値（IB証券 / 対象）から変えて、選んだ値が届くことを見る
+    await page.getByTestId('symbols-add-order-route').selectOption('0')
+    await page.getByTestId('symbols-add-vwap-target').selectOption('0')
     await page.getByTestId('symbols-add-previous-close').fill('123.45')
     await page.getByTestId('symbols-add-average-volume').fill('1000000')
     await page.getByTestId('symbols-add-note').fill('追加した銘柄')
@@ -613,8 +614,8 @@ test.describe('銘柄マスタ 新規追加', () => {
     await expect(row).toContainText(NEW_SYMBOL.name)
     await expect(row).toContainText('Test Inc.')
     await expect(row).toContainText('取引不可')
-    await expect(row).toContainText('IB証券')
-    await expect(row).toContainText('対象')
+    await expect(row).toContainText('みずほ証券')
+    await expect(row).toContainText('対象外')
     await expect(row).toContainText(formatUsdUnit(123.45))
     await expect(row).toContainText(formatQuantity(1_000_000))
     await expect(row).toContainText('追加した銘柄')

@@ -6,7 +6,9 @@
 
 `useCrudList` に任せている振る舞い（古い応答の破棄）は `composables-use-crud-list.md` が守り、
 `fetchHoldings` の送出名と変換は `api-holdings.md`（`HLA`）が守るので、ここでは**このストア固有の入出力**だけを書く。
-固有なのは一覧の件数・絞り込みの写しと、顧客名から顧客詳細へ移るための「顧客マスタの行 ID を引く」（`openCustomer`）。
+固有なのは一覧の件数・絞り込みの写しと、顧客名から顧客詳細へ移るための「顧客マスタの行 ID を得る」（`openCustomer`）。
+明細に `customerId`（`HoldingItem.口座ID`）があればそれを使って通信せず、無い明細だけ `GET /masters/customers` を引く。
+HSS-07〜11 は `customerId` の無い明細（部店コード・口座番号だけ）で引き直す道を守る。
 
 MSW の既定ハンドラ（`src/mocks/handlers/holdings.js` / `customers.js`）に当てて、取得・ページング・絞り込みと
 4 状態のもとになる `loading` / `error` / `isEmpty`、顧客を引く `customerLookupPending` / `customerLookupError` を守る。
@@ -25,3 +27,4 @@ MSW の既定ハンドラ（`src/mocks/handlers/holdings.js` / `customers.js`）
 | HSS-09 | `GET /masters/customers` が別の口座番号の行だけを返す | `openCustomer(holding)` | null が返り、`customerLookupError.message` が「口座番号 <口座番号> の顧客が顧客マスタに見つかりません。」になる | 実装済 |
 | HSS-10 | `GET /masters/customers` が 500 | `openCustomer(holding)` | null が返り、`customerLookupError.message` にサーバの理由が入る。`clearCustomerLookupError()` を呼ぶと null に戻る | 実装済 |
 | HSS-11 | `GET /masters/customers` の応答を握ったまま | `openCustomer(holding)` を呼ぶ | 応答が返るまで `customerLookupPending` が true、返ったら false | 実装済 |
+| HSS-12 | 既定モック | 先頭の明細に `customerId`（`口座ID` の文字列）を付けて `openCustomer` を呼ぶ | その `customerId` がそのまま返り、`GET /masters/customers` は呼ばれない。`customerLookupPending` は立たず、`customerLookupError` は null | 実装済 |

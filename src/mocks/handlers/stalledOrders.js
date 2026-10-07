@@ -44,8 +44,10 @@ export const stalledOrderHandlers = [
   }),
 
   /*
-   * コンファメーション CSV の取込。**API は未実装で、パス・項目名・応答はこちらの提案**
-   * （docs/api/requests.md の「契約提案」）。応答は既存の CsvImportResponse を流用する。
+   * コンファメーション CSV の取込。2026-10-07 の取り込みで仕様に入った（パス・項目名 file・
+   * 応答 CsvImportResponse とも提案のとおり）。ただし一覧がまだこのファイルの GET（モック）で、
+   * 取込はその一覧を書き換えるので、整合のため残している。一覧は GET /orders の 2 回呼びに
+   * 切り替える方針（docs/api/requests.md の #1 ①）で、**切り替えた日にこのファイルごと消す。**
    *
    *   422 … file が無い（FastAPI の UploadFile 必須の検証）
    *   400 … 空ファイル / ヘッダが違う / データ行が無い
@@ -136,8 +138,9 @@ const CONFIRMATION_HEADER = [
 ]
 
 /*
- * confirmation_status の値（提案。公開モックのサンプルに出るのは CANCELLED だけ）。
- * 約定・取消は滞留一覧から外し、未約定のものは注文中へ移す。
+ * confirmation_status の値（仕様の 4 値。処理状況は FILLED→011 / CANCELLED→034 /
+ * WORKING→003 / PARTIALLY_FILLED→010）。約定・取消は滞留一覧から外し、未約定のものは注文中へ移す。
+ * 仕様では PARTIALLY_FILLED は 010（一部約定）になるが、このモックは提案時のまま注文中（003）へ移す。
  */
 const CLOSED_STATUSES = ['FILLED', 'CANCELLED']
 const WORKING_STATUSES = ['WORKING', 'PARTIALLY_FILLED']

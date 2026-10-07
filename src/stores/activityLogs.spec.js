@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { activityLogs } from '@/mocks/fixtures/activityLogs'
+import { users } from '@/mocks/fixtures/users'
 import { ACTIVITY_LOGS_PAGE_SIZE, useActivityLogsStore } from './activityLogs'
 
 /*
@@ -226,5 +227,25 @@ describe('stores/activityLogs', () => {
     await Promise.all([stale, latest])
 
     expect(idsOf(store)).toEqual(expectedIds.slice(0, PAGE_SIZE))
+  })
+
+  it('[ALS-15] 実行者区分で絞り込む', async () => {
+    // 管理者・管理責任者に入るロール（モックの読み方。src/mocks/handlers/activityLogs.js）
+    const managerCodes = new Set(
+      users
+        .filter((user) => ['manager', 'supervisor'].includes(user.ロールコード))
+        .map((user) => user.操作者コード),
+    )
+    const expected = idsMatching((row) => managerCodes.has(row.操作者))
+    const store = useActivityLogsStore()
+
+    await store.load({ actorGroup: 'manager' })
+
+    expect(store.actorGroup).toBe('manager')
+    expect(store.total).toBe(expected.length)
+    expect(idsOf(store)).toEqual(expected.slice(0, PAGE_SIZE))
+    // 絞り込みが効いていること（全件でも 0 件でもない）
+    expect(expected.length).toBeGreaterThan(0)
+    expect(expected.length).toBeLessThan(TOTAL)
   })
 })

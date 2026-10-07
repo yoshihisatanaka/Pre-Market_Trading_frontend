@@ -184,6 +184,12 @@ const routes = [
     meta: { title: '仮計算マスタ', requiredPermission: 'master' },
   },
   {
+    path: '/masters/fee-preferences',
+    name: 'fee-preference-list',
+    component: () => import('@/views/FeePreferenceListView.vue'),
+    meta: { title: '手数料優遇マスタ', requiredPermission: 'master' },
+  },
+  {
     path: '/masters/hard-limits',
     name: 'slice-criteria-master',
     component: () => import('@/views/SliceCriteriaMasterView.vue'),

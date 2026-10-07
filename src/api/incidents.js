@@ -127,7 +127,7 @@ function toSuspensionHistory(raw) {
     operation: raw['操作区分'],
     operationName: raw['操作区分名'] ?? '',
     operator: raw['操作者'] ?? '',
-    // 操作者の氏名は仕様に無い（docs/api/requests.md #39 で依頼中）。フィクスチャの契約提案を先に読む
+    // 操作者の氏名は仕様に無い（docs/api/requests.md #48 で依頼中）。フィクスチャの契約提案を先に読む
     operatorName: raw['操作者名'] ?? '',
     /*
      * 停止理由は履歴の独立した項目に無く、変更後データ（object。中身のキーは description にだけある）

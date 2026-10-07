@@ -78,7 +78,7 @@ export const suspensionTargets = [
  * 書かれている（docs/api/requests.md #15）。ここでは操作前後のレコードの写しを
  * 2 項目に絞って置き、差分データは null にしておく。画面が読むのは 変更後データ の 停止理由 だけ。
  *
- * 操作者名 は仕様（SuspensionHistoryItem）に無い**契約提案**（docs/api/requests.md #39）。画面モックの
+ * 操作者名 は仕様（SuspensionHistoryItem）に無い**契約提案**（docs/api/requests.md #48）。画面モックの
  * 更新者列がコードの下に氏名を出すので、その形で先に置いてある。契約テストは KNOWN_GAPS でこの 1 項目だけを許す。
  */
 export const suspensionHistories = [

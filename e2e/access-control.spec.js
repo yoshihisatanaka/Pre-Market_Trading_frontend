@@ -4,7 +4,7 @@ import { noOperationOperator, salesOperator } from '../src/mocks/fixtures/curren
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/access-control.md（タイトル先頭の [AC-nn] が対応 ID）
-// meta.requiredPermission の付いたルート（運用管理の 4 画面 = AC-01〜04 / マスタメンテの 10 画面 = AC-05〜07）を、権限の無い利用者が URL で直接開いたときに
+// meta.requiredPermission の付いたルート（運用管理の 4 画面 = AC-01〜04 / マスタメンテの 11 画面 = AC-05〜07）を、権限の無い利用者が URL で直接開いたときに
 // 権限なしの画面（/forbidden）へ回されることと、権限があれば開けることを守る。
 // 各画面の中身はそれぞれのシナリオが見るので、ここでは「その画面の目印が出たか」だけを見る。
 // サイドメニューの区分の出し分けは e2e/layout.spec.js（LAY-16 / 17）が見る。
@@ -31,10 +31,10 @@ const SCREENS = operationSection.items.map((item) => ({
 }))
 
 /*
- * マスタメンテの 10 画面（AC-05〜07）。src/router/index.js の
+ * マスタメンテの 11 画面（AC-05〜07）。src/router/index.js の
  * requiredPermission: 'master' のルートと同じ。router は views を辿るので import せず再掲する。
  * 為替マスタ（/masters/fx）は 2026-09-29、仮計算マスタ（/masters/provisional-calculation）は
- * 2026-10-05 にルートができたので足した。
+ * 2026-10-05、手数料優遇マスタ（/masters/fee-preferences）は 2026-10-07 にルートができたので足した。
  * 見出しはメニュー定義（navigation.js の「マスタメンテ」区分。meta.title と同じ文言）から取る。
  */
 const MASTER_ROUTE_PATHS = [
@@ -45,6 +45,7 @@ const MASTER_ROUTE_PATHS = [
   '/masters/symbols',
   '/masters/fx',
   '/masters/provisional-calculation',
+  '/masters/fee-preferences',
   '/masters/ca',
   '/masters/hard-limits',
   '/masters/balance-adjustments',
@@ -112,10 +113,10 @@ test.describe('アクセス制御', () => {
     }
   })
 
-  test('[AC-05] マスタ更新権限が無いとマスタメンテの 10 画面とも権限なしの画面へ回される', async ({
+  test('[AC-05] マスタ更新権限が無いとマスタメンテの 11 画面とも権限なしの画面へ回される', async ({
     page,
   }) => {
-    test.slow() // 10 画面を読み込み直すので既定の 30 秒では足りないことがある
+    test.slow() // 11 画面を読み込み直すので既定の 30 秒では足りないことがある
     // 再掲した path がメニューのマスタメンテ区分から外れていない（改名・移動に気づくため）
     for (const screen of MASTER_SCREENS) expect(screen.title).toBeTruthy()
     // フィクスチャがこのシナリオの前提（マスタ更新権限なし）を満たしている
@@ -152,7 +153,7 @@ test.describe('アクセス制御', () => {
     }
   })
 
-  test('[AC-07] 権限があればマスタメンテの 10 画面とも開ける', async ({ page }) => {
+  test('[AC-07] 権限があればマスタメンテの 11 画面とも開ける', async ({ page }) => {
     test.slow()
     for (const screen of MASTER_SCREENS) {
       await page.goto(screen.path)

@@ -11,10 +11,15 @@
  *   - 出来状況は 未出来 / 注文中 / 一部出来 / 全部出来 / 取消済 / 取消済（出来有）/ 注文エラー
  *   - VWAP 注文（`VWAP区分` 1）
  *
+ * 滞留注文抽出（src/api/stalledOrders.js）も同じ `GET /orders` を処理状況で絞って読む。
+ * 注文エラー（101 / 103）は #40 と #29、注文中（003）は #42 と #34。部店 123 と銘柄 AAPL は注文中だけ、
+ * 部店 234 と銘柄 AMZN は注文エラーだけに当たる（片方の一覧だけが空になる絞り込みを試せる）。
+ *
  * コード値:
  *   売買区分 … '1' 売 / '3' 買（`GET /orders` の side クエリの説明による）
  *   指成区分 … 'LO' 指値 / 'MO' 成行
- *   処理状況 … '000' 未発注 / '003' 注文中 / '010' 一部出来 / '011' 全部出来 / '034' 取消済 / '101' 発注失敗
+ *   処理状況 … '000' 未発注 / '003' 注文中 / '010' 一部出来 / '011' 全部出来 / '034' 取消済 /
+ *              '101' 発注失敗（Dream）/ '103' IB発注失敗
  *   発注範囲 … '02' / '03' / '04' / '06'（ExecutionScopeEnum。2026-10-02 に '01' / '05' が外れた）
  *
  * 約定代金_JPY は 約定代金 × 適用為替レート（150）を円未満で四捨五入した概算。
@@ -43,7 +48,20 @@ const STATUS_NAMES = {
   '011': '全部出来',
   '034': '取消済',
   101: '発注失敗',
+  103: 'IB発注失敗',
 }
+
+/** 発注範囲 → 発注範囲名（OrderItemResponse の `発注範囲名` の説明にある対応） */
+const SCOPE_NAMES = {
+  '02': 'プレ＋レギュラー',
+  '03': 'レギュラー',
+  '04': 'プレ＋レギュラー＋アフター',
+  '06': 'アフター',
+}
+
+/** 終端の処理状況（有効残数量が 0）と、件数カードの集計から外れる処理状況（`集計対象` の説明） */
+const TERMINAL_STATUSES = ['011', '034', '101', '103']
+const UNCOUNTED_STATUSES = ['034', '101', '103']
 
 /**
  * 1 行ぶんの OrderItemResponse を組み立てる。
@@ -71,7 +89,7 @@ function order({
   amountUsd = null,
   error = null,
 }) {
-  const terminal = ['011', '034', '101'].includes(status)
+  const terminal = TERMINAL_STATUSES.includes(status)
   return {
     ID: id,
     元注文ID: originalOrderId,
@@ -86,6 +104,7 @@ function order({
     指成区分: orderType,
     指値単価: limitPrice,
     発注範囲: scope,
+    発注範囲名: SCOPE_NAMES[scope],
     VWAP区分: vwap,
     注文ルート: vwap === 1 ? '2' : '1',
     注文ルート名: vwap === 1 ? 'VWAP' : 'IB',
@@ -98,7 +117,7 @@ function order({
     取消数量: canceled,
     有効残数量: terminal ? 0 : quantity - filled,
     出来有無: filled > 0,
-    集計対象: !['034', '101'].includes(status) && kind !== 'SLICE_CHILD',
+    集計対象: !UNCOUNTED_STATUSES.includes(status) && kind !== 'SLICE_CHILD',
     約定代金: amountUsd,
     約定代金_JPY: amountUsd === null ? null : Math.round(amountUsd * orderInquiryFxRate),
     エラー内容: error,
@@ -315,5 +334,21 @@ export const orderInquiryRows = [
     status: '034',
     displayStatus: '取消済',
     canceled: 30,
+  }),
+  // IB への発注に失敗したまま残っている成行注文（滞留注文抽出の注文エラー。発注 CSV の価格が空欄になる）
+  order({
+    id: 29,
+    customer: CUSTOMERS.kato,
+    symbol: 'MSFT',
+    name: 'Microsoft Corporation',
+    side: '3',
+    quantity: 35,
+    orderType: 'MO',
+    scope: '03',
+    date: '2026-09-25',
+    time: '10:22:00',
+    status: '103',
+    displayStatus: '注文エラー',
+    error: 'IB への注文送信処理がタイムアウトしました。',
   }),
 ]

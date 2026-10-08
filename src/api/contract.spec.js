@@ -255,18 +255,9 @@ const KNOWN_GAPS = [
    * 2026-09-18 の取り込みで全マスタに入った。先行実装の食い違いは解消したので行を外した。
    */
   /*
-   * 滞留注文抽出の検索 API は仕様に無い（成熟度 D）。形は src/mocks/fixtures/stalledOrders.js が
-   * 契約提案で、MSW だけが応答する。一覧のパス自体が仕様に無いので kind: 'path' で載せる。
-   * 9/30 に (b)「既存の GET /orders を拡張する」で決着したが、src/api/stalledOrders.js はまだこのパスを
-   * 送っている（GET /orders の 2 回呼びへの書き直しが残作業）ので、行は残す。
+   * 滞留注文抽出の一覧（GET /operations/stalled-orders。仕様に無いパス）は、#1 ① の決着どおり
+   * GET /orders の 2 回呼び（status=101,103 / 003）に書き直したので行を外した（2026-10-08）。
    */
-  {
-    kind: 'path',
-    method: 'GET',
-    path: '/operations/stalled-orders',
-    reason: '滞留注文抽出の検索 API が仕様に無い。fixture を契約提案として先に置いている',
-    request: '#1',
-  },
   /*
    * コンファメーション CSV の取込（POST /operations/stalled-orders/confirmation-import）は
    * 2026-10-07 の取り込みで仕様に入ったので行を外した。

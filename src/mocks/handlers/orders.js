@@ -9,6 +9,7 @@ import { detailError, nowIsoTimestamp, toNonNegativeInt, toStatusList } from './
  *   - 注文照会（`/orders/inquiry`）… 実仕様の `OrderListResponse`（`orders` / `total` …）を読む
  * 1 本のハンドラで両方の形を 1 つの応答に載せて返す（同じパスにハンドラを 2 本置くと先の 1 本しか効かない）。
  * 参考実装を退役させるときに `items` を外し、実 API に切り替えるときはこのハンドラごと消す。
+ * 滞留注文抽出（`/operations/stalled-orders`）も同じ `orders` を処理状況（101,103 / 003）で絞って読む。
  *
  * 注文照会から入る訂正・取消の画面のために、1 件の詳細（GET /orders/{order_id}）・訂正・取消も持つ。
  * 訂正・取消は行を書き換えるので、行は可変状態にしてある（resetOrderInquiryRows で元に戻す）。

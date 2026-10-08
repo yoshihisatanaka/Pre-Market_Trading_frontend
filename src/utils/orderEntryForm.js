@@ -51,9 +51,10 @@ const MESSAGES = {
   branchRequired: '部店コードを入力してください。',
   accountRequired: '口座番号を入力してください。',
   accountNumeric: '口座番号を数値で入力してください。',
-  tickerRequired: '銘柄コードを入力してください。',
-  tickerNotFound: '銘柄コードが見つかりません。ユニバース銘柄を確認してください。',
-  tickerLookupFailed: 'ティッカーコードを照会できませんでした。時間をおいて再度お試しください。',
+  // 欄はティッカーでも銘柄コードでも引けるが、文言はモック（order_validator.py）と同じく「ティッカー」と呼ぶ
+  tickerRequired: 'ティッカーを入力してください。',
+  tickerNotFound: 'ティッカーが見つかりません。取扱銘柄を確認してください。',
+  tickerLookupFailed: 'ティッカーを照会できませんでした。時間をおいて再度お試しください。',
   sideRequired: '売買区分を選択してください。',
   quantityRequired: '注文数量を入力してください。',
   quantityInteger: '注文数量を整数で入力してください。',

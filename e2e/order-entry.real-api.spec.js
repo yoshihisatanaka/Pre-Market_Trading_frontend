@@ -39,7 +39,7 @@ const CUSTOMERS_LIST_KEY = 'customers'
 const SYMBOLS_LIST_KEY = 'stocks'
 
 // src/utils/orderEntryForm.js の MESSAGES.tickerNotFound と同じ文言（MESSAGES は export されていないので再掲する）
-const TICKER_NOT_FOUND = '銘柄コードが見つかりません。ユニバース銘柄を確認してください。'
+const TICKER_NOT_FOUND = 'ティッカーが見つかりません。取扱銘柄を確認してください。'
 
 // src/utils/symbolTypes.js の取引可否（規制情報）。コード値は仮置き（openapi.json に enum が無い）。
 // 取引可の銘柄を選ぶときに「禁止（'1'）でない」ことだけに使う
@@ -89,6 +89,9 @@ function isUsableStock(row) {
 
 /** ティッカーの横に出る名前（views/OrderEntryView.vue の symbolHint と同じ優先順） */
 const stockLabel = (row) => row.銘柄名_英字 || row.銘柄名
+
+/** 銘柄名の前に出る 1 行（views/OrderEntryView.vue の symbolHint.code と同じ形） */
+const stockCodeLine = (row) => `ティッカー：${row.Ticker} ／ 銘柄コード：${row.銘柄コード}`
 
 function skipWithoutData() {
   test.skip(!account, '実 API に注文に使える口座が無い（顧客マスタの先頭 1 ページ）')
@@ -219,7 +222,7 @@ test.describe('新規注文（実 API 接続）', () => {
     await api.dispose()
   })
 
-  test('[NR-01] 実データの口座番号・ティッカーで照会でき、入力フォームが出る', async ({ page }) => {
+  test('[NR-01] 実データの口座番号・銘柄コードで照会でき、入力フォームが出る', async ({ page }) => {
     skipWithoutData()
     await openForm(page)
 
@@ -232,10 +235,12 @@ test.describe('新規注文（実 API 接続）', () => {
 
     await page.getByTestId('order-entry-branch').fill(account.部店コード)
     await page.getByTestId('order-entry-account').fill(accountText(account))
-    await page.getByTestId('order-entry-ticker').fill(stock.Ticker)
+    // Ticker ではなく銘柄コードで引く（Ticker での照会は NR-02 / NR-05 が通る）
+    await page.getByTestId('order-entry-ticker').fill(stock.銘柄コード)
 
     await expect(page.getByTestId('order-entry-account-hint')).toHaveText(account.顧客名)
     await expect(page.getByTestId('order-entry-customer-bar')).toBeVisible()
+    await expect(page.getByTestId('order-entry-ticker-code')).toHaveText(stockCodeLine(stock))
     await expect(page.getByTestId('order-entry-ticker-hint')).toHaveText(stockLabel(stock))
   })
 
@@ -305,12 +310,14 @@ test.describe('新規注文（実 API 接続）', () => {
   }) => {
     skipWithoutData()
 
-    // 実在しそうにない綴りから、実 API の一致が無いものを選ぶ
+    // 実在しそうにない綴りから、Ticker にも銘柄コードにも一致が無いものを選ぶ
+    // （画面の照会と同じ ?symbol= で引く。stores/orderEntry.js の findSymbol）
     const api = await apiContext(playwright)
     let missing = null
     for (const candidate of ['ZZZZ', 'ZZZZZ', 'QZQZ', 'XZXZX', 'ZQZQZ']) {
-      const rows = await firstPage(api, SYMBOLS_API_PATH, SYMBOLS_LIST_KEY, { ticker: candidate })
-      if (!rows.some((row) => (row.Ticker ?? '').toUpperCase() === candidate)) {
+      const rows = await firstPage(api, SYMBOLS_API_PATH, SYMBOLS_LIST_KEY, { symbol: candidate })
+      const hit = (value) => (value ?? '').toUpperCase() === candidate
+      if (!rows.some((row) => hit(row.Ticker) || hit(row.銘柄コード))) {
         missing = candidate
         break
       }

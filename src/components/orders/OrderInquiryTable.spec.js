@@ -28,12 +28,14 @@ const order = (overrides = {}) => ({
   filledAmountJpy: 60937500,
   marketScope: '04',
   vwap: false,
+  forced: false,
   statusName: '一部出来',
   statusTone: 'partial',
   errorReason: '',
   orderedAt: '2026-09-28T09:01:00',
   amendable: true,
   cancelable: true,
+  slicePlan: null,
   ...overrides,
 })
 
@@ -53,9 +55,9 @@ const amendedGroup = () =>
     ],
   })
 
-/** 自動分割 3 件の元注文（#35 と子注文 #43〜#45） */
-const splitGroup = () =>
-  group(order({ id: '35' }), {
+/** 自動分割 3 件の元注文（#35 と子注文 #43〜#45）。slicePlan は親の判定結果（既定は無し） */
+const splitGroup = (slicePlan = null) =>
+  group(order({ id: '35', slicePlan }), {
     slices: ['43', '44', '45'].map((id) => order({ id, originalOrderId: '35', quantity: 1000 })),
   })
 
@@ -70,7 +72,7 @@ const cell = (wrapper, row, label) => row.findAll('td')[headers(wrapper).indexOf
 
 // シナリオ: docs/unit/components-orders-order-inquiry-table.md
 describe('OrderInquiryTable', () => {
-  it('[OIT-01] 列見出しが画面モックの 18 列になる', () => {
+  it('[OIT-01] 列見出しが画面モックの 19 列になる', () => {
     const wrapper = mountTable([group(order())])
 
     expect(headers(wrapper)).toEqual([
@@ -89,6 +91,7 @@ describe('OrderInquiryTable', () => {
       '約定代金（円貨）',
       '市場区分',
       '出来状況',
+      '強制',
       '送信日時',
       '受注日時',
       '操作',
@@ -148,7 +151,7 @@ describe('OrderInquiryTable', () => {
     expect(toggle().text()).toBe('自動分割 3件')
   })
 
-  it('[OIT-06] 明細の見出し 4 項目は「—」で出る', async () => {
+  it('[OIT-06] 親に判定結果が無ければ明細の見出し 4 項目は「—」で出る', async () => {
     const wrapper = mountTable([splitGroup()])
     await wrapper.find('[data-testid="order-inquiry-split-toggle"]').trigger('click')
     const detail = wrapper.find('[data-testid="order-inquiry-split-detail"]')
@@ -334,5 +337,55 @@ describe('OrderInquiryTable', () => {
         String(headers(wrapper).length),
       )
     }
+  })
+
+  const metaValues = async (wrapper) => {
+    await wrapper.find('[data-testid="order-inquiry-split-toggle"]').trigger('click')
+    return wrapper
+      .find('[data-testid="order-inquiry-split-detail"]')
+      .findAll('dd')
+      .map((dd) => dd.text())
+  }
+
+  it('[OIT-18] 親の判定結果が明細の見出し 4 項目に単位付きで出る', async () => {
+    const REASONS = ['市場関与率超過', '大口注文金額超過']
+    const full = mountTable([
+      splitGroup({
+        maxSliceQuantity: 1199,
+        reasons: REASONS,
+        averageVolume: 24000,
+        referencePrice: 337.5,
+      }),
+    ])
+
+    expect(await metaValues(full)).toEqual([
+      '1,199 株／スライス',
+      '市場関与率超過・大口注文金額超過',
+      '24,000 株',
+      formatUsd(337.5),
+    ])
+    expect(formatUsd(337.5)).toBe('337.50 ドル')
+
+    const partial = mountTable([
+      splitGroup({ maxSliceQuantity: null, reasons: [], averageVolume: 0, referencePrice: null }),
+    ])
+    expect(await metaValues(partial)).toEqual(['—', '—', '0 株', '—'])
+  })
+
+  it('[OIT-19] 強制発注の注文にだけ「強制」のラベルが出て、訂正履歴の行にも出る', async () => {
+    const forced = group(order({ id: '41', forced: true }), {
+      history: [order({ id: '38', forced: true })],
+    })
+    const wrapper = mountTable([forced, group(order({ id: '2' }))])
+    const [forcedRow, plainRow] = rows(wrapper)
+
+    const label = cell(wrapper, forcedRow, '強制').find('[data-testid="order-inquiry-forced"]')
+    expect(label.text()).toBe('強制')
+    expect(label.element.tagName).toBe('SPAN')
+    expect(cell(wrapper, plainRow, '強制').text()).toBe('—')
+    expect(plainRow.find('[data-testid="order-inquiry-forced"]').exists()).toBe(false)
+
+    await wrapper.find('[data-testid="order-inquiry-history-toggle"]').trigger('click')
+    expect(cell(wrapper, historyRows(wrapper)[0], '強制').text()).toBe('強制')
   })
 })

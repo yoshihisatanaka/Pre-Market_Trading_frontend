@@ -455,4 +455,56 @@ describe('api/orderInquiry', () => {
       message: `この注文は取消できません（処理状況: ${filled.処理状況}）`,
     })
   })
+
+  it('[OIA-33] 強制区分が 1 の行だけ forced が true になる', async () => {
+    respondRows([
+      row({ ID: 1, 強制区分: 1 }),
+      row({ ID: 2, 強制区分: 0 }),
+      row({ ID: 3, 強制区分: null }),
+    ])
+
+    const { items } = await fetchOrderInquiry()
+
+    expect(items.map((group) => group.latest.forced)).toEqual([true, false, false])
+  })
+
+  it('[OIA-34] スライスの親の判定結果は slicePlan に入り、ほかの行は null になる', async () => {
+    const parent = byId(35)
+
+    const { items } = await fetchOrderInquiry()
+    const group = items.find((item) => item.id === '35')
+
+    expect(group.latest.slicePlan).toEqual({
+      maxSliceQuantity: parent.スライス適用上限数量,
+      reasons: parent.スライス適用理由,
+      averageVolume: parent.スライス平均出来高,
+      referencePrice: parent.スライス参照価格,
+    })
+    expect(parent.スライス適用理由.length).toBeGreaterThan(0)
+    const others = items.filter((item) => item.id !== '35').map((item) => item.latest)
+    for (const order of [...group.slices, ...others]) {
+      expect(order.slicePlan, order.id).toBeNull()
+    }
+  })
+
+  it('[OIA-35] 判定結果の一部だけが来ても読め、参照価格は数値の文字列も受ける', async () => {
+    respondRows([
+      row({ ID: 1, スライス適用理由: ['理由A', null, '', '理由B'] }),
+      row({ ID: 2, スライス参照価格: '337.5000' }),
+      row({ ID: 3, スライス適用理由: [] }),
+    ])
+
+    const { items } = await fetchOrderInquiry()
+    const [reasonsOnly, priceOnly, empty] = items.map((group) => group.latest.slicePlan)
+
+    expect(reasonsOnly).toEqual({
+      maxSliceQuantity: null,
+      reasons: ['理由A', '理由B'],
+      averageVolume: null,
+      referencePrice: null,
+    })
+    expect(priceOnly.referencePrice).toBe(337.5)
+    expect(priceOnly.reasons).toEqual([])
+    expect(empty).toBeNull()
+  })
 })

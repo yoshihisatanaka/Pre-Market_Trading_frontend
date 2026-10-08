@@ -110,10 +110,17 @@ function collectPosts(page, pathname) {
 }
 
 /**
+ * beforeAll で選んだ口座の部店・口座番号のクエリ。
+ * /orders/new は account_number が無いと顧客検索へ回る（router/index.js の beforeEnter）
+ */
+const accountQuery = () =>
+  `?${new URLSearchParams({ branch_code: account.部店コード, account_number: accountText(account) })}`
+
+/**
  * 画面を開いて入力フォームが出るまで待ち、実 API に当たっていることを確かめる。
  * 操作者（/auth/me）の読み込みを待ってから返す（権限なしの帯は読み終えてから出るため）。
  */
-async function openForm(page, query = '') {
+async function openForm(page, query = accountQuery()) {
   const operatorLoaded = page
     .waitForResponse((res) => pathnameOf(res.url()) === AUTH_ME_API_PATH, { timeout: 10_000 })
     .catch(() => null)

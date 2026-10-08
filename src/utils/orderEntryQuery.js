@@ -2,8 +2,9 @@ import { SPECIFIC_DEPOSIT } from './apiEnums'
 import { DEPOSIT_CATEGORY, SIDE } from './orderEntryOptions'
 
 /*
- * 新規注文（/orders/new）へ顧客・銘柄を引き継ぐ URL クエリ。
- * 顧客詳細（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）が組み立て、
+ * 新規注文（/orders/new と顧客詳細の注文入力タブ /customers/:customerId/order-entry）へ
+ * 顧客・銘柄を引き継ぐ URL クエリ。
+ * 顧客詳細（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）と預り検索が組み立て、
  * 新規注文の画面（views/OrderEntryView.vue）が読んで入力欄の初期値にする。
  *
  * クエリ名は URL 上の契約で、バックエンドには送らない（送るのは src/api/orderEntry.js）。
@@ -12,10 +13,11 @@ import { DEPOSIT_CATEGORY, SIDE } from './orderEntryOptions'
  *   ticker         … ティッカー（大文字）
  *   side           … 'buy' / 'sell'（注文の売買区分のコードではなく向きの名前で持つ。URL を読んで分かるように）
  *   deposit        … 預り区分（注文の 預り売買区分 のコード。'0' 特定 / '1' 一般 / '6' 成長投資枠）
+ *   quantity       … 注文数量（正の整数。預りの「売り」だけが売却可能株数を載せる。モックと同じ）
  *
- * 引き継ぐのは入力欄の初期値だけ。数量は渡さない（モックは売りのとき売却可能数量を入れるが、
- * `GET /holdings` は売却可能数量を返さず、保有数量を入れると注文中の売りと二重になる）。
- * 読めない値（手で書き換えられた URL）は空に落とし、入力欄は既定のままにする。
+ * 引き継ぐのは入力欄の初期値だけ。数量は保有数量ではなく売却可能株数（HoldingItem.売却可能株数。
+ * 当日の売注文を引いた数）を渡す。保有数量を入れると注文中の売りと二重になる。売却可能株数が無いか 0 の
+ * 明細は数量を渡さない。読めない値（手で書き換えられた URL）は空に落とし、入力欄は既定のままにする。
  */
 
 const SIDES_BY_NAME = Object.freeze({ buy: SIDE.BUY, sell: SIDE.SELL })
@@ -23,8 +25,9 @@ const SIDE_NAMES = Object.freeze({ [SIDE.BUY]: 'buy', [SIDE.SELL]: 'sell' })
 const DEPOSIT_VALUES = Object.values(DEPOSIT_CATEGORY)
 
 /**
- * 預りの特定預り区分 → 注文の預り売買区分。向きが逆なので読み替える
- * （src/api/holdings.js の冒頭。0 / 1 の向きは docs/api/requests.md #24 で確認中）。
+ * 預りの特定預り区分（0 一般 / 1 特定）→ 注文の預り売買区分（0 特定 / 1 一般）。向きが逆なので読み替える
+ * （src/api/holdings.js の冒頭。HoldingItem.預り売買区分 の中身が特定預り区分であることは
+ * docs/api/requests.md #36 ⑥ の回答で確定）。
  * NISA（旧）・継続管理勘定は注文の預り区分に対応する値が無いので ''（既定のまま）。
  *
  * @param {string} specificDeposit Holding の specificDeposit
@@ -52,7 +55,8 @@ export function toDepositCategory(specificDeposit) {
  *   ticker?: string,
  *   side?: string,
  *   depositCategory?: string,
- * }} [values] side は売買区分のコード（SIDE の値）
+ *   quantity?: number|null,
+ * }} [values] side は売買区分のコード（SIDE の値）。quantity は正の整数のときだけ載せる
  * @returns {Record<string, string>}
  */
 export function buildOrderEntryQuery({
@@ -61,6 +65,7 @@ export function buildOrderEntryQuery({
   ticker = '',
   side = '',
   depositCategory = '',
+  quantity = null,
 } = {}) {
   const entries = [
     ['branch_code', branchCode],
@@ -68,8 +73,13 @@ export function buildOrderEntryQuery({
     ['ticker', ticker],
     ['side', SIDE_NAMES[side] ?? ''],
     ['deposit', depositCategory],
+    ['quantity', isPositiveInteger(quantity) ? String(quantity) : ''],
   ]
   return Object.fromEntries(entries.filter(([, value]) => value))
+}
+
+function isPositiveInteger(value) {
+  return Number.isSafeInteger(value) && value > 0
 }
 
 /**
@@ -77,9 +87,12 @@ export function buildOrderEntryQuery({
  *
  * 成長投資枠の明細の「買い」は預り区分を引き継がない（買付に成長投資枠は選べない。
  * utils/orderEntryForm.js の growthOnBuy）。特定で始め、変えるかは入力する人が決める。
+ * 「売り」だけは売却可能株数を数量として引き継ぐ（「買い」は数量を空のまま）。
  *
  * @param {{ branchCode: string, accountNumber: string }} customer
- * @param {{ ticker: string, symbolCode: string, specificDeposit: string }} holding src/api/holdings.js の Holding
+ * @param {{
+ *   ticker: string, symbolCode: string, specificDeposit: string, sellableQuantity?: number|null,
+ * }} holding src/api/holdings.js の Holding
  * @param {string} side SIDE.BUY / SIDE.SELL
  * @returns {Record<string, string>} buildOrderEntryQuery の結果
  */
@@ -93,6 +106,7 @@ export function holdingOrderQuery(customer, holding, side) {
     side,
     depositCategory:
       side === SIDE.BUY && depositCategory === DEPOSIT_CATEGORY.GROWTH ? '' : depositCategory,
+    quantity: side === SIDE.SELL ? (holding.sellableQuantity ?? null) : null,
   })
 }
 
@@ -106,12 +120,14 @@ export function holdingOrderQuery(customer, holding, side) {
  *   ticker: string,
  *   side: string,
  *   depositCategory: string,
- * }} side は売買区分のコード（SIDE の値）
+ *   quantity: string,
+ * }} side は売買区分のコード（SIDE の値）。quantity は正の整数の数字列（先頭の 0 は落とす）
  */
 export function parseOrderEntryQuery(query = {}) {
   const text = (name) => (typeof query[name] === 'string' ? query[name].trim() : '')
   const accountNumber = text('account_number')
   const deposit = text('deposit')
+  const quantity = Number(text('quantity'))
 
   return {
     branchCode: text('branch_code'),
@@ -119,5 +135,6 @@ export function parseOrderEntryQuery(query = {}) {
     ticker: text('ticker').toUpperCase(),
     side: SIDES_BY_NAME[text('side')] ?? '',
     depositCategory: DEPOSIT_VALUES.includes(deposit) ? deposit : '',
+    quantity: /^\d+$/.test(text('quantity')) && isPositiveInteger(quantity) ? String(quantity) : '',
   }
 }

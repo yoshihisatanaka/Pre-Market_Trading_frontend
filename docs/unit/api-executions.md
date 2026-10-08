@@ -19,7 +19,7 @@
 | EXA-05 | 応答の `売買区分` が `'3'` / `'1'` / `'9'` | `fetchExecutions()` | `side` が `'buy'` / `'sell'` / `''` になる | 実装済 |
 | EXA-06 | 応答の nullable 項目が `null`（`顧客名` / `Ticker` / `約定単価` / `約定日時`） | `fetchExecutions()` | 文字列項目は `''`、数値項目は `null` のまま（0 と未取得を区別する） | 実装済 |
 | EXA-07 | 既定モック | `fetchExecutions()` | `ID` / `注文ID` / `口座番号`（integer）が文字列の `id` / `orderId` / `accountNumber` になる | 実装済 |
-| EXA-08 | 既定モック / `summary` が欠けた応答 | `fetchExecutions()` | `summary` が `count` / `orderCount` / `buyCount` / `sellCount` / `totalQuantity` / `totalAmountUsd` / `totalFeeUsd` に変換される。欠けているときは全項目 0 | 実装済 |
+| EXA-08 | 既定モック / `summary` が欠けた応答 | `fetchExecutions()` | `summary` が `count` / `orderCount` / `buyCount` / `sellCount` / `partialCount` / `totalQuantity` / `totalAmountUsd` / `totalFeeUsd` に変換される（`partialCount` は `一部出来件数` = 処理状況 010 の注文の件数）。欠けているときは全項目 0 | 実装済 |
 | EXA-09 | 既定モック | 各条件に値を入れて `exportExecutionsCsv()`（`side: 'buy'`） | `GET /executions/export-csv` に一覧と同じクエリ名 `branch_code` / `symbol` / `side=3` / `status` / `start_date` / `end_date` / `route` でその値が送られ、`limit` / `offset` は載らない | 実装済 |
 | EXA-10 | 既定モック | 全条件を空文字・`side: 'x'` にして `exportExecutionsCsv()` | 空文字の条件と知らない `side` はクエリに載らず、`limit` / `offset` も載らない（クエリが空） | 実装済 |
 | EXA-11 | 既定モック | `exportExecutionsCsv()` | `blob` が（文字列ではなく）Blob で、本文は見出し 1 行 + フィクスチャの全件（ページで切られない） | 実装済 |
@@ -29,6 +29,10 @@
 | EXA-15 | 応答に Content-Disposition が無い | `exportExecutionsCsv()` | `filename` が `EXECUTIONS_CSV_FILENAME` になる | 実装済 |
 | EXA-16 | `filename*` のパーセントエンコードが壊れていて、`filename="…"` も持つ | `exportExecutionsCsv()` | 例外にならず、`filename` が `filename="…"` の値になる | 実装済 |
 | EXA-17 | 既定モック（本文の先頭に UTF-8 BOM を付けて返す） | `exportExecutionsCsv()` | `blob` の先頭 3 バイトが BOM（`EF BB BF`）のまま | 実装済 |
+| EXA-18 | — | `toStatusQuery()` を `'034'` / `'011'` / `'010'` / `''` / `undefined` で呼ぶ | `'032,034'` / `'011'` / `'010'` / `undefined` / `undefined`（取消済だけ 2 コードに広げ、空は送らない） | 実装済 |
+| EXA-19 | 既定モック（処理状況 032 と 034 の行を含む） | `fetchExecutions({ status: '034' })` と `exportExecutionsCsv({ status: '034' })` | どちらも `status=032,034` を送り、一覧にはフィクスチャの 032 と 034 の行がどちらも返る（`total` がその件数） | 実装済 |
+| EXA-20 | 応答の 約定代金_JPY が数値 / `null`（為替未登録） | `fetchExecutions()` | `amountJpy` がその数値 / `null` のまま（0 に潰さない） | 実装済 |
+| EXA-21 | 応答の 注文ルート / 注文ルート名 が `null`（預託先参照権限の無い操作者にサーバがこう返す） | `fetchExecutions()` | 例外にならず、`route` / `routeName` が `''` になる。ほかの項目はそのまま変換される | 実装済 |
 
 > ファイル名の取り出し（EXA-12〜16）の実体は `src/api/fileDownload.js`（`api-file-download.md`）。
 > ここでは約定の CSV 出力がそれを通していることを確かめる。

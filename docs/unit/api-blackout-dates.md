@@ -16,8 +16,8 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 
 特に取り違えやすい 2 点をここで固定する。
 
-- **`limit` を送らない。** 実 API の一覧は 1 ページ 50 件で固定されていて `limit` というクエリを持たない
-  （海外休場日の `/masters/market-holidays` は持つ）。ストアは表示件数を `limit` として渡してくるので、落とすのは api 層の役目
+- **`limit` を送る。** 以前は実 API が 1 ページ 50 件固定で `limit` を持たず api 層が落としていたが、
+  #21 で `limit`（1〜200・既定 50）が入った。ストアが渡す表示件数をそのまま送る
 - **事前検証の `is_update` は「編集からの呼び出しか（= id を持つか）」だけで決まる。**
   対象は本文の受注不可日ではなく**クエリの `blackout_date_id`** で指すので、日付を変える編集でも
   対象を見失わず、自分自身が重複として弾かれることもない（CA の `ca_id` と同じ形）。
@@ -27,7 +27,7 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 |---|---|---|---|---|
 | BDA-01 | 既定モック | `fetchBlackoutDates()` を引数なしで呼ぶ | `GET /api/masters/blackout-dates` に `offset=0` だけが載る。`start_date` / `end_date` / `include_deleted` は送らない | 実装済 |
 | BDA-02 | 既定モック | `fetchBlackoutDates({ dateFrom: '2026-01-01', dateTo: '2026-12-31' })` を呼ぶ | クエリ名が `start_date` / `end_date` で、値が integer の `20260101` / `20261231` になる（`date_from` や `'2026-01-01'` では送らない） | 実装済 |
-| BDA-03 | 既定モック | `fetchBlackoutDates({ limit: 50, offset: 50 })` を呼ぶ | `limit` はクエリに載らない（実 API が受け付けない）。`offset` は渡した値で載る | 実装済 |
+| BDA-03 | 既定モック | `fetchBlackoutDates({ limit: 20, offset: 50 })` を呼ぶ | `limit` と `offset` が渡した値でクエリに載る | 実装済 |
 | BDA-04 | API が `BlackoutDateItem` を 1 件返す | `fetchBlackoutDates()` を呼ぶ | `{ id, date: '2026-12-25', reason, updatedAt }` に変換される。`id` は実 API の `ID`（integer）を文字列にしたもので、受注不可日ではない。`date` は `'YYYY-MM-DD'`。対象市場に相当する項目は持たない | 実装済 |
 | BDA-05 | API が `備考: null` / `更新日時: null` の行を返す | `fetchBlackoutDates()` を呼ぶ | `reason` と `updatedAt` が空文字になる（`null` を画面へ流さない） | 実装済 |
 | BDA-06 | API が `blackout_dates` を持たない応答を返す | `fetchBlackoutDates()` を呼ぶ | `items` が空配列、`total` が 0 になる（`blackout_dates` は required ではない） | 実装済 |
@@ -42,6 +42,8 @@ MSW のモックが返す結果を見ている。モックはこちらの実装�
 | BDA-15 | 既定モック | `deleteBlackoutDate('12')` を呼ぶ | `DELETE /api/masters/blackout-dates/12` を呼び、戻り値が渡した id になる。パスに載るのは id で、受注不可日ではない | 実装済 |
 | BDA-16 | `VITE_USER_CODE` が設定されている | 更新系（`createBlackoutDate`）を呼ぶ | リクエストに `X-User-Code` ヘッダが載る（実 API が必須にしているため） | 実装済 |
 | BDA-17 | API が `ID` を持たない `BlackoutDateItem` を返す | `fetchBlackoutDates()` を呼ぶ | `id` が空文字のままになる（受注不可日へフォールバックしない）。`date` は従来どおり出る | 実装済 |
+| BDA-18 | 既定モック | `fetchBlackoutDates({ date: '2026-12-25' })` を呼ぶ | 単一指定のクエリ `blackout_date` に integer の `20261225` が載る。`start_date` / `end_date` は送らない（期間指定と取り違えない） | 実装済 |
+| BDA-19 | 既定モック | `fetchBlackoutDates({ date: '' })` を呼ぶ | 空文字は「条件なし」なので `blackout_date` をキーごと送らない | 実装済 |
 
 ## 主キーは `id`（受注不可日ではない）
 

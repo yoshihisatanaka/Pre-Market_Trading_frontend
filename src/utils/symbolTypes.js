@@ -24,10 +24,17 @@ export const REGULATION_OPTIONS = [
   { value: '1', label: '取引不可' },
 ]
 
+/*
+ * 預託先区分と VWAP対象区分の**並びはコード順ではなく画面モックの順**（IB → みずほ / 対象 → 対象外）。
+ * docs/api/requests.md #42 の回答で、この順に固定すると決まった（`GET /codes` の形は変わらない）。
+ * 新規追加の初期値は各定数の先頭（IB / 対象）で、並びを変えると初期値も一緒に変わる
+ * （src/views/SymbolListView.vue の emptyForm）。
+ */
+
 /** 預託先区分（注文ルート）。SymbolItem.注文ルート の description（0:みずほ, 1:IB）に準拠 */
 export const ORDER_ROUTE_OPTIONS = [
-  { value: '0', label: 'みずほ証券' },
   { value: '1', label: 'IB証券' },
+  { value: '0', label: 'みずほ証券' },
 ]
 
 /**
@@ -35,8 +42,8 @@ export const ORDER_ROUTE_OPTIONS = [
  * ラベルは画面モックの文言（対象外 / 対象）に寄せる。
  */
 export const VWAP_TARGET_OPTIONS = [
-  { value: '0', label: '対象外' },
   { value: '1', label: '対象' },
+  { value: '0', label: '対象外' },
 ]
 
 /**

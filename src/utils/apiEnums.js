@@ -163,8 +163,12 @@ export const SETTLEMENT_CURRENCY_VALUES = Object.freeze(['0', '1'])
 /** 勧誘区分。`SolicitationEnum` */
 export const SOLICITATION_VALUES = Object.freeze(['1', '2'])
 
-/** 発注範囲。`ExecutionScopeEnum` */
-export const EXECUTION_SCOPE_VALUES = Object.freeze(['01', '02', '03', '04', '05', '06'])
+/**
+ * 発注範囲。`ExecutionScopeEnum`。
+ * 2026-10-02 の取り込みで '01'（プレのみ）と '05'（レギュラー＋アフター）が外れ、4 値になった
+ * （`GET /codes` の 発注範囲 も同じ 4 値）。
+ */
+export const EXECUTION_SCOPE_VALUES = Object.freeze(['02', '03', '04', '06'])
 
 /** 資金性格。`FundNatureEnum` */
 export const FUND_NATURE_VALUES = Object.freeze(['1', '2'])

@@ -5,6 +5,7 @@ import { server } from '@/mocks/server'
 import { blackoutDates, canceledBlackoutDates } from '@/mocks/fixtures/blackoutDates'
 import { BLACKOUT_DATES_PAGE_SIZE, useBlackoutDatesStore } from './blackoutDates'
 import { useMarketStatusStore } from './marketStatus'
+import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
 
 /*
  * フィクスチャはバックエンドの生の形（日本語キー / 受注不可日は YYYYMMDD の integer）なので、
@@ -24,16 +25,16 @@ const TOTAL = blackoutDates.length
 const firstPage = blackoutDates.slice(0, PAGE_SIZE)
 const secondPage = blackoutDates.slice(PAGE_SIZE, PAGE_SIZE * 2)
 
-// 絞り込みはフィクスチャ先頭の年をそのまま使う（年もハードコードしない）
+// 登録用の日付を作るための年。フィクスチャ先頭の年をそのまま使う（年もハードコードしない）
 const YEAR = String(blackoutDates[0].受注不可日).slice(0, 4)
-const DATE_FROM = `${YEAR}-01-01`
-const DATE_TO = `${YEAR}-12-31`
-const inYear = blackoutDates.filter((blackout) => String(blackout.受注不可日).startsWith(YEAR))
 
-// 全期間を含む絞り込み条件（最古 / 最新の日付そのもの）
-const allDates = blackoutDates.map((blackout) => blackout.受注不可日)
-const ALL_FROM = toIsoDate(Math.min(...allDates))
-const ALL_TO = toIsoDate(Math.max(...allDates))
+/*
+ * 絞り込みは画面モックどおり 1 日指定（date）。フィクスチャの 2 件目の日付を使い、
+ * その日の行（受注不可日は一意なので 1 件）を期待値にする。
+ */
+const FILTER_ROW = blackoutDates[1]
+const FILTER_DATE = toIsoDate(FILTER_ROW.受注不可日)
+const onFilterDate = blackoutDates.filter((blackout) => blackout.受注不可日 === FILTER_ROW.受注不可日)
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
@@ -150,15 +151,14 @@ describe('useBlackoutDatesStore', () => {
     expect(ids(store.items)).toEqual(expectedIds(secondPage))
   })
 
-  it('[BDS-04] 日付で絞り込むと total も絞り込み後の件数になる', async () => {
+  it('[BDS-04] 日付で絞り込むとその日の行だけになり total も絞り込み後の件数になる', async () => {
     const store = useBlackoutDatesStore()
 
-    await store.load({ dateFrom: DATE_FROM, dateTo: DATE_TO })
+    await store.load({ date: FILTER_DATE })
 
-    expect(store.dateFrom).toBe(DATE_FROM)
-    expect(store.dateTo).toBe(DATE_TO)
-    expect(store.total).toBe(inYear.length)
-    expect(ids(store.items)).toEqual(expectedIds(inYear))
+    expect(store.date).toBe(FILTER_DATE)
+    expect(store.total).toBe(onFilterDate.length)
+    expect(ids(store.items)).toEqual(expectedIds(onFilterDate))
   })
 
   it('[BDS-05] 取得中は loading が true になり完了すると false に戻る', async () => {
@@ -207,17 +207,20 @@ describe('useBlackoutDatesStore', () => {
   })
 
   it('[BDS-08] reload は直前のページ位置と絞り込みを保ったまま取り直す', async () => {
+    /*
+     * 1 日指定の結果は 1 ページに収まるので、表示件数の位置には行が無い。
+     * offset が消えればその日の行が、date が消えれば全件の 2 ページ目が出てくるので、
+     * 「total がその日の件数で items が空」のままなら両方が保たれている。
+     */
     const store = useBlackoutDatesStore()
-    await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
-    const before = ids(store.items)
+    await store.load({ offset: PAGE_SIZE, date: FILTER_DATE })
 
     await store.reload()
 
     expect(store.offset).toBe(PAGE_SIZE)
-    expect(store.dateFrom).toBe(ALL_FROM)
-    expect(store.dateTo).toBe(ALL_TO)
-    expect(ids(store.items)).toEqual(before)
-    expect(ids(store.items)).toEqual(expectedIds(secondPage))
+    expect(store.date).toBe(FILTER_DATE)
+    expect(store.total).toBe(onFilterDate.length)
+    expect(store.items).toEqual([])
   })
 
   it('[BDS-09] 後から届いた古い応答で結果が巻き戻らない', async () => {
@@ -238,7 +241,7 @@ describe('useBlackoutDatesStore', () => {
     expect(ids(store.items)).toEqual(expectedIds(secondPage))
   })
 
-  it('[BDS-10] limit は表示件数の定数だがリクエストには載らない', async () => {
+  it('[BDS-10] limit は既定の表示件数で、リクエストにも載る', async () => {
     let sentParams = null
     server.use(
       http.get('*/api/masters/blackout-dates', ({ request }) => {
@@ -250,10 +253,10 @@ describe('useBlackoutDatesStore', () => {
 
     await store.load()
 
-    // ページャーの表示には使うが、実 API の一覧は 1 ページ 50 件で固定されていて
-    // limit というクエリを持たない（api 層が落としている）
+    // 50 件固定の特例はやめ、全画面共通の DEFAULT_PAGE_SIZE に従う（#21）
+    expect(PAGE_SIZE).toBe(DEFAULT_PAGE_SIZE)
     expect(store.limit).toBe(PAGE_SIZE)
-    expect(sentParams.has('limit')).toBe(false)
+    expect(sentParams.get('limit')).toBe(String(PAGE_SIZE))
   })
 
   it('[BDS-11] create が成功すると一覧が読み直され登録した日付が現れる', async () => {
@@ -357,18 +360,18 @@ describe('useBlackoutDatesStore', () => {
   })
 
   it('[BDS-17] create 後の読み直しでもページ位置と絞り込みが保たれる', async () => {
+    // これから登録する日付で絞っておく（登録前は 0 件）
     const store = useBlackoutDatesStore()
-    await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
+    await store.load({ offset: PAGE_SIZE, date: NEW_DATE })
+    expect(store.total).toBe(0)
 
     await store.create({ date: NEW_DATE, reason: NEW_REASON })
 
-    // 登録後の一覧は日付の降順のまま 1 件増える
-    const expected = sortedDesc([...fixtureDates, NEW_DATE])
+    // 読み直しは同じ条件で行われる。全件に戻れば TOTAL + 1、1 ページ目に戻れば登録した行が見える
     expect(store.offset).toBe(PAGE_SIZE)
-    expect(store.dateFrom).toBe(ALL_FROM)
-    expect(store.dateTo).toBe(ALL_TO)
-    expect(store.total).toBe(TOTAL + 1)
-    expect(dates(store.items)).toEqual(expected.slice(PAGE_SIZE, PAGE_SIZE * 2))
+    expect(store.date).toBe(NEW_DATE)
+    expect(store.total).toBe(1)
+    expect(store.items).toEqual([])
   })
 
   it('[BDS-18] clearCreateError はサーバ障害と事前検証の理由をどちらも消す', async () => {
@@ -475,18 +478,20 @@ describe('useBlackoutDatesStore', () => {
   })
 
   it('[BDS-23] remove 後の読み直しでもページ位置と絞り込みが保たれる', async () => {
+    // 削除する行の日付で絞っておく
+    const targetDate = toIsoDate(DELETE_TARGET.受注不可日)
     const store = useBlackoutDatesStore()
-    await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
+    await store.load({ offset: PAGE_SIZE, date: targetDate })
+    const before = store.total
 
     await store.remove(DELETE_TARGET_ID)
 
-    // 削除は論理削除だが、既定の一覧は取消済みを返さないので 1 件減って見える
-    const remaining = blackoutDates.filter((blackout) => toId(blackout) !== DELETE_TARGET_ID)
+    // 削除は論理削除だが、既定の一覧は取消済みを返さないので、その日の件数が 1 減って見える。
+    // 全件に戻れば TOTAL - 1 になる
     expect(store.offset).toBe(PAGE_SIZE)
-    expect(store.dateFrom).toBe(ALL_FROM)
-    expect(store.dateTo).toBe(ALL_TO)
-    expect(store.total).toBe(TOTAL - 1)
-    expect(ids(store.items)).toEqual(expectedIds(remaining.slice(PAGE_SIZE, PAGE_SIZE * 2)))
+    expect(store.date).toBe(targetDate)
+    expect(store.total).toBe(before - 1)
+    expect(store.items).toEqual([])
   })
 
   it('[BDS-24] clearDeleteError で削除エラーが消える', async () => {
@@ -740,24 +745,26 @@ describe('useBlackoutDatesStore', () => {
   })
 
   it('[BDS-34] update 後の読み直しでもページ位置と絞り込みが保たれる', async () => {
+    // 更新する行の日付で絞っておく
+    const targetDate = toIsoDate(EDIT_TARGET.受注不可日)
     const store = useBlackoutDatesStore()
-    await store.load({ offset: PAGE_SIZE, dateFrom: ALL_FROM, dateTo: ALL_TO })
+    await store.load({ offset: PAGE_SIZE, date: targetDate })
+    const before = store.total
 
-    // 対象は 1 ページ目の行なので、合札は表示中の行ではなくフィクスチャから取る
+    // その位置に行は表示されていないので、合札は表示中の行ではなくフィクスチャから取る
     const updated = await store.update({
       id: toId(EDIT_TARGET),
-      date: toIsoDate(EDIT_TARGET.受注不可日),
+      date: targetDate,
       reason: EDITED_REASON,
       updatedAt: EDIT_TARGET.更新日時,
     })
 
     expect(updated).not.toBeNull()
     expect(store.offset).toBe(PAGE_SIZE)
-    expect(store.dateFrom).toBe(ALL_FROM)
-    expect(store.dateTo).toBe(ALL_TO)
-    // 日付を変えていないので件数も並びも動かない
-    expect(store.total).toBe(TOTAL)
-    expect(ids(store.items)).toEqual(expectedIds(secondPage))
+    expect(store.date).toBe(targetDate)
+    // 日付を変えていないのでその日の件数は動かない（全件に戻れば TOTAL になる）
+    expect(store.total).toBe(before)
+    expect(store.items).toEqual([])
   })
 
   it('[BDS-35] clearUpdateError はサーバ障害と事前検証の理由をどちらも消す', async () => {

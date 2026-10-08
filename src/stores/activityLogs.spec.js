@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { activityLogs } from '@/mocks/fixtures/activityLogs'
+import { users } from '@/mocks/fixtures/users'
 import { ACTIVITY_LOGS_PAGE_SIZE, useActivityLogsStore } from './activityLogs'
 
 /*
@@ -126,15 +127,18 @@ describe('stores/activityLogs', () => {
     expect(expected.length).toBeGreaterThan(0)
   })
 
-  it('[ALS-06] 対象種別で絞り込む', async () => {
-    const expected = idsMatching((row) => row.対象種別 === TARGET_TYPE)
+  it('[ALS-06] 対象種別（複数）で絞り込む', async () => {
+    const second = activityLogs.find((row) => row.対象種別 !== TARGET_TYPE).対象種別
+    const targetTypes = [TARGET_TYPE, second]
+    const expected = idsMatching((row) => targetTypes.includes(row.対象種別))
     const store = useActivityLogsStore()
 
-    await store.load({ targetType: TARGET_TYPE })
+    await store.load({ targetTypes })
 
-    expect(store.targetType).toBe(TARGET_TYPE)
-    expect(idsOf(store)).toEqual(expected)
-    expect(expected.length).toBeGreaterThan(0)
+    expect(store.targetTypes).toEqual(targetTypes)
+    expect(idsOf(store)).toEqual(expected.slice(0, PAGE_SIZE))
+    // 2 種とも含まれていること（1 種だけに絞られていないこと）
+    expect(new Set(store.items.map((item) => item.targetType))).toEqual(new Set(targetTypes))
   })
 
   it('[ALS-07] 対象キーは部分一致で絞り込み、対象キーの無い行は含まない', async () => {
@@ -193,11 +197,11 @@ describe('stores/activityLogs', () => {
   it('[ALS-12] reload は条件とページ位置を保ったまま読み直す', async () => {
     const expected = idsMatching((row) => row.対象種別 === TARGET_TYPE)
     const store = useActivityLogsStore()
-    await store.load({ offset: 0, targetType: TARGET_TYPE, sort: 'asc' })
+    await store.load({ offset: 0, targetTypes: [TARGET_TYPE], sort: 'asc' })
 
     await store.reload()
 
-    expect(store.targetType).toBe(TARGET_TYPE)
+    expect(store.targetTypes).toEqual([TARGET_TYPE])
     expect(store.sort).toBe('asc')
     expect(store.offset).toBe(0)
     expect(idsOf(store)).toEqual([...expected].reverse())
@@ -223,5 +227,25 @@ describe('stores/activityLogs', () => {
     await Promise.all([stale, latest])
 
     expect(idsOf(store)).toEqual(expectedIds.slice(0, PAGE_SIZE))
+  })
+
+  it('[ALS-15] 実行者区分で絞り込む', async () => {
+    // 管理者・管理責任者に入るロール（モックの読み方。src/mocks/handlers/activityLogs.js）
+    const managerCodes = new Set(
+      users
+        .filter((user) => ['manager', 'supervisor'].includes(user.ロールコード))
+        .map((user) => user.操作者コード),
+    )
+    const expected = idsMatching((row) => managerCodes.has(row.操作者))
+    const store = useActivityLogsStore()
+
+    await store.load({ actorGroup: 'manager' })
+
+    expect(store.actorGroup).toBe('manager')
+    expect(store.total).toBe(expected.length)
+    expect(idsOf(store)).toEqual(expected.slice(0, PAGE_SIZE))
+    // 絞り込みが効いていること（全件でも 0 件でもない）
+    expect(expected.length).toBeGreaterThan(0)
+    expect(expected.length).toBeLessThan(TOTAL)
   })
 })

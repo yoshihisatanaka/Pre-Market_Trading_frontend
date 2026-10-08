@@ -1,38 +1,51 @@
 import { activityLogTargets } from './activityLogTargets'
+import { users } from './users'
 
 /*
  * モックのレスポンス実体（GET /operations/activity-logs）。
  * ここに書くのは「バックエンドが返す生の形」（openapi.json の ActivityLogItem）であり、
  * アプリ内モデルではない。
  *
- * 各行の末尾 5 項目（操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果）は画面モックが出していた項目で、
- * **契約提案**としてここに書いた（docs/api/requests.md #1）。うち 4 項目は 2026-09-30 の取り込みで
- * 仕様に入り、**仕様に無いのは 結果 だけ**になった。src/api/activityLogs.js はまだどれも読まない
- * （画面にも出さない）。契約テスト（src/api/contract.spec.js）は KNOWN_GAPS で 結果 だけを
- * 許しているので、仕様に入った日に CON-07 が落ちて気づける。
+ * 操作者名 / 実行者区分 / 対象機能 / 操作内容 は画面モックが出していた項目で、2026-09-30 の取り込みで
+ * 仕様に入った。区分 / 区分名 と対象種別 orders（注文の受付・訂正・取消）は 2026-10-06 の回答
+ * （docs/api/requests.md #38）。画面モックにあった 結果 は「追加しない」回答（#1 ③）なので書かない。
  *
  * ページャーの動作確認には 1 ページ（50 件）を超えるデータが要るので、
- * 対象種別・操作区分を一通り含む 16 件に、古い日付の顧客マスタ更新を 40 件足して 56 件にしてある。
+ * 対象種別・操作区分を一通り含む 24 件に、古い日付の顧客マスタ更新を 40 件足して 64 件にしてある。
+ * 業務操作（注文）・運用管理（発注停止 / お知らせ）の行は画面の「操作区分」の絞り込みと
+ * バッジの色分けの確認用。
  *
  * ブラウザ(MSW worker)・単体テスト・E2E で共用する。
  */
 
-/** 契約提案の操作者名・実行者区分。操作者コード → 表示名。一括処理（操作者 null）は「システム」 */
-const OPERATORS = {
-  '001': { name: '山田 太郎', role: 'IFA' },
-  '002': { name: '鈴木 花子', role: 'IFA' },
-  '003': { name: '佐藤 一郎', role: '営業員' },
-  '005': { name: '高橋 管理', role: '管理者' },
-  '006': { name: '伊藤 責任者', role: '管理責任者' },
-}
-const SYSTEM_OPERATOR = { name: 'システム', role: 'システム' }
+/**
+ * 操作者コード → 氏名・実行者区分（ロール名）。fixtures/users.js（m_操作者）から引く
+ * （実 API も m_操作者 から解決する）。一括処理（操作者 null）は「システム」
+ */
+const OPERATORS = Object.fromEntries(
+  users.map((user) => [user.操作者コード, { name: user.氏名, role: user.ロール名 }]),
+)
+// 操作者がマスタに無い行。実 API は 操作者名 を「システム」、実行者区分 を null で返す（2026-10-05 実測）
+const SYSTEM_OPERATOR = { name: 'システム', role: null }
 
-/** 契約提案の操作内容の動詞 */
-const OPERATION_VERBS = { CREATE: '登録', UPDATE: '更新', DELETE: '削除', BATCH: '一括取込' }
+/** 操作内容の動詞（実 API の 操作内容 は「<対象機能>を<動詞>」。動詞は /codes の 操作区分 の名称） */
+const OPERATION_VERBS = {
+  CREATE: '登録',
+  UPDATE: '更新',
+  DELETE: '削除',
+  BATCH: '一括処理',
+  SUSPEND: '停止',
+  RESUME: '再開',
+  SHOW: '表示',
+  HIDE: '非表示',
+  VWAP_BULK: 'VWAP対象一括更新',
+}
 
 /**
- * 対象種別・操作区分を一通り含む 16 件。操作日時の降順。
+ * 対象種別・操作区分を一通り含む 24 件。操作日時の降順。
  * before / after は変更前後のレコード（登録は before が、削除は after が無い）。
+ * 注文（orders）の行は変更前後のレコードを持たず（両方 null）、変更の中身は text（操作内容）に入る。
+ * 操作区分は 受付 → CREATE / 訂正 → UPDATE / 取消 → DELETE（#38 ①の回答）。
  */
 const BASE_ROWS = [
   {
@@ -56,6 +69,40 @@ const BASE_ROWS = [
     after: { 口座番号: '1230001', 顧客名: '山本 健一', 取引制限区分: '1' },
   },
   {
+    // 業務操作（注文の訂正）。画面の「操作区分」で 業務操作 を選ぶと残る行
+    type: 'orders',
+    targetId: '101',
+    targetKey: '101',
+    operation: 'UPDATE',
+    operator: '003',
+    at: '2026-09-16T10:15:00',
+    before: null,
+    after: null,
+    text: '注文訂正 注文ID 101 口座 1230001 AAPL 買 数量 100→80 指値 230.50→229.00',
+  },
+  {
+    type: 'orders',
+    targetId: '101',
+    targetKey: '101',
+    operation: 'CREATE',
+    operator: '003',
+    at: '2026-09-16T10:10:00',
+    before: null,
+    after: null,
+    text: '注文受付 注文ID 101 口座 1230001 AAPL 買 100株 指値 230.50',
+  },
+  {
+    // 運用管理（発注停止の再開）。画面の「操作区分」で 運用管理 を選ぶと残る行
+    type: 'order-suspensions',
+    targetId: '1',
+    targetKey: 'ALL',
+    operation: 'RESUME',
+    operator: '006',
+    at: '2026-09-16T09:50:00',
+    before: { 停止対象: 'ALL', 発注停止フラグ: 1, 停止理由: 'IB 接続障害' },
+    after: { 停止対象: 'ALL', 発注停止フラグ: 0, 停止理由: 'IB 接続障害' },
+  },
+  {
     type: 'fx',
     targetId: '2026-09-16',
     targetKey: '2026-09-16',
@@ -64,6 +111,36 @@ const BASE_ROWS = [
     at: '2026-09-16T09:05:00',
     before: { 適用日: '2026-09-16', 為替レート: 147.85 },
     after: { 適用日: '2026-09-16', 為替レート: 148.2 },
+  },
+  {
+    type: 'order-suspensions',
+    targetId: '1',
+    targetKey: 'ALL',
+    operation: 'SUSPEND',
+    operator: '006',
+    at: '2026-09-16T08:30:00',
+    before: { 停止対象: 'ALL', 発注停止フラグ: 0, 停止理由: null },
+    after: { 停止対象: 'ALL', 発注停止フラグ: 1, 停止理由: 'IB 接続障害' },
+  },
+  {
+    type: 'announcements',
+    targetId: '1',
+    targetKey: '1',
+    operation: 'HIDE',
+    operator: '005',
+    at: '2026-09-16T07:00:00',
+    before: { ID: 1, 表示フラグ: 1, 本文: '9月15日 06:00〜07:00 に計画メンテナンスを行います。' },
+    after: { ID: 1, 表示フラグ: 0, 本文: '9月15日 06:00〜07:00 に計画メンテナンスを行います。' },
+  },
+  {
+    type: 'announcements',
+    targetId: '1',
+    targetKey: '1',
+    operation: 'SHOW',
+    operator: '005',
+    at: '2026-09-15T18:00:00',
+    before: { ID: 1, 表示フラグ: 0, 本文: '' },
+    after: { ID: 1, 表示フラグ: 1, 本文: '9月15日 06:00〜07:00 に計画メンテナンスを行います。' },
   },
   {
     type: 'balance_adjustments',
@@ -94,6 +171,28 @@ const BASE_ROWS = [
     at: '2026-09-15T11:00:00',
     before: null,
     after: { 銘柄コード: 'PLTR', 銘柄名: 'パランティア', 規制区分: '0', 発注経路: '1' },
+  },
+  {
+    type: 'orders',
+    targetId: '102',
+    targetKey: '102',
+    operation: 'DELETE',
+    operator: '001',
+    at: '2026-09-15T10:00:00',
+    before: null,
+    after: null,
+    text: '注文取消 注文ID 102 口座 1230002 MSFT 売 20株 成行',
+  },
+  {
+    // VWAP 対象の一括更新。1 件のレコードに紐づかないので対象ID / 対象キーを持たない
+    type: 'symbols',
+    targetId: null,
+    targetKey: null,
+    operation: 'VWAP_BULK',
+    operator: '005',
+    at: '2026-09-15T09:00:00',
+    before: { VWAP対象区分: '0' },
+    after: { VWAP対象区分: '1' },
   },
   {
     type: 'customers',
@@ -247,13 +346,16 @@ function toDiff(before, after) {
 }
 
 function toActivityLogItem(row, index) {
-  const typeName = activityLogTargets.find((target) => target.対象種別 === row.type)?.対象種別名
+  const target = activityLogTargets.find((item) => item.対象種別 === row.type)
+  const typeName = target?.対象種別名
   const operator = OPERATORS[row.operator] ?? SYSTEM_OPERATOR
   const diff = toDiff(row.before, row.after)
 
   return {
     対象種別: row.type,
     対象種別名: typeName ?? row.type,
+    区分: target?.区分 ?? 'master',
+    区分名: target?.区分名 ?? 'マスタ更新',
     履歴ID: HISTORY_IDS[index],
     対象ID: row.targetId,
     対象キー: row.targetKey,
@@ -264,13 +366,11 @@ function toActivityLogItem(row, index) {
     変更後データ: row.after,
     差分: diff,
     変更項目: Object.keys(diff),
-    // ---- ここから下は契約提案（docs/api/requests.md #1）。2026-09-30 に 結果 以外は仕様に入った ----
     操作者名: operator.name,
     実行者区分: operator.role,
     対象機能: typeName ?? row.type,
-    操作内容: `${typeName ?? row.type}を${OPERATION_VERBS[row.operation]}`,
-    // 結果 だけはまだ仕様に無い
-    結果: '成功',
+    // 注文の行は注文イベントの内容文をそのまま返す（仕様の 操作内容 の説明）
+    操作内容: row.text ?? `${typeName ?? row.type}を${OPERATION_VERBS[row.operation]}`,
   }
 }
 

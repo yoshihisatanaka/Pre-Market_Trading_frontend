@@ -37,15 +37,18 @@ const AFTER_ALL_DATE = addDays(
   7,
 )
 
-// 画面の表示は小数 2 桁
-const shown = (value) => value.toFixed(2)
+// 画面の表示は小数 4 桁。源泉レートの未設定（null）は「—」
+const shown = (value) => value.toFixed(4)
+const UNSET = '—'
 const NEW_RATE = LATEST.為替レート + 1
+const NEW_WITHHOLDING_RATE = LATEST.源泉レート + 1
 // モックの事前検証が警告を返す、一般的な範囲（50〜300 円）から外れるレート
 const OUT_OF_RANGE_RATE = LATEST.為替レート * 10
 // 本文の型違反（正の数でない）。事前検証の段階で 422 になる
 const INVALID_RATE = 0
 
-const noticeFor = (value) => `USD/JPY のレートを ${shown(value)} 円に更新しました。`
+const noticeFor = (rate, withholdingRate) =>
+  `USD/JPY の公示（社内）レートを ${shown(rate)} 円、源泉レートを ${shown(withholdingRate)} 円に更新しました。`
 const REQUIRED_MESSAGE = 'レートを入力してください。'
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 const CONFLICT_MESSAGE =
@@ -59,6 +62,23 @@ const LATEST_DETAIL_PATH = `*/api/masters/fx/${LATEST.ID}`
 
 const latestError = (status, detail, options) =>
   http.get(LATEST_PATH, () => HttpResponse.json({ detail }, { status }), options)
+
+/** latest と詳細が、源泉レート未設定（null）の最新行を返す */
+const withoutWithholding = () => {
+  const row = { ...LATEST, 源泉レート: null }
+  return [
+    http.get(LATEST_PATH, () =>
+      HttpResponse.json({
+        ID: row.ID,
+        基準日: row.基準日,
+        通貨コード: row.通貨コード,
+        為替レート: row.為替レート,
+        源泉レート: row.源泉レート,
+      }),
+    ),
+    http.get(LATEST_DETAIL_PATH, () => HttpResponse.json({ exchange_rate: row })),
+  ]
+}
 
 /** 今日（JST）を固定する */
 function setToday(isoDate) {
@@ -108,6 +128,28 @@ async function openUpdate(wrapper) {
 }
 async function setRate(wrapper, value) {
   await byTestid(wrapper, 'fx-rate-input').setValue(String(value))
+}
+async function setWithholdingRate(wrapper, value) {
+  await byTestid(wrapper, 'fx-withholding-rate-input').setValue(String(value))
+}
+/** 公示レートと源泉レートの両方を入れる（送信系のテストは両方埋める） */
+async function setRates(wrapper, rate, withholdingRate = NEW_WITHHOLDING_RATE) {
+  await setRate(wrapper, rate)
+  await setWithholdingRate(wrapper, withholdingRate)
+}
+/**
+ * 入力欄の項目（FormField）に出ている入力エラーの文言。無ければ ''。
+ * CSS クラスに依存しないよう、入力欄の aria-describedby が指す要素から辿る
+ */
+function fieldErrorOf(wrapper, inputTestid) {
+  const describedBy = byTestid(wrapper, inputTestid).attributes('aria-describedby')
+  if (!describedBy) return ''
+  return describedBy
+    .split(' ')
+    .map((id) => wrapper.find(`[id="${id}"]`))
+    .filter((node) => node.exists() && node.attributes('role') === 'alert')
+    .map((node) => node.text())
+    .join('')
 }
 async function submit(wrapper) {
   await byTestid(wrapper, 'fx-update-submit').trigger('click')
@@ -159,14 +201,16 @@ describe('FxRateMasterView', () => {
     expect(byTestid(wrapper, 'fx-update').element.disabled).toBe(false)
   })
 
-  it('[FXV-04] 現在レート・基準日・最終更新を表示する', async () => {
+  it('[FXV-04] 公示レートのカードに現在レート（小数 4 桁）・基準日・最終更新を表示する', async () => {
     const wrapper = await mountView()
     await settle()
 
-    expect(text(wrapper, 'fx-rate')).toBe(shown(LATEST.為替レート))
-    expect(text(wrapper, 'fx-base-date')).toBe(LATEST_DATE)
-    expect(text(wrapper, 'fx-updated')).toContain(formatDateTime(LATEST.更新日時))
-    expect(text(wrapper, 'fx-updated')).toContain(LATEST.更新者)
+    const card = byTestid(wrapper, 'fx-public-card')
+    expect(card.find('[data-testid="fx-rate"]').text()).toBe(shown(LATEST.為替レート))
+    expect(card.find('[data-testid="fx-base-date"]').text()).toBe(LATEST_DATE)
+    const updated = card.find('[data-testid="fx-updated"]').text()
+    expect(updated).toContain(formatDateTime(LATEST.更新日時))
+    expect(updated).toContain(LATEST.更新者)
   })
 
   it('[FXV-05] 「再試行」で取り直すとエラーが消えて現在レートが出る', async () => {
@@ -191,6 +235,9 @@ describe('FxRateMasterView', () => {
 
     expect(exists(wrapper, 'fx-update-form')).toBe(true)
     expect(byTestid(wrapper, 'fx-rate-input').element.value).toBe(String(LATEST.為替レート))
+    expect(byTestid(wrapper, 'fx-withholding-rate-input').element.value).toBe(
+      String(LATEST.源泉レート),
+    )
     expect(text(wrapper, 'fx-update-submit')).toBe('更新')
   })
 
@@ -206,10 +253,10 @@ describe('FxRateMasterView', () => {
     await settle()
     await openUpdate(wrapper)
 
-    await setRate(wrapper, '')
+    await setRates(wrapper, '', NEW_WITHHOLDING_RATE)
     await submit(wrapper)
 
-    expect(byTestid(wrapper, 'fx-update-form').text()).toContain(REQUIRED_MESSAGE)
+    expect(fieldErrorOf(wrapper, 'fx-rate-input')).toBe(REQUIRED_MESSAGE)
     expect(validated).toBe(false)
   })
 
@@ -218,13 +265,15 @@ describe('FxRateMasterView', () => {
     await settle()
     await openUpdate(wrapper)
 
-    await setRate(wrapper, NEW_RATE)
+    await setRates(wrapper, NEW_RATE, NEW_WITHHOLDING_RATE)
     await submit(wrapper)
 
     expect(exists(wrapper, 'fx-update-form')).toBe(false)
-    expect(text(wrapper, 'fx-notice')).toBe(noticeFor(NEW_RATE))
+    expect(text(wrapper, 'fx-notice')).toBe(noticeFor(NEW_RATE, NEW_WITHHOLDING_RATE))
     expect(text(wrapper, 'fx-rate')).toBe(shown(NEW_RATE))
+    expect(text(wrapper, 'fx-withholding-rate')).toBe(shown(NEW_WITHHOLDING_RATE))
     expect(text(wrapper, 'fx-base-date')).toBe(AFTER_ALL_DATE)
+    expect(text(wrapper, 'fx-withholding-base-date')).toBe(AFTER_ALL_DATE)
   })
 
   it('[FXV-09] 今日の行があるときはその行が変更され、基準日は変わらない', async () => {
@@ -233,12 +282,14 @@ describe('FxRateMasterView', () => {
     await settle()
     await openUpdate(wrapper)
 
-    await setRate(wrapper, NEW_RATE)
+    await setRates(wrapper, NEW_RATE, NEW_WITHHOLDING_RATE)
     await submit(wrapper)
 
     expect(exists(wrapper, 'fx-update-form')).toBe(false)
-    expect(text(wrapper, 'fx-notice')).toBe(noticeFor(NEW_RATE))
+    expect(text(wrapper, 'fx-notice')).toBe(noticeFor(NEW_RATE, NEW_WITHHOLDING_RATE))
     expect(text(wrapper, 'fx-rate')).toBe(shown(NEW_RATE))
+    // 既定モックの PUT は本文の源泉レートを保存して返すので、送られていれば反映される
+    expect(text(wrapper, 'fx-withholding-rate')).toBe(shown(NEW_WITHHOLDING_RATE))
     expect(text(wrapper, 'fx-base-date')).toBe(LATEST_DATE)
   })
 
@@ -247,7 +298,7 @@ describe('FxRateMasterView', () => {
     await settle()
     await openUpdate(wrapper)
 
-    await setRate(wrapper, OUT_OF_RANGE_RATE)
+    await setRates(wrapper, OUT_OF_RANGE_RATE)
     await submit(wrapper)
 
     expect(exists(wrapper, 'fx-update-validation-warning')).toBe(true)
@@ -260,7 +311,7 @@ describe('FxRateMasterView', () => {
     const wrapper = await mountView()
     await settle()
     await openUpdate(wrapper)
-    await setRate(wrapper, OUT_OF_RANGE_RATE)
+    await setRates(wrapper, OUT_OF_RANGE_RATE)
     await submit(wrapper)
     expect(text(wrapper, 'fx-update-submit')).toBe('続行')
 
@@ -274,7 +325,7 @@ describe('FxRateMasterView', () => {
     const wrapper = await mountView()
     await settle()
     await openUpdate(wrapper)
-    await setRate(wrapper, OUT_OF_RANGE_RATE)
+    await setRates(wrapper, OUT_OF_RANGE_RATE)
     await submit(wrapper)
     expect(exists(wrapper, 'fx-update-validation-warning')).toBe(true)
 
@@ -295,7 +346,7 @@ describe('FxRateMasterView', () => {
     await settle()
     await openUpdate(wrapper)
 
-    await setRate(wrapper, NEW_RATE)
+    await setRates(wrapper, NEW_RATE)
     await submit(wrapper)
 
     expect(text(wrapper, 'fx-update-validation-error')).toContain(REJECT_REASON)
@@ -314,7 +365,7 @@ describe('FxRateMasterView', () => {
     await settle()
     await openUpdate(wrapper)
 
-    await setRate(wrapper, NEW_RATE)
+    await setRates(wrapper, NEW_RATE)
     await submit(wrapper)
 
     expect(text(wrapper, 'fx-update-error')).toBe(CONFLICT_MESSAGE)
@@ -327,7 +378,7 @@ describe('FxRateMasterView', () => {
     await settle()
     await openUpdate(wrapper)
 
-    await setRate(wrapper, INVALID_RATE)
+    await setRates(wrapper, INVALID_RATE)
     await submit(wrapper)
 
     // 実 API の msg は項目名を含まないので、client.js が loc から補っている
@@ -355,12 +406,83 @@ describe('FxRateMasterView', () => {
     await settle()
     await openUpdate(wrapper)
     expect(byTestid(wrapper, 'fx-rate-input').element.value).toBe('')
+    expect(byTestid(wrapper, 'fx-withholding-rate-input').element.value).toBe('')
 
-    await setRate(wrapper, NEW_RATE)
+    await setRates(wrapper, NEW_RATE, NEW_WITHHOLDING_RATE)
     await submit(wrapper)
 
     expect(exists(wrapper, 'fx-empty')).toBe(false)
     expect(text(wrapper, 'fx-rate')).toBe(shown(NEW_RATE))
+    expect(text(wrapper, 'fx-withholding-rate')).toBe(shown(NEW_WITHHOLDING_RATE))
     expect(text(wrapper, 'fx-base-date')).toBe(AFTER_ALL_DATE)
+  })
+
+  it('[FXV-18] 源泉レートのカードに源泉レート（小数 4 桁）と公示レートと同じ基準日・最終更新を表示する', async () => {
+    const wrapper = await mountView()
+    await settle()
+
+    const current = byTestid(wrapper, 'fx-current')
+    expect(current.find('[data-testid="fx-public-card"]').exists()).toBe(true)
+    const card = current.find('[data-testid="fx-withholding-card"]')
+    expect(card.exists()).toBe(true)
+    expect(card.find('[data-testid="fx-withholding-rate"]').text()).toBe(shown(LATEST.源泉レート))
+    expect(card.find('[data-testid="fx-withholding-base-date"]').text()).toBe(
+      text(wrapper, 'fx-base-date'),
+    )
+    expect(card.find('[data-testid="fx-withholding-updated"]').text()).toBe(
+      text(wrapper, 'fx-updated'),
+    )
+  })
+
+  it('[FXV-19] 源泉レートが未設定（null）のときは「—」を表示する', async () => {
+    server.use(...withoutWithholding())
+    const wrapper = await mountView()
+    await settle()
+
+    expect(text(wrapper, 'fx-withholding-rate')).toBe(UNSET)
+    expect(text(wrapper, 'fx-rate')).toBe(shown(LATEST.為替レート))
+  })
+
+  it('[FXV-20] 源泉レートが未設定のときはモーダルの源泉レートの初期値が空になる', async () => {
+    server.use(...withoutWithholding())
+    const wrapper = await mountView()
+    await settle()
+
+    await openUpdate(wrapper)
+
+    expect(byTestid(wrapper, 'fx-withholding-rate-input').element.value).toBe('')
+    expect(byTestid(wrapper, 'fx-rate-input').element.value).toBe(String(LATEST.為替レート))
+  })
+
+  it('[FXV-21] 源泉レートが未入力なら源泉レートの項目に必須の理由を出し、事前検証を送らない', async () => {
+    let validated = false
+    server.use(
+      http.post(VALIDATE_PATH, () => {
+        validated = true
+        return HttpResponse.json({ valid: true, errors: [], warnings: [] })
+      }),
+    )
+    const wrapper = await mountView()
+    await settle()
+    await openUpdate(wrapper)
+
+    await setRates(wrapper, NEW_RATE, '')
+    await submit(wrapper)
+
+    expect(fieldErrorOf(wrapper, 'fx-withholding-rate-input')).toBe(REQUIRED_MESSAGE)
+    expect(fieldErrorOf(wrapper, 'fx-rate-input')).toBe('')
+    expect(validated).toBe(false)
+  })
+
+  it('[FXV-22] 正の数でない源泉レートは項目名付きの 422 の理由を出す', async () => {
+    const wrapper = await mountView()
+    await settle()
+    await openUpdate(wrapper)
+
+    await setRates(wrapper, NEW_RATE, INVALID_RATE)
+    await submit(wrapper)
+
+    expect(text(wrapper, 'fx-update-error')).toMatch(/^源泉レート: /)
+    expect(exists(wrapper, 'fx-update-form')).toBe(true)
   })
 })

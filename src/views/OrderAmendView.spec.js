@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
@@ -79,6 +79,15 @@ const submit = async (wrapper) => {
   await settle()
 }
 
+/**
+ * 訂正を送り、完了表示が出るまで待つ。応答 → 再描画が settle() の回数に収まる前提を置かない
+ * （MSW のハンドラが本文を読む分だけ tick が増え、回数固定の待ちでは足りないことがある）。
+ */
+const submitAndComplete = async (wrapper) => {
+  await submit(wrapper)
+  await vi.waitFor(() => expect(exists(wrapper, 'order-amend-complete')).toBe(true))
+}
+
 /** FormField が入力欄の aria-describedby に渡す id から、エラー文とヒントを引く */
 const describedBy = (wrapper, input) =>
   (input.attributes('aria-describedby') ?? '')
@@ -102,7 +111,7 @@ function recordAmend(extra = {}) {
   const seen = []
   server.use(
     http.post(AMEND, async ({ request, params }) => {
-      seen.push(await request.clone().json())
+      seen.push(await request.json())
       return HttpResponse.json({
         success: true,
         mode: 'IN_PLACE',
@@ -196,7 +205,7 @@ describe('OrderAmendView', () => {
     expect(find(wrapper, 'order-amend-description').text()).toContain(`注文ID #${raw.ID}`)
     expect(summaryPairs(wrapper)).toEqual([
       ['注文ID', `#${raw.ID}`],
-      ['顧客', `部店 ${raw.部店} ／ 口座 ${raw.口座番号}`],
+      ['顧客', `${raw.顧客名} 部店 ${raw.部店} ／ 口座 ${raw.口座番号}`],
       ['銘柄', raw.Ticker],
       ['売買', SIDE_LABELS[raw.売買区分]],
       [
@@ -207,9 +216,30 @@ describe('OrderAmendView', () => {
       ['出来数量', `${formatQuantity(raw.出来数量)}株`],
       ['受注日時', formatMonthDayTime(`${raw.受注日}T${raw.受注時刻}`)],
     ])
+    expect(find(wrapper, 'order-amend-customer').text()).toBe(
+      `${raw.顧客名} 部店 ${raw.部店} ／ 口座 ${raw.口座番号}`,
+    )
     expect(find(wrapper, 'order-amend-original').text()).toBe('3,000株 ／ 成行')
-    expect(find(wrapper, 'order-amend-status').text()).toBe(orderStatusLabel(raw.処理状況))
+    // 状況はサーバの 処理状況名
+    expect(find(wrapper, 'order-amend-status').text()).toBe(raw.処理状況名)
     expect(find(wrapper, 'order-amend-status').text()).toBe('一部出来')
+  })
+
+  it('[OAV-25] 顧客名・処理状況名の無い応答（古いサーバ）では、顧客は部店・口座だけ、状況はコードの名前', async () => {
+    const raw = PARTIAL
+    const legacy = Object.fromEntries(
+      Object.entries(raw).filter(([key]) => !['顧客名', '処理状況名'].includes(key)),
+    )
+    server.use(
+      http.get(DETAIL, () => HttpResponse.json({ order: legacy, executions: [], events: [] })),
+    )
+    const { wrapper } = await mountView(raw.ID)
+    await settle()
+
+    expect(find(wrapper, 'order-amend-customer').text()).toBe(
+      `部店 ${raw.部店} ／ 口座 ${raw.口座番号}`,
+    )
+    expect(find(wrapper, 'order-amend-status').text()).toBe(orderStatusLabel(raw.処理状況))
   })
 
   it('[OAV-06] 入力欄は注文の現在値で埋まる', async () => {
@@ -373,7 +403,7 @@ describe('OrderAmendView', () => {
     await settle()
 
     await quantityInput(wrapper).setValue(String(PENDING.数量 + 5))
-    await submit(wrapper)
+    await submitAndComplete(wrapper)
 
     expect(exists(wrapper, 'order-amend-complete')).toBe(true)
     expect(find(wrapper, 'order-amend-complete-message').text()).toBe(
@@ -391,7 +421,7 @@ describe('OrderAmendView', () => {
     await settle()
 
     await quantityInput(wrapper).setValue(String(WORKING.数量 + 100))
-    await submit(wrapper)
+    await submitAndComplete(wrapper)
 
     const detail = find(wrapper, 'order-amend-complete-detail').text()
     expect(detail).toContain(`原注文 #${WORKING.ID}`)
@@ -405,7 +435,7 @@ describe('OrderAmendView', () => {
     await settle()
 
     await quantityInput(wrapper).setValue(String(PENDING.数量 + 5))
-    await submit(wrapper)
+    await submitAndComplete(wrapper)
 
     expect(
       find(wrapper, 'order-amend-complete-warnings')
@@ -464,7 +494,7 @@ describe('OrderAmendView', () => {
     await settle()
 
     await quantityInput(wrapper).setValue(String(PENDING.数量 + 5))
-    await submit(wrapper)
+    await submitAndComplete(wrapper)
     await find(wrapper, 'order-amend-back-to-list').trigger('click')
     await settle()
 

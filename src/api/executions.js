@@ -11,10 +11,15 @@ import { toFileDownload } from './fileDownload'
  *   - 検索クエリ名は英語（`branch_code` / `symbol` / `side` / `status` / `route` / `start_date` / `end_date`）
  *   - 売買区分は '1'（売）/ '3'（買）。アプリ内は 'sell' / 'buy'（openapi.json の `side` の説明どおり）
  *   - 口座番号は integer。アプリ内は文字列（src/api/customers.js と同じ）
+ *   - 出来状況の絞り込みはコードマスタ `約定出来状況` のコードで受け、取消済（034）だけは
+ *     `032,034`（取消済の 2 コード）に広げて `status` に載せる（toStatusQuery。#22 ③）
  *
- * 画面モック（execution_management.html）との差で、この層が埋めていないもの:
- *   - 約定金額（円）: ExecutionItem は USD の `約定代金` しか返さない。円貨の項目は持たない
- *   - 一部出来の件数: ExecutionSummary に無い（件数 / 注文件数 / 売件数 / 買件数 / 数量 / 代金 / 手数料のみ）
+ * 件数カードの「一部出来」は ExecutionSummary の `一部出来件数`（処理状況 010 の**注文**の件数。
+ * 約定の行数ではない）、円貨の約定金額は ExecutionItem の `約定代金_JPY`（約定代金 × 直近の USD
+ * レートの概算。為替未登録なら null）から出す（docs/api/requests.md #22 ①②）。
+ *
+ * 預託先（注文ルート / 注文ルート名）は、預託先参照権限の無い操作者には null で返り、route の
+ * 指定も無視される（#26）。null は空文字に寄せるので、画面が列を出していても壊れない。
  *
  * CSV 出力は一覧と同じ検索条件を受け、本文をファイルのまま（Blob）返す。
  * 列の並びと中身はバックエンドが決めるので、この層は変換しない。
@@ -42,6 +47,7 @@ import { toFileDownload } from './fileDownload'
  *   quantity: number|null,
  *   price: number|null,
  *   amountUsd: number|null,
+ *   amountJpy: number|null,
  *   executedAt: string,
  * }} Execution
  *   id は約定ID、orderId は注文ID（どちらも実 API の integer を文字列にしたもの）。
@@ -58,10 +64,12 @@ import { toFileDownload } from './fileDownload'
  *   orderCount: number,
  *   buyCount: number,
  *   sellCount: number,
+ *   partialCount: number,
  *   totalQuantity: number,
  *   totalAmountUsd: number,
  *   totalFeeUsd: number,
  * }} ExecutionSummary
+ *   partialCount は一部出来（処理状況 010）の注文の件数。count（約定の行数）とは単位が違う
  */
 
 /** 売買区分のコード → アプリ内の向き（openapi.json の `side` の説明: 1:売 / 3:買） */
@@ -72,6 +80,18 @@ const SIDE_CODES = { buy: '3', sell: '1' }
 
 /** 応答にファイル名が無いときの保存名（バックエンドが Content-Disposition に付ける名前と同じ） */
 export const EXECUTIONS_CSV_FILENAME = 'executions.csv'
+
+/**
+ * 出来状況の選択肢のコード → `status` に載せる処理状況コード（カンマ区切り）。
+ * コードマスタ `約定出来状況` の取消済は 034 だけだが、取消済には 032（取消済・出来有）もあるので両方で絞る。
+ * みずほ注文締（src/api/mizuhoExecutions.js）も同じ広げ方をする
+ */
+const STATUS_QUERY = { '034': '032,034' }
+
+/** 出来状況のコード → `status` の値。空は送らない（undefined） */
+export function toStatusQuery(status) {
+  return status ? (STATUS_QUERY[status] ?? status) : undefined
+}
 
 /**
  * 約定の検索条件（一覧と CSV 出力で共通）
@@ -86,7 +106,8 @@ export const EXECUTIONS_CSV_FILENAME = 'executions.csv'
  *   route?: string,
  * }} ExecutionFilters
  *   symbol は銘柄コードまたは Ticker。side は 'buy' / 'sell'（それ以外は送らない）。
- *   status / route はコード値。dateFrom / dateTo は YYYY-MM-DD。
+ *   status / route はコード値（status はコードマスタ `約定出来状況` のコード。送るときに toStatusQuery で広げる）。
+ *   dateFrom / dateTo は YYYY-MM-DD。
  *   空文字は「条件なし」としてリクエストに載せない
  */
 
@@ -148,7 +169,7 @@ function toSearchParams({
     branch_code: branchCode || undefined,
     symbol: symbol || undefined,
     side: SIDE_CODES[side],
-    status: status || undefined,
+    status: toStatusQuery(status),
     start_date: dateFrom || undefined,
     end_date: dateTo || undefined,
     route: route || undefined,
@@ -179,6 +200,7 @@ function toExecution(raw) {
     quantity: toNumberOrNull(raw?.約定数量),
     price: toNumberOrNull(raw?.約定単価),
     amountUsd: toNumberOrNull(raw?.約定代金),
+    amountJpy: toNumberOrNull(raw?.約定代金_JPY),
     executedAt: raw?.約定日時 ?? '',
   }
 }
@@ -190,6 +212,7 @@ function toSummary(raw) {
     orderCount: raw?.注文件数 ?? 0,
     buyCount: raw?.買件数 ?? 0,
     sellCount: raw?.売件数 ?? 0,
+    partialCount: raw?.一部出来件数 ?? 0,
     totalQuantity: raw?.約定数量合計 ?? 0,
     totalAmountUsd: raw?.約定代金合計_USD ?? 0,
     totalFeeUsd: raw?.手数料合計_USD ?? 0,

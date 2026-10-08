@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { viewerOperator } from '../src/mocks/fixtures/currentOperator'
 import { rolePermissions } from '../src/mocks/fixtures/permissions'
 import { mockApi } from './helpers/mockApi'
@@ -84,10 +85,7 @@ test.describe('権限マスタ', () => {
   test('[PM-01] サイドメニューから遷移すると 4 ロールが並ぶ', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: '権限マスタ', exact: true })
-      .click()
+    await clickSideMenuLink(page, '権限マスタ')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '権限マスタ', exact: true })).toBeVisible()

@@ -6,14 +6,15 @@
  * あちらは「キャンセル / 保存」のフォームの器）。フッタは「閉じる」だけ。
  *
  * 出すもの:
- *   - 概要（操作日時 / 対象種別 / 対象キー / 操作区分 / 操作者 / 履歴ID）
+ *   - 概要（操作日時 / 対象種別 / 対象キー / 操作区分 / 操作内容 / 操作者 / 履歴ID）
  *   - 変更項目（バッジ）と差分の表（項目 / 変更前 / 変更後）
- *   - 変更前データ / 変更後データの全項目（折りたたみ。無い側は出さない）
+ *   - 変更前データ / 変更後データの全項目（折りたたみ。無い側は出さない。注文の行は両方とも無い）
  *
  * **この部品は状態を持たない。** どの行を開いているかは呼び出し側（view）が持ち、
  * ここは close を emit するだけ。
  *
- * 出す data-testid: activity-log-detail / -changed-fields / -diff / -before / -after / -close
+ * 出す data-testid: activity-log-detail / -operation-text / -changed-fields / -diff / -before /
+ * -after / -close
  */
 import { computed } from 'vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
@@ -78,6 +79,9 @@ const afterRows = computed(() => toRecordRows(props.log?.after))
             {{ operationLabel(log.operation) }}
           </BaseBadge>
         </dd>
+        <!-- 注文の行は変更前後のレコードを持たず、変更の中身はこの表示文にある（#38 ①） -->
+        <dt>操作内容</dt>
+        <dd data-testid="activity-log-detail-operation-text">{{ log.operationText || '—' }}</dd>
         <dt>操作者</dt>
         <dd>{{ log.operator || '—' }}</dd>
         <dt>履歴ID</dt>

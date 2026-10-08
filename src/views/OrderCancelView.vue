@@ -49,12 +49,19 @@ const notFound = computed(() => error.value?.status === 404)
 // 取消画面の売買は画面モックどおり「買い / 売り」（一覧の「買 / 売」より一語長い）
 const sideLabels = { buy: '買い', sell: '売り' }
 
-/** 取消の対象になる株数（未約定残）。約定済みの株数は取り消されない */
+/**
+ * 取消の対象になる株数（未約定残）。約定済みの株数は取り消されない。
+ * サーバの 有効残数量 は使わない。注文エラー（101 / 103）は取消できるのに 有効残数量 が 0 で返り
+ * （有効な注文として数えない）、「取消対象 0 株」になってしまうため。出来数量はサーバの値
+ */
 const cancelQuantity = computed(() => {
   const target = order.value
   if (!target || target.quantity == null) return null
   return Math.max(target.quantity - target.filledQuantity, 0)
 })
+
+/** 処理状況の名前。サーバの 処理状況名 を使い、無い応答のときだけコードの写しで引く */
+const statusLabel = computed(() => order.value?.statusName || orderStatusLabel(order.value?.status))
 
 /** 「取消対象注文」の中身。並びは画面モックのとおり */
 const summaryItems = computed(() => {
@@ -150,7 +157,7 @@ function goBack() {
       <div class="order-cancel__lead">
         <p>対象注文と取消後の扱いを確認してから確定してください。</p>
         <BaseBadge variant="info" data-testid="order-cancel-status">
-          {{ orderStatusLabel(order.status) }}
+          {{ statusLabel }}
         </BaseBadge>
       </div>
 
@@ -176,7 +183,7 @@ function goBack() {
           </p>
 
           <BaseAlert v-if="locked" variant="warning" data-testid="order-cancel-locked">
-            この注文は取消できません（処理状況: {{ orderStatusLabel(order.status) }}）。
+            この注文は取消できません（処理状況: {{ statusLabel }}）。
           </BaseAlert>
           <BaseAlert v-if="cancelError" variant="error" data-testid="order-cancel-submit-error">
             {{ cancelError.message }}

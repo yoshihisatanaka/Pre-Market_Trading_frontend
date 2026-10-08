@@ -9,12 +9,16 @@ import { marketHolidayHandlers, resetMarketHolidayRows } from './marketHolidays'
 import { blackoutDateHandlers, resetBlackoutDateRows } from './blackoutDates'
 import { sliceCriteriaHandlers, resetSliceCriteriaRow } from './sliceCriteria'
 import { fxRateHandlers, resetFxRateRows } from './fxRates'
+import { calculationSettingsHandlers, resetCalculationSettingsRow } from './calculationSettings'
+import { calculationHandlers } from './calculations'
+import { feePreferenceHandlers, resetFeePreferenceRows } from './feePreferences'
 import { activityLogHandlers } from './activityLogs'
 import { permissionHandlers, resetPermissionRows } from './permissions'
 import { marketStatusHandlers } from './marketStatus'
 import { announcementHandlers, resetAnnouncementState } from './announcements'
 import { bannerHandlers } from './banner'
-import { stalledOrderHandlers, resetStalledOrderState } from './stalledOrders'
+import { stalledOrderHandlers } from './stalledOrders'
+import { userHandlers } from './users'
 import { incidentHandlers, resetIncidentState } from './incidents'
 import { mizuhoExecutionHandlers } from './mizuhoExecutions'
 import { closingHandlers, resetClosingState } from './closing'
@@ -46,11 +50,16 @@ import { holdingHandlers } from './holdings'
  *   /masters/blackout-dates  … 同上
  *   /masters/hard-limits     … 日本語キー / 拒否は 422 の HTTPValidationError と 409 の ErrorResponse
  *   /masters/fx              … 日本語キー / integer の基準日 / 最新・詳細・事前検証・登録・変更だけ
+ *   /masters/calculation-settings … 日本語キー / 部分更新 / 拒否は 422 と 409（実 API はローカル DB が未初期化で 500）
+ *   /calculations            … 仮計算。日本語キー / 円貨・外貨の 2 系統 / 計算式はバックエンドの fee_service.py の写し
+ *                              （実 API は仮計算マスタが未初期化だと 400）
+ *   /masters/fee-preferences … 日本語キー / 部分更新 / 事前検証の warnings / 論理削除（手数料パターンマスタの登録は A〜D と見なす）
  *   /market-status           … 日本語キー / 空白入りキー / 日付を「今日」へずらして返す
  *   /orders/csv-spec         … CSV一括注文の全 22 列の仕様（CsvHeaderSpecResponse そのまま）
  *   /orders/csv-template     … 同じくテンプレート（text/csv・BOM 付き・Content-Disposition 付き）
  *   /orders/validate-csv     … 同じく事前検証。アップロードされた CSV を実際に読んで行ごとに判定する
  *   /orders/bulk-create      … 同じく一括受付。送った並びで連番の注文 ID を返す（状態は持たない）
+ *   /masters/users           … 操作者の一覧（操作ログの操作者プルダウン用）。日本語キー / include_inactive
  * マスタ系のパスは 2026-09-15 の OpenAPI 取り込みで /masters/ 配下へ移った。
  * 実 API に当てて動かすときは環境変数 VITE_ENABLE_MSW を false にする（README「バックエンドとの連携」）。
  */
@@ -87,9 +96,10 @@ export function resetMockState() {
   resetBalanceAdjustmentRows()
   resetSliceCriteriaRow()
   resetFxRateRows()
+  resetCalculationSettingsRow()
+  resetFeePreferenceRows()
   resetPermissionRows()
   resetAnnouncementState()
-  resetStalledOrderState()
   resetIncidentState()
   resetClosingState()
   resetMizuhoOrderState()
@@ -117,7 +127,11 @@ export const handlers = [
   ...blackoutDateHandlers,
   ...sliceCriteriaHandlers,
   ...fxRateHandlers,
+  ...calculationSettingsHandlers,
+  ...calculationHandlers,
+  ...feePreferenceHandlers,
   ...activityLogHandlers,
+  ...userHandlers,
   ...permissionHandlers,
   ...marketStatusHandlers,
   ...announcementHandlers,

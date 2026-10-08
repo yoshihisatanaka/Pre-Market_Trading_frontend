@@ -2,7 +2,16 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { executions } from '@/mocks/fixtures/executions'
-import { EXECUTIONS_CSV_FILENAME, exportExecutionsCsv, fetchExecutions } from './executions'
+import {
+  EXECUTIONS_CSV_FILENAME,
+  exportExecutionsCsv,
+  fetchExecutions,
+  toStatusQuery,
+} from './executions'
+
+/** 取消済の選択肢のコード（コードマスタ 約定出来状況）と、status に載せる値（取消済の 2 コード） */
+const CANCELED = '034'
+const CANCELED_QUERY = '032,034'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -238,6 +247,10 @@ describe('api/executions', () => {
   it('[EXA-08] 集計をアプリ内モデルに変換し、欠けていれば全項目 0 にする', async () => {
     const sells = executions.filter((row) => row.売買区分 === '1')
     const buys = executions.filter((row) => row.売買区分 === '3')
+    // 一部出来は約定の行数ではなく注文の件数（処理状況 010 の注文 ID の数）
+    const partialOrders = new Set(
+      executions.filter((row) => row.処理状況 === '010').map((row) => row.注文ID),
+    )
 
     const { summary } = await fetchExecutions()
 
@@ -247,6 +260,7 @@ describe('api/executions', () => {
         'orderCount',
         'buyCount',
         'sellCount',
+        'partialCount',
         'totalQuantity',
         'totalAmountUsd',
         'totalFeeUsd',
@@ -256,6 +270,7 @@ describe('api/executions', () => {
     expect(summary.orderCount).toBe(new Set(executions.map((row) => row.注文ID)).size)
     expect(summary.buyCount).toBe(buys.length)
     expect(summary.sellCount).toBe(sells.length)
+    expect(summary.partialCount).toBe(partialOrders.size)
     expect(summary.totalQuantity).toBe(executions.reduce((sum, row) => sum + row.約定数量, 0))
     expect(summary.totalAmountUsd).toBeCloseTo(
       executions.reduce((sum, row) => sum + row.約定代金, 0),
@@ -275,6 +290,7 @@ describe('api/executions', () => {
       orderCount: 0,
       buyCount: 0,
       sellCount: 0,
+      partialCount: 0,
       totalQuantity: 0,
       totalAmountUsd: 0,
       totalFeeUsd: 0,
@@ -381,6 +397,53 @@ describe('api/executions', () => {
     const { filename } = await exportExecutionsCsv()
 
     expect(filename).toBe(NAME)
+  })
+
+  it('[EXA-18] toStatusQuery は取消済（034）だけを 032,034 に広げ、空は送らない', () => {
+    expect(toStatusQuery(CANCELED)).toBe(CANCELED_QUERY)
+    expect(toStatusQuery('011')).toBe('011')
+    expect(toStatusQuery('010')).toBe('010')
+    expect(toStatusQuery('')).toBeUndefined()
+    expect(toStatusQuery(undefined)).toBeUndefined()
+  })
+
+  it('[EXA-19] 取消済で絞ると status=032,034 を送り、一覧にも CSV にも 032 と 034 の行が入る', async () => {
+    const canceled = executions.filter((row) => ['032', '034'].includes(row.処理状況))
+    // 032 の行が混ざっていないと「広げた」ことを確かめられない
+    expect(canceled.some((row) => row.処理状況 === '032')).toBe(true)
+    spyDefault()
+    spyExport()
+
+    const { items, total } = await fetchExecutions({ status: CANCELED })
+    expect(lastRequest.params.get('status')).toBe(CANCELED_QUERY)
+    expect(total).toBe(canceled.length)
+    expect(items.map((item) => item.id).sort()).toEqual(canceled.map((row) => String(row.ID)).sort())
+
+    await exportExecutionsCsv({ status: CANCELED })
+    expect(lastExportRequest.params.get('status')).toBe(CANCELED_QUERY)
+  })
+
+  it('[EXA-20] 約定代金_JPY は amountJpy になり、null（為替未登録）は null のまま', async () => {
+    // フィクスチャには円貨のある行と、為替未登録（null）の行の両方がある
+    const withJpy = sortedDesc.find((row) => row.約定代金_JPY !== null)
+    const withoutJpy = sortedDesc.find((row) => row.約定代金_JPY === null)
+    record(listBody([withJpy, withoutJpy]))
+
+    const { items } = await fetchExecutions()
+
+    expect(items[0].amountJpy).toBe(withJpy.約定代金_JPY)
+    expect(items[1].amountJpy).toBeNull()
+  })
+
+  it('[EXA-21] 預託先が null の応答（預託先参照権限なし）でも route / routeName は空文字になる', async () => {
+    record(listBody([{ ...newest, 注文ルート: null, 注文ルート名: null }]))
+
+    const { items } = await fetchExecutions()
+
+    expect(items).toHaveLength(1)
+    expect(items[0].route).toBe('')
+    expect(items[0].routeName).toBe('')
+    expect(items[0].id).toBe(String(newest.ID))
   })
 
   it('[EXA-17] 本文先頭の UTF-8 BOM がバイト列のまま残る', async () => {

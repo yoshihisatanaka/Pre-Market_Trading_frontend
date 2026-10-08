@@ -28,6 +28,16 @@ describe('currentOperatorFor', () => {
       expect(currentOperatorFor(code)).toBe(supervisorOperator)
     }
   })
+
+  it('[MCO-05] 預託先参照権限は manager / supervisor だけが持つ（バックエンドの既定と同じ）', () => {
+    // docs/api/requests.md #26 / #39 の既定: ifa / sales = false、manager / supervisor = true
+    const DEPOSITARY_ROLES = ['manager', 'supervisor']
+    for (const operator of devOperators) {
+      expect(operator.権限.depositary, operator.ロールコード).toBe(
+        DEPOSITARY_ROLES.includes(operator.ロールコード),
+      )
+    }
+  })
 })
 
 describe('GET /auth/me のモック', () => {

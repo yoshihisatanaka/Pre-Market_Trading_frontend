@@ -25,7 +25,7 @@ export const supervisorOperator = {
   ロール名: '管理責任者',
   部店コード: null,
   登録済: true,
-  権限: { order: true, master: true, operation: true, branch_all: true },
+  権限: { order: true, master: true, operation: true, branch_all: true, depositary: true },
   認可強制: false,
 }
 
@@ -40,7 +40,7 @@ export const salesOperator = {
   ロール名: '営業員',
   部店コード: '123',
   登録済: true,
-  権限: { order: true, master: false, operation: false, branch_all: true },
+  権限: { order: true, master: false, operation: false, branch_all: true, depositary: false },
   認可強制: false,
 }
 
@@ -55,7 +55,7 @@ export const noOperationOperator = {
   ロール名: 'IFA',
   部店コード: '123',
   登録済: true,
-  権限: { order: false, master: false, operation: false, branch_all: false },
+  権限: { order: false, master: false, operation: false, branch_all: false, depositary: false },
   認可強制: false,
 }
 
@@ -67,7 +67,7 @@ export const viewerOperator = {
   ロール名: '管理者',
   部店コード: '001',
   登録済: true,
-  権限: { order: true, master: true, operation: true, branch_all: true },
+  権限: { order: true, master: true, operation: true, branch_all: true, depositary: true },
   認可強制: false,
 }
 

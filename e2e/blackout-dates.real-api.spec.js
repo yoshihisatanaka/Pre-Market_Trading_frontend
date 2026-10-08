@@ -256,43 +256,36 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
     await expect(page.getByTestId('blackout-dates-error')).toHaveCount(0)
   })
 
-  test('[BDR-02] 日付（From）で絞り込むと、その日以降の行だけが返る', async ({ page }) => {
+  test('[BDR-02] 日付で検索すると、その日付の行だけが返る', async ({ page }) => {
     await openList(page)
     const total = await countOf(page)
     test.skip(total === 0, '実 DB に受注不可日が 1 件も無いので絞り込みを確かめられない')
 
-    // 期待値は書かず、1 行目に実際に出ている日付をそのまま条件にする。
-    // 一覧は受注不可日の降順なので、1 行目は表示中で最も新しい日付になる
-    const from = (await dateCellsOf(page).first().innerText()).trim()
-
-    await page.getByTestId('blackout-dates-date-from').fill(from)
-    await page.getByTestId('blackout-dates-search-submit').click()
-
-    await expect(page).toHaveURL(/date_from=/)
-    const filtered = await countOf(page)
-    expect(filtered).toBeLessThanOrEqual(total)
-    await expect(rowsOf(page)).toHaveCount(Math.min(filtered, PAGE_SIZE))
-
-    // 表示されている行がすべて条件を満たす（サーバ側の絞り込みが効いている）
-    for (const text of await dateCellsOf(page).allInnerTexts()) {
-      expect(text.trim() >= from).toBe(true)
-    }
-  })
-
-  test('[BDR-03] 日付を From / To の両方に入れると、その日付の行だけが返る', async ({ page }) => {
-    await openList(page)
-    const total = await countOf(page)
-    test.skip(total === 0, '実 DB に受注不可日が 1 件も無いので絞り込みを確かめられない')
-
+    // 期待値は書かず、1 行目に実際に出ている日付をそのまま条件にする
     const date = (await dateCellsOf(page).first().innerText()).trim()
 
-    await page.getByTestId('blackout-dates-date-from').fill(date)
-    await page.getByTestId('blackout-dates-date-to').fill(date)
+    await page.getByTestId('blackout-dates-date').fill(date)
     await page.getByTestId('blackout-dates-search-submit').click()
 
+    await expect(page).toHaveURL(/[?&]date=/)
     await expect(page.getByTestId('blackout-dates-count')).toHaveText('1 件')
     await expect(rowsOf(page)).toHaveCount(1)
     await expect(rowsOf(page).first()).toContainText(date)
+  })
+
+  test('[BDR-03] 未登録の日付で検索すると 0 件になる', async ({ page }) => {
+    await openList(page)
+
+    // beforeAll が選んだ未使用日。BDR-04 で登録する前なので、まだ一覧に無い。
+    // 日付の条件が実 API に届いていなければ全件が返り、ここで落ちる
+    const isoDate = toIsoDate(testDate)
+
+    await page.getByTestId('blackout-dates-date').fill(isoDate)
+    await page.getByTestId('blackout-dates-search-submit').click()
+
+    await expect(page).toHaveURL(/[?&]date=/)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText('0 件')
+    await expect(page.getByTestId('blackout-dates-empty')).toBeVisible()
   })
 
   test('[BDR-04] 未登録の日付を追加すると件数が 1 増える', async ({ page }) => {
@@ -340,13 +333,11 @@ test.describe('受注不可日マスタ（実 API 接続）', () => {
   })
 
   /*
-   * 実 API の事前検証は blackout_date_id を付けると、本文の 受注不可日 が ID の指す日付と
-   * 違うだけで 400 を返す（PUT 自体は日付の変更を受け付ける）。バックエンド対応待ち
-   * （docs/api/requests.md の依頼 #18、docs/e2e/blackout-dates-real-api.md に経緯）。
-   * 対応したら test.fixme を test に戻し、文書の状態を実装済にする。
-   * 戻るまでは rowDate が testDate のままなので、BDR-08 / 09 は testDate の行を追う。
+   * 以前は実 API の事前検証が日付の変更を 400 で弾くため test.fixme にしていた
+   * （docs/api/requests.md の依頼 #18。2026-09-30 に validate が日付の変更を受けるようになった）。
+   * ここで行が spareDate へ移り、BDR-08 / 09 はその日付の行を追う。
    */
-  test.fixme('[BDR-07] 日付を変更すると、その行が新しい日付に移る', async ({ page }) => {
+  test('[BDR-07] 日付を変更すると、その行が新しい日付に移る', async ({ page }) => {
     await openList(page)
     const before = await countOf(page)
     const fromIso = toIsoDate(testDate)

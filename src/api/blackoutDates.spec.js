@@ -100,14 +100,32 @@ describe('api/blackoutDates', () => {
     expect(lastRequest.params.has('date_to')).toBe(false)
   })
 
-  it('[BDA-03] limit は渡されても送らない（実 API が受け付けない）', async () => {
+  it('[BDA-18] 1 日指定の date は blackout_date に YYYYMMDD の整数で載り、期間のクエリは送らない', async () => {
     record('get', '*/api/masters/blackout-dates', listBody([]))
 
-    // ストア（useCrudList）は表示件数を limit として渡してくるが、
-    // 実 API の一覧は 1 ページ 50 件で固定されていて limit というクエリを持たない
-    await fetchBlackoutDates({ limit: 50, offset: 50 })
+    await fetchBlackoutDates({ date: '2026-12-25' })
 
-    expect(lastRequest.params.has('limit')).toBe(false)
+    expect(lastRequest.params.get('blackout_date')).toBe('20261225')
+    // 期間指定（新規注文が使う start_date / end_date）と取り違えていないこと
+    expect(lastRequest.params.has('start_date')).toBe(false)
+    expect(lastRequest.params.has('end_date')).toBe(false)
+  })
+
+  it('[BDA-19] date が空文字なら blackout_date をキーごと送らない', async () => {
+    record('get', '*/api/masters/blackout-dates', listBody([]))
+
+    await fetchBlackoutDates({ date: '' })
+
+    expect(lastRequest.params.has('blackout_date')).toBe(false)
+  })
+
+  it('[BDA-03] limit と offset は渡した値で送る', async () => {
+    record('get', '*/api/masters/blackout-dates', listBody([]))
+
+    // ストア（useCrudList）が表示件数を limit として渡してくる（#21 で実 API に入った）
+    await fetchBlackoutDates({ limit: 20, offset: 50 })
+
+    expect(lastRequest.params.get('limit')).toBe('20')
     expect(lastRequest.params.get('offset')).toBe('50')
   })
 

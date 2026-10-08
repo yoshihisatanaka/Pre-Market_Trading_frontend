@@ -14,8 +14,9 @@ import { symbols } from './symbols'
  * ページャーの動作確認には 1 ページ（50 件）を超えるデータが要るので 56 件作る。混ぜてあるもの:
  *   - 売買区分 … '3' 買 と '1' 売（2 : 1）
  *   - 注文ルート … '1' IB と '0' みずほ（3 : 1）
- *   - 処理状況 … '011' 全部出来 / '010' 一部出来 / '034' 取消済（出来有）。
- *     全部出来以外は約定数量が注文数量の半分
+ *   - 処理状況 … '011' 全部出来 / '010' 一部出来 / '032'・'034' 取消済（出来有）。
+ *     全部出来以外は約定数量が注文数量の半分。取消済 4 件のうち 1 件（最初の 1 件）だけが 032
+ *   - 約定代金_JPY … 約定代金 × EXECUTION_FX_RATE（円未満四捨五入）。最後の 1 件だけ為替未登録の null
  *   - 約定日時 … 2026-09-24〜28 の 5 日に散らす。ID が大きいほど新しい
  *
  * 処理状況名はサーバが付ける表示項目。取消済（034）の名前がサーバで「取消済」なのか
@@ -27,10 +28,13 @@ const TRADED_SYMBOLS = symbols.slice(0, 8)
 
 const SIDE_NAMES = { 1: '売', 3: '買' }
 const ROUTE_NAMES = { 0: 'みずほ証券', 1: 'IB証券' }
-const STATUS_NAMES = { '010': '一部出来', '011': '全部出来', '034': '取消済' }
+const STATUS_NAMES = { '010': '一部出来', '011': '全部出来', '032': '取消済', '034': '取消済' }
 
 /** 有効な約定の件数 */
 const EXECUTION_COUNT = 56
+
+/** 約定代金_JPY（円貨の概算）に使う USD/JPY。実 API は直近の USD レートを掛ける */
+export const EXECUTION_FX_RATE = 150
 
 /** 1 日に並べる件数（56 件を 5 日に散らす） */
 const EXECUTIONS_PER_DAY = 12
@@ -38,6 +42,8 @@ const EXECUTIONS_PER_DAY = 12
 /** 0 始まりの連番から、処理状況を決める（全部出来が大半、一部出来と取消済を少し混ぜる） */
 function statusOf(index) {
   if (index % 7 === 3) return '010'
+  // 取消済の最初の 1 件（index 5）は 032（取消済・出来有）。034 だけで絞ると拾えない行
+  if (index === 5) return '032'
   if (index % 11 === 5) return '034'
   return '011'
 }
@@ -98,6 +104,7 @@ function toExecutionItem(index) {
     約定数量: quantity,
     約定単価: price,
     約定代金: amount,
+    約定代金_JPY: index === EXECUTION_COUNT - 1 ? null : Math.round(amount * EXECUTION_FX_RATE),
     約定日時: executedAt,
     手数料: Math.round(amount * 0.00495 * 100) / 100,
     手数料通貨: 'USD',

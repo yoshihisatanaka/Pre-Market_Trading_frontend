@@ -34,7 +34,7 @@ export const MARKET_HOLIDAYS_PAGE_SIZE = DEFAULT_PAGE_SIZE
 export const useMarketHolidaysStore = defineStore('marketHolidays', () =>
   useCrudList({
     pageSize: MARKET_HOLIDAYS_PAGE_SIZE,
-    filterKeys: ['dateFrom', 'dateTo', 'holidayType'],
+    filterKeys: ['date', 'holidayType'],
     fetchPage: fetchMarketHolidays,
     createItem: reloadMarketStatusAfter(createMarketHoliday),
     validateItem: validateMarketHoliday,

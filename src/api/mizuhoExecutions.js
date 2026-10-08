@@ -1,6 +1,6 @@
 import { SIDE_VALUES } from '@/utils/apiEnums'
 import { apiClient } from './client'
-import { EXECUTIONS_CSV_FILENAME } from './executions'
+import { EXECUTIONS_CSV_FILENAME, toStatusQuery } from './executions'
 import { toFileDownload } from './fileDownload'
 
 /*
@@ -22,9 +22,12 @@ import { toFileDownload } from './fileDownload'
  * CSV 出力は約定照会と同じ `GET /executions/export-csv` を、一覧と同じ条件（route=0 固定）で読む。
  *
  * 成熟度 A（パス・クエリ・レスポンスのスキーマが openapi.json にある。CSV 出力は B）。
- * ただし画面モックの次の 2 項目は仕様に無い:
- *   - 約定金額（円）… ExecutionItem は 約定代金（USD）しか返さない
- *   - 件数カードの「一部出来」… ExecutionSummary に一部出来の件数が無い
+ * 件数カードの「一部出来」は ExecutionSummary の `一部出来件数`（処理状況 010 の注文の件数）、
+ * 約定金額（円）は ExecutionItem の `約定代金_JPY`（円貨の概算。為替未登録なら null）から出す
+ * （docs/api/requests.md #22 ①②）。
+ *
+ * route=0 の固定は、預託先参照権限の無い操作者ではサーバに無視される（#26。全ルートの約定が返る）。
+ * この画面は運用管理権限の画面で、既定では権限を持つロール（manager / supervisor）が預託先参照権限も持つ。
  */
 
 /** 注文ルート（預託先）のみずほ。`/masters/symbols` の預託先区分と同じコード */
@@ -54,6 +57,7 @@ const FILL_STATUS_BY_CODE = {
  *   quantity: number|null,
  *   executedQuantity: number|null,
  *   executedPrice: number|null,
+ *   executedAmountJpy: number|null,
  *   executedAt: string|null,
  *   fillStatus: 'filled'|'partial'|'canceled_filled'|'',
  *   statusName: string,
@@ -66,8 +70,14 @@ const FILL_STATUS_BY_CODE = {
  */
 
 /**
- * @typedef {{ executionCount: number, buyCount: number, sellCount: number }} MizuhoExecutionSummary
- *   同じ検索条件での集計（ページに依らない）。件数カードに出す 3 つだけを運ぶ
+ * @typedef {{
+ *   executionCount: number,
+ *   buyCount: number,
+ *   sellCount: number,
+ *   partialCount: number,
+ * }} MizuhoExecutionSummary
+ *   同じ検索条件での集計（ページに依らない）。件数カードに出す 4 つだけを運ぶ。
+ *   partialCount は一部出来（処理状況 010）の注文の件数で、executionCount（約定の行数）とは単位が違う
  */
 
 /**
@@ -83,8 +93,8 @@ const FILL_STATUS_BY_CODE = {
  * }} MizuhoExecutionFilters
  *   side は売買区分コード（'1' / '3'）。知らない値は送らない。
  *   fillStatus は出来状況の処理状況コード（コードマスタ `約定出来状況` のコード。'011' / '010' / '034'）で、
- *   そのまま `status` に載せる。取消済は 032 / 034 の 2 つあるが `status` は 1 コードしか受けないので、
- *   034 だけで絞る（約定照会と同じ。TODO(処理実装): 032 も拾う指定をバックエンドに確認する）。
+ *   `status` に載せる。取消済（034）だけは 032 / 034 の 2 コードをカンマ区切りで送る
+ *   （約定照会と同じ toStatusQuery。#22 ③）。
  *   行の fillStatus（'filled' など。画面の表示用の区分）とは値の体系が違う。
  *   dateFrom / dateTo は YYYY-MM-DD（実 API はそのまま受け取る）。
  *   空文字は「条件なし」としてリクエストに載せない
@@ -147,7 +157,7 @@ function toSearchParams({
     branch_code: branchCode || undefined,
     symbol: symbol.trim() || undefined,
     side: SIDE_VALUES.includes(side) ? side : undefined,
-    status: fillStatus || undefined,
+    status: toStatusQuery(fillStatus),
     start_date: dateFrom || undefined,
     end_date: dateTo || undefined,
   }
@@ -165,6 +175,7 @@ function toMizuhoExecution(raw) {
     quantity: toNumber(raw?.注文数量),
     executedQuantity: toNumber(raw?.約定数量),
     executedPrice: toNumber(raw?.約定単価),
+    executedAmountJpy: toNumber(raw?.約定代金_JPY),
     executedAt: raw?.約定日時 ?? null,
     fillStatus: FILL_STATUS_BY_CODE[raw?.処理状況] ?? '',
     // 表示名はサーバが付けて返す。区分に当たらないコードのときだけ画面がこれを出す
@@ -173,12 +184,13 @@ function toMizuhoExecution(raw) {
   }
 }
 
-/** ExecutionSummary → 件数カードの 3 つ。欠けていたら 0 件として扱う */
+/** ExecutionSummary → 件数カードの 4 つ。欠けていたら 0 件として扱う */
 function toSummary(raw) {
   return {
     executionCount: raw?.件数 ?? 0,
     buyCount: raw?.買件数 ?? 0,
     sellCount: raw?.売件数 ?? 0,
+    partialCount: raw?.一部出来件数 ?? 0,
   }
 }
 

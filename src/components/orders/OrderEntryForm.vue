@@ -24,6 +24,7 @@ import {
   FUND_NATURE_OPTIONS,
   ORDER_CHANNEL_OPTIONS,
   ORDER_METHOD_OPTIONS,
+  ORDER_PERSON_MAX_LENGTH,
   ORDER_TYPE,
   ORDER_TYPE_OPTIONS,
   SETTLEMENT_CURRENCY_OPTIONS,
@@ -54,7 +55,10 @@ defineProps({
     type: Object,
     default: () => ({ text: '', tone: '' }),
   },
-  /** ティッカーの横の表示。形は customerHint と同じ */
+  /**
+   * ティッカー／銘柄コードの横の表示。形は customerHint と同じで、引き当てたときだけ
+   * code（「ティッカー：… ／ 銘柄コード：…」）が付き、銘柄名の前に出す
+   */
   symbolHint: {
     type: Object,
     default: () => ({ text: '', tone: '' }),
@@ -84,7 +88,7 @@ const form = defineModel({ type: Object, required: true })
 const isLimit = computed(() => form.value.orderType === ORDER_TYPE.LIMIT)
 
 /*
- * 注文種別（VWAP区分）の選択肢はコードマスタ `VWAP区分`（依頼中の契約提案）から。
+ * 注文種別（VWAP区分）の選択肢はコードマスタ `VWAP区分` から。
  * 読み込みは main.js が起動時に行い、App.vue は読み終えてから画面を描く。
  */
 const codes = useCodesStore()
@@ -179,7 +183,7 @@ function selectOrderType(value) {
 
         <FormField
           v-slot="{ field }"
-          label="ティッカーコード"
+          label="ティッカー／銘柄コード"
           layout="inline"
           required
           :error="errors.ticker"
@@ -193,6 +197,13 @@ function selectOrderType(value) {
             data-testid="order-entry-ticker"
             @input="reformat($event, 'ticker', toUpperCase)"
           />
+          <span
+            v-if="symbolHint.text && symbolHint.code"
+            class="order-entry-form__hint-code"
+            data-testid="order-entry-ticker-code"
+          >
+            {{ symbolHint.code }}
+          </span>
           <span
             v-if="symbolHint.text"
             :class="['order-entry-form__hint', `is-${symbolHint.tone}`]"
@@ -344,6 +355,7 @@ function selectOrderType(value) {
             v-model="form.orderPerson"
             variant="underline"
             class="order-entry-form__short"
+            :maxlength="ORDER_PERSON_MAX_LENGTH"
             autocomplete="off"
             data-testid="order-entry-order-person"
           />
@@ -528,6 +540,13 @@ function selectOrderType(value) {
   min-width: 100px;
   font-size: var(--font-size-md);
   font-weight: 600;
+}
+
+.order-entry-form__hint-code {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .order-entry-form__hint.is-found {

@@ -96,6 +96,25 @@ describe('api/marketHolidays', () => {
     expect(lastRequest.params.has('date_to')).toBe(false)
   })
 
+  it('[MHA-14] 1 日指定の date は start_date と end_date の両方に同じ日で載る', async () => {
+    record('get', '*/api/masters/market-holidays', listBody([]))
+
+    await fetchMarketHolidays({ date: '2026-12-25' })
+
+    // 実 API に単一指定のクエリが無いので、期間の両端に同じ日を置いて 1 日を指す
+    expect(lastRequest.params.get('start_date')).toBe('20261225')
+    expect(lastRequest.params.get('end_date')).toBe('20261225')
+  })
+
+  it('[MHA-15] date は dateFrom / dateTo より優先される', async () => {
+    record('get', '*/api/masters/market-holidays', listBody([]))
+
+    await fetchMarketHolidays({ date: '2026-12-25', dateFrom: '2026-01-01', dateTo: '2026-12-31' })
+
+    expect(lastRequest.params.get('start_date')).toBe('20261225')
+    expect(lastRequest.params.get('end_date')).toBe('20261225')
+  })
+
   it('[MHA-03] 休場区分の絞り込みは holiday_type にコードのまま載る', async () => {
     record('get', '*/api/masters/market-holidays', listBody([]))
 

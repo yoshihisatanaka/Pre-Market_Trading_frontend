@@ -3,6 +3,7 @@ import { navItems, navSections } from '../src/components/layout/navigation'
 import { noOperationOperator, supervisorOperator } from '../src/mocks/fixtures/currentOperator'
 import { closedMarketStatusResponse } from '../src/mocks/fixtures/marketStatus'
 import { mockApi } from './helpers/mockApi'
+import { sectionToggle } from './helpers/sideMenu'
 
 // シナリオ: docs/e2e/layout.md（タイトル先頭の [LAY-xx] が対応 ID）
 // 画面固有の要素はここでは検証しない（各画面のシナリオで扱う）。
@@ -15,14 +16,19 @@ const toggleButton = (page) => page.getByTestId('sidebar-toggle')
 const contentLeft = async (page) => (await page.getByRole('main').boundingBox()).x
 
 /*
- * LAY-03 / LAY-04 で使う、まだルートの無いメニュー項目。navigation.js から引いて、
- * 名前や path が変わったときに黙って空振りしないようにする（2026-10-02 に顧客検索から差し替えた）。
+ * LAY-03 で遷移に使うメニュー項目。既定の画面（注文一覧）ではない項目なら何でもよい。
+ * navigation.js から引いて、名前や path が変わったときに黙って空振りしないようにする。
+ * 2026-10-02 に預り検索が実装されてメニューの未実装の項目が無くなったので、「見つからない」は
+ * メニューに無い URL（LAY-04）で見る形に分けた。
  */
-const UNIMPLEMENTED_LABEL = '預り検索'
-const UNIMPLEMENTED_PATH = navItems.find((item) => item.label === UNIMPLEMENTED_LABEL)?.to
+const TARGET_LABEL = '預り検索'
+const TARGET_PATH = navItems.find((item) => item.label === TARGET_LABEL)?.to
+const UNKNOWN_PATH = '/no-such-page'
 
 test.describe('共通レイアウト', () => {
-  test('[LAY-01] サイドメニューにシステム名とセクション、全リンクが表示される', async ({ page }) => {
+  test('[LAY-01] サイドメニューにシステム名とセクションが出て、既定で開く区分のリンクだけが見える', async ({
+    page,
+  }) => {
     await page.goto('/')
 
     await expect(page.getByText('米株発注システム')).toBeVisible()
@@ -31,10 +37,25 @@ test.describe('共通レイアウト', () => {
     for (const section of navSections) {
       await expect(nav.getByRole('heading', { name: section.label, exact: true })).toBeVisible()
     }
+    // 閉じた区分のリンクも DOM には在る（隠れているだけ）
+    await expect(nav.getByRole('link', { includeHidden: true })).toHaveCount(navItems.length)
 
-    await expect(nav.getByRole('link')).toHaveCount(navItems.length)
-    await expect(nav.getByRole('link', { name: '顧客検索', exact: true })).toBeVisible()
-    await expect(nav.getByRole('link', { name: '残高マスタ', exact: true })).toBeVisible()
+    // 既定の開閉が要件どおりであること自体も確かめる（defaultOpen の付け外しで黙って変わらないように）
+    expect(navSections.filter((s) => s.defaultOpen !== false).map((s) => s.label)).toEqual([
+      '顧客',
+      '注文・照会',
+    ])
+    for (const section of navSections) {
+      const open = section.defaultOpen !== false
+      await expect(sectionToggle(page, section.label)).toHaveAttribute(
+        'aria-expanded',
+        String(open),
+      )
+      for (const item of section.items) {
+        const link = nav.getByRole('link', { name: item.label, exact: true, includeHidden: true })
+        await (open ? expect(link).toBeVisible() : expect(link).toBeHidden())
+      }
+    }
   })
 
   test('[LAY-02] ヘッダに画面タイトルと市場ステータスが表示される', async ({ page }) => {
@@ -51,13 +72,13 @@ test.describe('共通レイアウト', () => {
   }) => {
     await page.goto('/')
 
-    // 未実装の項目を使う（実装されたら、その時点で未実装の別の項目へ差し替える）
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
-    await nav.getByRole('link', { name: UNIMPLEMENTED_LABEL, exact: true }).click()
+    await nav.getByRole('link', { name: TARGET_LABEL, exact: true }).click()
 
-    await expect(page).toHaveURL(new RegExp(`${UNIMPLEMENTED_PATH}$`))
-    await expect(page.getByRole('heading', { name: 'ページが見つかりません' })).toBeVisible()
-    await expect(nav.getByRole('link', { name: UNIMPLEMENTED_LABEL, exact: true })).toHaveAttribute(
+    await expect(page).toHaveURL(new RegExp(`${TARGET_PATH}$`))
+    // 見出しは遷移先のルートの meta.title（メニューの表示名と同じ）。画面の中身はここでは見ない
+    await expect(page.getByRole('heading', { name: TARGET_LABEL, exact: true })).toBeVisible()
+    await expect(nav.getByRole('link', { name: TARGET_LABEL, exact: true })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -65,16 +86,15 @@ test.describe('共通レイアウト', () => {
     await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
   })
 
-  test('[LAY-04] 未実装の画面を直接開いてもレイアウトは表示される', async ({ page }) => {
-    await page.goto(UNIMPLEMENTED_PATH)
+  test('[LAY-04] メニューに無い URL を直接開いてもレイアウトは表示される', async ({ page }) => {
+    await page.goto(UNKNOWN_PATH)
 
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
     await expect(nav).toBeVisible()
     await expect(page.getByRole('heading', { name: 'ページが見つかりません' })).toBeVisible()
-    await expect(nav.getByRole('link', { name: UNIMPLEMENTED_LABEL, exact: true })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
+    // どのメニュー項目も現在ページにならない
+    await expect(nav.getByRole('link').first()).toBeVisible()
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(0)
   })
 
   test('[LAY-05] 広い画面では既定でサイドメニューが開いている', async ({ page }) => {
@@ -321,11 +341,159 @@ test.describe('共通レイアウト', () => {
     for (const section of masterSections) {
       await expect(nav.getByRole('heading', { name: section.label, exact: true })).toHaveCount(0)
       for (const item of section.items) {
-        await expect(nav.getByRole('link', { name: item.label, exact: true })).toHaveCount(0)
+        await expect(
+          nav.getByRole('link', { name: item.label, exact: true, includeHidden: true }),
+        ).toHaveCount(0)
       }
     }
-    await expect(nav.getByRole('link')).toHaveCount(
+    // 運用管理は既定で閉じているので、隠れたリンクも数える
+    await expect(nav.getByRole('link', { includeHidden: true })).toHaveCount(
       shownSections.flatMap((section) => section.items).length,
     )
+  })
+
+  /*
+   * 区分のアコーディオン。既定の開閉は LAY-01 が見る。
+   * 各画面の「サイドメニューから開く」テストは helpers/sideMenu.js の clickSideMenuLink() で区分を開いてから押す。
+   */
+  test('[LAY-19] 閉じた区分の見出しを click すると開き、もう一度 click すると閉じる', async ({
+    page,
+  }) => {
+    await page.goto('/')
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    const toggle = sectionToggle(page, 'マスタメンテ')
+    const link = nav.getByRole('link', { name: '銘柄マスタ', exact: true, includeHidden: true })
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(link).toBeHidden()
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(link).toBeVisible()
+    // 他の区分は巻き込まない
+    await expect(sectionToggle(page, '運用管理')).toHaveAttribute('aria-expanded', 'false')
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(link).toBeHidden()
+  })
+
+  test('[LAY-20] 閉じた区分の画面を直接開くとその区分が開いている', async ({ page }) => {
+    await page.goto('/masters/symbols')
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    await expect(sectionToggle(page, 'マスタメンテ')).toHaveAttribute('aria-expanded', 'true')
+    await expect(nav.getByRole('link', { name: '銘柄マスタ', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(sectionToggle(page, '運用管理')).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  /*
+   * 遷移の確定待ち（遅延 import のチャンク取得。src/composables/useRouteLoading.js）。
+   * router の各フックの解除条件は単体側が持つので、ここでは「押した直後に反応が返るか」
+   * 「読み終えたら消えるか」「後から押した方が勝つか」「マウスを載せると先読みするか」だけを見る。
+   *
+   * 遅延は page.route() で画面モジュールの取得を遅らせて作る。/src/** の import() は MSW の対象外で
+   * ネットワークに出るので捕まえられる（API の ?mockDelay とは別物。API は MSW が横取りするので page.route が効かない）。
+   * dev の URL は /src/views/CustomerSearchView.vue（HMR 後は ?t= が付く）。<style scoped> は同じ pathname に
+   * ?vue&type=style を付けた別リクエストで、本体の評価中に取りに行く。遅らせるのは本体だけにし、
+   * 「本体の応答が返った」= 「遅れていたチャンクが届いた」と読めるようにする。
+   */
+  const CUSTOMER_SEARCH_MODULE = '/src/views/CustomerSearchView.vue'
+  const isCustomerSearchModule = (url) =>
+    url.pathname.endsWith(CUSTOMER_SEARCH_MODULE) && !url.searchParams.has('type')
+
+  /** 顧客検索の画面モジュールの取得を delayMs 遅らせる。page.goto() の後・click の前に仕掛ける */
+  async function delayCustomerSearchModule(page, delayMs) {
+    await page.route(isCustomerSearchModule, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+      await route.continue()
+    })
+  }
+
+  test('[LAY-21] 画面の読み込み中はバーと押した項目の回転マークが出て、読み終えると消える', async ({
+    page,
+  }) => {
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+
+    await delayCustomerSearchModule(page, 1500)
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    const link = nav.getByRole('link', { name: '顧客検索', exact: true })
+    const loading = page.getByTestId('route-loading')
+    await link.click()
+
+    // 押した直後の反応（読み込み中は URL も見出しも現在ページも動かない）
+    await expect(loading).toBeVisible()
+    await expect(loading).toContainText('画面を読み込んでいます')
+    await expect(link.locator('.base-spinner')).toBeVisible()
+    await expect(page.getByRole('main')).toHaveAttribute('aria-busy', 'true')
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(0)
+
+    // 読み終えると遷移が確定し、読み込み中の表示が全部消える
+    await expect(page).toHaveURL(/\/customers\/search$/)
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
+    await expect(loading).toHaveCount(0)
+    await expect(link.locator('.base-spinner')).toHaveCount(0)
+    await expect(page.getByRole('main')).not.toHaveAttribute('aria-busy', 'true')
+    await expect(link).toHaveAttribute('aria-current', 'page')
+  })
+
+  test('[LAY-22] 読み込み中に別の項目を押すと後から押した方が勝つ', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+
+    await delayCustomerSearchModule(page, 1500)
+    // 遅れていたチャンクが届いたことを「本体の応答が返った」で知る（固定 sleep の代わり）
+    const delayedModuleArrived = page.waitForResponse((response) =>
+      isCustomerSearchModule(new URL(response.url())),
+    )
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    const loading = page.getByTestId('route-loading')
+    await nav.getByRole('link', { name: '顧客検索', exact: true }).click()
+    await expect(loading).toBeVisible()
+
+    await nav.getByRole('link', { name: '注文照会', exact: true }).click()
+
+    await expect(page).toHaveURL(/\/orders\/inquiry$/)
+    await expect(page.getByRole('heading', { name: '注文照会', exact: true })).toBeVisible()
+    await expect(loading).toHaveCount(0)
+
+    // 遅れていた顧客検索が届いても追い越されたままで、表示も戻らない
+    await delayedModuleArrived
+    await page.waitForLoadState('networkidle')
+    await expect(page).toHaveURL(/\/orders\/inquiry$/)
+    await expect(page.getByRole('heading', { name: '注文照会', exact: true })).toBeVisible()
+    await expect(loading).toHaveCount(0)
+    await expect(nav.getByRole('link', { name: '注文照会', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
+  })
+
+  test('[LAY-23] メニューの項目にマウスを載せると画面を先読みする', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+
+    // hover より前に仕掛ける（後からだと取り逃す）
+    const prefetched = page.waitForRequest((request) =>
+      isCustomerSearchModule(new URL(request.url())),
+    )
+
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    await nav.getByRole('link', { name: '顧客検索', exact: true }).hover()
+
+    await prefetched
+    // 先読みだけで遷移はしない
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(0)
   })
 })

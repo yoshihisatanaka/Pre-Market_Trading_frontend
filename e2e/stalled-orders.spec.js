@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { stalledOrderErrors, stalledWorkingOrders } from '../src/mocks/fixtures/stalledOrders'
 import { formatUsd } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
@@ -7,7 +8,9 @@ import { mockApi } from './helpers/mockApi'
 // シナリオ: docs/e2e/stalled-orders.md（タイトル先頭の [SO-nn] が対応 ID）
 // 注文エラー / 注文中の 2 本の一覧の 4 状態と URL クエリの同期、フロントで組み立てる CSV 3 種の
 // ダウンロード（ファイル名と中身）、コンファメーション CSV の取込（成功 / 行エラー / 400 / 500）を
-// 実ブラウザで通す。取込の既定ハンドラは状態を持つが、page.goto() のたびに初期状態へ戻る。
+// 実ブラウザで通す。取込は実 API が入ったので MSW の既定ハンドラが無い（素通し）。取込のシナリオは
+// 応答を mockApi() で page.goto() の前に差し込み、画面の出し分けだけを見る。mockApi() は固定応答しか
+// 返せず、一覧の GET も固定のフィクスチャなので、取込の結果が一覧に反映されることは検証しない。
 // CSV の値の変換の細かい分岐や props の境界は単体テスト側が担保する。
 
 const PATH = '/operations/stalled-orders'
@@ -24,7 +27,7 @@ const CRLF = '\r\n'
 const TWS_ORDER_HEADER =
   'order_id,account_number,symbol,action,quantity,order_type,limit_price,time_in_force,market_category'
 
-/** コンファメーション CSV のヘッダ（src/utils/stalledOrderCsv.js / handlers/stalledOrders.js と同じ） */
+/** コンファメーション CSV のヘッダ（src/utils/stalledOrderCsv.js と同じ） */
 const CONFIRMATION_HEADER =
   'order_id,confirmation_ref,confirmation_status,filled_quantity,average_price,confirmed_at,message'
 
@@ -61,7 +64,6 @@ const errorRows = (page) =>
 const workingRows = (page) =>
   page.getByTestId('stalled-working-orders-table').getByTestId('data-table-row')
 
-const byId = (rows, id) => rows.find((row) => row.ID === id)
 const branch123Errors = stalledOrderErrors.filter((row) => row.部店 === '123')
 
 /** 2 本の一覧の件数を確かめる */
@@ -98,12 +100,45 @@ const VALID_CONFIRMATION = [
 ]
 const CONFIRMATION_NAME = 'confirmation.csv'
 
+/*
+ * 取込の応答（CsvImportResponse の生の形）。実 API の文言は持っていないので、message は
+ * このテストが決めた値で、画面がそれをそのまま出すことを見る。
+ */
+const IMPORT_SUCCESS = {
+  success: true,
+  total_count: 2,
+  success_count: 2,
+  error_count: 0,
+  errors: [],
+  message: 'コンファメーションを 2 件取り込みました。',
+}
+const UNKNOWN_ORDER_ERROR = '注文ID「999」は滞留注文にありません。'
+const IMPORT_ROW_ERROR = {
+  success: false,
+  total_count: 1,
+  success_count: 0,
+  error_count: 1,
+  errors: [
+    {
+      line_number: 2,
+      errors: [UNKNOWN_ORDER_ERROR],
+      row_data: { order_id: '999', confirmation_status: 'FILLED' },
+    },
+  ],
+  message: '1 行にエラーがあるため、取り込みませんでした。CSV を直して取り込み直してください。',
+}
+const HEADER_ERROR = `ヘッダが違います。1 行目を ${CONFIRMATION_HEADER} にしてください。`
+
+/** 取込の応答を差し替える。page.goto() より前に呼ぶ */
+function mockImport(page, status, body) {
+  return mockApi(page, [{ method: 'post', path: IMPORT_PATH, status, body }])
+}
+
 test.describe('滞留注文抽出', () => {
   test('[SO-01] サイドメニューから開くと 2 本の一覧が件数付きで表示される', async ({ page }) => {
     await page.goto('/')
 
-    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
-    await nav.getByRole('link', { name: '滞留注文抽出', exact: true }).click()
+    await clickSideMenuLink(page, '滞留注文抽出')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '滞留注文抽出', exact: true })).toBeVisible()
@@ -313,7 +348,8 @@ test.describe('滞留注文抽出', () => {
     await expect(page.getByTestId('stalled-orders-confirmation-sample')).toBeEnabled()
   })
 
-  test('[SO-20] コンファメーションを取り込むと一覧に反映され選択が外れる', async ({ page }) => {
+  test('[SO-20] 取込に成功すると応答の文言が通知に出て選択が外れる', async ({ page }) => {
+    await mockImport(page, 200, IMPORT_SUCCESS)
     await page.goto(PATH)
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
 
@@ -324,30 +360,20 @@ test.describe('滞留注文抽出', () => {
     await importButton(page).click()
 
     await expect(page.getByTestId('stalled-orders-import-notice')).toHaveText(
-      'コンファメーションを 2 件取り込みました（約定・取消で除外 1 件 / 注文中 1 件）。',
+      IMPORT_SUCCESS.message,
     )
-    // #27 は約定で外れ、#26 は注文中へ移る（注文中は受注日時の新しい順）
-    const remainingError = byId(stalledOrderErrors, 5)
-    const [order28, order6] = stalledWorkingOrders
-    await expectCounts(page, 1, 3)
-    await expect(errorRows(page).first().getByRole('cell').first()).toHaveText(
-      `#${remainingError.ID}`,
-    )
-    for (const [index, order] of [order28, ORDER_26, order6].entries()) {
-      await expect(workingRows(page).nth(index).getByRole('cell').first()).toHaveText(
-        `#${order.ID}`,
-      )
-    }
-
+    await expect(page.getByTestId('stalled-orders-import-errors')).toHaveCount(0)
     await expect(page.getByTestId('stalled-orders-confirmation-file')).not.toContainText(
       CONFIRMATION_NAME,
     )
     await expect(importButton(page)).toBeDisabled()
+    // 一覧は出たまま（反映の中身はバックエンドの責務で、固定のフィクスチャでは見られない）
+    await expect(page.getByTestId('stalled-order-errors-table')).toBeVisible()
+    await expect(page.getByTestId('stalled-working-orders-table')).toBeVisible()
   })
 
-  test('[SO-21] 滞留一覧に無い注文 ID があると 1 行も取り込まず行エラーを出す', async ({
-    page,
-  }) => {
+  test('[SO-21] 行エラーが返ると理由の表が出てファイルは選ばれたまま', async ({ page }) => {
+    await mockImport(page, 200, IMPORT_ROW_ERROR)
     await page.goto(PATH)
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
 
@@ -358,15 +384,13 @@ test.describe('滞留注文抽出', () => {
     await importButton(page).click()
 
     const errors = page.getByTestId('stalled-orders-import-errors')
-    await expect(errors).toContainText(
-      '1 行にエラーがあるため、取り込みませんでした。CSV を直して取り込み直してください。',
-    )
+    await expect(errors).toContainText(IMPORT_ROW_ERROR.message)
     const rows = errors.getByTestId('data-table-row')
     await expect(rows).toHaveCount(1)
     const cells = rows.first().getByRole('cell')
     await expect(cells.nth(0)).toHaveText('2')
     await expect(cells.nth(1)).toHaveText('999')
-    await expect(cells.nth(2)).toHaveText('注文ID「999」は滞留注文にありません。')
+    await expect(cells.nth(2)).toHaveText(UNKNOWN_ORDER_ERROR)
 
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
     await expect(page.getByTestId('stalled-orders-confirmation-file')).toContainText(
@@ -375,25 +399,24 @@ test.describe('滞留注文抽出', () => {
     await expect(page.getByTestId('stalled-orders-import-notice')).toHaveCount(0)
   })
 
-  test('[SO-22] ヘッダが違う CSV は理由が出てファイルは選ばれたまま', async ({ page }) => {
+  test('[SO-22] ファイルごと拒否（400）されると理由が出てファイルは選ばれたまま', async ({
+    page,
+  }) => {
+    await mockImport(page, 400, { detail: HEADER_ERROR })
     await page.goto(PATH)
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
 
     await chooseCsv(page, 'wrong.csv', ['id,status', '27,FILLED'])
     await importButton(page).click()
 
-    await expect(page.getByTestId('stalled-orders-import-error')).toHaveText(
-      `ヘッダが違います。1 行目を ${CONFIRMATION_HEADER} にしてください。`,
-    )
+    await expect(page.getByTestId('stalled-orders-import-error')).toHaveText(HEADER_ERROR)
     await expect(page.getByTestId('stalled-orders-confirmation-file')).toContainText('wrong.csv')
     await expect(importButton(page)).toBeEnabled()
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
   })
 
   test('[SO-23] 取込が 500 のとき理由が出てファイルは選ばれたまま', async ({ page }) => {
-    await mockApi(page, [
-      { method: 'post', path: IMPORT_PATH, status: 500, body: { detail: SERVER_ERROR } },
-    ])
+    await mockImport(page, 500, { detail: SERVER_ERROR })
     await page.goto(PATH)
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
 
@@ -409,6 +432,7 @@ test.describe('滞留注文抽出', () => {
   })
 
   test('[SO-24] 取り込んだ後に同じファイルをもう一度選べる', async ({ page }) => {
+    await mockImport(page, 200, IMPORT_SUCCESS)
     await page.goto(PATH)
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
 

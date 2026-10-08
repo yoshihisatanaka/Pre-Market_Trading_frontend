@@ -13,6 +13,9 @@
  *   {prefix}-stock-code / {prefix}-type / {prefix}-ex-rights-date / {prefix}-effective-date
  *   / {prefix}-payment-date / {prefix}-denominator / {prefix}-numerator / {prefix}-note
  *
+ * 唯一の add / edit 差は `stockCodeLocked`（編集で銘柄コードを読み取り専用にする）。
+ * 項目の増減ではなく 1 属性の切り替えに留めてある（SymbolFormFields の symbolCodeLocked と同じ形）。
+ *
  * 単体テストは持たない。挙動は `src/views/CorporateActionListView.spec.js`（CAV）が
  * 追加・編集それぞれのダイアログを通して担保する（`src/components/masters/` と同じ扱い）。
  */
@@ -27,6 +30,19 @@ defineProps({
   testidPrefix: {
     type: String,
     required: true,
+  },
+  /**
+   * 銘柄コードを変更不可にする（編集で true）。
+   *
+   * 実 API の CAUpdateRequest は 銘柄コード を受け付けるが、CA は銘柄に属する出来事なので、
+   * 銘柄を取り違えたときは「別の銘柄の CA に付け替える」のではなく、削除して登録し直す運用にする
+   * （顧客マスタの口座番号・銘柄マスタの銘柄コードと揃える）。
+   * `disabled` ではなく `readonly` にする理由は SymbolFormFields と同じ（disabled は「処理中」の意味で
+   * 使っている・値を選択してコピーできる）。値は読み取り専用でも本文に載せて送る。
+   */
+  stockCodeLocked: {
+    type: Boolean,
+    default: false,
   },
   /**
    * 項目ごとの入力エラー（`{ stockCode, caType, denominator, numerator }`）。
@@ -56,6 +72,7 @@ const form = defineModel({ type: Object, required: true })
         v-model="form.stockCode"
         placeholder="例: A0001"
         maxlength="14"
+        :readonly="stockCodeLocked"
         :data-testid="`${testidPrefix}-stock-code`"
       />
     </FormField>

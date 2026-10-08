@@ -8,7 +8,7 @@
  */
 import DataTable from '@/components/ui/DataTable.vue'
 import { formatFillStatus } from '@/utils/fillStatusTypes'
-import { formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
+import { formatJpyUnit, formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
 
 defineProps({
   rows: {
@@ -72,12 +72,8 @@ function fillStatusLabel(row) {
     <template #cell-executedQuantity="{ value }">{{ formatQuantity(value) }}</template>
     <template #cell-executedPrice="{ value }">{{ formatUsd(value) }}</template>
 
-    <!--
-      約定金額（円）。ExecutionItem は 約定代金（USD）しか返さず、円の値の出所が無い。
-      列（見出し）はモックどおり確保し、セルは常に '—' にしてある（顧客マスタの評価額と同じ扱い）。
-      TODO(処理実装): 円貨の約定金額が仕様に入ったら api 層の toMizuhoExecution() に足して差し替える
-    -->
-    <template #cell-executedAmountJpy> — </template>
+    <!-- 約定金額（円）。ExecutionItem の 約定代金_JPY（為替未登録なら null で '—'） -->
+    <template #cell-executedAmountJpy="{ value }">{{ formatJpyUnit(value) }}</template>
 
     <template #cell-executedAt="{ value }">
       <span class="mizuho-execution-table__muted">{{ formatMonthDayTime(value) }}</span>

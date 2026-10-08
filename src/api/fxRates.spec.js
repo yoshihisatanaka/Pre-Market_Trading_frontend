@@ -27,15 +27,23 @@ const ROW = fxRates.at(-1)
 const ROW_ID = String(ROW.ID)
 const ROW_DATE = toIsoDate(ROW.基準日)
 const NEW_RATE = ROW.為替レート + 1
+const NEW_WITHHOLDING_RATE = ROW.源泉レート + 1
 
-/** アプリ内モデル → 生の形の期待値（FxRequest の 3 項目） */
-const expectedRequest = ({ baseDate, currencyCode, rate }) => ({
+/** アプリ内モデル → 生の形の期待値（FxRequest の 4 項目。源泉レートは省略時 null） */
+const expectedRequest = ({ baseDate, currencyCode, rate, withholdingRate = null }) => ({
   基準日: Number(baseDate.replaceAll('-', '')),
   通貨コード: currencyCode,
   為替レート: rate,
+  源泉レート: withholdingRate,
 })
 
-const saveArgs = { baseDate: ROW_DATE, currencyCode: ROW.通貨コード, rate: NEW_RATE }
+// 源泉レートを渡さない呼び出し（省略時の既定 null を確かめる）
+const saveArgsWithoutWithholding = {
+  baseDate: ROW_DATE,
+  currencyCode: ROW.通貨コード,
+  rate: NEW_RATE,
+}
+const saveArgs = { ...saveArgsWithoutWithholding, withholdingRate: NEW_WITHHOLDING_RATE }
 
 /** 最後に届いたリクエストを覚えておくための入れ物 */
 let lastRequest = null
@@ -77,6 +85,7 @@ const latestBody = {
   基準日: ROW.基準日,
   通貨コード: ROW.通貨コード,
   為替レート: ROW.為替レート,
+  源泉レート: ROW.源泉レート,
 }
 
 /** FxItem → アプリ内モデルの期待値 */
@@ -85,6 +94,7 @@ const expectedFxRate = (raw) => ({
   baseDate: toIsoDate(raw.基準日),
   currencyCode: raw.通貨コード,
   rate: raw.為替レート,
+  withholdingRate: raw.源泉レート,
   updatedAt: raw.更新日時,
   updatedBy: raw.更新者,
   createdAt: raw.作成日時,
@@ -112,6 +122,7 @@ describe('api/fxRates', () => {
       baseDate: ROW_DATE,
       currencyCode: ROW.通貨コード,
       rate: ROW.為替レート,
+      withholdingRate: ROW.源泉レート,
     })
   })
 
@@ -177,8 +188,8 @@ describe('api/fxRates', () => {
     expect(result).toEqual({ valid: false, errors: [reason], warnings: [] })
   })
 
-  it('[FXA-10] 登録は FxRequest の 3 項目だけを送り、登録された 1 件を返す', async () => {
-    const saved = { ...ROW, 為替レート: NEW_RATE }
+  it('[FXA-10] 登録は FxRequest の 4 項目だけを送り、登録された 1 件を返す', async () => {
+    const saved = { ...ROW, 為替レート: NEW_RATE, 源泉レート: NEW_WITHHOLDING_RATE }
     record('post', CREATE_PATH, { success: true, exchange_rate: saved, message: '' }, 201)
 
     const result = await createFxRate(saveArgs)
@@ -190,7 +201,7 @@ describe('api/fxRates', () => {
   })
 
   it('[FXA-11] 変更は ID をパスに載せ、本文に更新日時を渡した値のまま載せる', async () => {
-    const saved = { ...ROW, 為替レート: NEW_RATE }
+    const saved = { ...ROW, 為替レート: NEW_RATE, 源泉レート: NEW_WITHHOLDING_RATE }
     record('put', DETAIL_PATH, { success: true, exchange_rate: saved, message: '' })
 
     const result = await updateFxRate({ ...saveArgs, id: ROW_ID, updatedAt: ROW.更新日時 })
@@ -216,5 +227,39 @@ describe('api/fxRates', () => {
 
     await expect(promise).rejects.toBeInstanceOf(ApiError)
     await expect(promise).rejects.toMatchObject({ status: 409, message: detail })
+  })
+
+  it('[FXA-14] latest の源泉レートが null のときは null のまま返す', async () => {
+    record('get', LATEST_PATH, { ...latestBody, 源泉レート: null })
+
+    const latest = await fetchLatestFxRate({ targetDate: ROW_DATE })
+
+    expect(latest.withholdingRate).toBeNull()
+  })
+
+  it('[FXA-15] 詳細の源泉レートが null のときは null のまま返す', async () => {
+    record('get', DETAIL_PATH, { exchange_rate: { ...ROW, 源泉レート: null } })
+
+    const fxRate = await fetchFxRate(ROW_ID)
+
+    expect(fxRate.withholdingRate).toBeNull()
+  })
+
+  it('[FXA-16] 登録で源泉レートを渡さないときは本文に 源泉レート: null を載せる', async () => {
+    record('post', CREATE_PATH, { success: true, exchange_rate: ROW, message: '' }, 201)
+
+    await createFxRate(saveArgsWithoutWithholding)
+
+    expect(Object.hasOwn(lastRequest.body, '源泉レート')).toBe(true)
+    expect(lastRequest.body.源泉レート).toBeNull()
+  })
+
+  it('[FXA-17] 変更で源泉レートを渡さないときは本文に 源泉レート: null を載せる', async () => {
+    record('put', DETAIL_PATH, { success: true, exchange_rate: ROW, message: '' })
+
+    await updateFxRate({ ...saveArgsWithoutWithholding, id: ROW_ID, updatedAt: ROW.更新日時 })
+
+    expect(Object.hasOwn(lastRequest.body, '源泉レート')).toBe(true)
+    expect(lastRequest.body.源泉レート).toBeNull()
   })
 })

@@ -6,6 +6,23 @@ import router from './router'
 import { useCodesStore } from './stores/codes'
 import { useCurrentOperatorStore } from './stores/currentOperator'
 import { useMarketStatusStore } from './stores/marketStatus'
+/*
+ * 本文の書体（tokens.css の --font-family-base の先頭 'Noto Sans JP'）。画面モックは同じ書体を
+ * Web フォントで同梱しているので、端末に入っていなくても同じ見た目になるよう合わせる。
+ * 使うウェイトだけを読む（src/ の font-weight は 400 / 500 / 600 / 700）。文字の範囲ごとに分割された
+ * woff2 なので、ブラウザは画面に出た文字の分だけを取りに行く。
+ *
+ * 自動操作のブラウザ（Playwright の E2E・MCP。navigator.webdriver が true）では読まない。
+ * E2E はテストごとにキャッシュの無いブラウザで開くので、1 画面あたり数十本のフォントを毎回
+ * dev サーバから取り直し、全件が 13 分 → 19 分に延びて揺れも増えた（2026-10-08 実測）。
+ * 書体は文言・要素の判定に効かないので、E2E では端末の書体にフォールバックさせる
+ */
+if (!navigator.webdriver) {
+  import('@fontsource/noto-sans-jp/400.css')
+  import('@fontsource/noto-sans-jp/500.css')
+  import('@fontsource/noto-sans-jp/600.css')
+  import('@fontsource/noto-sans-jp/700.css')
+}
 import './assets/styles/main.css'
 
 async function enableMocking() {

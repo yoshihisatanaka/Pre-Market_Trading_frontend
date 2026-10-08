@@ -32,7 +32,7 @@ export const useCurrentOperatorStore = defineStore('currentOperator', () => {
   /**
    * 権限を持っているか。読み終える前と、読めなかったときは false。
    *
-   * @param {'order'|'master'|'operation'|'branchAll'} permission CurrentOperator.permissions のキー
+   * @param {'order'|'master'|'operation'|'branchAll'|'depositary'} permission CurrentOperator.permissions のキー
    */
   function can(permission) {
     return Boolean(operator.value?.permissions?.[permission])

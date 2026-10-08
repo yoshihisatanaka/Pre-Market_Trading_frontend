@@ -43,11 +43,15 @@ const secondPage = allRows.slice(PAGE_SIZE, PAGE_SIZE * 2)
 const ODD_OFFSET = 7
 const oddPage = allRows.slice(ODD_OFFSET, ODD_OFFSET + PAGE_SIZE)
 
-// 絞り込みはフィクスチャ先頭の年をそのまま使う（年もハードコードしない）
+// 登録用の日付を作るための年。フィクスチャ先頭の年をそのまま使う（年もハードコードしない）
 const YEAR = allRows[0].date.slice(0, 4)
-const DATE_FROM = `${YEAR}-01-01`
-const DATE_TO = `${YEAR}-12-31`
-const inYear = allRows.filter((blackout) => blackout.date.startsWith(YEAR))
+
+/*
+ * 検索は画面モックどおり「日付」1 欄（その日だけを探す）。フィクスチャの 2 件目の日付を使い、
+ * その日の行（受注不可日は一意なので 1 件）を期待値にする。
+ */
+const FILTER_DATE = allRows[1].date
+const onFilterDate = allRows.filter((blackout) => blackout.date === FILTER_DATE)
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
@@ -84,13 +88,11 @@ const DELETE_TARGET = allRows[0]
 const NOT_FOUND_MESSAGE = '指定された受注不可日が存在しないか、既に削除されています'
 
 /*
- * 「最終ページが 1 件だけ」を作るための絞り込み。
- * 一覧は日付の降順なので、先頭（最新）から PAGE_SIZE + 1 件目までを範囲に取ると
- * 2 ページ目がちょうど 1 件になる（From が古い側 = その 1 件、To が最新の日付）。
+ * 「最終ページが 1 件だけ」を作るための一覧。検索は 1 日指定になり、絞り込みで
+ * 2 ページ目を作れなくなったので、フィクスチャの先頭 PAGE_SIZE + 1 件だけを返す応答に差し替える。
  */
-const LAST_PAGE_TARGET = allRows[PAGE_SIZE]
-const LAST_PAGE_FROM = LAST_PAGE_TARGET.date
-const LAST_PAGE_TO = allRows[0].date
+const LAST_PAGE_ROWS = blackoutDates.slice(0, PAGE_SIZE + 1)
+const LAST_PAGE_TARGET = toRow(LAST_PAGE_ROWS[PAGE_SIZE])
 
 // 編集の対象もフィクスチャから導く（別の行の日付へ変えれば重複で弾かれる）
 const EDIT_TARGET = allRows[0]
@@ -98,12 +100,6 @@ const OTHER_TARGET = allRows[1]
 const EDITED_REASON = '編集後の理由'
 const CONFLICT_MESSAGE =
   '他のユーザーによって受注不可日データが更新されています。最新データを再取得してください。'
-
-/*
- * 「絞り込みの範囲外へ動かす日付」。降順の先頭が最新なので YEAR はフィクスチャの最終年で、
- * その翌年はフィクスチャに無く LAST_PAGE_TO より後になる（= 範囲から出て total が 1 減る）。
- */
-const OUT_OF_RANGE_DATE = `${Number(YEAR) + 1}-06-01`
 
 const Page = { render: () => h('div') }
 
@@ -199,6 +195,27 @@ function gateListResponse() {
     }),
   )
   return release
+}
+
+/**
+ * 渡した行だけを持つ一覧として振る舞うハンドラ（一覧の取得と削除）。
+ * 既定のフィクスチャでは作れない件数（最終ページが 1 件だけ）を再現するために使う。
+ *
+ * @param {object[]} initialRows バックエンドの生の形の行
+ */
+function serveOnly(initialRows) {
+  let current = [...initialRows]
+  server.use(
+    http.get('*/api/masters/blackout-dates', ({ request }) => {
+      const offset = Number(new URL(request.url).searchParams.get('offset') ?? 0)
+      return HttpResponse.json(listBody(current.slice(offset, offset + PAGE_SIZE), current.length))
+    }),
+    http.delete('*/api/masters/blackout-dates/:id', ({ params }) => {
+      const target = current.find((row) => String(row.ID) === params.id)
+      current = current.filter((row) => row !== target)
+      return HttpResponse.json(itemBody({ ...target, 取消区分: 1 }))
+    }),
+  )
 }
 
 const deleteButton = (wrapper, id) => wrapper.find(`[data-testid="blackout-dates-delete-${id}"]`)
@@ -312,8 +329,7 @@ describe('BlackoutDateListView', () => {
 
     expect(exists(wrapper, 'blackout-dates-error')).toBe(true)
     expect(exists(wrapper, 'blackout-dates-search')).toBe(true)
-    expect(exists(wrapper, 'blackout-dates-date-from')).toBe(true)
-    expect(exists(wrapper, 'blackout-dates-date-to')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-date')).toBe(true)
   })
 
   it('[BDL-06] offset 付きの URL で開くとそのページを復元する', async () => {
@@ -352,20 +368,21 @@ describe('BlackoutDateListView', () => {
     const { wrapper, router } = await mountView()
     await settle()
 
-    await wrapper.find('[data-testid="blackout-dates-date-from"]').setValue(DATE_FROM)
-    await wrapper.find('[data-testid="blackout-dates-date-to"]').setValue(DATE_TO)
+    await wrapper.find('[data-testid="blackout-dates-date"]').setValue(FILTER_DATE)
     await wrapper.find('[data-testid="blackout-dates-search"]').trigger('submit')
     await settle()
 
-    expect(router.currentRoute.value.query).toEqual({ date_from: DATE_FROM, date_to: DATE_TO })
-    expect(rows(wrapper)).toHaveLength(inYear.length)
-    expect(countText(wrapper)).toBe(`${inYear.length} 件`)
+    // 1 日指定なので URL には date だけが乗る（期間の date_from / date_to は使わない）
+    expect(router.currentRoute.value.query).toEqual({ date: FILTER_DATE })
+    expect(rows(wrapper)).toHaveLength(onFilterDate.length)
+    expect(rows(wrapper)[0].text()).toContain(FILTER_DATE)
+    expect(countText(wrapper)).toBe(`${onFilterDate.length} 件`)
   })
 
   it('[BDL-10] クリアで URL クエリが空になり全件に戻る', async () => {
-    const { wrapper, router } = await mountView({ date_from: DATE_FROM, date_to: DATE_TO })
+    const { wrapper, router } = await mountView({ date: FILTER_DATE })
     await settle()
-    expect(rows(wrapper)).toHaveLength(inYear.length)
+    expect(rows(wrapper)).toHaveLength(onFilterDate.length)
 
     await wrapper.find('[data-testid="blackout-dates-search-clear"]').trigger('click')
     await settle()
@@ -376,11 +393,10 @@ describe('BlackoutDateListView', () => {
   })
 
   it('[BDL-11] URL の日付条件が入力欄に反映される', async () => {
-    const { wrapper } = await mountView({ date_from: DATE_FROM, date_to: DATE_TO })
+    const { wrapper } = await mountView({ date: FILTER_DATE })
     await settle()
 
-    expect(wrapper.find('[data-testid="blackout-dates-date-from"]').element.value).toBe(DATE_FROM)
-    expect(wrapper.find('[data-testid="blackout-dates-date-to"]').element.value).toBe(DATE_TO)
+    expect(wrapper.find('[data-testid="blackout-dates-date"]').element.value).toBe(FILTER_DATE)
   })
 
   it('[BDL-13] 説明バナーは 4 状態のいずれでも表示される', async () => {
@@ -661,11 +677,8 @@ describe('BlackoutDateListView', () => {
   })
 
   it('[BDL-27] 最終ページの最後の 1 件を消すと 1 ページ前に戻る', async () => {
-    const { wrapper, router } = await mountView({
-      date_from: LAST_PAGE_FROM,
-      date_to: LAST_PAGE_TO,
-      offset: String(PAGE_SIZE),
-    })
+    serveOnly(LAST_PAGE_ROWS)
+    const { wrapper, router } = await mountView({ offset: String(PAGE_SIZE) })
     await settle()
     expect(rows(wrapper)).toHaveLength(1)
 
@@ -676,11 +689,8 @@ describe('BlackoutDateListView', () => {
     await settle()
     await settle()
 
-    // offset だけが消え、絞り込み条件は残る
-    expect(router.currentRoute.value.query).toEqual({
-      date_from: LAST_PAGE_FROM,
-      date_to: LAST_PAGE_TO,
-    })
+    // 1 ページ目に戻ったので offset が消える
+    expect(router.currentRoute.value.query).toEqual({})
     expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
     expect(countText(wrapper)).toBe(`${PAGE_SIZE} 件`)
   })
@@ -881,31 +891,25 @@ describe('BlackoutDateListView', () => {
     expect(exists(wrapper, 'blackout-dates-edit-validation-error')).toBe(false)
   })
 
-  it('[BDL-36] 最終ページの 1 件を絞り込みの範囲外へ動かすと 1 ページ前に戻る', async () => {
-    const { wrapper, router } = await mountView({
-      date_from: LAST_PAGE_FROM,
-      date_to: LAST_PAGE_TO,
-      offset: String(PAGE_SIZE),
-    })
+  it('[BDL-36] 絞り込んだ日付の行を別の日付へ変えると空状態になり条件は残る', async () => {
+    const { wrapper, router } = await mountView({ date: EDIT_TARGET.date })
     await settle()
     expect(rows(wrapper)).toHaveLength(1)
 
-    await openEditModal(wrapper, LAST_PAGE_TARGET.id)
-    await fillEdit(wrapper, OUT_OF_RANGE_DATE, EDITED_REASON)
+    await openEditModal(wrapper, EDIT_TARGET.id)
+    await fillEdit(wrapper, NEW_DATE, EDITED_REASON)
     await editSubmit(wrapper).trigger('click')
-    // 事前検証 → 更新 → 再取得 → 0 件を見て 1 ページ戻る → 再取得 の分だけ待つ
-    await settle()
+    // 事前検証 → 更新 → 再取得 → 再描画 の分だけ待つ
     await settle()
     await settle()
     await settle()
 
-    // offset だけが消え、絞り込み条件は残る
-    expect(router.currentRoute.value.query).toEqual({
-      date_from: LAST_PAGE_FROM,
-      date_to: LAST_PAGE_TO,
-    })
-    expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
-    expect(countText(wrapper)).toBe(`${PAGE_SIZE} 件`)
+    expect(editDialog(wrapper).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="blackout-dates-notice"]').text()).toContain(NEW_DATE)
+    // その日に合う行が無くなるので空状態。条件は消さず、1 ページ目なのでページも動かさない
+    expect(exists(wrapper, 'blackout-dates-empty')).toBe(true)
+    expect(exists(wrapper, 'blackout-dates-table')).toBe(false)
+    expect(router.currentRoute.value.query).toEqual({ date: EDIT_TARGET.date })
   })
 
   it('[BDL-37] 登録が受理されたら一覧の読み直しを待たずに追加モーダルが閉じる', async () => {

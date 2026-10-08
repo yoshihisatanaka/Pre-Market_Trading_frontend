@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { codeEntries } from '../src/mocks/fixtures/codes'
 import { canceledCustomers, customers } from '../src/mocks/fixtures/customers'
 import { CUSTOMER_FIELDS } from '../src/utils/customerFields'
@@ -165,10 +166,7 @@ test.describe('顧客マスタ一覧', () => {
   test('[CU-01] サイドメニューから開くと一覧と件数が表示される', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: '顧客マスタ', exact: true })
-      .click()
+    await clickSideMenuLink(page, '顧客マスタ')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '顧客マスタ', exact: true })).toBeVisible()

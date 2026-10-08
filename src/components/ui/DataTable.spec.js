@@ -75,4 +75,40 @@ describe('DataTable', () => {
       expect(row.classes()).toEqual([])
     }
   })
+
+  it('[DTB-07] clickable の行を click すると row-click にその行が渡る', async () => {
+    const wrapper = mount(DataTable, { props: { columns, rows, clickable: true } })
+
+    const second = wrapper.findAll('[data-testid="data-table-row"]')[1]
+    await second.find('td').trigger('click')
+
+    expect(wrapper.emitted('row-click')).toEqual([[rows[1]]])
+    expect(second.classes()).toContain('is-clickable')
+    expect(second.attributes('tabindex')).toBe('0')
+  })
+
+  it('[DTB-08] clickable の行は行そのものの Enter でだけ row-click を出す', async () => {
+    const wrapper = mount(DataTable, {
+      props: { columns, rows, clickable: true },
+      slots: { 'cell-symbol': '<button type="button">内側</button>' },
+    })
+
+    const first = wrapper.find('[data-testid="data-table-row"]')
+    await first.find('button').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('row-click')).toBeUndefined()
+
+    await first.trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('row-click')).toEqual([[rows[0]]])
+  })
+
+  it('[DTB-09] clickable を渡さないと click / Enter で row-click を出さない', async () => {
+    const wrapper = mount(DataTable, { props: { columns, rows } })
+
+    const first = wrapper.find('[data-testid="data-table-row"]')
+    await first.trigger('click')
+    await first.trigger('keydown', { key: 'Enter' })
+
+    expect(wrapper.emitted('row-click')).toBeUndefined()
+    expect(first.attributes('tabindex')).toBeUndefined()
+  })
 })

@@ -45,6 +45,8 @@ const updateItem = activityLogs.find((row) => row.操作区分 === 'UPDATE' && r
 const createItem = activityLogs.find((row) => row.操作区分 === 'CREATE')
 const deleteItem = activityLogs.find((row) => row.操作区分 === 'DELETE')
 const multiDiffItem = activityLogs.find((row) => Object.keys(row.差分).length >= 2)
+// 注文（業務操作）の行。変更前後のレコードを持たない
+const orderItem = activityLogs.find((row) => row.区分 === 'business')
 
 /** 仕様（ActivityLogItem）から作るアプリ内モデルのキー */
 const MODEL_KEYS = [
@@ -52,10 +54,16 @@ const MODEL_KEYS = [
   'historyId',
   'targetType',
   'targetTypeName',
+  'category',
+  'categoryName',
   'targetId',
   'targetKey',
   'operation',
+  'operationText',
   'operator',
+  'operatorName',
+  'operatorRole',
+  'feature',
   'at',
   'before',
   'after',
@@ -82,8 +90,10 @@ describe('api/activityLogs', () => {
       dateFrom: '2026-09-01',
       dateTo: '2026-09-16',
       operator: updateItem.操作者,
+      actorGroup: 'manager',
       operation: updateItem.操作区分,
-      targetType: updateItem.対象種別,
+      // 対象種別は複数をカンマ区切りで送る（画面の 区分 を展開した並び）
+      targetTypes: [updateItem.対象種別, 'order-suspensions'],
       targetKey: updateItem.対象キー,
       sort: 'asc',
     }
@@ -93,12 +103,14 @@ describe('api/activityLogs', () => {
     expect(lastRequest.params.get('start_date')).toBe(conditions.dateFrom)
     expect(lastRequest.params.get('end_date')).toBe(conditions.dateTo)
     expect(lastRequest.params.get('operator')).toBe(conditions.operator)
+    expect(lastRequest.params.get('actor_group')).toBe(conditions.actorGroup)
     expect(lastRequest.params.get('operation')).toBe(conditions.operation)
-    expect(lastRequest.params.get('target_types')).toBe(conditions.targetType)
+    expect(lastRequest.params.get('target_types')).toBe(conditions.targetTypes.join(','))
     expect(lastRequest.params.get('target_key')).toBe(conditions.targetKey)
     expect(lastRequest.params.get('sort')).toBe(conditions.sort)
     expect([...lastRequest.params.keys()].sort()).toEqual(
       [
+        'actor_group',
         'end_date',
         'limit',
         'offset',
@@ -119,8 +131,9 @@ describe('api/activityLogs', () => {
       dateFrom: '',
       dateTo: '',
       operator: '',
+      actorGroup: '',
       operation: '',
-      targetType: '',
+      targetTypes: [],
       targetKey: '',
       sort: '',
     })
@@ -154,6 +167,8 @@ describe('api/activityLogs', () => {
       activityLogTargets.map((raw) => ({
         code: raw.対象種別,
         name: raw.対象種別名,
+        category: raw.区分,
+        categoryName: raw.区分名,
         keyLabel: raw.対象キー項目,
         historyTable: raw.履歴テーブル,
       })),
@@ -244,18 +259,72 @@ describe('api/activityLogs', () => {
     }
   })
 
-  it('[ALA-12] 仕様に無い契約提案の 5 項目は変換結果に出さない', async () => {
-    // フィクスチャに契約提案の項目が載っていないと、このシナリオは意味を失う
+  it('[ALA-12] 仕様に入った 4 項目は読み、変換結果のキーは仕様由来の項目だけ', async () => {
+    // フィクスチャに 4 項目が載っていないと、このシナリオは意味を失う
     expect(updateItem).toHaveProperty('操作者名')
     record(listBody([updateItem]))
 
     const { items } = await fetchActivityLogs()
 
     expect(Object.keys(items[0]).sort()).toEqual([...MODEL_KEYS].sort())
-    const values = Object.values(items[0])
-    for (const key of ['操作者名', '実行者区分', '操作内容']) {
-      expect(values).not.toContain(updateItem[key])
+    expect(items[0]).toMatchObject({
+      operatorName: updateItem.操作者名,
+      operatorRole: updateItem.実行者区分,
+      feature: updateItem.対象機能,
+      operationText: updateItem.操作内容,
+    })
+  })
+
+  it('[ALA-17] 区分・区分名を読み、注文の行の変更前後データは null のまま', async () => {
+    // フィクスチャに注文（業務操作）の行が無いと、このシナリオは意味を失う
+    expect(orderItem).toBeDefined()
+    record(listBody([updateItem, orderItem]))
+
+    const { items } = await fetchActivityLogs()
+
+    expect(items.map(({ category, categoryName }) => ({ category, categoryName }))).toEqual(
+      [updateItem, orderItem].map((raw) => ({ category: raw.区分, categoryName: raw.区分名 })),
+    )
+    expect(items[1].before).toBeNull()
+    expect(items[1].after).toBeNull()
+    expect(items[1].operationText).toBe(orderItem.操作内容)
+  })
+
+  it('[ALA-18] 区分・区分名が無い応答は空文字に寄せる', async () => {
+    const withoutCategory = (raw) => {
+      const copy = { ...raw }
+      delete copy.区分
+      delete copy.区分名
+      return copy
     }
+    record(listBody([withoutCategory(updateItem)]))
+    server.use(
+      http.get(TARGETS_PATH, () =>
+        HttpResponse.json({ targets: [withoutCategory(activityLogTargets[0])] }),
+      ),
+    )
+
+    const { items } = await fetchActivityLogs()
+    const targets = await fetchActivityLogTargets()
+
+    expect(items[0]).toMatchObject({ category: '', categoryName: '' })
+    expect(targets[0]).toMatchObject({ category: '', categoryName: '' })
+  })
+
+  it('[ALA-16] 4 項目が null・欠落のときは空文字に寄せる', async () => {
+    const raw = { ...updateItem, 実行者区分: null, 操作内容: null }
+    delete raw.操作者名
+    delete raw.対象機能
+    record(listBody([raw]))
+
+    const { items } = await fetchActivityLogs()
+
+    expect(items[0]).toMatchObject({
+      operatorName: '',
+      operatorRole: '',
+      feature: '',
+      operationText: '',
+    })
   })
 
   it('[ALA-13] 履歴ID が重複しても行キーは一意になる', async () => {

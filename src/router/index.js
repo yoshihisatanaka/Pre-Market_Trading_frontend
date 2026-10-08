@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import OrderListView from '@/views/OrderListView.vue'
 import { permissionGuard } from './permissionGuard'
+import { trackRouteLoading } from '@/composables/useRouteLoading'
 
 /*
  * meta.requiredPermission を付けたルートは、その権限（GET /auth/me の権限）が無いと開けない
@@ -32,12 +33,19 @@ const routes = [
     meta: { title: '顧客検索' },
   },
   {
+    // path は navigation.js（サイドメニュー）の項目と一致させる
+    path: '/customers/holdings',
+    name: 'holding-search',
+    component: () => import('@/views/HoldingSearchView.vue'),
+    meta: { title: '預り検索' },
+  },
+  {
     /*
      * 顧客詳細。顧客検索の顧客名から入る画面で、サイドメニューには載せない。
      * 親（CustomerDetailView）が顧客カードとタブを持ち、タブの中身を子ルートが描く。
      * :customerId は顧客マスタの行 ID（数字だけにする。/customers/search と紛れない）。
      * /customers/:customerId だけを開いたら外株預りへ回す。
-     * 見出しは 2 つのタブとも「顧客詳細」（どのタブかはタブの選択で示す）
+     * 見出しはどのタブも「顧客詳細」（どのタブかはタブの選択で示す）
      */
     path: '/customers/:customerId(\\d+)',
     component: () => import('@/views/CustomerDetailView.vue'),
@@ -58,6 +66,17 @@ const routes = [
         name: 'customer-orders',
         component: () => import('@/views/CustomerOrdersView.vue'),
       },
+      {
+        // 新規注文（/orders/new）と同じ画面を顧客カードとタブの下に描く。部店と口座番号は URL クエリで渡す
+        path: 'order-entry',
+        name: 'customer-order-entry',
+        component: () => import('@/views/OrderEntryView.vue'),
+      },
+      {
+        path: 'calculations',
+        name: 'customer-calculations',
+        component: () => import('@/views/CustomerCalculationView.vue'),
+      },
     ],
   },
   {
@@ -68,11 +87,16 @@ const routes = [
     meta: { title: 'CSV一括注文' },
   },
   {
-    // 入力 → 確認 → 完了は 1 つのルートの中で段階を切り替える（再読み込みで入力へ戻る）
+    /*
+     * 入力 → 確認 → 完了は 1 つのルートの中で段階を切り替える（再読み込みで入力へ戻る）。
+     * 顧客（口座番号のクエリ）の指定が無ければ顧客検索へ回す（モックの order_new_get と同じ。
+     * 注文は顧客を選んでから、顧客詳細の注文入力タブで入れる）
+     */
     path: '/orders/new',
     name: 'order-new',
     component: () => import('@/views/OrderEntryView.vue'),
     meta: { title: '新規注文' },
+    beforeEnter: (to) => (to.query.account_number ? true : { name: 'customer-search' }),
   },
   {
     // 取込み画面の「内容を確認する」の先。メニューには載せない（事前検証の結果はストアが持つ）
@@ -154,6 +178,18 @@ const routes = [
     meta: { title: '為替マスタ', requiredPermission: 'master' },
   },
   {
+    path: '/masters/provisional-calculation',
+    name: 'calculation-settings-master',
+    component: () => import('@/views/CalculationSettingsMasterView.vue'),
+    meta: { title: '仮計算マスタ', requiredPermission: 'master' },
+  },
+  {
+    path: '/masters/fee-preferences',
+    name: 'fee-preference-list',
+    component: () => import('@/views/FeePreferenceListView.vue'),
+    meta: { title: '手数料優遇マスタ', requiredPermission: 'master' },
+  },
+  {
     path: '/masters/hard-limits',
     name: 'slice-criteria-master',
     component: () => import('@/views/SliceCriteriaMasterView.vue'),
@@ -229,6 +265,12 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
+
+/*
+ * 遷移の確定待ち（遅延 import のチャンク取得と、下の permissionGuard の /auth/me 待ち）を
+ * レイアウトに知らせる。ガードは登録順に直列で走るので、permissionGuard より前に差す。
+ */
+trackRouteLoading(router)
 
 router.beforeEach(permissionGuard)
 

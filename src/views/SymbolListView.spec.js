@@ -60,12 +60,14 @@ const oddPage = allRows.slice(ODD_OFFSET, ODD_OFFSET + PAGE_SIZE)
 
 // 絞り込みに使う値もフィクスチャから導く
 const TICKER = allRows[0].ticker
+const SYMBOL_NAME = allRows[0].name
 const REGULATION = allRows[0].regulation
 const ORDER_ROUTE = allRows[0].orderRoute
 const VWAP_TARGET = allRows[0].vwapTarget
 const filtered = allRows.filter(
   (row) =>
     row.ticker === TICKER &&
+    row.name.includes(SYMBOL_NAME) &&
     row.regulation === REGULATION &&
     row.orderRoute === ORDER_ROUTE &&
     row.vwapTarget === VWAP_TARGET,
@@ -251,6 +253,66 @@ const failValidate = (message) =>
     ),
   )
 
+/* ここから VWAP一括ダイアログ用のヘルパ（事前確認と本実行の 2 本を差し替える） */
+
+/** VWAP対象区分のコード値（utils/symbolTypes.js と同じ）。一括対象外化が変えるのは '1' の行 */
+const VWAP_ON = '1'
+const VWAP_OFF = '0'
+
+/** いま VWAP対象の有効な行。ダイアログの件数と一覧の項目数はここから導く */
+const vwapTargets = sorted.filter((raw) => raw.VWAP対象区分 === VWAP_ON && raw.取消区分 === 0)
+
+/** 表の VWAP対象区分セル（列の並びは STV-03 のとおり。0 始まりで 9 番目） */
+const VWAP_CELL = 9
+const vwapCells = (wrapper) => rows(wrapper).map((row) => cells(row)[VWAP_CELL])
+
+const VWAP_BULK_PATH = '*/api/masters/symbols/vwap-target'
+const VWAP_BULK_VALIDATE_PATH = '*/api/masters/symbols/vwap-target/validate'
+
+/*
+ * 開閉は実行ボタンの有無で見る（削除確認の STV-37 / 38 と同じ）。
+ * `symbols-vwap-bulk-dialog` は BaseModal（Teleport がルート）に付けられていて要素に乗らない。
+ */
+const vwapSubmit = (wrapper) => wrapper.find('[data-testid="symbols-vwap-bulk-submit"]')
+const vwapCancel = (wrapper) => wrapper.find('[data-testid="symbols-vwap-bulk-cancel"]')
+
+/** ヘッダの「VWAP対象を一括で対象外へ」を押し、事前確認の応答まで待つ */
+const openVwapBulk = async (wrapper) => {
+  await wrapper.find('[data-testid="symbols-vwap-bulk"]').trigger('click')
+  await settle()
+}
+
+const submitVwapBulk = async (wrapper) => {
+  await vwapSubmit(wrapper).trigger('click')
+  await settle()
+}
+
+/** 事前確認の応答を差し替える（本実行は既定のまま） */
+const respondToVwapPreview = (body, status = 200) =>
+  server.use(http.post(VWAP_BULK_VALIDATE_PATH, () => HttpResponse.json(body, { status })))
+
+/** 本実行の応答を差し替える（wait を渡すと過渡状態を観測できる。事前確認は既定のまま） */
+const respondToVwapBulk = (body, status = 200, wait = 0) =>
+  server.use(
+    http.post(VWAP_BULK_PATH, async () => {
+      if (wait) await delay(wait)
+      return HttpResponse.json(body, { status })
+    }),
+  )
+
+/** 対象 0 件の事前確認（VwapTargetBulkResponse。候補はあるが値の変わる銘柄が無い） */
+const emptyVwapPreview = () => ({
+  success: true,
+  dry_run: true,
+  mode: 'set',
+  VWAP対象区分: VWAP_OFF,
+  候補件数: TOTAL,
+  対象件数: 0,
+  更新件数: 0,
+  symbols: [],
+  message: '0 件が対象です（更新は行っていません）',
+})
+
 describe('SymbolListView', () => {
   it('[STV-01] 応答を待つ間はローディングだけを出す', async () => {
     const { wrapper } = await mountView()
@@ -401,11 +463,12 @@ describe('SymbolListView', () => {
     expect(rows(wrapper)).toHaveLength(secondPage.length)
   })
 
-  it('[STV-13] 検索すると URL に 4 条件が乗り絞り込まれる', async () => {
+  it('[STV-13] 検索すると URL に 5 条件が乗り絞り込まれる', async () => {
     const { wrapper, router } = await mountView()
     await settle()
 
     await wrapper.find('[data-testid="symbols-symbol-code"]').setValue(TICKER)
+    await wrapper.find('[data-testid="symbols-symbol-name"]').setValue(SYMBOL_NAME)
     await wrapper.find('[data-testid="symbols-regulation"]').setValue(REGULATION)
     await wrapper.find('[data-testid="symbols-order-route"]').setValue(ORDER_ROUTE)
     await wrapper.find('[data-testid="symbols-vwap-target"]').setValue(VWAP_TARGET)
@@ -414,6 +477,7 @@ describe('SymbolListView', () => {
 
     expect(router.currentRoute.value.query).toEqual({
       symbol_code: TICKER,
+      symbol_name: SYMBOL_NAME,
       regulation: REGULATION,
       order_route: ORDER_ROUTE,
       vwap_target: VWAP_TARGET,
@@ -452,11 +516,18 @@ describe('SymbolListView', () => {
     }
   })
 
-  it('[STV-17] ヘッダに追加の導線があり、行には編集と削除がこの順で並ぶ', async () => {
+  it('[STV-17] ヘッダに一括操作と追加の導線があり、行には編集と削除がこの順で並ぶ', async () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(exists(wrapper, 'symbols-add')).toBe(true)
+    // 画面モックどおり、一括操作が左・新規追加が右（querySelectorAll は文書順で返す）
+    const headerButtons = wrapper.findAll(
+      '[data-testid="symbols-vwap-bulk"], [data-testid="symbols-add"]',
+    )
+    expect(headerButtons.map((button) => button.text())).toEqual([
+      'VWAP対象を一括で対象外へ',
+      '新規追加',
+    ])
 
     // 破壊的な操作を最後にする既存の並び（編集が左・削除が右端）
     const buttons = rows(wrapper)[0].findAll('button')
@@ -622,16 +693,20 @@ describe('SymbolListView', () => {
     expect(addInput(wrapper, 'note').element.value).toBe('')
   })
 
-  it('[STV-25] 区分 3 つは未選択を作らず実 API の既定から始まる', async () => {
+  it('[STV-25] 区分 3 つは未選択を作らず選択肢の先頭から始まる', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     await openAddModal(wrapper)
 
-    // 注文ルートは null を送れないので、未選択の選択肢そのものを置かない
-    for (const name of ['regulation', 'order-route', 'vwap-target']) {
-      expect(addInput(wrapper, name).element.value).toBe('0')
-      expect(addInput(wrapper, name).findAll('option[value=""]')).toHaveLength(0)
+    // 取引可 / IB証券 / 対象。並び（#42）の先頭と初期値が一致する
+    const expected = { regulation: '0', 'order-route': '1', 'vwap-target': '1' }
+    for (const [name, value] of Object.entries(expected)) {
+      const select = addInput(wrapper, name)
+      expect(select.element.value).toBe(value)
+      expect(select.findAll('option')[0].element.value).toBe(value)
+      // 注文ルートは null を送れないので、未選択の選択肢そのものを置かない
+      expect(select.findAll('option[value=""]')).toHaveLength(0)
     }
   })
 
@@ -960,5 +1035,129 @@ describe('SymbolListView', () => {
     await openDeleteModal(wrapper)
 
     expect(exists(wrapper, 'symbols-delete-error')).toBe(false)
+  })
+
+  it('[STV-41] 一括操作を押すと事前確認の件数と対象の一覧が出る', async () => {
+    // フィクスチャに VWAP対象の行が無ければ、このシナリオは意味を失う
+    expect(vwapTargets.length).toBeGreaterThan(0)
+    const { wrapper } = await mountView()
+    await settle()
+    const before = vwapCells(wrapper)
+
+    await openVwapBulk(wrapper)
+
+    expect(exists(wrapper, 'symbols-vwap-bulk-submit')).toBe(true)
+    const count = wrapper.find('[data-testid="symbols-vwap-bulk-count"]').text()
+    expect(count).toMatch(new RegExp(`対象\\s*${vwapTargets.length}\\s*件`))
+    expect(count).toMatch(new RegExp(`有効な銘柄\\s*${TOTAL}\\s*件中`))
+    expect(wrapper.findAll('[data-testid="symbols-vwap-bulk-list"] li')).toHaveLength(
+      vwapTargets.length,
+    )
+    expect(vwapSubmit(wrapper).attributes('disabled')).toBeUndefined()
+    // dry-run なので表はまだ変わらない
+    expect(vwapCells(wrapper)).toEqual(before)
+    expect(exists(wrapper, 'symbols-vwap-bulk-empty')).toBe(false)
+  })
+
+  it('[STV-42] 対象外にするとダイアログが閉じ、件数入りのメッセージと全行「対象外」の表が出る', async () => {
+    const { wrapper, router } = await mountView()
+    await settle()
+    await openVwapBulk(wrapper)
+    expect(vwapCells(wrapper)).toContain(labelOf(VWAP_TARGET_OPTIONS, VWAP_ON))
+
+    await submitVwapBulk(wrapper)
+
+    expect(exists(wrapper, 'symbols-vwap-bulk-submit')).toBe(false)
+    expect(wrapper.find('[data-testid="symbols-notice"]').text()).toBe(
+      `VWAP対象の銘柄 ${vwapTargets.length} 件を対象外にしました。`,
+    )
+    // 今の条件のまま読み直す。行は増減しない
+    const off = labelOf(VWAP_TARGET_OPTIONS, VWAP_OFF)
+    expect(vwapCells(wrapper)).toEqual(Array.from({ length: PAGE_SIZE }, () => off))
+    expect(countText(wrapper)).toContain(String(TOTAL))
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('[STV-43] 事前確認に失敗すると理由が出て実行できない', async () => {
+    respondToVwapPreview({ detail: ERROR_MESSAGE }, 500)
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openVwapBulk(wrapper)
+
+    expect(exists(wrapper, 'symbols-vwap-bulk-submit')).toBe(true)
+    expect(wrapper.find('[data-testid="symbols-vwap-bulk-preview-error"]').text()).toContain(
+      ERROR_MESSAGE,
+    )
+    expect(vwapSubmit(wrapper).attributes('disabled')).toBeDefined()
+    expect(exists(wrapper, 'symbols-vwap-bulk-count')).toBe(false)
+    expect(exists(wrapper, 'symbols-vwap-bulk-list')).toBe(false)
+  })
+
+  it('[STV-44] 本実行に失敗するとダイアログは開いたまま理由を出す', async () => {
+    respondToVwapBulk({ detail: ERROR_MESSAGE }, 500)
+    const { wrapper } = await mountView()
+    await settle()
+    await openVwapBulk(wrapper)
+    const before = vwapCells(wrapper)
+
+    await submitVwapBulk(wrapper)
+
+    expect(exists(wrapper, 'symbols-vwap-bulk-submit')).toBe(true)
+    expect(wrapper.find('[data-testid="symbols-vwap-bulk-error"]').text()).toContain(ERROR_MESSAGE)
+    // 件数は見せたまま理由を出す。事前確認の枠には出さない
+    expect(exists(wrapper, 'symbols-vwap-bulk-count')).toBe(true)
+    expect(exists(wrapper, 'symbols-vwap-bulk-preview-error')).toBe(false)
+    expect(exists(wrapper, 'symbols-notice')).toBe(false)
+    expect(vwapCells(wrapper)).toEqual(before)
+  })
+
+  it('[STV-45] 対象が 0 件なら空の旨を出して実行できない', async () => {
+    respondToVwapPreview(emptyVwapPreview())
+    const { wrapper } = await mountView()
+    await settle()
+
+    await openVwapBulk(wrapper)
+
+    expect(exists(wrapper, 'symbols-vwap-bulk-empty')).toBe(true)
+    expect(vwapSubmit(wrapper).attributes('disabled')).toBeDefined()
+    expect(exists(wrapper, 'symbols-vwap-bulk-count')).toBe(false)
+    expect(exists(wrapper, 'symbols-vwap-bulk-list')).toBe(false)
+  })
+
+  it('[STV-46] 実行中は実行もキャンセルもできない', async () => {
+    respondToVwapBulk({ detail: ERROR_MESSAGE }, 500, 20)
+    const { wrapper } = await mountView()
+    await settle()
+    await openVwapBulk(wrapper)
+
+    // 応答を待たずに押した直後を見る
+    const pending = vwapSubmit(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(vwapSubmit(wrapper).text()).toContain('変更中…')
+    expect(vwapSubmit(wrapper).attributes('disabled')).toBeDefined()
+    // 結果の行き先が無くなるので、終わるまで閉じさせない
+    expect(vwapCancel(wrapper).attributes('disabled')).toBeDefined()
+
+    await pending
+    await settle()
+    expect(exists(wrapper, 'symbols-vwap-bulk-submit')).toBe(true)
+  })
+
+  it('[STV-47] ダイアログを開き直すと前回の失敗理由が残らない', async () => {
+    respondToVwapBulk({ detail: ERROR_MESSAGE }, 500)
+    const { wrapper } = await mountView()
+    await settle()
+    await openVwapBulk(wrapper)
+    await submitVwapBulk(wrapper)
+    expect(exists(wrapper, 'symbols-vwap-bulk-error')).toBe(true)
+
+    await vwapCancel(wrapper).trigger('click')
+    await openVwapBulk(wrapper)
+
+    expect(exists(wrapper, 'symbols-vwap-bulk-error')).toBe(false)
+    // 件数は改めて取り直して出る
+    expect(exists(wrapper, 'symbols-vwap-bulk-count')).toBe(true)
   })
 })

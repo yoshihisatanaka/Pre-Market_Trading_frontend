@@ -105,7 +105,7 @@ describe('stores/mizuhoClosing', () => {
     expect(store.loading).toBe(false)
   })
 
-  it('[MCS-05] 締めると応答の状態で status が差し替わり、照会は取り直さない', async () => {
+  it('[MCS-05] 締めると操作後の状態を返し、照会を読み直した状態（履歴付き）に差し替わる', async () => {
     const store = useMizuhoClosingStore()
     await store.load()
     let statusRequests = 0
@@ -118,13 +118,19 @@ describe('stores/mizuhoClosing', () => {
     const result = await store.close()
 
     expect(result.closed).toBe(true)
-    expect(store.status).toEqual(result)
+    expect(result.operator).toBe(USER_CODE)
+    expect(statusRequests).toBe(1)
+    expect(store.status.closed).toBe(true)
     expect(store.status.updatedAt).toEqual(expect.any(String))
     expect(store.status.operator).toBe(USER_CODE)
-    expect(statusRequests).toBe(0)
+    expect(store.status.history).toHaveLength(mizuhoClosingStatus.history.length + 1)
+    expect(store.status.history[0]).toMatchObject({ action: 'close', operator: USER_CODE })
+    // 読み直しは裏で行うので、取得の loading / error は立たない
+    expect(store.loading).toBe(false)
+    expect(store.error).toBeNull()
   })
 
-  it('[MCS-06] 締め解除で受付中に戻り、更新日時は埋まったまま', async () => {
+  it('[MCS-06] 締め解除で受付中に戻り、更新日時は埋まったまま。履歴は新しい順に積まれる', async () => {
     const store = useMizuhoClosingStore()
     await store.load()
     await store.close()
@@ -133,6 +139,22 @@ describe('stores/mizuhoClosing', () => {
 
     expect(store.status.closed).toBe(false)
     expect(store.status.updatedAt).toEqual(expect.any(String))
+    expect(store.status.history.map((entry) => entry.action)).toEqual(['reopen', 'close'])
+  })
+
+  it('[MCS-13] 締めのあとの読み直しが 500 でも、操作の応答の状態のままで error は立たない', async () => {
+    const store = useMizuhoClosingStore()
+    await store.load()
+    server.use(
+      http.get(STATUS_PATH, () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+    )
+
+    const result = await store.close()
+
+    expect(result.closed).toBe(true)
+    expect(store.status).toEqual(result)
+    expect(store.error).toBeNull()
+    expect(store.saveError).toBeNull()
   })
 
   it('[MCS-07] 締めが 403 なら saveError に理由が入り、error と状態は変わらない', async () => {

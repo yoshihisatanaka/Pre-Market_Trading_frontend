@@ -9,12 +9,21 @@
  * 権限の要る区分（requiredPermission）は、その権限を持つ利用者にだけ出す。
  * /auth/me を読み終えるまでは持っていない扱いにする（出てから消えるちらつきを防ぐ）。
  * 読み込みを始めるのは main.js で、ここは結果を見るだけ。画面そのものの制限は router の permissionGuard。
+ *
+ * 区分ごとのアコーディオンの開閉はここで持つ（板全体の開閉とは別物）。初期値は navigation.js の defaultOpen。
+ * 現在のページを含む区分は、遷移のたびに開く（畳んだ区分の中にいて現在地が見えなくならないように）。
+ * 畳んだ区分のリンクは v-show で隠すだけで、DOM には残す。
+ *
+ * 画面は遅延 import なので、押してからチャンクが届くまで遷移が確定せず aria-current も動かない。
+ * その間は pendingPath（所有者の AppLayout が router から配る）に一致する項目を読み込み中の見た目にし、
+ * 押した瞬間に反応が返るようにする。マウスが乗った / フォーカスした時点でチャンクを先読みするのも
+ * 同じ理由（loadRouteLocation は解決済みなら何もしない）。
  */
-import { computed } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, reactive, watch } from 'vue'
+import { RouterLink, loadRouteLocation, useRoute, useRouter } from 'vue-router'
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { navSections } from './navigation'
-import { navIcons } from './navIcons'
 
 defineProps({
   /** 展開しているか。既定は展開（畳むのは呼び出し側の明示的な指定） */
@@ -22,14 +31,46 @@ defineProps({
     type: Boolean,
     default: true,
   },
+  /** 遷移の確定待ちの行き先（path）。一致する項目を読み込み中の見た目にする。空なら無し */
+  pendingPath: {
+    type: String,
+    default: '',
+  },
 })
 
 const operator = useCurrentOperatorStore()
+const router = useRouter()
+
+/** 行き先のチャンクを先に取りに行く。全 record が redirect のときだけ reject するので握りつぶす */
+const prefetch = (to) => loadRouteLocation(router.resolve(to)).catch(() => {})
 
 const visibleSections = computed(() =>
   navSections.filter(
     (section) => !section.requiredPermission || operator.can(section.requiredPermission),
   ),
+)
+
+/** 区分ラベル → 開いているか */
+const expanded = reactive(
+  Object.fromEntries(navSections.map((section) => [section.label, section.defaultOpen !== false])),
+)
+
+function toggleSection(section) {
+  expanded[section.label] = !expanded[section.label]
+}
+
+/** 配下のページ（/masters/symbols/… など）にいるときも、その項目の区分を現在地とみなす */
+const containsPath = (section, path) =>
+  section.items.some((item) => path === item.to || path.startsWith(`${item.to}/`))
+
+const route = useRoute()
+watch(
+  () => route.path,
+  (path) => {
+    const current = navSections.find((section) => containsPath(section, path))
+    if (current) expanded[current.label] = true
+  },
+  { immediate: true },
 )
 </script>
 
@@ -52,30 +93,52 @@ const visibleSections = computed(() =>
 
     <nav class="sidebar__nav" aria-label="メインメニュー">
       <template v-for="section in visibleSections" :key="section.label">
-        <h2 class="sidebar__section">{{ section.label }}</h2>
-        <RouterLink
-          v-for="item in section.items"
-          :key="item.to"
-          :to="item.to"
-          class="sidebar__link"
-          active-class="is-active"
-        >
-          <!-- アイコンはラベルの装飾。読み上げ対象から外してリンク名をラベルだけにする -->
-          <svg
-            v-if="item.icon"
-            class="sidebar__icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
+        <!-- 見出しの中にボタンを置く（見出しとしての読み上げと、開閉ボタンとしての操作を両立させる） -->
+        <h2 class="sidebar__section">
+          <button
+            type="button"
+            class="sidebar__section-toggle"
+            :class="{ 'is-closed': !expanded[section.label] }"
+            :aria-expanded="String(expanded[section.label])"
+            :aria-controls="`sidebar-section-${section.label}`"
+            @click="toggleSection(section)"
           >
-            <path :d="navIcons[item.icon]" />
-          </svg>
-          {{ item.label }}
-        </RouterLink>
+            {{ section.label }}
+            <svg
+              class="sidebar__chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </h2>
+        <div v-show="expanded[section.label]" :id="`sidebar-section-${section.label}`">
+          <RouterLink
+            v-for="item in section.items"
+            :key="item.to"
+            :to="item.to"
+            class="sidebar__link"
+            :class="{ 'is-pending': item.to === pendingPath }"
+            active-class="is-active"
+            @pointerenter="prefetch(item.to)"
+            @focus="prefetch(item.to)"
+          >
+            {{ item.label }}
+            <!-- 読み上げは AppLayout のバーに任せる（リンク名をラベルだけに保つ） -->
+            <BaseSpinner
+              v-if="item.to === pendingPath"
+              size="sm"
+              label=""
+              class="sidebar__pending"
+            />
+          </RouterLink>
+        </div>
       </template>
     </nav>
   </aside>
@@ -130,17 +193,73 @@ const visibleSections = computed(() =>
 }
 
 .sidebar__section {
-  margin: var(--space-4) 0 var(--space-2);
-  padding: 0 var(--space-2);
+  margin: var(--space-3) 0 var(--space-1);
   color: var(--color-sidebar-section);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
+/* 2 区分目以降は上に区切り線を引き、畳んだ区分が続いても境目が分かるようにする */
+.sidebar__section:not(:first-child) {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-sidebar-divider);
+}
+
 .sidebar__section:first-child {
   margin-top: 0;
+}
+
+/* ボタンの既定の装飾を外し、押せる範囲を見出しの幅いっぱいに広げる */
+.sidebar__section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.sidebar__section-toggle:hover {
+  background-color: var(--color-sidebar-hover);
+  color: var(--color-sidebar-text-active);
+}
+
+.sidebar__section-toggle:focus-visible,
+.sidebar__link:focus-visible {
+  outline: 2px solid var(--color-sidebar-accent);
+  outline-offset: -2px;
+}
+
+/* 見出しの文字を主にするため、矢印は一段落とす */
+.sidebar__chevron {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  opacity: 0.7;
+  transition:
+    transform var(--sidebar-transition-duration) ease,
+    opacity 0.15s ease;
+}
+
+.sidebar__section-toggle:hover .sidebar__chevron {
+  opacity: 1;
+}
+
+/* 閉じているときは右向き（開くと下向きに戻る） */
+.sidebar__section-toggle.is-closed .sidebar__chevron {
+  transform: rotate(-90deg);
 }
 
 .sidebar__link {
@@ -157,16 +276,27 @@ const visibleSections = computed(() =>
     color 0.15s ease;
 }
 
+.sidebar__link + .sidebar__link {
+  margin-top: 2px;
+}
+
 .sidebar__link:hover,
-.sidebar__link.is-active {
+.sidebar__link.is-pending {
   background-color: var(--color-sidebar-hover);
   color: var(--color-sidebar-text-active);
 }
 
-.sidebar__icon {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
+/* 現在地は hover と別の面にし、左端のバーと太字で示す（バーは inset の影で描き、幅をずらさない） */
+.sidebar__link.is-active {
+  background-color: var(--color-sidebar-active-bg);
+  box-shadow: inset 3px 0 0 var(--color-sidebar-accent);
+  color: var(--color-sidebar-text-active);
+  font-weight: 600;
+}
+
+/* 読み込み中の回転マークはラベルの右端に寄せる */
+.sidebar__pending {
+  margin-left: auto;
 }
 
 /* 0s にすると visibility の遅延も 0s になり、その場で切り替わる */

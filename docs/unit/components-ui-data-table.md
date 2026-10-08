@@ -12,3 +12,6 @@
 | DTB-04 | `rowKey` に `id` 以外を指定し、行に `id` が無い | マウントする | 行が描画される（キー解決に失敗しない） | 実装済 |
 | DTB-05 | 行ごとに違う値を返す `rowClass` 関数を渡す | マウントする | 各行にその戻り値のクラスが付く（`null` を返した行には付かない） | 実装済 |
 | DTB-06 | `rowClass` を渡さない | マウントする | どの行にも追加のクラスが付かない（既定で何も足さない） | 実装済 |
+| DTB-07 | `clickable` を渡す | 2 行目を click | `row-click` がその行のデータ 1 つを引数に 1 回発火する。行には `is-clickable` クラスと `tabindex="0"` が付く | 実装済 |
+| DTB-08 | `clickable` を渡す | 行で Enter を押す / セルの中の要素で Enter を押す | 行で押したときだけ `row-click` が発火し、セルの中身からの Enter では発火しない | 実装済 |
+| DTB-09 | `clickable` を渡さない | 行を click / Enter | `row-click` は発火せず、行に `tabindex` が付かない | 実装済 |

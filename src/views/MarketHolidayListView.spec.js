@@ -8,9 +8,9 @@ import { server } from '@/mocks/server'
 import { canceledMarketHolidays, marketHolidays } from '@/mocks/fixtures/marketHolidays'
 import { MARKET_HOLIDAYS_PAGE_SIZE } from '@/stores/marketHolidays'
 import {
-  MARKET_HOLIDAY_TYPE_DEFAULT,
+  MARKET_HOLIDAY_EARLY_CLOSE_LABEL,
   MARKET_HOLIDAY_TYPE_OPTIONS,
-  formatMarketHolidayType,
+  formatMarketHolidayEarlyClose,
 } from '@/utils/marketHolidayTypes'
 import MarketHolidayListView from './MarketHolidayListView.vue'
 
@@ -42,11 +42,15 @@ const secondPage = marketHolidays.slice(PAGE_SIZE, PAGE_SIZE * 2)
 const ODD_OFFSET = 7
 const oddPage = marketHolidays.slice(ODD_OFFSET, ODD_OFFSET + PAGE_SIZE)
 
-// 絞り込みはフィクスチャ先頭の年をそのまま使う（年もハードコードしない）
+// 登録用の日付を作るための年。フィクスチャ先頭の年をそのまま使う（年もハードコードしない）
 const YEAR = String(marketHolidays[0].休場日).slice(0, 4)
-const DATE_FROM = `${YEAR}-01-01`
-const DATE_TO = `${YEAR}-12-31`
-const inYear = marketHolidays.filter((holiday) => String(holiday.休場日).startsWith(YEAR))
+
+/*
+ * 検索は画面モックどおり「日付」1 欄（その日だけを探す）。フィクスチャの 2 件目の日付を使い、
+ * その日の行（休場日は一意なので 1 件）を期待値にする。
+ */
+const FILTER_DATE = toIsoDate(marketHolidays[1].休場日)
+const onFilterDate = marketHolidays.filter((holiday) => toIsoDate(holiday.休場日) === FILTER_DATE)
 
 // 登録に使う「フィクスチャに無い日付」もフィクスチャから導く（既存日付と衝突したら別日になる）
 const existingDates = new Set(marketHolidays.map((holiday) => toIsoDate(holiday.休場日)))
@@ -88,13 +92,11 @@ const DELETE_TARGET_DATE = toIsoDate(DELETE_TARGET.休場日)
 const NOT_FOUND_MESSAGE = `指定された海外休場日が存在しません: ${DELETE_TARGET_ID}`
 
 /*
- * 「最終ページが 1 件だけ」を作るための絞り込み。
- * 一覧は降順なので、末尾から数えて PAGE_SIZE + 1 件目までを範囲にすると
- * 2 ページ目がちょうど 1 件になる。
+ * 「最終ページが 1 件だけ」を作るための一覧。検索は 1 日指定になり、絞り込みで
+ * 2 ページ目を作れなくなったので、フィクスチャの先頭 PAGE_SIZE + 1 件だけを返す応答に差し替える。
  */
-const LAST_PAGE_TARGET = marketHolidays[PAGE_SIZE]
-const LAST_PAGE_FROM = toIsoDate(LAST_PAGE_TARGET.休場日)
-const LAST_PAGE_TO = toIsoDate(marketHolidays[0].休場日)
+const LAST_PAGE_ROWS = marketHolidays.slice(0, PAGE_SIZE + 1)
+const LAST_PAGE_TARGET = LAST_PAGE_ROWS[PAGE_SIZE]
 
 const Page = { render: () => h('div') }
 
@@ -136,9 +138,11 @@ const countText = (wrapper) => wrapper.find('[data-testid="market-holidays-count
 const exists = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`).exists()
 const addDateInput = (wrapper) => wrapper.find('[data-testid="market-holidays-add-date"]')
 const addReasonInput = (wrapper) => wrapper.find('[data-testid="market-holidays-add-reason"]')
-const addTypeSelect = (wrapper) => wrapper.find('[data-testid="market-holidays-add-holiday-type"]')
+// 新規追加の「短縮取引日として登録する」チェック（画面モックの short_trading_day）
+const addShortTradingCheckbox = (wrapper) =>
+  wrapper.find('[data-testid="market-holidays-add-short-trading-day"]')
 const searchTypeSelect = (wrapper) => wrapper.find('[data-testid="market-holidays-holiday-type"]')
-// 一覧の休場区分セル（行ごとに 1 つ）
+// 一覧の短縮取引日セル（行ごとに 1 つ。短縮取引日は終了時刻のバッジ、終日休場は —）
 const typeCells = (wrapper) =>
   rows(wrapper).map((row) => row.find('.market-holiday-list__type').text())
 const headers = (wrapper) => wrapper.findAll('th').map((th) => th.text())
@@ -189,6 +193,36 @@ function gateListResponse() {
     }),
   )
   return release
+}
+
+/**
+ * 渡した行だけを持つ一覧として振る舞うハンドラ（一覧の取得と削除）。
+ * 既定のフィクスチャでは作れない件数（最終ページが 1 件だけ）を再現するために使う。
+ *
+ * @param {object[]} initialRows バックエンドの生の形の行
+ */
+function serveOnly(initialRows) {
+  let current = [...initialRows]
+  server.use(
+    http.get('*/api/masters/market-holidays', ({ request }) => {
+      const offset = Number(new URL(request.url).searchParams.get('offset') ?? 0)
+      return HttpResponse.json({
+        total: current.length,
+        limit: PAGE_SIZE,
+        offset,
+        holidays: current.slice(offset, offset + PAGE_SIZE),
+      })
+    }),
+    http.delete('*/api/masters/market-holidays/:id', ({ params }) => {
+      const target = current.find((row) => toId(row) === params.id)
+      current = current.filter((row) => row !== target)
+      return HttpResponse.json({
+        success: true,
+        holiday: { ...target, 取消区分: 1 },
+        message: '海外休場日を削除しました',
+      })
+    }),
+  )
 }
 
 const deleteNotFoundHandler = () =>
@@ -259,7 +293,7 @@ describe('MarketHolidayListView', () => {
 
     expect(exists(wrapper, 'market-holidays-error')).toBe(true)
     expect(exists(wrapper, 'market-holidays-search')).toBe(true)
-    expect(exists(wrapper, 'market-holidays-date-from')).toBe(true)
+    expect(exists(wrapper, 'market-holidays-date')).toBe(true)
   })
 
   it('[MHL-06] offset 付きの URL で開くとそのページを復元する', async () => {
@@ -298,20 +332,21 @@ describe('MarketHolidayListView', () => {
     const { wrapper, router } = await mountView()
     await settle()
 
-    await wrapper.find('[data-testid="market-holidays-date-from"]').setValue(DATE_FROM)
-    await wrapper.find('[data-testid="market-holidays-date-to"]').setValue(DATE_TO)
+    await wrapper.find('[data-testid="market-holidays-date"]').setValue(FILTER_DATE)
     await wrapper.find('[data-testid="market-holidays-search"]').trigger('submit')
     await settle()
 
-    expect(router.currentRoute.value.query).toEqual({ date_from: DATE_FROM, date_to: DATE_TO })
-    expect(rows(wrapper)).toHaveLength(inYear.length)
-    expect(countText(wrapper)).toBe(`${inYear.length} 件`)
+    // 1 日指定なので URL には date だけが乗る（期間の date_from / date_to は使わない）
+    expect(router.currentRoute.value.query).toEqual({ date: FILTER_DATE })
+    expect(rows(wrapper)).toHaveLength(onFilterDate.length)
+    expect(rows(wrapper)[0].text()).toContain(FILTER_DATE)
+    expect(countText(wrapper)).toBe(`${onFilterDate.length} 件`)
   })
 
   it('[MHL-10] クリアで URL クエリが空になり全件に戻る', async () => {
-    const { wrapper, router } = await mountView({ date_from: DATE_FROM, date_to: DATE_TO })
+    const { wrapper, router } = await mountView({ date: FILTER_DATE })
     await settle()
-    expect(rows(wrapper)).toHaveLength(inYear.length)
+    expect(rows(wrapper)).toHaveLength(onFilterDate.length)
 
     await wrapper.find('[data-testid="market-holidays-search-clear"]').trigger('click')
     await settle()
@@ -321,11 +356,10 @@ describe('MarketHolidayListView', () => {
   })
 
   it('[MHL-11] URL の日付条件が入力欄に反映される', async () => {
-    const { wrapper } = await mountView({ date_from: DATE_FROM, date_to: DATE_TO })
+    const { wrapper } = await mountView({ date: FILTER_DATE })
     await settle()
 
-    expect(wrapper.find('[data-testid="market-holidays-date-from"]').element.value).toBe(DATE_FROM)
-    expect(wrapper.find('[data-testid="market-holidays-date-to"]').element.value).toBe(DATE_TO)
+    expect(wrapper.find('[data-testid="market-holidays-date"]').element.value).toBe(FILTER_DATE)
   })
 
   it('[MHL-13] 「新規追加」で空の追加モーダルが開く', async () => {
@@ -474,11 +508,8 @@ describe('MarketHolidayListView', () => {
   })
 
   it('[MHL-22] 最終ページの最後の 1 件を消すと 1 ページ前に戻る', async () => {
-    const { wrapper, router } = await mountView({
-      date_from: LAST_PAGE_FROM,
-      date_to: LAST_PAGE_TO,
-      offset: String(PAGE_SIZE),
-    })
+    serveOnly(LAST_PAGE_ROWS)
+    const { wrapper, router } = await mountView({ offset: String(PAGE_SIZE) })
     await settle()
     expect(rows(wrapper)).toHaveLength(1)
 
@@ -489,26 +520,25 @@ describe('MarketHolidayListView', () => {
     await settle()
     await settle()
 
-    // offset だけが消え、絞り込み条件は残る
-    expect(router.currentRoute.value.query).toEqual({
-      date_from: LAST_PAGE_FROM,
-      date_to: LAST_PAGE_TO,
-    })
+    // 1 ページ目に戻ったので offset が消える
+    expect(router.currentRoute.value.query).toEqual({})
     expect(rows(wrapper)).toHaveLength(PAGE_SIZE)
     expect(countText(wrapper)).toBe(`${PAGE_SIZE} 件`)
   })
 
-  it('[MHL-23] 一覧に休場区分の列が出てコードではなく表示名が入る', async () => {
+  it('[MHL-23] 一覧に短縮取引日の列が出て、短縮取引日の行だけ終了時刻が入る', async () => {
     const { wrapper } = await mountView()
     await settle()
 
-    expect(headers(wrapper)).toContain('休場区分')
+    expect(headers(wrapper)).toContain('短縮取引日')
     // 期待値はフィクスチャの生の値を変換して作る（表示名を並べ書きしない）
     expect(typeCells(wrapper)).toEqual(
-      firstPage.map((holiday) => formatMarketHolidayType(holiday.休場区分)),
+      firstPage.map((holiday) => formatMarketHolidayEarlyClose(holiday.休場区分)),
     )
-    // 生のコードがそのまま出ていないこと
+    // 生のコードがそのまま出ていないこと。終日休場の行は —
     expect(typeCells(wrapper)).not.toContain(SHORTENED.value)
+    expect(typeCells(wrapper)).toContain('—')
+    expect(typeCells(wrapper)).toContain(MARKET_HOLIDAY_EARLY_CLOSE_LABEL)
   })
 
   it('[MHL-24] 休場区分を選んで検索すると URL に条件が乗り絞り込まれる', async () => {
@@ -522,7 +552,7 @@ describe('MarketHolidayListView', () => {
     expect(router.currentRoute.value.query).toEqual({ holiday_type: SHORTENED.value })
     expect(rows(wrapper)).toHaveLength(shortenedHolidays.length)
     expect(countText(wrapper)).toBe(`${shortenedHolidays.length} 件`)
-    expect(new Set(typeCells(wrapper))).toEqual(new Set([SHORTENED.label]))
+    expect(new Set(typeCells(wrapper))).toEqual(new Set([MARKET_HOLIDAY_EARLY_CLOSE_LABEL]))
   })
 
   it('[MHL-25] URL の休場区分がセレクトと一覧に復元される', async () => {
@@ -543,27 +573,28 @@ describe('MarketHolidayListView', () => {
     expect(countText(wrapper)).toBe(`${TOTAL} 件`)
   })
 
-  it('[MHL-27] 追加モーダルの休場区分は既定値で開き、開き直すとリセットされる', async () => {
+  it('[MHL-27] 追加モーダルの短縮取引日チェックは外れた状態で開き、開き直すとリセットされる', async () => {
     const { wrapper } = await mountView()
     await settle()
 
     await openAddModal(wrapper)
-    expect(addTypeSelect(wrapper).element.value).toBe(MARKET_HOLIDAY_TYPE_DEFAULT)
+    expect(addShortTradingCheckbox(wrapper).element.checked).toBe(false)
 
-    await addTypeSelect(wrapper).setValue(SHORTENED.value)
+    await addShortTradingCheckbox(wrapper).setValue(true)
+    expect(addShortTradingCheckbox(wrapper).element.checked).toBe(true)
     await wrapper.find('[data-testid="market-holidays-add-cancel"]').trigger('click')
     await openAddModal(wrapper)
 
-    expect(addTypeSelect(wrapper).element.value).toBe(MARKET_HOLIDAY_TYPE_DEFAULT)
+    expect(addShortTradingCheckbox(wrapper).element.checked).toBe(false)
   })
 
-  it('[MHL-28] 休場区分を選んで追加するとその区分で登録される', async () => {
+  it('[MHL-28] 短縮取引日にチェックして追加すると短縮取引で登録される', async () => {
     const { wrapper } = await mountView()
     await settle()
     await openAddModal(wrapper)
 
     await fillAdd(wrapper, NEW_DATE, NEW_REASON)
-    await addTypeSelect(wrapper).setValue(SHORTENED.value)
+    await addShortTradingCheckbox(wrapper).setValue(true)
     await wrapper.find('[data-testid="market-holidays-add-submit"]').trigger('click')
     // POST → 一覧の再取得 → 再描画 の 2 往復を待つ
     await settle()
@@ -580,6 +611,7 @@ describe('MarketHolidayListView', () => {
 
     expect(rows(wrapper)).toHaveLength(shortenedHolidays.length + 1)
     expect(rows(wrapper).map((row) => row.text())).toContainEqual(expect.stringContaining(NEW_DATE))
+    expect(new Set(typeCells(wrapper))).toEqual(new Set([MARKET_HOLIDAY_EARLY_CLOSE_LABEL]))
   })
 
   it('[MHL-29] 取消済みの日付を追加すると警告が出てモーダルは開いたままになる', async () => {

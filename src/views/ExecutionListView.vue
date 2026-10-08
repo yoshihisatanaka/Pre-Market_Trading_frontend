@@ -16,16 +16,16 @@ import { useCodesStore } from '@/stores/codes'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useExecutionsStore } from '@/stores/executions'
 import { downloadBlob } from '@/utils/download'
-import { formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
+import { formatJpyUnit, formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
 
 /*
  * 約定照会。一部出来 / 全部出来 / 取消済（出来有）の約定を検索する（読むだけの一覧）。
  *   - ヘッダの「CSV出力」は、いま一覧に出ている検索条件で GET /executions/export-csv を落とす
- *   - 預託先（検索条件の「預託先区分」と列の「預託先」）は管理者・管理責任者にだけ出す（GET /auth/me のロール）
+ *   - 預託先（検索条件の「預託先区分」と列の「預託先」）は預託先参照権限のある操作者にだけ出す
+ *     （GET /auth/me の permissions.depositary。既定は manager / supervisor が持つ）
  *
  * 画面モック（premarket-order-202609 の execution_management.html）からの意図的なずれ:
- *   - 約定金額は円ではなく USD の約定代金を出す（ExecutionItem が円貨の項目を持たない）
- *   - 「一部出来」の件数カードは '—' のまま（ExecutionSummary に一部出来の件数が無い）
+ *   - 約定金額（円）の手前に USD の約定代金も出す（円は約定代金 × 直近レートの概算なので、元の値も並べる）
  *   - 一覧カードのヘッダにある 2 つ目の CSV ボタンは置かない（ヘッダの「CSV出力」と同じ操作。
  *     MasterListCard のヘッダは件数の表示が占めている）
  *   - 件数カードの売買の色は表と同じ 買=赤 / 売=青 に揃えた（モックはカードだけ逆）
@@ -39,21 +39,16 @@ const { items, total, limit, offset, loading, error, isEmpty, summary, exporting
   storeToRefs(store)
 
 /*
- * 預託先を見られるロール（値は /auth/me のロールコード）。
- * 画面モックは manager と admin に出すが、admin は開発中用のロールなので、
- * 実在する上位のロールである管理責任者（supervisor）に置き換えた。
+ * 預託先を見られるか。ロールではなく /auth/me の預託先参照権限（permissions.depositary）で決める
+ * （docs/api/requests.md #26 / #39。サーバも同じ権限で 注文ルート を null にし、route を無視する）。
  *
  * /auth/me を読み終える前と、読めなかったときは出さない（誤って出さない側に倒す。
  * stores/currentOperator.js と同じ方針）。ensureLoaded は main.js が起動時に始めているので
  * 通常は何もしない（ガードを通らない単体テストのための保険）。
  */
-const ROUTE_VIEWER_ROLES = ['manager', 'supervisor']
-
 const currentOperator = useCurrentOperatorStore()
 currentOperator.ensureLoaded()
-const canViewRoute = computed(() =>
-  ROUTE_VIEWER_ROLES.includes(currentOperator.operator?.roleCode),
-)
+const canViewRoute = computed(() => currentOperator.can('depositary'))
 
 /** 売買区分。値はアプリ内の向きで、コードへの変換は api 層が行う */
 const SIDE_OPTIONS = [
@@ -62,11 +57,9 @@ const SIDE_OPTIONS = [
 ]
 
 /*
- * 出来状況。選択肢はコードマスタ `約定出来状況`（依頼中の契約提案）から来て、値は処理状況コード
- * （実 API の status にそのまま載る）。App.vue がコードマスタを読み終えてから画面を描くので、
- * setup の時点で揃っている（URL クエリの検査にもそのまま使える）。
- * 取消済は 032 / 034 の 2 つがあるが、status は 1 つのコードしか受けないので 034 だけで絞る。
- * TODO(処理実装): 032 も拾う指定のしかたをバックエンドに確認する
+ * 出来状況。選択肢はコードマスタ `約定出来状況` から来て、値は処理状況コード。
+ * App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で揃っている
+ * （URL クエリの検査にもそのまま使える）。取消済（034）は api 層が 032,034 に広げて送る。
  */
 const codes = useCodesStore()
 const STATUS_OPTIONS = codes.optionsFor('約定出来状況')
@@ -92,8 +85,8 @@ const STATUS_DISPLAY = {
 const SIDE_LABELS = { buy: '買', sell: '売' }
 
 /**
- * 列は画面モックの並びどおり（約定金額だけ USD に置き換えた。冒頭のコメント）。
- * 末尾の「預託先」は見られるロールのときだけ足す
+ * 列は画面モックの並びどおり（約定金額（円）の手前に USD の約定代金を足した。冒頭のコメント）。
+ * 末尾の「預託先」は預託先参照権限があるときだけ足す
  */
 const BASE_COLUMNS = [
   { key: 'id', label: '約定ID' },
@@ -106,6 +99,7 @@ const BASE_COLUMNS = [
   { key: 'quantity', label: '約定数量', numeric: true },
   { key: 'price', label: '約定単価(USD)', numeric: true },
   { key: 'amountUsd', label: '約定代金(USD)', numeric: true },
+  { key: 'amountJpy', label: '約定金額(円)', numeric: true },
   { key: 'executedAt', label: '約定日時' },
   { key: 'status', label: '出来状況' },
 ]
@@ -153,6 +147,7 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
 /*
  * 件数カード。集計は一覧と同じ応答に入っている。
  * 取得中とエラーのときは '—' にする（確定前の値を出すと、前回の集計が新しい結果に見える）。
+ * 「一部出来」だけは約定の行数ではなく一部出来の注文の件数（ExecutionSummary の 一部出来件数）。
  */
 const summaryReady = computed(() => !loading.value && !error.value && summary.value !== null)
 
@@ -175,8 +170,12 @@ const stats = computed(() => [
     value: summaryReady.value ? summary.value.sellCount : null,
     tone: 'sell',
   },
-  // TODO(処理実装): ExecutionSummary に一部出来の件数が入ったら api 層の toSummary() に足して出す
-  { testid: 'executions-summary-partial', label: '一部出来', value: null, tone: 'partial' },
+  {
+    testid: 'executions-summary-partial',
+    label: '一部出来',
+    value: summaryReady.value ? summary.value.partialCount : null,
+    tone: 'partial',
+  },
 ])
 
 /**
@@ -366,6 +365,8 @@ async function exportCsv() {
         <template #cell-quantity="{ value }">{{ formatQuantity(value) }}</template>
         <template #cell-price="{ value }">{{ priceLabel(value) }}</template>
         <template #cell-amountUsd="{ value }">{{ formatUsd(value) }}</template>
+        <!-- 円貨は概算（約定代金 × 直近の USD レート）。為替未登録なら null で '—' -->
+        <template #cell-amountJpy="{ value }">{{ formatJpyUnit(value) }}</template>
 
         <template #cell-executedAt="{ value }">
           <span class="execution-list__at">{{ formatMonthDayTime(value) }}</span>

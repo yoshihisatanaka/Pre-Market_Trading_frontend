@@ -59,6 +59,13 @@
   --color-loss: #2b6cb0;
 
   /*
+   * 仮計算への導線（外株預り・預り検索の「仮計算」）。発注の売買色と並べても紛れない灰青。
+   * モックの .calc-entry-btn / .calc-row-btn / .direct-order-calc
+   */
+  --color-calculation: #65778e;
+  --color-calculation-hover: #506176;
+
+  /*
    * みずほ注文締めカードの操作ボタン（「みずほ注文締め」「注文ファイル作成」で共通）。
    * モックの .mizuho-close-action / .mizuho-order-file-action。押せないときは淡色面に灰色の文字
    */
@@ -75,6 +82,9 @@
   --color-sidebar-text: #d3dae3;
   --color-sidebar-text-active: #ffffff;
   --color-sidebar-section: #aeb9c7;
+  --color-sidebar-active-bg: #2f4a6b; /* 現在地の面。hover より青みを足して区別する */
+  --color-sidebar-accent: #63b3ed; /* 現在地の左端のバー */
+  --color-sidebar-divider: #243142; /* 区分の区切り線（border より一段控えめ） */
 
   /*
    * 市場ステータス（ヘッダのバッジ）。モック 08986d1 の base.html から。
@@ -116,7 +126,7 @@
   --space-6: 32px;
 
   /* typography */
-  /* Noto Sans JP はモックの指定に合わせる（フォントファイルは同梱しない。無ければ以降にフォールバック） */
+  /* Noto Sans JP はモックの指定に合わせる（Web フォントは src/main.js が @fontsource/noto-sans-jp から読む） */
   --font-family-base: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic UI', Meiryo, sans-serif;
   --font-family-numeric: 'SF Mono', Consolas, 'Roboto Mono', monospace;
   --font-size-xs: 11px;

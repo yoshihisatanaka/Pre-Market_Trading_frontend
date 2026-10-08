@@ -5,8 +5,8 @@
  * 値は同じ検索条件での集計（ページに依らない）。取得中・失敗中は呼び出し側が null を渡し、
  * すべて '—' になる（前回の値を新しい条件の結果に見せない）。
  *
- * 「一部出来」は常に '—'。実 API の ExecutionSummary に一部出来の件数が無いため
- * （src/api/mizuhoExecutions.js の冒頭コメント）。
+ * 「一部出来」は一部出来の**注文**の件数（ExecutionSummary の 一部出来件数）。ほかの 3 枚は約定の行数で、
+ * 単位が違う（src/api/mizuhoExecutions.js の MizuhoExecutionSummary）。
  *
  * 色は画面モックの件数カードではなく、一覧の売買列と同じ 買=赤 / 売=青（tokens.css）にそろえる。
  * モックはカードだけ 買=青 / 売=赤 で、同じ画面の中で色の意味が逆になっていたため。
@@ -28,8 +28,7 @@ const cards = computed(() => [
   { key: 'total', label: '総約定件数', value: props.summary?.executionCount, tone: null },
   { key: 'buy', label: '買い約定', value: props.summary?.buyCount, tone: 'buy' },
   { key: 'sell', label: '売り約定', value: props.summary?.sellCount, tone: 'sell' },
-  // TODO(処理実装): ExecutionSummary に一部出来の件数が入ったら値を渡す
-  { key: 'partial', label: '一部出来', value: null, tone: 'partial' },
+  { key: 'partial', label: '一部出来', value: props.summary?.partialCount, tone: 'partial' },
 ])
 </script>
 

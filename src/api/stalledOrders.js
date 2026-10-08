@@ -9,8 +9,9 @@ import { apiClient } from './client'
  * **この API はバックエンド未実装。** openapi.json に該当パスが無いため、形は実 API の
  * `OrderItemResponse` に寄せた仮置きで、モック（src/mocks/）だけが応答する。
  * 仕様が来たらこの層の変換だけを直せば、ストアと画面は無変更で済む。
- * コンファメーション CSV の取込（importConfirmationCsv）も同じく未実装で、形は
- * docs/api/requests.md の「契約提案」に書いた提案（応答は既存の CsvImportResponse）。
+ * コンファメーション CSV の取込（importConfirmationCsv）は、docs/api/requests.md の「契約提案」に
+ * 書いた形のまま 2026-10-07 の取り込みで仕様に入った（POST /operations/stalled-orders/confirmation-import。
+ * 応答は既存の CsvImportResponse）。MSW のハンドラは消してあり、実 API へ素通しする。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり:
  *   - 一覧の 2 本が日本語キー（注文エラー / 注文中）。バックエンドへ渡した依頼書の形に合わせてある

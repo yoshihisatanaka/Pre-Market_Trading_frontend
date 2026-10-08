@@ -38,10 +38,18 @@ const LIST_KEY = 'exchange_rates'
 const CURRENCY_CODE = 'USD'
 
 /*
- * 試験用に書くレート。50〜300 円の範囲内（警告が出ない）で、途中で落ちたときに人が残骸と
+ * 試験用に書く公示（社内）レート。50〜300 円の範囲内（警告が出ない）で、途中で落ちたときに人が残骸と
  * 見分けられる値に寄せる。開始時の現在レートと同じ値は使わない（変わったことを確かめられない）。
  */
 const RATE_CANDIDATES = [123.41, 123.42, 123.43, 123.44, 123.45, 123.46]
+/*
+ * 公示レートと組にして書く源泉レート。画面モックの入力例（公示 150.25 / 源泉 149.80）と同じく
+ * 公示より 0.45 円低くする（123.41 → 122.96）。組にしておけば、どの公示レートと一緒に保存した
+ * 源泉レートかが値だけで判る。
+ */
+function withholdingOf(rate) {
+  return Math.round((rate - 0.45) * 100) / 100
+}
 // 範囲外の警告を出す値（src/api/fxRates.js の validateFxRate の注記: 一般的な範囲 50〜300 円）
 const OUT_OF_RANGE_RATE = '350'
 // FxRequest の 為替レート は exclusiveMinimum: 0 なので実 API が拒否する値
@@ -60,9 +68,17 @@ function toApiDate(isoDate) {
   return Number(isoDate.replaceAll('-', ''))
 }
 
-/** 小数 2 桁の表示（FxRateMasterView.vue の formatRate と同じ） */
+/** 小数 4 桁の表示。null は「—」（FxRateMasterView.vue の formatRate と同じ） */
 function rateText(value) {
-  return Number(value).toFixed(2)
+  return typeof value === 'number' ? value.toFixed(4) : '—'
+}
+
+/** 保存完了の文言（FxRateMasterView.vue の submitUpdate と同じ） */
+function noticeText(rate, withholdingRate) {
+  return (
+    `USD/JPY の公示（社内）レートを ${rateText(rate)} 円、` +
+    `源泉レートを ${rateText(withholdingRate)} 円に更新しました。`
+  )
 }
 
 /** 開始時に控えた日付。日付をまたいだ実行で戻す対象を取り違えないよう、以降はこれだけを使う */
@@ -76,7 +92,7 @@ let originalLatest = null
 /** 開始時の今日の USD の行（取消済みも含む。無ければ null） */
 let originalToday = null
 /** 試験用のレート（beforeAll が開始時の現在レートを除いて選ぶ） */
-const RATE = { smoke: 0, change: 0, alt: 0, screen: 0 }
+const RATE = { smoke: 0, change: 0, alt: 0, screen: 0, keep: 0 }
 
 /** 今日以前の最新レート（LatestFxResponse）。404 なら null */
 async function fetchLatest(api) {
@@ -129,10 +145,16 @@ async function openPage(page) {
   await assertRealApi(page)
 }
 
-async function openUpdateWith(page, value) {
+/**
+ * モーダルを開いて公示（社内）レートと源泉レートを入れる。源泉レートも必須なので、
+ * withholding を省略したときは公示レートと組の値（withholdingOf）を入れる。
+ * 公示レートだけを試す回（範囲外・0）は、源泉レートに正しい値を明示して渡す。
+ */
+async function openUpdateWith(page, value, withholding = withholdingOf(Number(value))) {
   await page.getByTestId('fx-update').click()
   await expect(page.getByTestId('fx-update-form')).toBeVisible()
   await page.getByTestId('fx-rate-input').fill(value)
+  await page.getByTestId('fx-withholding-rate-input').fill(String(withholding))
 }
 
 /** 画面から送られる登録（POST /api/masters/fx）か変更（PUT /api/masters/fx/{id}）の応答を待つ */
@@ -154,11 +176,26 @@ function waitForValidate(page) {
   )
 }
 
-async function expectApiRate(api, rate) {
+/** 実 API の latest が今日の基準日で、公示レート（と渡されたなら源泉レート）がその値 */
+async function expectApiRate(api, rate, withholdingRate) {
   const latest = await fetchLatest(api)
   expect(latest, '実 API の latest が 404 になった').toBeTruthy()
   expect(latest.基準日).toBe(TODAY_API)
   expect(latest.為替レート).toBeCloseTo(rate, 2)
+  if (withholdingRate !== undefined) {
+    expect(latest.源泉レート, '実 API の latest の源泉レートが保存した値でない').toBeCloseTo(
+      withholdingRate,
+      2,
+    )
+  }
+}
+
+/** 公示カードと源泉カードの値・基準日が保存した値と今日になっている */
+async function expectCards(page, rate, withholdingRate) {
+  await expect(page.getByTestId('fx-rate')).toHaveText(rateText(rate))
+  await expect(page.getByTestId('fx-base-date')).toHaveText(TODAY)
+  await expect(page.getByTestId('fx-withholding-rate')).toHaveText(rateText(withholdingRate))
+  await expect(page.getByTestId('fx-withholding-base-date')).toHaveText(TODAY)
 }
 
 /**
@@ -198,7 +235,8 @@ async function restoreToday(api) {
   }
 }
 
-// 登録または変更 → 再読み込み → 変更 → 警告 → 拒否 → 競合 は 1 本の流れなので順に実行する
+// 登録または変更 → 再読み込み → 変更 → 警告 → 拒否 → 競合 → 源泉レートの据え置き は
+// 1 本の流れなので順に実行する
 test.describe.configure({ mode: 'serial' })
 
 test.describe('為替マスタ（実 API 接続）', () => {
@@ -214,8 +252,10 @@ test.describe('為替マスタ（実 API 接続）', () => {
     snapshotTaken = true
 
     const current = originalLatest ? rateText(originalLatest.為替レート) : ''
-    const [smoke, change, alt, screen] = RATE_CANDIDATES.filter((v) => rateText(v) !== current)
-    Object.assign(RATE, { smoke, change, alt, screen })
+    const [smoke, change, alt, screen, keep] = RATE_CANDIDATES.filter(
+      (v) => rateText(v) !== current,
+    )
+    Object.assign(RATE, { smoke, change, alt, screen, keep })
 
     console.log(
       `[beforeAll] 今日=${TODAY} latest=${JSON.stringify(originalLatest)} ` +
@@ -238,6 +278,9 @@ test.describe('為替マスタ（実 API 接続）', () => {
     )
     expect(latest?.為替レート ?? null, '終了時の latest のレートが開始時と違う').toBe(
       originalLatest?.為替レート ?? null,
+    )
+    expect(latest?.源泉レート ?? null, '終了時の latest の源泉レートが開始時と違う').toBe(
+      originalLatest?.源泉レート ?? null,
     )
   })
 
@@ -262,8 +305,17 @@ test.describe('為替マスタ（実 API 接続）', () => {
     await expect(page.getByTestId('fx-current')).toBeVisible()
     await expect(page.getByTestId('fx-rate')).toHaveText(rateText(latest.為替レート))
     await expect(page.getByTestId('fx-base-date')).toHaveText(toIsoDate(latest.基準日))
+    // 源泉レートは同じ行の項目なので、基準日も同じ。未設定（null）なら「—」
+    await expect(page.getByTestId('fx-withholding-card')).toBeVisible()
+    await expect(page.getByTestId('fx-withholding-rate')).toHaveText(
+      rateText(latest.源泉レート ?? null),
+    )
+    await expect(page.getByTestId('fx-withholding-base-date')).toHaveText(
+      toIsoDate(latest.基準日),
+    )
     if (detail.更新者) {
       await expect(page.getByTestId('fx-updated')).toContainText(detail.更新者)
+      await expect(page.getByTestId('fx-withholding-updated')).toContainText(detail.更新者)
     }
   })
 
@@ -280,15 +332,17 @@ test.describe('為替マスタ（実 API 接続）', () => {
     const body = await logExchange('FXR-02', res)
     expect(res.ok(), `実 API がレート更新を受理しない: ${body}`).toBe(true)
 
+    // 源泉レートは部分更新に任せず、常に本文に載せて送っている
+    expect(res.request().postDataJSON().源泉レート).toBeCloseTo(withholdingOf(RATE.smoke), 2)
+
     await expect(page.getByTestId('fx-update-form')).toHaveCount(0)
     await expect(page.getByTestId('fx-notice')).toHaveText(
-      `USD/JPY のレートを ${rateText(RATE.smoke)} 円に更新しました。`,
+      noticeText(RATE.smoke, withholdingOf(RATE.smoke)),
     )
-    await expect(page.getByTestId('fx-rate')).toHaveText(rateText(RATE.smoke))
-    await expect(page.getByTestId('fx-base-date')).toHaveText(TODAY)
+    await expectCards(page, RATE.smoke, withholdingOf(RATE.smoke))
 
     const api = await apiContext(playwright)
-    await expectApiRate(api, RATE.smoke)
+    await expectApiRate(api, RATE.smoke, withholdingOf(RATE.smoke))
     await api.dispose()
   })
 
@@ -301,8 +355,7 @@ test.describe('為替マスタ（実 API 接続）', () => {
 
     await openPage(page)
 
-    await expect(page.getByTestId('fx-rate')).toHaveText(rateText(RATE.smoke))
-    await expect(page.getByTestId('fx-base-date')).toHaveText(TODAY)
+    await expectCards(page, RATE.smoke, withholdingOf(RATE.smoke))
     if (detail.更新者) {
       await expect(page.getByTestId('fx-updated')).toContainText(detail.更新者)
     }
@@ -341,15 +394,15 @@ test.describe('為替マスタ（実 API 接続）', () => {
     expect(res.status(), `実 API が変更を受理しない: ${body}`).toBe(200)
 
     await expect(page.getByTestId('fx-update-form')).toHaveCount(0)
+    expect(sent.源泉レート).toBeCloseTo(withholdingOf(RATE.change), 2)
     await expect(page.getByTestId('fx-notice')).toHaveText(
-      `USD/JPY のレートを ${rateText(RATE.change)} 円に更新しました。`,
+      noticeText(RATE.change, withholdingOf(RATE.change)),
     )
-    await expect(page.getByTestId('fx-rate')).toHaveText(rateText(RATE.change))
-    await expect(page.getByTestId('fx-base-date')).toHaveText(TODAY)
+    await expectCards(page, RATE.change, withholdingOf(RATE.change))
 
     // 今日の行は増えず、同じ ID のまま値だけが変わる
     const after = await fetchTodayRows(api)
-    await expectApiRate(api, RATE.change)
+    await expectApiRate(api, RATE.change, withholdingOf(RATE.change))
     await api.dispose()
     expect(after).toHaveLength(before.length)
     expect(after.filter((row) => row.取消区分 === 0).map((row) => row.ID)).toEqual([held.ID])
@@ -361,7 +414,8 @@ test.describe('為替マスタ（実 API 接続）', () => {
   }) => {
     await openPage(page)
 
-    await openUpdateWith(page, OUT_OF_RANGE_RATE)
+    // 源泉レートは範囲内の値にして、警告の原因を公示レートだけにする
+    await openUpdateWith(page, OUT_OF_RANGE_RATE, withholdingOf(RATE.change))
     const validateResponse = waitForValidate(page)
     const submit = page.getByTestId('fx-update-submit')
     await submit.click()
@@ -374,10 +428,10 @@ test.describe('為替マスタ（実 API 接続）', () => {
 
     await page.getByTestId('fx-update-cancel').click()
     await expect(page.getByTestId('fx-update-form')).toHaveCount(0)
-    await expect(page.getByTestId('fx-rate')).toHaveText(rateText(RATE.change))
+    await expectCards(page, RATE.change, withholdingOf(RATE.change))
 
     const api = await apiContext(playwright)
-    await expectApiRate(api, RATE.change)
+    await expectApiRate(api, RATE.change, withholdingOf(RATE.change))
     await api.dispose()
   })
 
@@ -387,7 +441,8 @@ test.describe('為替マスタ（実 API 接続）', () => {
   }) => {
     await openPage(page)
 
-    await openUpdateWith(page, NON_POSITIVE_RATE)
+    // 源泉レートは正しい値にして、拒否の原因を公示レートだけにする
+    await openUpdateWith(page, NON_POSITIVE_RATE, withholdingOf(RATE.change))
     const validateResponse = waitForValidate(page)
     await page.getByTestId('fx-update-submit').click()
     // 422（FxRequest の exclusiveMinimum）か valid: false のどちらで返るかを報告の材料に残す
@@ -400,7 +455,7 @@ test.describe('為替マスタ（実 API 接続）', () => {
     await expect(page.getByTestId('fx-notice')).toHaveCount(0)
 
     const api = await apiContext(playwright)
-    await expectApiRate(api, RATE.change)
+    await expectApiRate(api, RATE.change, withholdingOf(RATE.change))
     await api.dispose()
   })
 
@@ -424,7 +479,12 @@ test.describe('為替マスタ（実 API 接続）', () => {
      */
     await expect(async () => {
       const res = await api.put(`${API_PATH}/${held.ID}`, {
-        data: { 基準日: TODAY_API, 通貨コード: CURRENCY_CODE, 為替レート: RATE.alt },
+        data: {
+          基準日: TODAY_API,
+          通貨コード: CURRENCY_CODE,
+          為替レート: RATE.alt,
+          源泉レート: withholdingOf(RATE.alt),
+        },
       })
       expect(res.ok(), `別経路の PUT が通らない: ${res.status()} ${await res.text()}`).toBe(true)
       const now = await fetchDetail(api, held.ID)
@@ -451,5 +511,57 @@ test.describe('為替マスタ（実 API 接続）', () => {
     const now = await fetchDetail(api, held.ID)
     await api.dispose()
     expect(now.為替レート).toBeCloseTo(RATE.alt, 2)
+    expect(now.源泉レート).toBeCloseTo(withholdingOf(RATE.alt), 2)
+  })
+
+  test('[FXR-08] 公示レートだけ変えても源泉レートが残る（画面からも、源泉レートを送らない PUT でも）', async ({
+    page,
+    playwright,
+  }) => {
+    // FXR-07 で API 直接書いた値（公示 RATE.alt / 源泉 withholdingOf(RATE.alt)）が今日の行に入っている
+    const kept = withholdingOf(RATE.alt)
+    const api = await apiContext(playwright)
+    await expectApiRate(api, RATE.alt, kept)
+
+    await openPage(page)
+    await expectCards(page, RATE.alt, kept)
+
+    // モーダルを開くと源泉レートの入力欄に現在の値が入っている。公示レートだけを書き換えて送る
+    await page.getByTestId('fx-update').click()
+    await expect(page.getByTestId('fx-update-form')).toBeVisible()
+    const withholdingInput = page.getByTestId('fx-withholding-rate-input')
+    await expect
+      .poll(async () => Number(await withholdingInput.inputValue()), {
+        message: '源泉レートの入力欄に現在の値が入っていない',
+      })
+      .toBeCloseTo(kept, 2)
+    await page.getByTestId('fx-rate-input').fill(String(RATE.keep))
+
+    const saveResponse = waitForSave(page)
+    await page.getByTestId('fx-update-submit').click()
+    const res = await saveResponse
+    const body = await logExchange('FXR-08', res)
+    expect(res.ok(), `実 API が変更を受理しない: ${body}`).toBe(true)
+    expect(res.request().postDataJSON().源泉レート).toBeCloseTo(kept, 2)
+
+    await expect(page.getByTestId('fx-update-form')).toHaveCount(0)
+    await expect(page.getByTestId('fx-notice')).toHaveText(noticeText(RATE.keep, kept))
+    await expectCards(page, RATE.keep, kept)
+
+    await expectApiRate(api, RATE.keep, kept)
+
+    /*
+     * PUT は FxUpdateRequest の部分更新で、本文に含めなかった 源泉レート は残る（#34 で確定）。
+     * 画面は源泉レートを常に送るので、キーごと落とした本文は API 直接で確かめる
+     */
+    const active = await fetchTodayActive(api)
+    const res2 = await api.put(`${API_PATH}/${active.ID}`, {
+      data: { 基準日: TODAY_API, 通貨コード: CURRENCY_CODE, 為替レート: RATE.alt },
+    })
+    expect(res2.ok(), `源泉レート抜きの PUT が通らない: ${res2.status()} ${await res2.text()}`).toBe(
+      true,
+    )
+    await expectApiRate(api, RATE.alt, kept)
+    await api.dispose()
   })
 })

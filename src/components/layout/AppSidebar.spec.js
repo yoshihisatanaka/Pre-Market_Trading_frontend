@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -38,11 +38,15 @@ beforeEach(() => {
   setActivePinia(createPinia())
 })
 
-function createTestRouter() {
+/**
+ * @param {import('vue-router').RouteRecordRaw[]} [routes] 受け皿より前に置く追加ルート（先読みの検証で遅延ルートを足す）
+ */
+function createTestRouter(routes = []) {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: '/', component: Page, meta: { title: '注文一覧' } },
+      ...routes,
       { path: '/:pathMatch(.*)*', component: Page, meta: { title: 'ページが見つかりません' } },
     ],
   })
@@ -51,11 +55,12 @@ function createTestRouter() {
 /**
  * @param {string} path
  * @param {object} [props]
- * @param {{ loadOperator?: boolean }} [options] loadOperator が false なら操作者を読み込まずにマウントする
+ * @param {{ loadOperator?: boolean, routes?: import('vue-router').RouteRecordRaw[] }} [options]
+ *   loadOperator が false なら操作者を読み込まずにマウントする。routes は createTestRouter に渡す追加ルート
  */
-async function mountAt(path, props = {}, { loadOperator = true } = {}) {
+async function mountAt(path, props = {}, { loadOperator = true, routes = [] } = {}) {
   if (loadOperator) await useCurrentOperatorStore().ensureLoaded()
-  const router = createTestRouter()
+  const router = createTestRouter(routes)
   // mount 前に遷移を済ませておけば router.isReady() を待つ必要がない
   await router.push(path)
   const wrapper = mount(AppSidebar, { props, global: { plugins: [router] } })
@@ -68,8 +73,52 @@ const currentPageLabels = (wrapper) =>
     .filter((link) => link.attributes('aria-current') === 'page')
     .map((link) => link.text())
 
+const linkByLabel = (wrapper, label) =>
+  wrapper.findAll('a').find((link) => link.text() === label)
+/** 読み込み中の見た目になっているリンクのラベル */
+const pendingLabels = (wrapper) =>
+  wrapper
+    .findAll('a')
+    .filter((link) => link.classes().includes('is-pending'))
+    .map((link) => link.text())
+/** 回転マークを持つリンクのラベル */
+const spinnerLabels = (wrapper) =>
+  wrapper
+    .findAll('a')
+    .filter((link) => link.find('.base-spinner').exists())
+    .map((link) => link.text())
+
 const headings = (wrapper) => wrapper.findAll('h2').map((el) => el.text())
 const hrefs = (wrapper) => wrapper.findAll('a').map((link) => link.attributes('href'))
+
+const sectionToggle = (wrapper, label) =>
+  wrapper.findAll('h2 button').find((button) => button.text() === label)
+const isExpanded = (wrapper, label) =>
+  sectionToggle(wrapper, label).attributes('aria-expanded') === 'true'
+/*
+ * 配下リンクの表示は、見出しボタンの aria-controls が指す入れ物の display（v-show）で見る。
+ * isVisible() は jsdom の getComputedStyle を辿るが、一度開いて閉じ直した後の display: none を拾わなかった。
+ */
+const linksShown = (wrapper, label) => {
+  const id = sectionToggle(wrapper, label).attributes('aria-controls')
+  return wrapper.find(`[id="${id}"]`).element.style.display !== 'none'
+}
+
+/** 区分ラベル → 開いているか（見出しボタンの aria-expanded と、配下リンクの表示が一致することも見る） */
+function openState(wrapper) {
+  return Object.fromEntries(
+    navSections.map((section) => {
+      const expanded = isExpanded(wrapper, section.label)
+      expect(linksShown(wrapper, section.label)).toBe(expanded)
+      return [section.label, expanded]
+    }),
+  )
+}
+
+/** navigation.js の defaultOpen から導いた初期の開閉 */
+const DEFAULT_OPEN = Object.fromEntries(
+  navSections.map((section) => [section.label, section.defaultOpen !== false]),
+)
 
 /** 指定の区分だけが並んでいること（見出しもリンクも定義順） */
 function expectSections(wrapper, sections) {
@@ -184,5 +233,109 @@ describe('AppSidebar', () => {
     await flushPromises()
 
     expectSections(wrapper, navSections)
+  })
+
+  it('[ASB-12] 顧客と注文は開き、マスタメンテと運用管理は閉じた状態で始まる', async () => {
+    // 既定値が要件どおりであること自体も確かめる（defaultOpen の付け外しで黙って変わらないように）
+    expect(DEFAULT_OPEN).toEqual({
+      顧客: true,
+      '注文・照会': true,
+      マスタメンテ: false,
+      運用管理: false,
+    })
+
+    const { wrapper } = await mountAt('/')
+
+    expect(openState(wrapper)).toEqual(DEFAULT_OPEN)
+  })
+
+  it('[ASB-13] 閉じた区分の見出しを click すると開き、もう一度 click すると閉じる', async () => {
+    const { wrapper } = await mountAt('/')
+
+    await sectionToggle(wrapper, MASTER_SECTION.label).trigger('click')
+    expect(openState(wrapper)).toEqual({ ...DEFAULT_OPEN, [MASTER_SECTION.label]: true })
+
+    await sectionToggle(wrapper, MASTER_SECTION.label).trigger('click')
+    expect(openState(wrapper)).toEqual(DEFAULT_OPEN)
+  })
+
+  it('[ASB-14] 開いた区分の見出しを click すると閉じる', async () => {
+    const { wrapper } = await mountAt('/')
+
+    await sectionToggle(wrapper, '顧客').trigger('click')
+
+    expect(openState(wrapper)).toEqual({ ...DEFAULT_OPEN, 顧客: false })
+  })
+
+  it('[ASB-15] 現在のページを含む区分は既定で閉じる区分でも開いて始まる', async () => {
+    const { wrapper } = await mountAt('/masters/symbols')
+
+    expect(openState(wrapper)).toEqual({ ...DEFAULT_OPEN, [MASTER_SECTION.label]: true })
+    expect(currentPageLabels(wrapper)).toEqual(['銘柄マスタ'])
+  })
+
+  it('[ASB-16] 閉じた区分の配下のページへ遷移するとその区分が開く', async () => {
+    const { wrapper, router } = await mountAt('/')
+
+    await router.push('/operations/incidents/1')
+    await flushPromises()
+
+    expect(openState(wrapper)).toEqual({ ...DEFAULT_OPEN, [OPERATION_SECTION.label]: true })
+  })
+
+  it('[ASB-17] pendingPath に一致する項目だけを読み込み中の見た目にし、読み上げ対象外の回転マークを付ける', async () => {
+    const { wrapper } = await mountAt('/', { pendingPath: '/customers/search' })
+
+    expect(pendingLabels(wrapper)).toEqual(['顧客検索'])
+    expect(spinnerLabels(wrapper)).toEqual(['顧客検索'])
+
+    const link = linkByLabel(wrapper, '顧客検索')
+    expect(link.find('.base-spinner').attributes('aria-hidden')).toBe('true')
+    // 回転マークがリンク名を汚さない（読み上げは AppLayout のバーに任せる）
+    expect(link.text()).toBe('顧客検索')
+  })
+
+  it('[ASB-18] pendingPath を省略するとどの項目も読み込み中の見た目にならない', async () => {
+    const { wrapper } = await mountAt('/')
+
+    expect(pendingLabels(wrapper)).toEqual([])
+    expect(spinnerLabels(wrapper)).toEqual([])
+  })
+
+  it('[ASB-19] 項目にマウスを載せる / フォーカスすると行き先のチャンクを先読みし、遷移はしない', async () => {
+    const loader = vi.fn(() => Promise.resolve(Page))
+    const loader2 = vi.fn(() => Promise.resolve(Page))
+    const { wrapper, router } = await mountAt(
+      '/',
+      {},
+      {
+        routes: [
+          { path: '/customers/search', component: loader },
+          { path: '/orders/inquiry', component: loader2 },
+        ],
+      },
+    )
+
+    await linkByLabel(wrapper, '顧客検索').trigger('pointerenter')
+    await linkByLabel(wrapper, '注文照会').trigger('focus')
+
+    expect(loader).toHaveBeenCalledTimes(1)
+    expect(loader2).toHaveBeenCalledTimes(1)
+    expect(router.currentRoute.value.path).toBe('/')
+  })
+
+  it('[ASB-20] 先読み済みの項目にもう一度マウスを載せても取り直さない', async () => {
+    const loader = vi.fn(() => Promise.resolve(Page))
+    const { wrapper } = await mountAt(
+      '/',
+      {},
+      { routes: [{ path: '/customers/search', component: loader }] },
+    )
+
+    await linkByLabel(wrapper, '顧客検索').trigger('pointerenter')
+    await flushPromises()
+    await linkByLabel(wrapper, '顧客検索').trigger('pointerenter')
+
+    expect(loader).toHaveBeenCalledTimes(1)
   })
 })

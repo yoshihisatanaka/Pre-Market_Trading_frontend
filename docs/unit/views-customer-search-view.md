@@ -13,7 +13,7 @@
 - **開いた時点で条件なしの一覧が出る**（画面モックと同じ。CSW-02）
 - **URL のクエリ名は画面モックと同じ `branch_code` / `sales_rep_code` / `account_number` / `name`** で、
   API へは `branch_code` / `handler_code` / `account_no` / `customer_name` で送られる（CSW-08 / CSW-09）
-- **顧客名は顧客詳細（`/customers/<id>/summary`）へのリンク**（`customer-search-detail-<id>`。CSW-11）
+- **行のクリックで顧客詳細（`/customers/<id>/summary`）へ移る**（画面モックと同じく行全体が対象。顧客名以外のセルでもよい。CSW-11）
 - **米国株評価額 / 評価損益の列は無い**（2026-09-28 決定。CSW-03）
 
 期待値はフィクスチャ（`src/mocks/fixtures/customers.js`）と `CUSTOMER_SEARCH_PAGE_SIZE`、
@@ -31,7 +31,7 @@
 | CSW-08 | 既定モック | 部店・扱者・口座番号・顧客名を入れて「検索」を submit | URL に `branch_code` / `sales_rep_code` / `account_number` / `name` が乗り（`offset` なし）、表がその条件で絞り込まれる | 実装済 |
 | CSW-09 | `?branch_code=…&sales_rep_code=…&account_number=…&name=…` でマウント | 送られたリクエストのクエリを見る | API へ `branch_code` / `handler_code` / `account_no` / `customer_name` で送られ、URL 上の名前（`sales_rep_code` / `account_number` / `name`）は送られない。入力欄にも同じ値が入る | 実装済 |
 | CSW-10 | 絞り込み済み | 「クリア」を click | URL クエリが空になり、全件に戻る | 実装済 |
-| CSW-11 | 既定モック | 先頭行の顧客名のリンクを見る | `customer-search-detail-<id>` のリンクが顧客名を出し、`/customers/<id>/summary` を指す | 実装済 |
+| CSW-11 | 既定モック | 先頭行の口座番号のセル（顧客名ではないセル）を click | URL が `/customers/<先頭行の id>/summary` に移る。顧客名（`customer-search-detail-<id>`）はリンクではなく素の文字で出る | 実装済 |
 | CSW-12 | 既定モック（コンプラランク A・B と C・D・X の行がある） | コンプラランクのセルを読む | `CAUTION_RANKS` のランクは `buy` のバッジ、それ以外は `gray` のバッジでランクを出す | 実装済 |
 | CSW-13 | 全取引停止の行と通常の行がある | 取引規制のセルを読む | 停止の行だけ「全取引停止」のバッジ（`buy`）、通常の行はバッジなしの「-」 | 実装済 |
 | CSW-14 | 個人と法人（年齢が空）の行がある | 年齢のセルを読む | 個人は「75歳」の形、法人は「—」 | 実装済 |

@@ -50,6 +50,7 @@ async function mountView(query = {}) {
     history: createMemoryHistory(),
     routes: [
       { path: PATH, name: 'order-inquiry', component: Page },
+      { path: '/customers/search', name: 'customer-search', component: Page },
       { path: '/orders/:orderId(\\d+)/amend', name: 'order-amend', component: Page },
       { path: '/orders/:orderId(\\d+)/cancel', name: 'order-cancel', component: Page },
       { path: '/:pathMatch(.*)*', component: Page },
@@ -213,7 +214,7 @@ describe('OrderInquiryListView', () => {
     expect(wrapper.find('[data-testid="order-inquiry-branch-code"]').element.value).toBe('')
   })
 
-  it('[OIV-09] 発注権限があれば「新規注文」が出て押すと /orders/new へ移る', async () => {
+  it('[OIV-09] 発注権限があれば「新規注文」が出て押すと顧客検索へ移る', async () => {
     const { wrapper, router } = await mountView()
     await settle()
 
@@ -221,7 +222,7 @@ describe('OrderInquiryListView', () => {
     await wrapper.find('[data-testid="order-inquiry-new-order"]').trigger('click')
     await settle()
 
-    expect(router.currentRoute.value.path).toBe('/orders/new')
+    expect(router.currentRoute.value.path).toBe('/customers/search')
   })
 
   it('[OIV-10] 「訂正」は最新の版の注文 ID で訂正画面へ移る', async () => {

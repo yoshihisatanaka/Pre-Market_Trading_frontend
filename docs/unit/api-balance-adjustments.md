@@ -8,8 +8,8 @@
 アプリ内モデルに変換する層。**ここが吸収している差だけ**を見る（画面の挙動は `BLV` 側）。
 
 とくに落としたくないのは 3 点。
-`残高` が加算値ではなく**補正後の絶対値**であること、`symbol_name` が
-**実 API に無いクエリ**であること（それでも綴りを決めて送る）、
+`残高` が加算値ではなく**補正後の絶対値**であること、銘柄名を
+**`symbol_name_ja` にだけ送る**こと（`symbol_name_en` と両方送ると AND になる。#13）、
 新規登録では**ティッカーを `銘柄コード` として送り、銘柄名は送らない**こと。
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
@@ -17,7 +17,7 @@
 | BLA-01 | 既定モック | `fetchBalanceAdjustments()` を呼ぶ | `{ items, total }` が返り、items の各件が camelCase のアプリ内モデルになっている | 実装済 |
 | BLA-02 | 応答の配列名が `balances` | `fetchBalanceAdjustments()` を呼ぶ | `items` に読み替えられている | 実装済 |
 | BLA-03 | 応答に `balances` が無い | `fetchBalanceAdjustments()` を呼ぶ | `items` が空配列、`total` が 0 になる（例外にしない） | 実装済 |
-| BLA-04 | 検索条件をすべて渡す | `fetchBalanceAdjustments({ branchCode, accountNumber, customerName, ticker, symbolName })` | クエリが `branch_code` / `account_no` / `customer_name` / `symbol` / `symbol_name` で送られる | 実装済 |
+| BLA-04 | 検索条件をすべて渡す | `fetchBalanceAdjustments({ branchCode, accountNumber, customerName, ticker, symbolName })` | クエリが `branch_code` / `account_no` / `customer_name` / `symbol` / `symbol_name_ja` で送られる（`symbol_name_en` と旧名 `symbol_name` は送らない） | 実装済 |
 | BLA-05 | 検索条件が空文字 | `fetchBalanceAdjustments({ branchCode: '', ticker: '' })` | 空の条件はクエリに載らない（`limit` / `offset` だけが載る） | 実装済 |
 | BLA-06 | 口座番号に数字以外が混ざる | `fetchBalanceAdjustments({ accountNumber: '12a' })` | `account_no` を送らない（422 で弾かれて理由が画面に出ないのを避ける） | 実装済 |
 | BLA-07 | 応答の `ID` が integer | `fetchBalanceAdjustments()` を呼ぶ | `id` が文字列になっている（行キーと URL で使うため） | 実装済 |

@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import { closedMizuhoClosingStatus, mizuhoClosingStatus } from '../src/mocks/fixtures/closing'
 import { mizuhoExecutions } from '../src/mocks/fixtures/mizuhoExecutions'
 import { mizuhoOrders } from '../src/mocks/fixtures/mizuhoOrders'
-import { formatDateTime } from '../src/utils/format'
+import { formatDateTime, formatJpyUnit } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/mizuho-operations.md（タイトル先頭の [MZ-nn] が対応 ID）
@@ -44,6 +44,11 @@ const sellSkipped = ordersOf('1').filter((row) => row.Dream登録状況 !== '2')
 const buyRows = mizuhoExecutions.filter((row) => row.売買区分 === '3')
 const sellRows = mizuhoExecutions.filter((row) => row.売買区分 === '1')
 const partialRows = mizuhoExecutions.filter((row) => row.処理状況 === '010')
+// 件数カードの「一部出来」は約定の行数ではなく注文の件数（処理状況 010 の注文 ID の数）
+const partialOrderCount = new Set(partialRows.map((row) => row.注文ID)).size
+const sellPartialOrderCount = new Set(
+  partialRows.filter((row) => row.売買区分 === '1').map((row) => row.注文ID),
+).size
 
 // MZ-11: 部店 123 かつ AMD の行（取消済）
 const AMD_BRANCH = '123'
@@ -51,6 +56,14 @@ const AMD_SYMBOL = 'AMD'
 const amdRows = mizuhoExecutions.filter(
   (row) => row.部店 === AMD_BRANCH && row.銘柄コード === AMD_SYMBOL,
 )
+
+// MZ-17: 取消済（出来有）。選択肢のコードは 034 だけだが、api 層（src/api/executions.js の toStatusQuery）が
+// status=032,034 に広げて送るので、032 の行も当たる
+const CANCELED = '034'
+const canceledRows = mizuhoExecutions.filter((row) => ['032', '034'].includes(row.処理状況))
+
+// 状態変更履歴の操作区分 → 画面の表記（src/components/mizuho/MizuhoClosingPanel.vue の HISTORY_ACTION_LABELS）
+const HISTORY_ACTION_LABELS = { CLOSE: '締め実行', RESET: '締め解除' }
 
 // MZ-12: 約定日が 2026-09-26 の行
 const TARGET_DATE = '2026-09-26'
@@ -153,7 +166,12 @@ test.describe('みずほ注文締', () => {
     await expect(rows.first().getByRole('cell').first()).toHaveText(`#${mizuhoExecutions[0].ID}`)
   })
 
-  test('[MZ-02] 表の列が公開モックの順に並び、約定金額(円) は — になる', async ({ page }) => {
+  test('[MZ-02] 表の列が公開モックの順に並び、約定金額(円) に円貨の約定代金が出る', async ({
+    page,
+  }) => {
+    // 前提: 既定のみずほの約定はすべて円額を持つ（為替未登録の null が無い）
+    expect(mizuhoExecutions.every((row) => row.約定代金_JPY !== null)).toBe(true)
+
     await page.goto(PATH)
 
     await expect(
@@ -161,7 +179,7 @@ test.describe('みずほ注文締', () => {
     ).toHaveText(COLUMN_HEADERS)
     await expect(rowsOf(page)).toHaveCount(mizuhoExecutions.length)
     await expect(columnCellsOf(page, AMOUNT_JPY_COLUMN)).toHaveText(
-      mizuhoExecutions.map(() => '—'),
+      mizuhoExecutions.map((row) => formatJpyUnit(row.約定代金_JPY)),
     )
   })
 
@@ -197,7 +215,12 @@ test.describe('みずほ注文締', () => {
     await expect(page.getByTestId('mizuho-closing-state')).toHaveText('受付中')
   })
 
-  test('[MZ-05] 締め済は締め解除と注文ファイル作成が出て、履歴が 1 行出る', async ({ page }) => {
+  test('[MZ-05] 締め済は締め解除と注文ファイル作成が出て、履歴が新しい順に並ぶ', async ({
+    page,
+  }) => {
+    const entries = closedMizuhoClosingStatus.history
+    expect(entries).toHaveLength(3)
+
     await mockApi(page, [{ path: CLOSING_PATH, body: closedMizuhoClosingStatus }])
     await page.goto(PATH)
 
@@ -206,11 +229,15 @@ test.describe('みずほ注文締', () => {
     await expect(page.getByTestId('mizuho-closing-order-file')).toBeEnabled()
     await expect(page.getByTestId('mizuho-closing-close')).toHaveCount(0)
 
+    // history はサーバが新しい順で返す。画面はその順のまま 1 件 1 行で出す
     const history = page.getByTestId('mizuho-closing-history-row')
-    await expect(history).toHaveCount(1)
-    await expect(history).toContainText(formatDateTime(closedMizuhoClosingStatus.更新日時))
-    await expect(history).toContainText('締め実行')
-    await expect(history).toContainText(closedMizuhoClosingStatus.実行者)
+    await expect(history).toHaveCount(entries.length)
+    for (const [index, entry] of entries.entries()) {
+      const row = history.nth(index)
+      await expect(row).toContainText(formatDateTime(entry.操作日時))
+      await expect(row).toContainText(HISTORY_ACTION_LABELS[entry.操作区分])
+      await expect(row).toContainText(entry.実行者)
+    }
     await expect(page.getByTestId('mizuho-closing-history-empty')).toHaveCount(0)
   })
 
@@ -258,14 +285,14 @@ test.describe('みずほ注文締', () => {
     expect(downloads).toHaveLength(0)
   })
 
-  test('[MZ-08] 件数カードに総件数・買い・売りが出て、一部出来は — になる', async ({ page }) => {
+  test('[MZ-08] 件数カードに総件数・買い・売り・一部出来の注文件数が出る', async ({ page }) => {
     await page.goto(PATH)
 
     await expectSummary(page, {
       total: String(mizuhoExecutions.length),
       buy: String(buyRows.length),
       sell: String(sellRows.length),
-      partial: '—',
+      partial: String(partialOrderCount),
     })
   })
 
@@ -284,7 +311,7 @@ test.describe('みずほ注文締', () => {
       total: String(sellRows.length),
       buy: '0',
       sell: String(sellRows.length),
-      partial: '—',
+      partial: String(sellPartialOrderCount),
     })
   })
 
@@ -365,7 +392,7 @@ test.describe('みずほ注文締', () => {
       '該当する約定はありません。',
     )
     await expect(page.getByTestId('mizuho-executions-table')).toHaveCount(0)
-    await expectSummary(page, { total: '0', buy: '0', sell: '0', partial: '—' })
+    await expectSummary(page, { total: '0', buy: '0', sell: '0', partial: '0' })
     // 条件を直せるよう検索カードは残り、締めカードも影響を受けない
     await expect(page.getByTestId('mizuho-executions-search')).toBeVisible()
     await expect(page.getByTestId('mizuho-closing-state')).toHaveText('受付中')
@@ -402,6 +429,28 @@ test.describe('みずほ注文締', () => {
     await expect(rowsOf(page)).toHaveCount(mizuhoExecutions.length)
   })
 
+  test('[MZ-17] 出来状況「取消済（出来有）」で検索すると 032 と 034 の両方の約定が出る', async ({
+    page,
+  }) => {
+    // 032 と 034 が 1 件ずつ混ざっていないと、広げて送ったことを確かめられない
+    expect(canceledRows.map((row) => row.処理状況).sort()).toEqual(['032', '034'])
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(mizuhoExecutions.length)
+
+    await page.getByTestId('mizuho-executions-fill-status').selectOption(CANCELED)
+    await submitSearch(page)
+
+    await expect(page).toHaveURL(new RegExp(`[?&]status=${CANCELED}(&|$)`))
+    await expect(page.getByTestId('mizuho-executions-count')).toHaveText(
+      `${canceledRows.length} 件`,
+    )
+    await expect(rowsOf(page)).toHaveCount(canceledRows.length)
+    await expect(columnCellsOf(page, FILL_STATUS_COLUMN)).toHaveText(
+      canceledRows.map(() => '取消済（出来有）'),
+    )
+  })
+
   test('[MZ-18] 「締める」で締め済になり、履歴と通知が出る', async ({ page }) => {
     await page.goto(PATH)
 
@@ -411,7 +460,12 @@ test.describe('みずほ注文締', () => {
     await expect(page.getByTestId('mizuho-closing-reopen')).toBeVisible()
     await expect(page.getByTestId('mizuho-closing-order-file')).toBeEnabled()
     await expect(page.getByTestId('mizuho-closing-close')).toHaveCount(0)
-    await expect(page.getByTestId('mizuho-closing-history-row')).toContainText('締め実行')
+    // 締めたあと照会を読み直し、モックが X-User-Code から記録した実行者付きの 1 行が出る。
+    // 実行者の値は frontend の VITE_USER_CODE で変わるので、空欄（—）でないことだけを見る
+    const history = page.getByTestId('mizuho-closing-history-row')
+    await expect(history).toHaveCount(1)
+    await expect(history).toContainText('締め実行')
+    await expect(history.locator('span').last()).not.toHaveText('—')
     await expect(page.getByTestId('mizuho-operations-notice')).toHaveText(
       'みずほ注文を締めました。',
     )
@@ -427,7 +481,14 @@ test.describe('みずほ注文締', () => {
     await expect(dialogOf(page)).toHaveCount(0)
     await expect(page.getByTestId('mizuho-closing-state')).toHaveText('受付中')
     await expect(page.getByTestId('mizuho-closing-close')).toBeEnabled()
-    await expect(page.getByTestId('mizuho-closing-history-row')).toContainText('締め解除')
+    // 履歴は新しい順に積み上がる（締め解除 → 締め実行）。実行者はどちらも同じ操作者
+    const history = page.getByTestId('mizuho-closing-history-row')
+    await expect(history).toHaveCount(2)
+    await expect(history.nth(0)).toContainText('締め解除')
+    await expect(history.nth(1)).toContainText('締め実行')
+    const operator = await history.nth(1).locator('span').last().textContent()
+    expect(operator.trim()).not.toBe('—')
+    await expect(history.nth(0).locator('span').last()).toHaveText(operator.trim())
     await expect(page.getByTestId('mizuho-operations-notice')).toHaveText(
       'みずほ注文締めを解除しました。',
     )

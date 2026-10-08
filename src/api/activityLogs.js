@@ -10,17 +10,23 @@ import { apiClient } from './client'
  * 実 API の操作ログは「各マスタの履歴テーブルを UNION ALL で横断したもの」で、1 行が 1 回の
  * 登録・更新・削除・一括処理にあたる。変更前後のレコード JSON と項目別の差分を持つ。
  *
- * 画面モック（https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）にある
- * 操作者名 / 実行者区分 / 対象機能 / 操作内容 / 結果 は、ここではまだ扱わない。
- * 結果 以外の 4 項目は 2026-09-30 の取り込みで ActivityLogItem に入ったので、画面に出すときは
- * ここの変換に足す。結果 はバックエンドに依頼中（docs/api/requests.md #1）で、提案する形は
- * src/mocks/fixtures/activityLogs.js に書いてある。
+ * 画面モック（https://uspreorder-vmbhej3k.manus.space/operations/activity-logs）にあった
+ * 操作者名 / 実行者区分 / 対象機能 / 操作内容 は 2026-09-30 の取り込みで ActivityLogItem に入り、
+ * ここで読む。結果 だけは仕様に無い（バックエンドの回答は「追加しない」。履歴は成功した変更しか
+ * 残さないため。docs/api/requests.md #1）。
+ *
+ * 2026-10-06 の回答（#38）で、注文の受付・訂正・取消が対象種別 `orders` として横断に入り、
+ * 両方の Item に 区分（business / master / operation）と 区分名 が付いた。区分は仕様で必須ではないので、
+ * 無い応答では空文字のまま返し、画面が対象種別から導く（utils/activityLogTypes.js の resolveCategory）。
+ * 注文の行は 変更前データ / 変更後データ が null で、変更内容は 操作内容 の文中にある。
  */
 
 /**
  * @typedef {object} ActivityLogTarget 操作ログの対象種別 1 件（アプリ内モデル）
  * @property {string} code 対象種別コード（customers / symbols …）。target_types に載せる値
  * @property {string} name 対象種別名（顧客マスタ …）。画面の表示用
+ * @property {string} category 区分コード（business / master / operation）。応答に無ければ空文字
+ * @property {string} categoryName 区分名（業務操作 / マスタ更新 / 運用管理）。応答に無ければ空文字
  * @property {string} keyLabel 対象キーの項目名（口座番号 / 銘柄コード …）
  * @property {string} historyTable 参照元の履歴テーブル名
  */
@@ -39,19 +45,25 @@ import { apiClient } from './client'
  * @property {number} historyId 履歴ID（履歴テーブル内の ID）
  * @property {string} targetType 対象種別コード
  * @property {string} targetTypeName 対象種別名
+ * @property {string} category 区分コード（business / master / operation）。応答に無ければ空文字
+ * @property {string} categoryName 区分名（業務操作 / マスタ更新 / 運用管理）。応答に無ければ空文字
  * @property {string} targetId 各マスタの個別履歴 API に渡すキー。無い行は空文字
  * @property {string} targetKey 対象レコードの識別キー（画面表示用）。無い行は空文字
- * @property {string} operation 操作区分（CREATE / UPDATE / DELETE / BATCH）
+ * @property {string} operation 操作区分（CREATE / UPDATE / DELETE / BATCH / SUSPEND / RESUME / SHOW / HIDE / VWAP_BULK）
+ * @property {string} operationText 操作内容の表示文（「銘柄情報を更新」など）。無い行は空文字
  * @property {string} operator 操作者コード。一括処理など、持たない行は空文字
+ * @property {string} operatorName 操作者の氏名。操作者がマスタに無い行は「システム」（サーバの既定）
+ * @property {string} operatorRole 実行者区分（操作者のロール名）。解決できない行は空文字
+ * @property {string} feature 対象機能名（対象種別名と同じ）。無い行は空文字
  * @property {string} at 操作日時（ISO8601）。整形は utils/activityLogTypes.js の formatActivityAt
- * @property {Record<string, *>|null} before 変更前のレコード。登録の行では null
- * @property {Record<string, *>|null} after 変更後のレコード。削除の行では null
+ * @property {Record<string, *>|null} before 変更前のレコード。登録の行・注文の行では null
+ * @property {Record<string, *>|null} after 変更後のレコード。削除の行・注文の行では null
  * @property {ActivityLogDiff[]} diff 項目別の差分。仕様の順（変更項目の順）のまま
  * @property {string[]} changedFields 変更された項目名
  */
 
 /**
- * 操作ログの対象種別を取得する（検索の「対象種別」プルダウン用）。
+ * 操作ログの対象種別を取得する（検索の「対象機能」プルダウン用）。
  *
  * @returns {Promise<ActivityLogTarget[]>} 仕様の並びのまま
  */
@@ -65,6 +77,8 @@ function toActivityLogTarget(raw) {
   return {
     code: raw?.対象種別 ?? '',
     name: raw?.対象種別名 ?? '',
+    category: raw?.区分 ?? '',
+    categoryName: raw?.区分名 ?? '',
     keyLabel: raw?.対象キー項目 ?? '',
     historyTable: raw?.履歴テーブル ?? '',
   }
@@ -79,8 +93,10 @@ function toActivityLogTarget(raw) {
  * @param {string} [params.dateFrom] 期間（From）。YYYY-MM-DD
  * @param {string} [params.dateTo] 期間（To）。YYYY-MM-DD
  * @param {string} [params.operator] 操作者コード（完全一致）
- * @param {string} [params.operation] 操作区分（CREATE / UPDATE / DELETE / BATCH）
- * @param {string} [params.targetType] 対象種別コード。画面は 1 つだけ選ぶ
+ * @param {string} [params.actorGroup] 実行者区分（sales_ifa: 営業員・IFA / manager: 管理者・管理責任者）
+ * @param {string} [params.operation] 操作区分（CREATE / UPDATE / DELETE / BATCH / SUSPEND / RESUME / SHOW / HIDE / VWAP_BULK）
+ * @param {string[]} [params.targetTypes] 対象種別コードの並び。画面の 区分 / 対象機能 を展開したもの
+ *   （utils/activityLogTypes.js の targetTypesFor）。空なら全対象種別を横断する
  * @param {string} [params.targetKey] 対象キー（部分一致）
  * @param {string} [params.sort] 操作日時の並び順（asc / desc）。空なら送らず、実 API の既定（desc）に任せる
  * @returns {Promise<{ items: ActivityLog[], total: number }>}
@@ -91,8 +107,9 @@ export async function fetchActivityLogs({
   dateFrom = '',
   dateTo = '',
   operator = '',
+  actorGroup = '',
   operation = '',
-  targetType = '',
+  targetTypes = [],
   targetKey = '',
   sort = '',
 } = {}) {
@@ -104,9 +121,10 @@ export async function fetchActivityLogs({
       start_date: dateFrom || undefined,
       end_date: dateTo || undefined,
       operator: operator || undefined,
+      actor_group: actorGroup || undefined,
       operation: operation || undefined,
-      // 仕様はカンマ区切りで複数を受けるが、画面の選択は 1 つなのでそのまま載せる
-      target_types: targetType || undefined,
+      // 仕様はカンマ区切りで複数を受ける
+      target_types: targetTypes.length > 0 ? targetTypes.join(',') : undefined,
       target_key: targetKey || undefined,
       sort: sort || undefined,
     },
@@ -128,11 +146,17 @@ function toActivityLog(raw) {
     historyId,
     targetType,
     targetTypeName: raw?.対象種別名 ?? '',
+    category: raw?.区分 ?? '',
+    categoryName: raw?.区分名 ?? '',
     // nullable な文字列は空文字に寄せる（画面が null と '' を区別しなくてよいように）
     targetId: raw?.対象ID ?? '',
     targetKey: raw?.対象キー ?? '',
     operation: raw?.操作区分 ?? '',
+    operationText: raw?.操作内容 ?? '',
     operator: raw?.操作者 ?? '',
+    operatorName: raw?.操作者名 ?? '',
+    operatorRole: raw?.実行者区分 ?? '',
+    feature: raw?.対象機能 ?? '',
     at: raw?.操作日時 ?? '',
     // レコードは「無い」（登録前・削除後）と「空」が別物なので null を潰さない
     before: raw?.変更前データ ?? null,

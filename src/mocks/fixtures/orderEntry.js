@@ -25,7 +25,7 @@ export const orderMessages = {
   unacknowledgedWarnings:
     '確認が必要な警告があります。内容を確認のうえ、強制区分を指定して再度送信してください。',
   customerNotFound: '口座が見つかりません。部店と口座番号を確認してください。',
-  symbolNotFound: '銘柄コードが見つかりません。ユニバース銘柄を確認してください。',
+  symbolNotFound: 'ティッカーが見つかりません。取扱銘柄を確認してください。',
   prohibited: '売り、買いともに禁止銘柄です。',
   growthOnBuy: '買付時に「成長投資枠」を選択することはできません。',
   vwapNotTarget: 'この銘柄は現在、VWAP対象外です。通常注文で入力してください。',

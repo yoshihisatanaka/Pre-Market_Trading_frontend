@@ -286,7 +286,8 @@ function customerLabel(customer) {
           data-testid="customers-account-number"
         />
       </FormField>
-      <FormField v-slot="{ field }" label="顧客名" hint="顧客名・カナのどちらにも当たります">
+      <!-- モック（/masters/customers）と顧客検索・預り検索に揃える。カナにも当たることはラベルで示す -->
+      <FormField v-slot="{ field }" label="顧客名（カナ含む）">
         <BaseInput
           v-bind="field"
           v-model="inputs.customerName"

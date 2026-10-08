@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { DEPOSIT_CATEGORY, ORDER_FORM_DEFAULTS, ORDER_TYPE, SIDE, VWAP } from './orderEntryOptions'
+import {
+  DEPOSIT_CATEGORY,
+  ORDER_FORM_DEFAULTS,
+  ORDER_PERSON_MAX_LENGTH,
+  ORDER_TYPE,
+  SECURITIES_DELIVERY_DEFAULT,
+  SIDE,
+  VWAP,
+} from './orderEntryOptions'
 import {
   buildEstimateReadback,
   buildExpiryOptions,
   buildOrderInput,
   buildOrderReadback,
   createOrderForm,
+  defaultOrderPerson,
   estimateOrderAmount,
   EXPIRY_OPTION_COUNT,
   formatLimitPrice,
@@ -30,9 +39,9 @@ const MESSAGES = {
   branchRequired: '部店コードを入力してください。',
   accountRequired: '口座番号を入力してください。',
   accountNumeric: '口座番号を数値で入力してください。',
-  tickerRequired: '銘柄コードを入力してください。',
-  tickerNotFound: '銘柄コードが見つかりません。ユニバース銘柄を確認してください。',
-  tickerLookupFailed: 'ティッカーコードを照会できませんでした。時間をおいて再度お試しください。',
+  tickerRequired: 'ティッカーを入力してください。',
+  tickerNotFound: 'ティッカーが見つかりません。取扱銘柄を確認してください。',
+  tickerLookupFailed: 'ティッカーを照会できませんでした。時間をおいて再度お試しください。',
   sideRequired: '売買区分を選択してください。',
   quantityRequired: '注文数量を入力してください。',
   quantityInteger: '注文数量を整数で入力してください。',
@@ -49,7 +58,11 @@ const MESSAGES = {
   orderDateTooOld: '受注日が7日間以前の注文は入力できません。',
   orderTimeFormat: '受注時刻は数値4桁（hhnn）で入力してください。',
   orderPersonRequired: '受注者を入力してください。',
+  orderPersonTooLong: `受注者は${ORDER_PERSON_MAX_LENGTH}文字以内で入力してください。`,
 }
+
+/** 受注者（最大文字数ちょうどの社員コード） */
+const ORDER_PERSON = 'T'.padEnd(ORDER_PERSON_MAX_LENGTH, '0')
 
 /** 照会で見つかった銘柄（src/api/symbols.js の Symbol のうち使う項目） */
 const SYMBOL = {
@@ -66,7 +79,7 @@ function validForm(overrides = {}) {
   return {
     ...createOrderForm({
       now: NOW,
-      orderPerson: 'test-user',
+      orderPerson: ORDER_PERSON,
       branchCode: '123',
       accountNumber: '1230004',
     }),
@@ -210,11 +223,31 @@ describe('orderEntryForm', () => {
     expect(errors.ticker).toBe(MESSAGES.tickerLookupFailed)
   })
 
+  it('[NOF-30] 受注者は前後の空白を落として数え、最大文字数を超えると弾く', () => {
+    const personError = (orderPerson) => validate(validForm({ orderPerson })).orderPerson
+    const tooLong = 'X'.repeat(ORDER_PERSON_MAX_LENGTH + 1)
+
+    expect(personError(ORDER_PERSON)).toBe('')
+    expect(personError(`  ${ORDER_PERSON}  `)).toBe('')
+    expect(personError(tooLong)).toBe(MESSAGES.orderPersonTooLong)
+    expect(personError('   ')).toBe(MESSAGES.orderPersonRequired)
+  })
+
+  it('[NOF-31] defaultOrderPerson は最大文字数以内の社員コードだけを初期値にする', () => {
+    const tooLong = 'X'.repeat(ORDER_PERSON_MAX_LENGTH + 1)
+
+    expect(defaultOrderPerson(ORDER_PERSON)).toBe(ORDER_PERSON)
+    expect(defaultOrderPerson(` ${ORDER_PERSON} `)).toBe(ORDER_PERSON)
+    expect(defaultOrderPerson(tooLong)).toBe('')
+    expect(defaultOrderPerson(null)).toBe('')
+    expect(defaultOrderPerson(undefined)).toBe('')
+  })
+
   it('[NOF-15] buildOrderInput は銘柄マスタのコードと固定値を入れ、成行の単価は null', () => {
     const form = validForm({
       branchCode: ' 123 ',
       accountNumber: ' 1230004 ',
-      orderPerson: ' test-user ',
+      orderPerson: ` ${ORDER_PERSON} `,
     })
     const input = buildOrderInput(form, { symbol: SYMBOL, today: TODAY, createdBy: 'creator' })
 
@@ -227,13 +260,13 @@ describe('orderEntryForm', () => {
       orderType: ORDER_TYPE.MARKET,
       limitPrice: null,
       expiryDate: '2026-09-29',
-      securitiesDelivery: '500',
+      securitiesDelivery: SECURITIES_DELIVERY_DEFAULT,
       transactionType: '100',
       vwap: false,
       forced: false,
       orderDate: '2026-09-29',
       orderTime: '10:30',
-      orderPerson: 'test-user',
+      orderPerson: ORDER_PERSON,
       createdBy: 'creator',
     })
     expect(input.symbolCode).not.toBe(form.ticker)
@@ -327,6 +360,13 @@ describe('orderEntryForm', () => {
     expect(form.depositCategory).toBe(ORDER_FORM_DEFAULTS.depositCategory)
   })
 
+  it('[NOF-32] createOrderForm は引き継いだ数量を入力欄と同じ 3 桁区切りにする', () => {
+    const now = new Date(2026, 8, 29, 9, 5)
+
+    expect(createOrderForm({ now, quantity: '1500' }).quantity).toBe('1,500')
+    expect(createOrderForm({ now }).quantity).toBe('')
+  })
+
   it('[NOF-21] 概算は外貨を小数第 2 位、円貨を円未満で四捨五入する', () => {
     expect(estimateOrderAmount({ quantity: 7, unitPrice: 1.2345, fxRate: 150.25 })).toEqual({
       usd: 8.64,
@@ -383,7 +423,7 @@ describe('orderEntryForm', () => {
       depositCategory: '特定',
       cashDelivery: '当社',
       orderDateTime: '09/29 10:30',
-      orderPerson: 'test-user',
+      orderPerson: ORDER_PERSON,
       solicitationMethod: '勧誘あり ／ 電話他',
       fundChannel: '余裕資金 ／ 営業店',
     })

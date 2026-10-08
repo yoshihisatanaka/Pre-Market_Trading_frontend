@@ -2,7 +2,9 @@
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -14,11 +16,13 @@ import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from '@/stores/marketHolidays'
 import {
-  MARKET_HOLIDAY_TYPE_DEFAULT,
+  MARKET_HOLIDAY_EARLY_CLOSE_LABEL,
   MARKET_HOLIDAY_TYPE_OPTIONS,
-  formatMarketHolidayType,
+  formatMarketHolidayEarlyClose,
   isMarketHolidayType,
+  isShortTradingDay,
 } from '@/utils/marketHolidayTypes'
+import { HOLIDAY_TYPE } from '@/utils/apiEnums'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useMarketHolidaysStore()
@@ -41,20 +45,21 @@ const {
 const columns = [
   { key: 'date', label: '日付' },
   { key: 'reason', label: '休場理由' },
-  { key: 'holidayType', label: '休場区分' },
+  // 画面モックと同じく区分は「短縮取引日」として見せる（短縮取引日の行にだけ終了時刻のバッジ）
+  { key: 'holidayType', label: '短縮取引日' },
   // 行ごとの操作（削除）。画面モックに合わせて見出しは空にする
   { key: 'actions', label: '' },
 ]
 
 /*
  * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
- * URL 上のクエリ名（date_from / date_to / holiday_type）は画面モックの form と同じ契約で、
- * この filters 定義にだけ現れる。
+ * 日付は画面モックどおり 1 欄（その日だけを探す）で、URL 上のクエリ名（date）も画面モックの form と
+ * 同じ契約。休場区分（holiday_type）は画面モックに無いが、実 API の区分で絞れるので残している。
+ * どちらもこの filters 定義にだけ現れる（実 API の start_date / end_date への読み替えは api 層が行う）。
  */
 const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
   filters: [
-    { key: 'dateFrom', query: 'date_from' },
-    { key: 'dateTo', query: 'date_to' },
+    { key: 'date', query: 'date' },
     // 未知のコード（?holiday_type=9 など）は条件なしとして捨てる
     {
       key: 'holidayType',
@@ -78,8 +83,15 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
 const isAddOpen = ref(false)
 const addDate = ref('')
 const addReason = ref('')
-// セレクトは常に有効なコードが入る（プレースホルダを置かない）ので addErrors には持たせない
-const addHolidayType = ref(MARKET_HOLIDAY_TYPE_DEFAULT)
+/*
+ * 短縮取引日のチェック（画面モックの「短縮取引日として登録する」）。
+ * 外れていれば終日休場（m_海外休場日.休場区分 の DEFAULT '0'）、入っていれば短縮取引（'1'）として送る。
+ * 2 値なので入力の不備は起きず、addErrors には持たせない
+ */
+const addShortTradingDay = ref(false)
+const addHolidayType = computed(() =>
+  addShortTradingDay.value ? HOLIDAY_TYPE.SHORTENED : HOLIDAY_TYPE.ALL_DAY,
+)
 const addErrors = ref({ date: '', reason: '' })
 
 // 追加と削除の成功メッセージは同じ枠に出す（同時に成功することは無い）
@@ -88,7 +100,7 @@ const noticeMessage = ref('')
 function openAdd() {
   addDate.value = ''
   addReason.value = ''
-  addHolidayType.value = MARKET_HOLIDAY_TYPE_DEFAULT
+  addShortTradingDay.value = false
   addErrors.value = { date: '', reason: '' }
   // 前回の失敗と成功をどちらも持ち込まない
   store.clearCreateError()
@@ -197,23 +209,15 @@ async function submitDelete() {
       @submit="submitSearch"
       @clear="clearSearch"
     >
-      <FormField v-slot="{ field }" label="日付（From）">
+      <FormField v-slot="{ field }" label="日付">
         <BaseInput
           v-bind="field"
-          v-model="inputs.dateFrom"
+          v-model="inputs.date"
           type="date"
-          data-testid="market-holidays-date-from"
+          data-testid="market-holidays-date"
         />
       </FormField>
-      <FormField v-slot="{ field }" label="日付（To）">
-        <BaseInput
-          v-bind="field"
-          v-model="inputs.dateTo"
-          type="date"
-          data-testid="market-holidays-date-to"
-        />
-      </FormField>
-      <FormField v-slot="{ field }" label="休場区分">
+      <FormField v-slot="{ field }" label="短縮取引日">
         <BaseSelect
           v-bind="field"
           v-model="inputs.holidayType"
@@ -242,8 +246,14 @@ async function submitDelete() {
           <span class="market-holiday-list__date">{{ value || '—' }}</span>
         </template>
 
+        <!-- 画面モックどおり、短縮取引日の行にだけ終了時刻のバッジを出す（終日休場は —） -->
         <template #cell-holidayType="{ value }">
-          <span class="market-holiday-list__type">{{ formatMarketHolidayType(value) }}</span>
+          <span class="market-holiday-list__type">
+            <BaseBadge v-if="isShortTradingDay(value)" variant="warning">
+              {{ MARKET_HOLIDAY_EARLY_CLOSE_LABEL }}
+            </BaseBadge>
+            <template v-else>{{ formatMarketHolidayEarlyClose(value) }}</template>
+          </span>
         </template>
 
         <template #cell-actions="{ row }">
@@ -290,14 +300,12 @@ async function submitDelete() {
         />
       </FormField>
 
-      <FormField v-slot="{ field }" label="休場区分" required>
-        <BaseSelect
-          v-bind="field"
-          v-model="addHolidayType"
-          :options="MARKET_HOLIDAY_TYPE_OPTIONS"
-          data-testid="market-holidays-add-holiday-type"
-        />
-      </FormField>
+      <!-- 画面モックどおりチェックボックス。外れていれば終日休場、入っていれば短縮取引で登録する -->
+      <BaseCheckbox
+        v-model="addShortTradingDay"
+        :label="`短縮取引日として登録する（${MARKET_HOLIDAY_EARLY_CLOSE_LABEL}）`"
+        data-testid="market-holidays-add-short-trading-day"
+      />
     </MasterFormDialog>
 
     <ConfirmDeleteDialog
@@ -319,7 +327,7 @@ async function submitDelete() {
   gap: var(--space-5);
 }
 
-/* 休場区分は補助的な情報なので、画面モックの中間列（対象市場）と同じく一段小さく落ち着かせる */
+/* 短縮取引日は補助的な情報。終日休場の '—' は画面モックと同じく小さく薄く、短縮取引日はバッジで目立たせる */
 .market-holiday-list__type {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);

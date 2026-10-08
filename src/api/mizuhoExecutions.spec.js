@@ -36,6 +36,10 @@ function record(body) {
 
 const head = mizuhoExecutions[0]
 
+/** 取消済の選択肢のコードと、status に載せる値（取消済の処理状況 032 / 034 の両方） */
+const CANCELED = '034'
+const CANCELED_QUERY = '032,034'
+
 /** ExecutionsResponse の形。summary を渡さなければキーごと落とす */
 const listBody = (rows, summary) => ({
   total: rows.length,
@@ -149,7 +153,7 @@ describe('api/mizuhoExecutions', () => {
     }
   })
 
-  it('[MZE-05] 出来状況（処理状況コード）はそのまま status で送る', async () => {
+  it('[MZE-05] 出来状況（処理状況コード）は status で送り、取消済（034）だけ 032,034 に広げる', async () => {
     const sent = []
     // 選択肢はコードマスタ 約定出来状況（010 / 011 / 034）
     const codes = codeEntries('約定出来状況').map(({ code }) => code)
@@ -159,8 +163,31 @@ describe('api/mizuhoExecutions', () => {
       sent.push(lastParams.get('status'))
     }
 
-    expect(sent).toEqual(codes)
-    expect(codes.length).toBeGreaterThan(0)
+    expect(codes).toContain(CANCELED)
+    expect(sent).toEqual(codes.map((code) => (code === CANCELED ? CANCELED_QUERY : code)))
+  })
+
+  it('[MZE-16] 取消済（034）で絞ると、既定モックの 032 と 034 の行がどちらも返る', async () => {
+    const expected = mizuhoExecutions.filter((row) => ['032', '034'].includes(row.処理状況))
+    // 032 の行が混ざっていないと「広げた」ことを確かめられない
+    expect(expected.some((row) => row.処理状況 === '032')).toBe(true)
+
+    const { items, total } = await fetchMizuhoExecutions({ fillStatus: CANCELED })
+
+    expect(total).toBe(expected.length)
+    expect(items.map((item) => item.id).sort()).toEqual(
+      expected.map((row) => String(row.ID)).sort(),
+    )
+  })
+
+  it('[MZE-17] 約定代金_JPY は executedAmountJpy になり、null は null のまま', async () => {
+    record(listBody([head, { ...head, ID: 2, 約定代金_JPY: null }]))
+
+    const { items } = await fetchMizuhoExecutions()
+
+    expect(head.約定代金_JPY).toEqual(expect.any(Number))
+    expect(items[0].executedAmountJpy).toBe(head.約定代金_JPY)
+    expect(items[1].executedAmountJpy).toBeNull()
   })
 
   it('[MZE-06] 売買区分 3 / 1 / 未知 は buy / sell / 空文字 になる', async () => {
@@ -223,7 +250,7 @@ describe('api/mizuhoExecutions', () => {
 
     const { summary } = await fetchMizuhoExecutions()
 
-    expect(summary).toEqual({ executionCount: 0, buyCount: 0, sellCount: 0 })
+    expect(summary).toEqual({ executionCount: 0, buyCount: 0, sellCount: 0, partialCount: 0 })
   })
 
   it('[MZE-11] CSV 出力は一覧と同じクエリに route=0 を載せ、limit / offset は送らない', async () => {

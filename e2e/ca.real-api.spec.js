@@ -269,6 +269,8 @@ test.describe('CAマスタ（実 API 接続）', () => {
     await expect(editDialogOf(page)).toBeVisible()
 
     await expect(page.getByTestId('ca-edit-stock-code')).toHaveValue(ca.銘柄コード)
+    // 銘柄コードは編集で変えられない（取り違えは削除して登録し直す運用）
+    await expect(page.getByTestId('ca-edit-stock-code')).not.toBeEditable()
     await expect(page.getByTestId('ca-edit-type')).toHaveValue(ca.CA種別)
     await expect(page.getByTestId('ca-edit-ex-rights-date')).toHaveValue(toIsoDate(ca.権利付最終日))
     await expect(page.getByTestId('ca-edit-effective-date')).toHaveValue(toIsoDate(ca.効力発生日))

@@ -2,14 +2,15 @@ import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { salesOperator, viewerOperator } from '../src/mocks/fixtures/currentOperator'
 import { executions } from '../src/mocks/fixtures/executions'
-import { formatQuantity } from '../src/utils/format'
+import { formatJpyUnit, formatQuantity } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/executions.md（タイトル先頭の [EX-nn] が対応 ID）
 // 約定を検索して読むだけの画面。ページ位置と検索条件は URL クエリを正とするため、
 // URL と画面の同期と、一覧と同じ応答から出す件数カードをここで守る。
 // あわせて、ヘッダの「CSV出力」が一覧の条件で落ちること（EX-14〜17）と、
-// 預託先の欄・列がロールで出し分けられること（EX-18 / EX-19）を守る。
+// 預託先の欄・列が /auth/me の預託先参照権限（権限.depositary）で出し分けられること（EX-18 / EX-19 / EX-23）、
+// 円貨の約定金額（EX-21）と、取消済で 032 / 034 の両方が当たること（EX-22）を守る。
 // mockApi() は固定の body を返すだけで offset や検索条件のクエリを解釈しない。
 // ページングと絞り込み（EX-02〜EX-08 / EX-12 / EX-13）はクエリを実際に処理する既定ハンドラで検証する。
 
@@ -31,6 +32,7 @@ const COLUMNS = [
   '約定数量',
   '約定単価(USD)',
   '約定代金(USD)',
+  '約定金額(円)',
   '約定日時',
   '出来状況',
   '預託先',
@@ -63,6 +65,14 @@ const byPartial = sorted.filter((row) => row.処理状況 === PARTIAL)
 const LATEST_DATE = firstRow.約定日時.slice(0, 10)
 const byLatestDate = sorted.filter((row) => row.約定日時.slice(0, 10) === LATEST_DATE)
 const bySellAndSymbol = bySell.filter(matchesSymbol)
+
+/*
+ * 取消済（出来有）。選択肢のコードは 034 だけだが、api 層（src/api/executions.js の toStatusQuery）が
+ * status=032,034 に広げて送るので、032 の行も当たる（EX-22）
+ */
+const CANCELED = '034'
+const CANCELED_CODES = ['032', '034']
+const byCanceled = sorted.filter((row) => CANCELED_CODES.includes(row.処理状況))
 
 // フィクスチャのどの銘柄コード・Ticker にも当たらない文字列
 const NO_MATCH = 'ZZZZ'
@@ -337,8 +347,14 @@ test.describe('約定照会', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    // ExecutionSummary に一部出来の件数が無いので、一部出来のカードは '—' のまま
-    const values = [formatQuantity(TOTAL), formatQuantity(byBuy.length), formatQuantity(bySell.length), '—']
+    // 一部出来は約定の行数ではなく一部出来の注文の件数（処理状況 010 の注文 ID の数）
+    const partialOrders = new Set(byPartial.map((row) => row.注文ID)).size
+    const values = [
+      formatQuantity(TOTAL),
+      formatQuantity(byBuy.length),
+      formatQuantity(bySell.length),
+      formatQuantity(partialOrders),
+    ]
 
     const cards = page.getByTestId(/^executions-summary-/)
     await expect(cards).toHaveCount(STAT_CARDS.length)
@@ -458,7 +474,10 @@ test.describe('約定照会', () => {
     await expect(page.getByTestId('executions-export')).toBeDisabled()
   })
 
-  test('[EX-18] 営業員には預託先の欄と列が無く、URL の route も効かない', async ({ page }) => {
+  test('[EX-18] 預託先参照権限の無い営業員には預託先の欄と列が無く、URL の route も効かない', async ({
+    page,
+  }) => {
+    expect(salesOperator.権限.depositary).toBe(false)
     await mockApi(page, [{ path: '*/api/auth/me', body: salesOperator }])
     await page.goto(`${PATH}?route=${MIZUHO}`)
 
@@ -470,7 +489,10 @@ test.describe('約定照会', () => {
     )
   })
 
-  test('[EX-19] 管理者には預託先の欄と列があり、URL の route で絞り込まれる', async ({ page }) => {
+  test('[EX-19] 預託先参照権限のある管理者には預託先の欄と列があり、URL の route で絞り込まれる', async ({
+    page,
+  }) => {
+    expect(viewerOperator.権限.depositary).toBe(true)
     // 1 ページに収まり、全件より少ない（絞り込みが効いたと言える）
     expect(byIb.length).toBeGreaterThan(0)
     expect(byIb.length).toBeLessThan(Math.min(TOTAL, PAGE_SIZE + 1))
@@ -483,5 +505,56 @@ test.describe('約定照会', () => {
     await expect(page.getByTestId('executions-count')).toHaveText(`${byIb.length} 件`)
     await expect(page.getByTestId('executions-table').locator('th')).toHaveText(COLUMNS)
     await expect(columnOf(page, '預託先')).toHaveText(byIb.map((row) => row.注文ルート名))
+  })
+
+  test('[EX-21] 約定金額(円) に円貨の約定代金が出て、為替未登録の行は — になる', async ({ page }) => {
+    // 前提: 先頭（最新）の 1 件だけが為替未登録の null で、ほかは円額を持つ
+    expect(firstRow.約定代金_JPY).toBeNull()
+    expect(sorted.slice(1, PAGE_SIZE).every((row) => row.約定代金_JPY !== null)).toBe(true)
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await expect(columnOf(page, '約定金額(円)')).toHaveText(
+      sorted.slice(0, PAGE_SIZE).map((row) => formatJpyUnit(row.約定代金_JPY)),
+    )
+    await expect(cellOf(rowsOf(page).first(), '約定金額(円)')).toHaveText('—')
+    await expect(cellOf(rowsOf(page).nth(1), '約定金額(円)')).toHaveText(/^[\d,]+ 円$/)
+  })
+
+  test('[EX-22] 出来状況「取消済（出来有）」は 032 と 034 の両方の約定が出る', async ({ page }) => {
+    // 032 の行が混ざっていないと、広げて送ったことを確かめられない
+    expect(byCanceled.some((row) => row.処理状況 === '032')).toBe(true)
+    expect(byCanceled.some((row) => row.処理状況 === CANCELED)).toBe(true)
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('executions-status').selectOption(CANCELED)
+    await search(page)
+
+    expect(new URL(page.url()).searchParams.get('status')).toBe(CANCELED)
+    await expect(page.getByTestId('executions-count')).toHaveText(`${byCanceled.length} 件`)
+    await expect(rowsOf(page)).toHaveCount(byCanceled.length)
+    await expect(columnOf(page, '出来状況')).toHaveText(
+      Array(byCanceled.length).fill('取消済（出来有）'),
+    )
+    await expect(columnOf(page, '約定ID')).toHaveText(byCanceled.map((row) => `#${row.ID}`))
+  })
+
+  test('[EX-23] 管理者でも預託先参照権限が無ければ預託先の欄と列が無く、route も効かない', async ({
+    page,
+  }) => {
+    // ロールは預託先を見られる管理者のまま、権限だけを外す（ロールではなく権限で決まること）
+    const noDepositary = { ...viewerOperator, 権限: { ...viewerOperator.権限, depositary: false } }
+    await mockApi(page, [{ path: '*/api/auth/me', body: noDepositary }])
+    await page.goto(`${PATH}?route=${IB}`)
+
+    await expect(page.getByTestId('executions-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    await expect(page.getByTestId('executions-route')).toHaveCount(0)
+    await expect(page.getByTestId('executions-table').locator('th')).toHaveText(
+      COLUMNS_WITHOUT_ROUTE,
+    )
   })
 })

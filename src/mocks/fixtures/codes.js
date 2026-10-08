@@ -3,8 +3,8 @@
  * ここに書くのは「バックエンドが返す生の形」であり、アプリ内モデルではない。
  *
  * `GET /codes` の応答（codeMasters）はバックエンドの `app/config/codes.json` の写し
- * （2026-09-30 時点。実 API はこのファイルをそのまま返す）に、追加を依頼中の 4 カテゴリ
- * （PROPOSED_CODE_MASTERS）を足したもの。形は openapi の CodesResponse のとおり
+ * （実 API はこのファイルをそのまま返す。2026-10-06 に実 API の応答と 43 カテゴリすべて一致を確認）。
+ * 形は openapi の CodesResponse のとおり
  * `{カテゴリ: {コード: 名称}}` で、`投資方針` だけが `{法人区分: {コード: 名称}}` の 2 段になる。
  * バックエンドがカテゴリや名称を変えたら、ここも写し直す。
  *
@@ -47,30 +47,6 @@ export const handlerListResponse = {
   items: [...salesHandlers]
     .sort((a, b) => a.branchCode.localeCompare(b.branchCode) || a.code.localeCompare(b.code))
     .map(({ code, name, branchCode }) => ({ 部店コード: branchCode, 扱者コード: code, 扱者名: name })),
-}
-
-/**
- * **契約提案（バックエンドに codes.json への追加を依頼中。docs/api/requests.md）。**
- * 画面に選択肢が要るのに、実 API の /codes にも他の API にも取得先が無いカテゴリ。
- * コードは各画面がいま API に送っている値（処理状況コードなど）をそのまま使う。
- * 実 API に入ったら、codes.json の写し（CODES_JSON）へ移してここから消す。
- */
-export const PROPOSED_CODE_MASTERS = {
-  /** 注文照会の検索。コードは GET /orders の status に載せる処理状況コード */
-  注文照会出来状況: {
-    '000': '未出来',
-    '003': '注文中',
-    '010': '一部出来',
-    '011': '全部出来',
-    '034': '取消済（出来有・無）',
-    101: '注文エラー',
-  },
-  /** 約定照会・みずほ注文締の検索。コードは GET /executions の status に載せる処理状況コード */
-  約定出来状況: { '010': '一部出来', '011': '全部出来', '034': '取消済（出来有）' },
-  /** 新規注文の注文種別（OrderRequest の VWAP区分。integer で送る） */
-  VWAP区分: { 0: '通常', 1: 'VWAP' },
-  /** 操作ログの検索（GET /operations/activity-logs の operation） */
-  操作区分: { CREATE: '登録', UPDATE: '更新', DELETE: '削除', BATCH: '一括処理' },
 }
 
 /**
@@ -127,12 +103,11 @@ const CODES_JSON = {
   注文チャネル: { EGY: '営業店', CC: 'コール', HT: 'ネット' },
   金銭受渡方法: { '000': '当社', 100: '他機関', 200: '国外' },
   電出区分: { 0: '', 1: '電出済' },
+  // 2026-10-02 の取り込みで '01'（プレ）と '05'（レギュラー＋アフター）が外れた（実 API の /codes も 4 値）
   発注範囲: {
-    '01': 'プレ',
     '02': 'プレ＋レギュラー',
     '03': 'レギュラー',
     '04': 'プレ＋レギュラー＋アフター',
-    '05': 'レギュラー＋アフター',
     '06': 'アフター',
   },
   法人区分: { 0: '個人', 1: '法人' },
@@ -195,10 +170,36 @@ const CODES_JSON = {
   口座区分: { 0: '一般', 1: '自己', 2: '同業者' },
   事故処理口座区分: { 0: '通常', 1: '事故処理' },
   規制情報: { 0: '通常', 1: '買禁止', 2: '売禁止', 3: '売買禁止' },
+  // ここから下の 4 つはフロントの依頼（docs/api/requests.md #30）で足されたもの
+  /** 注文照会の検索。コードは GET /orders の status に載せる処理状況コード */
+  注文照会出来状況: {
+    '000': '未出来',
+    '003': '注文中',
+    '010': '一部出来',
+    '011': '全部出来',
+    '034': '取消済（出来有・無）',
+    101: '注文エラー',
+  },
+  /** 約定照会・みずほ注文締の検索。コードは GET /executions の status に載せる処理状況コード */
+  約定出来状況: { '010': '一部出来', '011': '全部出来', '034': '取消済（出来有）' },
+  /** 新規注文の注文種別（OrderRequest の VWAP区分。integer で送る） */
+  VWAP区分: { 0: '通常', 1: 'VWAP' },
+  /** 操作ログの検索（GET /operations/activity-logs の operation） */
+  操作区分: {
+    CREATE: '登録',
+    UPDATE: '更新',
+    DELETE: '削除',
+    BATCH: '一括処理',
+    SUSPEND: '停止',
+    RESUME: '再開',
+    SHOW: '表示',
+    HIDE: '非表示',
+    VWAP_BULK: 'VWAP対象一括更新',
+  },
 }
 
-/** `GET /codes` の応答そのもの。実 API の写しに、依頼中の契約提案を足したもの */
-export const codeMasters = { ...CODES_JSON, ...PROPOSED_CODE_MASTERS }
+/** `GET /codes` の応答そのもの */
+export const codeMasters = CODES_JSON
 
 /**
  * 画面のプルダウンに並ぶ順の `{ code, label }`。テストの期待値とフィクスチャの名前引きに使う。

@@ -37,11 +37,10 @@ export const ORDER_TYPE_OPTIONS = [
  * 「＋」は全角（モックの表記）。
  */
 export const EXECUTION_SCOPE_OPTIONS = [
-  { value: '01', label: 'プレ' },
+  // '01'（プレ）と '05'（レギュラー＋アフター）は 2026-10-02 の取り込みで enum から外れた
   { value: '02', label: 'プレ＋レギュラー' },
   { value: '04', label: 'プレ＋レギュラー＋アフター' },
   { value: '03', label: 'レギュラー' },
-  { value: '05', label: 'レギュラー＋アフター' },
   { value: '06', label: 'アフター' },
 ]
 
@@ -107,7 +106,7 @@ export const CASH_DELIVERY_OPTIONS = [
 export const VWAP = Object.freeze({ NORMAL: '0', VWAP: '1' })
 
 /**
- * 注文種別の名前。**入力欄の選択肢はコードマスタ `VWAP区分`（依頼中の契約提案）から来る**
+ * 注文種別の名前。**入力欄の選択肢はコードマスタ `VWAP区分` から来る**
  * （components/orders/OrderEntryForm.vue）。ここは確認・完了の読み上げ（utils/orderEntryForm.js）用の写し
  */
 export const VWAP_OPTIONS = [
@@ -119,11 +118,14 @@ export const VWAP_OPTIONS = [
 export const TRANSACTION_TYPE_CONSIGNMENT = '100'
 
 /**
- * 証券受渡方法（SecuritiesDeliveryEnum）。画面に欄は無く、モックの送信値（他社保管）で固定する。
- * モックは初期値だけ「当社保管」を持っていて食い違う。既定値はバックエンドに問い合わせている
- * （docs/api/requests.md #24）。
+ * 証券受渡方法（SecuritiesDeliveryEnum）。画面に欄は無く、既定値（当社保管）で固定する。
+ * OrderRequest の既定値と同じ（2026-10-06 回答。モックの初期値が正で、送信値の 500 は誤り。
+ * docs/api/requests.md #24 ⑤）。
  */
-export const SECURITIES_DELIVERY_OTHER = '500'
+export const SECURITIES_DELIVERY_DEFAULT = '100'
+
+/** 受注者の最大文字数（OrderRequest.受注者 は必須・1〜4 文字。docs/api/requests.md #24 ③） */
+export const ORDER_PERSON_MAX_LENGTH = 4
 
 /** 入力画面の既定値（モックの初期表示） */
 export const ORDER_FORM_DEFAULTS = Object.freeze({

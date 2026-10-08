@@ -429,6 +429,9 @@ describe('CorporateActionListView', () => {
     await settle()
     await openAddModal(wrapper)
 
+    // 読み取り専用は編集だけ。新規追加では銘柄コードを入力できる
+    expect(addInput(wrapper, 'stock-code').attributes('readonly')).toBeUndefined()
+
     await fillAdd(wrapper, { 'stock-code': NEW_STOCK_CODE, type: NEW_CA_TYPE })
     await submitAdd(wrapper)
 
@@ -597,6 +600,11 @@ describe('CorporateActionListView', () => {
     expect(editInput(wrapper, 'denominator').element.value).toBe(String(sorted[0].分母))
     expect(editInput(wrapper, 'numerator').element.value).toBe(String(sorted[0].分子))
     expect(editInput(wrapper, 'note').element.value).toBe(firstPage[0].note)
+    /*
+     * CA は銘柄に属する出来事なので、銘柄の取り違えは削除して登録し直す運用にする。
+     * 見た目（面が一段沈む）は scoped CSS なので jsdom では検証できない。
+     */
+    expect(editInput(wrapper, 'stock-code').attributes('readonly')).toBeDefined()
   })
 
   it('[CAV-32] 分母・分子が未設定の行では空欄になり 0 にならない', async () => {
@@ -630,7 +638,7 @@ describe('CorporateActionListView', () => {
     expect(countText(wrapper)).toContain(String(TOTAL))
   })
 
-  it('[CAV-27] 必須を空にすると項目の直下に理由を出し、API へ送らない', async () => {
+  it('[CAV-27] 編集で CA種別を空にすると項目の直下に理由を出し、API へ送らない', async () => {
     let updateCalls = 0
     server.use(
       http.put('*/api/masters/ca/:caId', () => {
@@ -642,29 +650,38 @@ describe('CorporateActionListView', () => {
     await settle()
     await openEditModal(wrapper)
 
-    await fillEdit(wrapper, { 'stock-code': '' })
+    // 銘柄コードは読み取り専用で空にできないので、画面の導線で空にできる CA種別で見る
+    await fillEdit(wrapper, { type: '' })
     await submitEdit(wrapper)
 
     expect(exists(wrapper, 'ca-edit-form')).toBe(true)
-    expect(fieldError(wrapper, editInput(wrapper, 'stock-code'))).toBe(
-      '銘柄コードを入力してください。',
-    )
+    expect(fieldError(wrapper, editInput(wrapper, 'type'))).toBe('CA種別を選択してください。')
     expect(updateCalls).toBe(0)
   })
 
   it('[CAV-28] 事前検証の不合格は編集モーダル内に箇条書きで出す', async () => {
+    /*
+     * 銘柄コードは編集で変えられないので、既定モックを不合格にする入力は画面から作れない。
+     * 応答を差し替えて出しかただけを見る（理由の例は、登録後に銘柄マスタから消えた銘柄）
+     */
+    const message = `銘柄コード(${firstPage[0].stockCode})は銘柄マスタに存在しません`
+    server.use(
+      http.post('*/api/masters/ca/validate', () =>
+        HttpResponse.json({ valid: false, errors: [message], warnings: [], details: null }),
+      ),
+    )
     const { wrapper } = await mountView()
     await settle()
     await openEditModal(wrapper)
 
-    await fillEdit(wrapper, { 'stock-code': UNKNOWN_STOCK_CODE })
+    await fillEdit(wrapper, { note: '編集した備考' })
     await submitEdit(wrapper)
 
     expect(exists(wrapper, 'ca-edit-form')).toBe(true)
-    expect(editValidationMessages(wrapper)).toEqual([
-      `銘柄コード(${UNKNOWN_STOCK_CODE})は銘柄マスタに存在しません`,
-    ])
+    expect(editValidationMessages(wrapper)).toEqual([message])
+    // 通信は成功しているので、サーバ障害の枠には出さない
     expect(exists(wrapper, 'ca-edit-error')).toBe(false)
+    expect(countText(wrapper)).toContain(String(TOTAL))
   })
 
   it('[CAV-29] 楽観的ロックの競合は通信・サーバ障害と同じ枠に出す', async () => {

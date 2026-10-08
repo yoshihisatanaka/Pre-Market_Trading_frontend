@@ -1,5 +1,6 @@
 import { File as NodeFile } from 'node:buffer'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { http, HttpResponse } from 'msw'
 import openapi from '../../docs/api/openapi.json'
 import { server } from '../mocks/server'
 import { branchListResponse, handlerListResponse } from '../mocks/fixtures/codes'
@@ -10,8 +11,11 @@ import { blackoutDates, canceledBlackoutDates } from '../mocks/fixtures/blackout
 import { canceledMarketHolidays, marketHolidays } from '../mocks/fixtures/marketHolidays'
 import { sliceCriteriaSetting } from '../mocks/fixtures/sliceCriteria'
 import { canceledFxRates, fxRates } from '../mocks/fixtures/fxRates'
+import { calculationSetting } from '../mocks/fixtures/calculationSettings'
+import { canceledFeePreferences, feePreferences } from '../mocks/fixtures/feePreferences'
 import { activityLogs } from '../mocks/fixtures/activityLogs'
 import { activityLogTargets } from '../mocks/fixtures/activityLogTargets'
+import { users } from '../mocks/fixtures/users'
 import { rolePermissions } from '../mocks/fixtures/permissions'
 import {
   noOperationOperator,
@@ -52,6 +56,7 @@ import {
   orderCsvValidateWithErrorsResponse,
 } from '../mocks/fixtures/orderCsv'
 import { orderCreateExamples, orderValidationExamples } from '../mocks/fixtures/orderEntry'
+import { calculationExamples } from '../mocks/fixtures/calculations'
 import { fetchOrders } from './orders'
 import { amendOrder, cancelOrder, fetchOrderDetail, fetchOrderInquiry } from './orderInquiry'
 import { fetchBranches, fetchCodes, fetchHandlers } from './codes'
@@ -64,7 +69,15 @@ import {
   updateCorporateAction,
   validateCorporateAction,
 } from './ca'
-import { createSymbol, deleteSymbol, fetchSymbols, updateSymbol, validateSymbol } from './symbols'
+import {
+  createSymbol,
+  deleteSymbol,
+  disableAllVwapTargets,
+  fetchSymbols,
+  previewDisableAllVwapTargets,
+  updateSymbol,
+  validateSymbol,
+} from './symbols'
 import {
   createMarketHoliday,
   deleteMarketHoliday,
@@ -86,7 +99,16 @@ import {
   updateFxRate,
   validateFxRate,
 } from './fxRates'
+import { fetchCalculationSettings, updateCalculationSettings } from './calculationSettings'
+import {
+  createFeePreference,
+  deleteFeePreference,
+  fetchFeePreferences,
+  updateFeePreference,
+  validateFeePreference,
+} from './feePreferences'
 import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
+import { fetchUsers } from './users'
 import { fetchStalledOrders, importConfirmationCsv } from './stalledOrders'
 import { fetchPermissions, updateRolePermission } from './permissions'
 import { fetchCurrentOperator } from './auth'
@@ -117,6 +139,7 @@ import {
   validateOrderCsv,
 } from './orderCsv'
 import { createOrder, validateOrder } from './orderEntry'
+import { calculate } from './calculations'
 
 // シナリオ: docs/unit/api-contract.md
 
@@ -199,15 +222,20 @@ const KNOWN_GAPS = [
   /*
    * 操作ログは 2026-09-24 に ActivityLogItem の形へ張り替えた。画面モックにあった 5 項目を
    * フィクスチャに契約提案として載せていたが、操作者名 / 実行者区分 / 対象機能 / 操作内容 の 4 項目は
-   * 2026-09-30 の取り込みで仕様に入ったので外した。残るのは 結果 だけ（src/api/activityLogs.js は読まない）。
+   * 2026-09-30 の取り込みで仕様に入った。残った 結果 は「追加しない」と回答があった（#1 ③。
+   * 履歴は成功した変更しか残さない）ので、2026-10-07 にフィクスチャから消して行を外した。
+   */
+  /*
+   * 障害管理の履歴の更新者は、画面モックがコードの下に氏名を出す。SuspensionHistoryItem には
+   * 操作者（コード）しか無いので、氏名をフィクスチャに契約提案として載せている（src/api/incidents.js は
+   * あれば読む）。仕様に入った日に CON-07 が落ちて気づける。
    */
   {
     kind: 'fixture',
-    fixture: 'activityLogs',
-    keys: ['結果'],
-    reason:
-      '画面モックにあった項目。ActivityLogItem に無いので画面には出さず、フィクスチャに契約提案として残している',
-    request: '#1',
+    fixture: 'suspensionHistories',
+    keys: ['操作者名'],
+    reason: '画面モックの更新者列（コード＋氏名）に要る項目。SuspensionHistoryItem に無い',
+    request: '#48',
   },
   /*
    * 一覧の *Item が ID を返すようになった（2026-09-18 の取り込み）。フロントが先行して
@@ -227,8 +255,10 @@ const KNOWN_GAPS = [
    * 2026-09-18 の取り込みで全マスタに入った。先行実装の食い違いは解消したので行を外した。
    */
   /*
-   * 滞留注文抽出は API が 1 本も無い（成熟度 D）。形は src/mocks/fixtures/stalledOrders.js が
+   * 滞留注文抽出の検索 API は仕様に無い（成熟度 D）。形は src/mocks/fixtures/stalledOrders.js が
    * 契約提案で、MSW だけが応答する。一覧のパス自体が仕様に無いので kind: 'path' で載せる。
+   * 9/30 に (b)「既存の GET /orders を拡張する」で決着したが、src/api/stalledOrders.js はまだこのパスを
+   * 送っている（GET /orders の 2 回呼びへの書き直しが残作業）ので、行は残す。
    */
   {
     kind: 'path',
@@ -238,30 +268,13 @@ const KNOWN_GAPS = [
     request: '#1',
   },
   /*
-   * コンファメーション CSV の取込も同じく仕様に無い。パスと項目名（file）は docs/api/requests.md の
-   * 契約提案で、応答は既存の CsvImportResponse を流用する前提。MSW だけが応答する。
+   * コンファメーション CSV の取込（POST /operations/stalled-orders/confirmation-import）は
+   * 2026-10-07 の取り込みで仕様に入ったので行を外した。
    */
-  {
-    kind: 'path',
-    method: 'POST',
-    path: '/operations/stalled-orders/confirmation-import',
-    reason:
-      'コンファメーション CSV の取込 API が仕様に無い。MSW のハンドラを契約提案として先に置いている',
-    request: '#1',
-  },
   /*
-   * 残高マスタの銘柄名の検索は画面モックにだけある条件で、src/api/balanceAdjustments.js の
-   * 冒頭コメントの 1 番。MSW だけが解釈し、実 API は黙って無視する。
-   * 4 番（売却不可区分）は 2026-09-25 の取り込みで仕様に入ったので行を外した。
+   * 残高マスタの銘柄名の検索（#13）は仕様に symbol_name_ja / symbol_name_en が入ったので、
+   * symbol_name_ja に送り替えて行を外した（2026-10-07）。
    */
-  {
-    kind: 'query',
-    method: 'GET',
-    template: '/masters/balance-adjustments',
-    names: ['symbol_name'],
-    reason: '画面モックの「銘柄名」検索。実 API は無視するので絞り込みが黙って効かない',
-    request: '#13',
-  },
   /*
    * CSV一括注文のプレビューに出す顧客名（CsvOrderRowResult.customer_name。#27）は
    * 2026-09-30 の取り込みで仕様に入ったので、orderCsvValidateRows / orderCsvValidate /
@@ -323,8 +336,15 @@ const FIXTURES = [
   },
   { name: 'sliceCriteria', schema: 'SliceSettingResponse', rows: [sliceCriteriaSetting] },
   { name: 'fxRates', schema: 'FxItem', rows: [...fxRates, ...canceledFxRates] },
+  { name: 'calculationSettings', schema: 'CalculationSettingItem', rows: [calculationSetting] },
+  {
+    name: 'feePreferences',
+    schema: 'FeePreferenceItem',
+    rows: [...feePreferences, ...canceledFeePreferences],
+  },
   { name: 'activityLogs', schema: 'ActivityLogItem', rows: activityLogs },
   { name: 'activityLogTargets', schema: 'ActivityLogTargetItem', rows: activityLogTargets },
+  { name: 'users', schema: 'OperatorItem', rows: users },
   { name: 'permissions', schema: 'RolePermissionItem', rows: rolePermissions },
   {
     name: 'currentOperator',
@@ -395,6 +415,11 @@ const FIXTURES = [
     rows: [...orderCsvValidateResponse.rows, ...orderCsvValidateWithErrorsResponse.rows],
   },
   { name: 'bulkOrderCreate', schema: 'BulkOrderCreateResponse', rows: [bulkOrderCreateResponse] },
+  /*
+   * 仮計算の応答はレスポンス全体が対象（MSW のハンドラが同じ組み立てで返す）。
+   * 外貨 / 円貨 / 手数料パラメータ / 計算パラメータは $ref 経由で入れ子まで型検査される
+   */
+  { name: 'calculation', schema: 'CalculationResponse', rows: calculationExamples },
 ]
 
 function describeSchema(schema) {
@@ -505,7 +530,7 @@ const PROBE_ORDER = {
   expiryDate: '2026-09-30',
   settlementCurrency: '0',
   depositCategory: '0',
-  securitiesDelivery: '500',
+  securitiesDelivery: '100',
   transactionType: '100',
   solicitation: '1',
   orderMethod: '3',
@@ -610,6 +635,11 @@ const PROBES = [
         vwapTarget: '0',
       }),
   },
+  // 銘柄名は ASCII 以外なら symbol_name_ja、ASCII だけなら symbol_name_en に乗る（両方を 1 回ずつ通す）
+  { name: 'fetchSymbols (symbol_name_ja)', run: () => fetchSymbols({ symbolName: 'アップル' }) },
+  { name: 'fetchSymbols (symbol_name_en)', run: () => fetchSymbols({ symbolName: 'Apple' }) },
+  { name: 'previewDisableAllVwapTargets', run: () => previewDisableAllVwapTargets() },
+  { name: 'disableAllVwapTargets', run: () => disableAllVwapTargets() },
   {
     name: 'validateSymbol',
     run: () => validateSymbol({ id: '1', symbolCode: 'AAPL', ticker: 'AAPL', name: 'x' }),
@@ -642,6 +672,8 @@ const PROBES = [
     name: 'fetchBlackoutDates',
     run: () => fetchBlackoutDates({ dateFrom: '2026-01-01', dateTo: '2026-12-31' }),
   },
+  // 画面の検索欄（1 日）は単一指定の blackout_date に乗る
+  { name: 'fetchBlackoutDates (date)', run: () => fetchBlackoutDates({ date: '2026-12-30' }) },
   {
     name: 'validateBlackoutDate',
     run: () => validateBlackoutDate({ date: '2031-01-01', reason: 'x', id: '1' }),
@@ -686,6 +718,35 @@ const PROBES = [
     run: () =>
       updateFxRate({ id: '1', baseDate: '2026-07-25', currencyCode: 'USD', rate: 1, updatedAt: '' }),
   },
+  { name: 'fetchCalculationSettings', run: () => fetchCalculationSettings() },
+  {
+    name: 'updateCalculationSettings',
+    run: () =>
+      updateCalculationSettings({
+        exchangeTaxRate: 0.0001,
+        localCommissionBp: 1,
+        fxSpread: 1,
+        nisaFxMarkupRate: 1,
+        updatedAt: '',
+      }),
+  },
+  {
+    name: 'fetchFeePreferences',
+    run: () => fetchFeePreferences({ branchCode: '123', accountNumber: '1230001', feePattern: 'A' }),
+  },
+  {
+    name: 'validateFeePreference',
+    run: () => validateFeePreference({ id: '1', accountNumber: '1230001', feeMultiplier: '80' }),
+  },
+  {
+    name: 'createFeePreference',
+    run: () => createFeePreference({ accountNumber: '1230014', fxSpread: '0' }),
+  },
+  {
+    name: 'updateFeePreference',
+    run: () => updateFeePreference({ id: '1', accountNumber: '1230001', updatedAt: '' }),
+  },
+  { name: 'deleteFeePreference', run: () => deleteFeePreference('1') },
   {
     name: 'fetchActivityLogs',
     run: () =>
@@ -693,13 +754,19 @@ const PROBES = [
         dateFrom: '2026-01-01',
         dateTo: '2026-12-31',
         operator: '001',
+        actorGroup: 'manager',
         operation: 'UPDATE',
-        targetType: 'customers',
+        targetTypes: ['customers'],
         targetKey: 'x',
         sort: 'asc',
       }),
   },
   { name: 'fetchActivityLogTargets', run: () => fetchActivityLogTargets() },
+  {
+    name: 'fetchUsers',
+    run: () =>
+      fetchUsers({ role: 'sales', branchCode: '123', includeInactive: true, limit: 200, offset: 0 }),
+  },
   {
     name: 'fetchStalledOrders',
     run: () => fetchStalledOrders({ branchCode: '123', accountNumber: '1234567', symbol: 'AAPL' }),
@@ -708,9 +775,18 @@ const PROBES = [
     name: 'importConfirmationCsv',
     /*
      * jsdom の FormData は MSW(node) が Request に変換できず POST が止まる。
-     * この呼び出しの間だけ Node（undici）の FormData と File に差し替える（stalledOrders.spec.js と同じ回避）
+     * この呼び出しの間だけ Node（undici）の FormData と File に差し替える（stalledOrders.spec.js と同じ回避）。
+     * 取込は実 API に入って MSW のハンドラを消したので、この 1 回だけ応答を差し込む
+     * （無いと未定義のリクエストとして vitest.setup.js の onUnhandledRequest: 'error' に掛かる）
      */
     run: async () => {
+      server.use(
+        http.post(
+          '*/api/operations/stalled-orders/confirmation-import',
+          () => HttpResponse.json({ detail: 'データ行がありません。' }, { status: 400 }),
+          { once: true },
+        ),
+      )
       const form = await new Response('', {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       }).formData()
@@ -867,6 +943,32 @@ const PROBES = [
     },
   },
   { name: 'bulkCreateOrders', run: () => bulkCreateOrders([], { createdBy: '001' }) },
+  {
+    name: 'calculate',
+    run: () =>
+      calculate({
+        accountNumber: '1230001',
+        symbol: 'AAPL',
+        side: '1',
+        quantity: 10,
+        unitPrice: 230.5,
+        specificDeposit: '1',
+        fxRate: null,
+        localFee1: null,
+        localFee2: null,
+        localTax1: null,
+        localTax2: null,
+        localTax3: null,
+        otherCost1: null,
+        otherCost2: null,
+        feePattern: null,
+        feeMultiplier: null,
+        basisPoints: null,
+        taxExempt: false,
+        feeMin: null,
+        feeMax: null,
+      }),
+  },
 ]
 
 /** 捕まえたリクエスト。{ probe, method, path, query: string[] } の配列 */

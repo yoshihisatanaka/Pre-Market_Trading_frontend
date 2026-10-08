@@ -16,13 +16,13 @@ import { apiClient } from './client'
  * 持っており、画面に出ている数と送る数を同一にできるため。src/views/BalanceAdjustmentListView.vue）。
  * ここに足し算を置くと「加算式 UI」という画面の都合がワイヤ層に漏れる。
  *
- * **実 API に送り先の無い画面項目が 3 つある**（画面モックにはあるが仕様に無い。
- * 4 番は 2026-09-25 の取り込みで仕様に入ったので、経緯として残している）。
- *   1. 検索の「銘柄名」… GET のクエリは branch_code / account_no / symbol / customer_name の
- *      4 つだけで、銘柄名に当たるものが無い。ここでは `symbol_name` という綴りで送っておき、
- *      **MSW のハンドラだけがそれを解釈して絞り込む**（FastAPI は知らないクエリを無視するので
- *      送っても害は無い。src/api/customers.js の handler_code と同じ扱い）。
- *      **MSW を切って実 API に当てると、この欄は黙って効かなくなる。** 仕様追加を依頼する対象
+ * **実 API に送り先の無い画面項目が 2 つある**（画面モックにはあるが仕様に無い。
+ * 1 番と 4 番は仕様に入ったので、経緯として残している）。
+ *   1. （解消済み）検索の「銘柄名」… 当初は GET に銘柄名のクエリが無く `symbol_name` を送って
+ *      MSW だけが解釈していた（#13）。仕様に `symbol_name_ja`（銘柄名（日本語）部分一致）と
+ *      `symbol_name_en`（銘柄名（英字）部分一致）が入ったので、**`symbol_name_ja` にだけ送る**。
+ *      画面の欄は 1 つだが、2 つは別パラメータで、description に「どちらかに一致（OR）」の記述が無い。
+ *      両方に同じ語を送ると AND になり、日本語名と英字名の両方に含まれる語しか当たらなくなるため
  *   2. 新規追加の「ティッカー」… BalanceAdjustmentRequest の必須は `銘柄コード` で Ticker が無い。
  *      入力値をそのまま 銘柄コード として送る。実 API が Ticker を解決してくれるかは未確認
  *   3. 新規追加の「銘柄名」… 本文に項目が無い。確認ステップの表示だけに使い、送らない
@@ -88,8 +88,8 @@ import { apiClient } from './client'
  *   symbolName?: string,
  * }} [params]
  *   customerName は顧客名・顧客名カナの両方に効く。ticker は 銘柄コード と Ticker の両方に効く
- *   （実 API の `symbol` がどちらにも当たるかは未確認）。symbolName は実 API に送り先が無く、
- *   モックだけが解釈する。空文字は「条件なし」としてリクエストに載せない
+ *   （実 API の `symbol` がどちらにも当たるかは未確認）。symbolName は銘柄名（日本語）の
+ *   部分一致（`symbol_name_ja`）。空文字は「条件なし」としてリクエストに載せない
  * @returns {Promise<{ items: BalanceAdjustment[], total: number }>} 口座番号 → 銘柄コード の昇順
  */
 export async function fetchBalanceAdjustments({
@@ -111,8 +111,8 @@ export async function fetchBalanceAdjustments({
       account_no: toAccountNo(accountNumber),
       customer_name: customerName || undefined,
       symbol: ticker || undefined,
-      // 実 API に無いクエリ。モックだけが解釈する（冒頭コメントの 1 番）
-      symbol_name: symbolName || undefined,
+      // 銘柄名は日本語名にだけ送る（冒頭コメントの 1 番）
+      symbol_name_ja: symbolName || undefined,
     },
   })
 
@@ -217,7 +217,7 @@ function toBalanceAdjustment(raw) {
     /*
      * 表示名はサーバが付けて返す。`預り区分名` は `特定預り区分名` の別名で、
      * どちらか片方しか来ない可能性があるので両方見る
-     * （名前が無ければ画面が src/utils/balanceTypes.js の対応表に落とす）。
+     * （名前が無ければ画面がコードマスタ GET /codes の `特定預り区分` から引く）。
      */
     specificDepositName: raw?.特定預り区分名 ?? raw?.預り区分名 ?? '',
     // 取込時の元残高。手動追加分は null。0 と「値が無い」は別物なので潰さない

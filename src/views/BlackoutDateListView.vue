@@ -48,14 +48,11 @@ const columns = [
 
 /*
  * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
- * URL 上のクエリ名（date_from / date_to）は画面モックの form と同じ契約で、
- * この filters 定義にだけ現れる（実 API 側の start_date / end_date への読み替えは api 層が行う）。
+ * 検索は画面モックどおり「日付」1 欄（その日だけを探す）。URL 上のクエリ名（date）も画面モックの
+ * form と同じ契約で、この filters 定義にだけ現れる（実 API の blackout_date への読み替えは api 層が行う）。
  */
 const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
-  filters: [
-    { key: 'dateFrom', query: 'date_from' },
-    { key: 'dateTo', query: 'date_to' },
-  ],
+  filters: [{ key: 'date', query: 'date' }],
   load: (params) => store.load(params),
 })
 
@@ -256,20 +253,12 @@ function stepBackIfPageEmpty() {
       @submit="submitSearch"
       @clear="clearSearch"
     >
-      <FormField v-slot="{ field }" label="日付（From）">
+      <FormField v-slot="{ field }" label="日付">
         <BaseInput
           v-bind="field"
-          v-model="inputs.dateFrom"
+          v-model="inputs.date"
           type="date"
-          data-testid="blackout-dates-date-from"
-        />
-      </FormField>
-      <FormField v-slot="{ field }" label="日付（To）">
-        <BaseInput
-          v-bind="field"
-          v-model="inputs.dateTo"
-          type="date"
-          data-testid="blackout-dates-date-to"
+          data-testid="blackout-dates-date"
         />
       </FormField>
     </MasterSearchCard>

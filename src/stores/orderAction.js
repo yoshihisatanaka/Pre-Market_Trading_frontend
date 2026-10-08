@@ -20,13 +20,19 @@ import { useAsync } from '@/composables/useAsync'
 export const useOrderActionStore = defineStore('orderAction', () => {
   /*
    * 画面を開き直したり、ブラウザバックで別の注文へ移ったりして load が重なったとき、
-   * 古い応答が新しい注文を上書きしないようにする（useCrudList の fetchLatest と同じ考えかた）
+   * 古い応答が新しい注文を上書きしないようにする。古い応答の失敗も捨てる（投げると useAsync が
+   * error に入れ、表示できている新しい注文がエラー表示に替わる。stores/customerDetail.js と同じ）
    */
   let latestToken = 0
   async function fetchLatest(id) {
     const token = ++latestToken
-    const result = await fetchOrderDetail(id)
-    return token === latestToken ? result : order.value
+    try {
+      const result = await fetchOrderDetail(id)
+      return token === latestToken ? result : order.value
+    } catch (e) {
+      if (token === latestToken) throw e
+      return order.value
+    }
   }
 
   const { data: order, error, loading, execute } = useAsync(fetchLatest)

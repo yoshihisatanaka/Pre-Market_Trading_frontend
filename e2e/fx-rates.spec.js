@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { fxRates } from '../src/mocks/fixtures/fxRates'
 import { mockApi } from './helpers/mockApi'
 
@@ -28,30 +29,44 @@ function toIsoDate(apiDate) {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
 
-/** 小数 2 桁の表示（画面の formatRate と同じ） */
+/** 小数 4 桁の表示（画面 FxRateMasterView.vue の formatRate と同じ） */
 function rateText(value) {
-  return value.toFixed(2)
+  return value.toFixed(4)
+}
+
+/** 成功メッセージ（画面 FxRateMasterView.vue の noticeMessage と同じ組み立て） */
+function noticeText(rate, withholdingRate) {
+  return (
+    `USD/JPY の公示（社内）レートを ${rateText(rate)} 円、` +
+    `源泉レートを ${rateText(withholdingRate)} 円に更新しました。`
+  )
 }
 
 /**
- * 最新（latest）と詳細が「今日（JST）の基準日の行」を返すようにする差し替え。
+ * 最新（latest）と詳細が、既定モックの最新行を `patch` で上書きした行を返すようにする差し替え。
  * ID と更新日時は既定モックの最新行のまま残すので、既定の PUT ハンドラがその行を見つけて
  * 楽観的ロックの照合も通る（変更の経路を既定ハンドラで通すため）。
  */
-function todayRowOverrides() {
-  const todayRow = { ...latestRow, 基準日: toApiDate(todayJst()) }
+function latestRowOverrides(patch) {
+  const row = { ...latestRow, ...patch }
   return [
     {
       path: LATEST_PATH,
       body: {
-        ID: todayRow.ID,
-        基準日: todayRow.基準日,
-        通貨コード: todayRow.通貨コード,
-        為替レート: todayRow.為替レート,
+        ID: row.ID,
+        基準日: row.基準日,
+        通貨コード: row.通貨コード,
+        為替レート: row.為替レート,
+        源泉レート: row.源泉レート,
       },
     },
-    { path: `*/api/masters/fx/${todayRow.ID}`, body: { exchange_rate: todayRow } },
+    { path: `*/api/masters/fx/${row.ID}`, body: { exchange_rate: row } },
   ]
+}
+
+/** 最新（latest）と詳細が「今日（JST）の基準日の行」を返すようにする差し替え */
+function todayRowOverrides() {
+  return latestRowOverrides({ 基準日: toApiDate(todayJst()) })
 }
 
 /** 最新レートが 1 件も無い（404）差し替え */
@@ -66,24 +81,32 @@ async function openAndWaitCurrent(page) {
   await expect(page.getByTestId('fx-rate')).toHaveText(rateText(latestRow.為替レート))
 }
 
-async function openUpdateWith(page, value) {
+/** モーダルを開く。各引数は undefined なら初期値（現在レート）のまま触らない */
+async function openUpdateWith(page, { rate, withholdingRate } = {}) {
   await page.getByTestId('fx-update').click()
   await expect(page.getByTestId('fx-update-form')).toBeVisible()
-  await page.getByTestId('fx-rate-input').fill(value)
+  if (rate !== undefined) await page.getByTestId('fx-rate-input').fill(rate)
+  if (withholdingRate !== undefined) {
+    await page.getByTestId('fx-withholding-rate-input').fill(withholdingRate)
+  }
 }
 
 // シナリオ: docs/e2e/fx-rates.md（タイトル先頭の [FX-nn] が対応 ID）
-// 現在レートの 4 状態、今日の行の有無による登録 / 変更の分岐、モーダルに出る拒否理由を守る。
+// 公示（社内）レートと源泉レートの 2 カードの 4 状態、今日の行の有無による登録 / 変更の分岐、
+// モーダルに出る拒否理由を守る。
 // dev サーバ側で MSW が起動しているため、既定ではフィクスチャの応答が返る。
 // モックの可変状態はページ単位なので、保存しても他のテストには持ち越さない。
 test.describe('為替マスタ', () => {
-  test('[FX-01] 現在レートと基準日・最終更新が表示される', async ({ page }) => {
+  test('[FX-01] 公示レートのカードに現在レートと基準日・最終更新が表示される', async ({
+    page,
+  }) => {
     await page.goto(PAGE_PATH)
 
+    const card = page.getByTestId('fx-public-card')
     await expect(page.getByTestId('fx-current')).toBeVisible()
-    await expect(page.getByTestId('fx-rate')).toHaveText(rateText(latestRow.為替レート))
-    await expect(page.getByTestId('fx-base-date')).toHaveText(toIsoDate(latestRow.基準日))
-    await expect(page.getByTestId('fx-updated')).toContainText(latestRow.更新者)
+    await expect(card.getByTestId('fx-rate')).toHaveText(rateText(latestRow.為替レート))
+    await expect(card.getByTestId('fx-base-date')).toHaveText(toIsoDate(latestRow.基準日))
+    await expect(card.getByTestId('fx-updated')).toContainText(latestRow.更新者)
   })
 
   test('[FX-02] 応答が返るまで読み込み中の表示が出る', async ({ page }) => {
@@ -127,14 +150,14 @@ test.describe('為替マスタ', () => {
   }) => {
     await openAndWaitCurrent(page)
 
-    await openUpdateWith(page, '151')
+    await openUpdateWith(page, { rate: '151' })
     await page.getByTestId('fx-update-submit').click()
 
     await expect(page.getByTestId('fx-update-form')).toHaveCount(0)
     await expect(page.getByTestId('fx-notice')).toHaveText(
-      'USD/JPY のレートを 151.00 円に更新しました。',
+      noticeText(151, latestRow.源泉レート),
     )
-    await expect(page.getByTestId('fx-rate')).toHaveText('151.00')
+    await expect(page.getByTestId('fx-rate')).toHaveText(rateText(151))
     await expect(page.getByTestId('fx-base-date')).toHaveText(todayJst())
   })
 
@@ -154,24 +177,27 @@ test.describe('為替マスタ', () => {
     await page.goto(PAGE_PATH)
     await expect(page.getByTestId('fx-base-date')).toHaveText(todayJst())
 
-    await openUpdateWith(page, '151')
+    await openUpdateWith(page, { rate: '151' })
     await page.getByTestId('fx-update-submit').click()
 
     await expect(page.getByTestId('fx-update-form')).toHaveCount(0)
     await expect(page.getByTestId('fx-notice')).toHaveText(
-      'USD/JPY のレートを 151.00 円に更新しました。',
+      noticeText(151, latestRow.源泉レート),
     )
-    await expect(page.getByTestId('fx-rate')).toHaveText('151.00')
+    await expect(page.getByTestId('fx-rate')).toHaveText(rateText(151))
     await expect(page.getByTestId('fx-base-date')).toHaveText(todayJst())
   })
 
-  test('[FX-07] レートを空にして更新すると入力を促す', async ({ page }) => {
+  test('[FX-07] 公示レートを空にして更新すると入力を促す', async ({ page }) => {
     await openAndWaitCurrent(page)
 
-    await openUpdateWith(page, '')
+    await openUpdateWith(page, { rate: '' })
     await page.getByTestId('fx-update-submit').click()
 
-    await expect(page.getByTestId('fx-update-form')).toContainText('レートを入力してください。')
+    await expect(page.getByTestId('fx-rate-input')).toHaveAccessibleDescription(
+      'レートを入力してください。',
+    )
+    await expect(page.getByTestId('fx-update-form')).toBeVisible()
     await expect(page.getByTestId('fx-notice')).toHaveCount(0)
     await expect(page.getByTestId('fx-rate')).toHaveText(rateText(latestRow.為替レート))
   })
@@ -179,7 +205,7 @@ test.describe('為替マスタ', () => {
   test('[FX-08] 範囲外のレートは警告のあと「続行」で保存される', async ({ page }) => {
     await openAndWaitCurrent(page)
 
-    await openUpdateWith(page, '350')
+    await openUpdateWith(page, { rate: '350' })
     const submit = page.getByTestId('fx-update-submit')
     await submit.click()
 
@@ -191,8 +217,8 @@ test.describe('為替マスタ', () => {
     await submit.click()
 
     await expect(page.getByTestId('fx-update-form')).toHaveCount(0)
-    await expect(page.getByTestId('fx-notice')).toContainText('350.00 円に更新しました。')
-    await expect(page.getByTestId('fx-rate')).toHaveText('350.00')
+    await expect(page.getByTestId('fx-notice')).toContainText(`${rateText(350)} 円`)
+    await expect(page.getByTestId('fx-rate')).toHaveText(rateText(350))
   })
 
   test('[FX-09] 事前検証で不合格になると理由が出て保存されない', async ({ page }) => {
@@ -206,7 +232,7 @@ test.describe('為替マスタ', () => {
     ])
     await openAndWaitCurrent(page)
 
-    await openUpdateWith(page, '151')
+    await openUpdateWith(page, { rate: '151' })
     await page.getByTestId('fx-update-submit').click()
 
     await expect(page.getByTestId('fx-update-validation-error')).toContainText(reason)
@@ -230,7 +256,7 @@ test.describe('為替マスタ', () => {
     await page.goto(PAGE_PATH)
     await expect(page.getByTestId('fx-base-date')).toHaveText(todayJst())
 
-    await openUpdateWith(page, '151')
+    await openUpdateWith(page, { rate: '151' })
     await page.getByTestId('fx-update-submit').click()
 
     await expect(page.getByTestId('fx-update-error')).toContainText('更新されました')
@@ -241,7 +267,7 @@ test.describe('為替マスタ', () => {
   test('[FX-11] キャンセルするとモーダルが閉じ現在値は変わらない', async ({ page }) => {
     await openAndWaitCurrent(page)
 
-    await openUpdateWith(page, '151')
+    await openUpdateWith(page, { rate: '151' })
     await page.getByTestId('fx-update-cancel').click()
 
     await expect(page.getByTestId('fx-update-form')).toHaveCount(0)
@@ -252,7 +278,7 @@ test.describe('為替マスタ', () => {
   test('[FX-12] サイドメニューから遷移できる', async ({ page }) => {
     await page.goto('/')
 
-    await page.getByRole('link', { name: '為替マスタ', exact: true }).click()
+    await clickSideMenuLink(page, '為替マスタ')
 
     await expect(page).toHaveURL(/\/masters\/fx$/)
     await expect(page.getByTestId('fx-current')).toBeVisible()
@@ -265,14 +291,85 @@ test.describe('為替マスタ', () => {
 
     await page.getByTestId('fx-update').click()
     await expect(page.getByTestId('fx-rate-input')).toHaveValue('')
+    await expect(page.getByTestId('fx-withholding-rate-input')).toHaveValue('')
     await page.getByTestId('fx-rate-input').fill('151')
+    await page.getByTestId('fx-withholding-rate-input').fill('150.5')
     await page.getByTestId('fx-update-submit').click()
 
-    await expect(page.getByTestId('fx-notice')).toHaveText(
-      'USD/JPY のレートを 151.00 円に更新しました。',
-    )
+    await expect(page.getByTestId('fx-notice')).toHaveText(noticeText(151, 150.5))
     await expect(page.getByTestId('fx-empty')).toHaveCount(0)
-    await expect(page.getByTestId('fx-rate')).toHaveText('151.00')
+    await expect(page.getByTestId('fx-rate')).toHaveText(rateText(151))
+    await expect(page.getByTestId('fx-withholding-rate')).toHaveText(rateText(150.5))
     await expect(page.getByTestId('fx-base-date')).toHaveText(todayJst())
+  })
+
+  test('[FX-14] 源泉レートのカードに現在レートと基準日・最終更新が表示される', async ({
+    page,
+  }) => {
+    await page.goto(PAGE_PATH)
+
+    const card = page.getByTestId('fx-withholding-card')
+    await expect(card.getByTestId('fx-withholding-rate')).toHaveText(
+      rateText(latestRow.源泉レート),
+    )
+    await expect(card.getByTestId('fx-withholding-base-date')).toHaveText(
+      toIsoDate(latestRow.基準日),
+    )
+    await expect(card.getByTestId('fx-withholding-updated')).toContainText(latestRow.更新者)
+  })
+
+  test('[FX-15] 源泉レートを変えて保存すると源泉カードだけが入れ替わる', async ({ page }) => {
+    await openAndWaitCurrent(page)
+
+    await openUpdateWith(page, { withholdingRate: '150.1234' })
+    await page.getByTestId('fx-update-submit').click()
+
+    await expect(page.getByTestId('fx-update-form')).toHaveCount(0)
+    await expect(page.getByTestId('fx-notice')).toContainText(
+      `源泉レートを ${rateText(150.1234)} 円`,
+    )
+    await expect(page.getByTestId('fx-withholding-rate')).toHaveText(rateText(150.1234))
+    await expect(page.getByTestId('fx-withholding-base-date')).toHaveText(todayJst())
+    await expect(page.getByTestId('fx-rate')).toHaveText(rateText(latestRow.為替レート))
+  })
+
+  test('[FX-16] 源泉レートを空にして更新すると入力を促す', async ({ page }) => {
+    await openAndWaitCurrent(page)
+
+    await openUpdateWith(page, { withholdingRate: '' })
+    await page.getByTestId('fx-update-submit').click()
+
+    await expect(page.getByTestId('fx-withholding-rate-input')).toHaveAccessibleDescription(
+      'レートを入力してください。',
+    )
+    await expect(page.getByTestId('fx-rate-input')).toHaveAccessibleDescription('')
+    await expect(page.getByTestId('fx-update-form')).toBeVisible()
+    await expect(page.getByTestId('fx-notice')).toHaveCount(0)
+    await expect(page.getByTestId('fx-withholding-rate')).toHaveText(
+      rateText(latestRow.源泉レート),
+    )
+  })
+
+  test('[FX-17] 源泉レートが未設定だと「—」が出て入力欄は空で開く', async ({ page }) => {
+    await mockApi(page, latestRowOverrides({ 源泉レート: null }))
+    await openAndWaitCurrent(page)
+
+    await expect(page.getByTestId('fx-withholding-rate')).toHaveText('—')
+
+    await openUpdateWith(page)
+    await expect(page.getByTestId('fx-withholding-rate-input')).toHaveValue('')
+  })
+
+  test('[FX-18] 源泉レートが 0 だとサーバの拒否理由が出て保存されない', async ({ page }) => {
+    await openAndWaitCurrent(page)
+
+    await openUpdateWith(page, { withholdingRate: '0' })
+    await page.getByTestId('fx-update-submit').click()
+
+    await expect(page.getByTestId('fx-update-form')).toContainText('源泉レート: ')
+    await expect(page.getByTestId('fx-notice')).toHaveCount(0)
+    await expect(page.getByTestId('fx-withholding-rate')).toHaveText(
+      rateText(latestRow.源泉レート),
+    )
   })
 })

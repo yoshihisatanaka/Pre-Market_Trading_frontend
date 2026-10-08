@@ -20,14 +20,27 @@ import { mockApi } from './helpers/mockApi'
 // 新規注文（外株注文入力）は入力 → 確認 → 完了を 1 つのルートで切り替える。初期読み込みの 4 状態、
 // 送信を受け付けない帯（権限なし・全体停止中）、口座番号・ティッカーの照会、止め方 3 種
 // （画面の入力不備 / サーバの errors / サーバの warnings）、確定から次の注文までを実ブラウザで守る。
-// 入口はサイドメニューに頼らず /orders/new を直接開く（メニュー項目は外す予定のため）。
+// 入口は顧客 ID 1 の顧客詳細の注文入力タブをクエリなしで直接開く（部店・口座番号は空のまま）。
+// /orders/new は口座番号のクエリが無いと顧客検索へ回る（NO-31）ので入口には使わない。
+// ただし顧客バーはタブの中では出さない（NO-34）ので、バーを見る行（NO-07〜09）だけ openStandaloneForm で開く。
 // 既定モックは確定のたびに注文 ID を FIRST_ORDER_ID から採番する（ページを開くたびに初期化）。
+// 受注者は必須・4 文字以内で、MSW 版では空で始まる（NO-32 / NO-33）。確認へ進む行は fillOrder が受注者を入れる。
 
-const PATH = '/orders/new'
+const PATH = '/customers/1/order-entry'
+const ORDER_NEW_PATH = '/orders/new'
 
 const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 
 const BRANCH = '123'
+
+/*
+ * 受注者（必須・4 文字以内。src/utils/orderEntryOptions.js の ORDER_PERSON_MAX_LENGTH と同じ値）。
+ * 初期値は社員コードが 4 文字以内のときだけ入るが、MSW の /auth/me の操作者コード
+ * （src/mocks/fixtures/currentOperator.js）はどれも 5 文字以上なので、MSW 版では空で始まる。
+ * 確認画面へ進む行はこの値を入れてから送信する
+ */
+const ORDER_PERSON = '001'
+const ORDER_PERSON_MAX_LENGTH = 4
 
 // フィクスチャはバックエンドの生の形（日本語キー・口座番号は integer）
 const customerOf = (accountNumber) => customers.find((row) => row.口座番号 === accountNumber)
@@ -66,20 +79,38 @@ async function openForm(page) {
   await expect(page.getByTestId('order-entry-form')).toBeVisible()
 }
 
+/**
+ * 顧客詳細を通らない入口（/orders/new）で開く。フォームの上の顧客バーはこちらでだけ出る
+ * （顧客詳細のタブの中では顧客カードと二重になるので出さない）。/orders/new は口座番号のクエリが
+ * 無いと顧客検索へ回るので、打ち直す前の顧客を付けて開く
+ */
+async function openStandaloneForm(page, customer) {
+  await page.goto(`${ORDER_NEW_PATH}?branch_code=${BRANCH}&account_number=${customer.口座番号}`)
+  await expect(page.getByTestId('order-entry-form')).toBeVisible()
+  await expect(page.getByTestId('order-entry-customer-name')).toHaveText(customer.顧客名)
+}
+
 function sideButton(page, name) {
   return page.getByTestId('order-entry-side').getByRole('button', { name, exact: true })
 }
 
-/** 部店・口座番号・ティッカー・売買・数量を入れる（ほかは既定値のまま） */
+/** 部店・口座番号・ティッカー・売買・数量・受注者を入れる（ほかは既定値のまま） */
 async function fillOrder(
   page,
-  { account = String(PLAIN.口座番号), ticker = AAPL.Ticker, side = '買い', quantity = '10' } = {},
+  {
+    account = String(PLAIN.口座番号),
+    ticker = AAPL.Ticker,
+    side = '買い',
+    quantity = '10',
+    orderPerson = ORDER_PERSON,
+  } = {},
 ) {
   await page.getByTestId('order-entry-branch').fill(BRANCH)
   await page.getByTestId('order-entry-account').fill(account)
   await page.getByTestId('order-entry-ticker').fill(ticker)
   if (side) await sideButton(page, side).click()
   if (quantity) await page.getByTestId('order-entry-quantity').fill(quantity)
+  if (orderPerson) await page.getByTestId('order-entry-order-person').fill(orderPerson)
 }
 
 async function submitInput(page) {
@@ -114,7 +145,6 @@ test.describe('新規注文 表示', () => {
   test('[NO-01] 画面を開くと入力フォームが既定値で表示される', async ({ page }) => {
     await openForm(page)
 
-    await expect(page.getByRole('heading', { name: '新規注文', exact: true })).toBeVisible()
     await expect(page.getByTestId('order-entry-submit')).toBeEnabled()
     await expect(page.getByTestId('order-entry-submit')).toHaveText('送信')
 
@@ -220,8 +250,7 @@ test.describe('新規注文 表示', () => {
 
 test.describe('新規注文 顧客・銘柄の照会', () => {
   test('[NO-07] 口座番号を入れると顧客名と顧客バーが出る', async ({ page }) => {
-    await openForm(page)
-    await page.getByTestId('order-entry-branch').fill(BRANCH)
+    await openStandaloneForm(page, CAUTION)
     await page.getByTestId('order-entry-account').fill(String(PLAIN.口座番号))
 
     await expect(page.getByTestId('order-entry-account-hint')).toHaveText(PLAIN.顧客名)
@@ -232,8 +261,7 @@ test.describe('新規注文 顧客・銘柄の照会', () => {
   })
 
   test('[NO-08] コンプラランク A の顧客は顧客バーに要注意が出る', async ({ page }) => {
-    await openForm(page)
-    await page.getByTestId('order-entry-branch').fill(BRANCH)
+    await openStandaloneForm(page, PLAIN)
     await page.getByTestId('order-entry-account').fill(String(CAUTION.口座番号))
 
     await expect(page.getByTestId('order-entry-customer-name')).toHaveText(CAUTION.顧客名)
@@ -243,8 +271,7 @@ test.describe('新規注文 顧客・銘柄の照会', () => {
   })
 
   test('[NO-09] 全取引停止の顧客は顧客バーに全取引停止が出る', async ({ page }) => {
-    await openForm(page)
-    await page.getByTestId('order-entry-branch').fill(BRANCH)
+    await openStandaloneForm(page, PLAIN)
     await page.getByTestId('order-entry-account').fill(String(SUSPENDED.口座番号))
 
     await expect(page.getByTestId('order-entry-customer-name')).toHaveText(SUSPENDED.顧客名)
@@ -261,12 +288,42 @@ test.describe('新規注文 顧客・銘柄の照会', () => {
     await expect(page.getByTestId('order-entry-customer-bar')).toHaveCount(0)
   })
 
+  test('[NO-34] 顧客詳細のタブの中では口座番号を入れても顧客バーは出ない', async ({ page }) => {
+    await openForm(page)
+    await page.getByTestId('order-entry-branch').fill(BRANCH)
+    await page.getByTestId('order-entry-account').fill(String(PLAIN.口座番号))
+
+    // 照会が済んだのを口座番号の横で確かめてから、バーが無いことを見る
+    await expect(page.getByTestId('order-entry-account-hint')).toHaveText(PLAIN.顧客名)
+    await expect(page.getByTestId('order-entry-customer-bar')).toHaveCount(0)
+  })
+
   test('[NO-11] 小文字のティッカーは大文字になり英字の銘柄名が出る', async ({ page }) => {
     await openForm(page)
     await page.getByTestId('order-entry-ticker').fill(AAPL.Ticker.toLowerCase())
 
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(AAPL.Ticker)
+    await expect(page.getByTestId('order-entry-ticker-code')).toHaveText(
+      `ティッカー：${AAPL.Ticker} ／ 銘柄コード：${AAPL.銘柄コード}`,
+    )
     await expect(page.getByTestId('order-entry-ticker-hint')).toHaveText(AAPL.銘柄名_英字)
+  })
+
+  test('[NO-35] 銘柄コードで入れても同じ銘柄が引け、確認画面はティッカーで読み上げる', async ({
+    page,
+  }) => {
+    await openForm(page)
+    await goToConfirm(page, { ticker: AAPL.銘柄コード.toLowerCase() })
+
+    const symbol = page.getByTestId('order-readback-symbol')
+    await expect(symbol).toContainText(AAPL.Ticker)
+    await expect(symbol).toContainText(AAPL.銘柄名_英字)
+
+    await page.getByTestId('order-entry-back').click()
+    await expect(page.getByTestId('order-entry-ticker')).toHaveValue(AAPL.銘柄コード)
+    await expect(page.getByTestId('order-entry-ticker-code')).toHaveText(
+      `ティッカー：${AAPL.Ticker} ／ 銘柄コード：${AAPL.銘柄コード}`,
+    )
   })
 
   test('[NO-12] 存在しないティッカーは「銘柄なし」で送信すると項目の下に理由が出る', async ({
@@ -295,10 +352,37 @@ test.describe('新規注文 入力の不備とサーバの判定', () => {
     const alerts = page.getByTestId('order-entry-form').getByRole('alert')
     await expect(alerts.filter({ hasText: '部店コードを入力してください。' })).toBeVisible()
     await expect(alerts.filter({ hasText: '口座番号を入力してください。' })).toBeVisible()
-    await expect(alerts.filter({ hasText: '銘柄コードを入力してください。' })).toBeVisible()
+    await expect(alerts.filter({ hasText: 'ティッカーを入力してください。' })).toBeVisible()
     await expect(alerts.filter({ hasText: '売買区分を選択してください。' })).toBeVisible()
     await expect(alerts.filter({ hasText: '注文数量を入力してください。' })).toBeVisible()
 
+    await expectStillInput(page)
+    await expect(page.getByTestId('order-entry-errors')).toHaveCount(0)
+    await expect(page.getByTestId('order-entry-warnings')).toHaveCount(0)
+  })
+
+  test('[NO-32] 受注者は空で始まり、4 文字までしか入らない', async ({ page }) => {
+    await openForm(page)
+
+    const orderPerson = page.getByTestId('order-entry-order-person')
+    await expect(orderPerson).toHaveValue('')
+    await expect(orderPerson).toHaveAttribute('maxlength', String(ORDER_PERSON_MAX_LENGTH))
+
+    // 1 文字ずつ打つ（利用者の入力と同じく maxlength で止まる）
+    await orderPerson.pressSequentially('12345')
+    await expect(orderPerson).toHaveValue('1234')
+  })
+
+  test('[NO-33] 受注者が空のまま送信すると受注者の下に理由が出て止まる', async ({ page }) => {
+    await openForm(page)
+    await fillOrder(page, { orderPerson: '' })
+    await submitInput(page)
+
+    await expect(
+      page.getByTestId('order-entry-form').getByRole('alert').filter({
+        hasText: '受注者を入力してください。',
+      }),
+    ).toBeVisible()
     await expectStillInput(page)
     await expect(page.getByTestId('order-entry-errors')).toHaveCount(0)
     await expect(page.getByTestId('order-entry-warnings')).toHaveCount(0)
@@ -421,6 +505,7 @@ test.describe('新規注文 確認', () => {
     await expect(page.getByTestId('order-readback-market-expiry')).toHaveText(
       `レギュラー ／ ${expiryLabel}`,
     )
+    await expect(page.getByTestId('order-readback-order-person')).toHaveText(ORDER_PERSON)
 
     // 成行の概算は 前日終値 × 数量、円貨は為替マスタの直近レートを掛ける
     const usd = Math.round(quantity * AAPL.前日終値 * 100) / 100
@@ -507,10 +592,13 @@ test.describe('新規注文 確定と次の注文', () => {
     await expect(page.getByTestId('order-entry-account')).toHaveValue(String(PLAIN.口座番号))
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue('')
     await expect(page.getByTestId('order-entry-quantity')).toHaveValue('')
+    // 受注者は社員コードの初期値に戻る（MSW の操作者コードは 5 文字以上なので空）
+    await expect(page.getByTestId('order-entry-order-person')).toHaveValue('')
 
     await page.getByTestId('order-entry-ticker').fill(AAPL.Ticker)
     await sideButton(page, '買い').click()
     await page.getByTestId('order-entry-quantity').fill('10')
+    await page.getByTestId('order-entry-order-person').fill(ORDER_PERSON)
     await submitInput(page)
     await expect(page.getByTestId('order-entry-confirm')).toBeVisible()
     await confirmOrder(page)
@@ -520,7 +608,7 @@ test.describe('新規注文 確定と次の注文', () => {
     )
   })
 
-  test('[NO-26] 「別の顧客で新規注文」は部店・口座番号も空にして入力へ戻る', async ({ page }) => {
+  test('[NO-26] 「別の顧客で新規注文」は顧客検索へ移る', async ({ page }) => {
     await openForm(page)
     await goToConfirm(page)
     await confirmOrder(page)
@@ -528,10 +616,23 @@ test.describe('新規注文 確定と次の注文', () => {
 
     await page.getByTestId('order-entry-new-order').click()
 
+    await expect(page).toHaveURL(/\/customers\/search$/, { timeout: 15_000 })
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
+  })
+
+  test('[NO-31] /orders/new は顧客の指定が無ければ顧客検索へ回り、口座番号付きなら開く', async ({
+    page,
+  }) => {
+    await page.goto(ORDER_NEW_PATH)
+    await expect(page).toHaveURL(/\/customers\/search$/)
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
+
+    await page.goto(`${ORDER_NEW_PATH}?branch_code=${BRANCH}&account_number=${PLAIN.口座番号}`)
+    await expect(page).toHaveURL(/\/orders\/new\?/)
+    await expect(page.getByRole('heading', { name: '新規注文', exact: true })).toBeVisible()
     await expect(page.getByTestId('order-entry-form')).toBeVisible()
-    await expect(page.getByTestId('order-entry-branch')).toHaveValue('')
-    await expect(page.getByTestId('order-entry-account')).toHaveValue('')
-    await expect(page.getByTestId('order-entry-customer-bar')).toHaveCount(0)
+    await expect(page.getByTestId('order-entry-branch')).toHaveValue(BRANCH)
+    await expect(page.getByTestId('order-entry-account')).toHaveValue(String(PLAIN.口座番号))
   })
 
   test('[NO-27] 「注文照会へ」で注文照会の画面へ移る', async ({ page }) => {

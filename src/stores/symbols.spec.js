@@ -84,6 +84,43 @@ const bothCodes = codesOf(
 // フィクスチャのどの銘柄コード・Ticker にも当たらない文字列
 const NO_MATCH = 'ZZZZ'
 
+/*
+ * 銘柄名（日本語）の検索。先頭行の銘柄名をそのまま使い、実 API と同じ規則
+ * （銘柄名への部分一致・大文字小文字を区別しない）で当たる行を導く。
+ * 銘柄コードや Ticker には当てない（symbol とは別のパラメータ）。
+ */
+const SYMBOL_NAME = sorted[0].銘柄名
+const nameCodes = codesOf(
+  sorted.filter((symbol) => (symbol.銘柄名 ?? '').toUpperCase().includes(SYMBOL_NAME.toUpperCase())),
+)
+
+/** VWAP対象区分のコード値（utils/symbolTypes.js と同じ。モックの一括更新が対象にするのは '1' の行） */
+const VWAP_ON = '1'
+const VWAP_OFF = '0'
+
+/** いま VWAP対象の有効な行。一括対象外化の対象件数と対象の一覧はここから導く */
+const vwapTargets = sorted.filter((symbol) => symbol.VWAP対象区分 === VWAP_ON)
+const vwapTargetCodes = codesOf(vwapTargets)
+
+const VWAP_BULK_PATH = '*/api/masters/symbols/vwap-target'
+const VWAP_BULK_VALIDATE_PATH = '*/api/masters/symbols/vwap-target/validate'
+
+/** 一括対象外化の事前確認を 500 にする差し替え */
+function failVwapPreview() {
+  server.use(
+    http.post(VWAP_BULK_VALIDATE_PATH, () =>
+      HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 }),
+    ),
+  )
+}
+
+/** 一括対象外化の本実行を 500 にする差し替え（事前確認は既定ハンドラのまま通す） */
+function failVwapBulk() {
+  server.use(
+    http.post(VWAP_BULK_PATH, () => HttpResponse.json({ detail: ERROR_MESSAGE }, { status: 500 })),
+  )
+}
+
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 
 /** 一覧を 500 にする差し替え */
@@ -303,6 +340,16 @@ describe('stores/symbols', () => {
     expect(store.deleting).toBe(false)
     // 削除は事前検証を通さないので、理由の入れ物は deleteError の 1 つだけ
     expect(store.deleteError).toBeNull()
+
+    // VWAP一括は useCrudList の外。事前確認と本実行で入れ物が分かれている
+    expect(typeof store.previewDisableAllVwap).toBe('function')
+    expect(typeof store.disableAllVwap).toBe('function')
+    expect(typeof store.clearVwapBulkError).toBe('function')
+    expect(store.vwapBulkPreview).toBeNull()
+    expect(store.vwapBulkPreviewing).toBe(false)
+    expect(store.vwapBulkPreviewError).toBeNull()
+    expect(store.vwapBulkUpdating).toBe(false)
+    expect(store.vwapBulkError).toBeNull()
   })
 
   it('[STS-11] 古い応答が新しい結果を上書きしない', async () => {
@@ -532,5 +579,132 @@ describe('stores/symbols', () => {
     store.clearDeleteError()
 
     expect(store.deleteError).toBeNull()
+  })
+
+  it('[STS-27] 銘柄名（日本語）で絞り込む', async () => {
+    const store = useSymbolsStore()
+
+    await store.load({ symbolName: SYMBOL_NAME })
+
+    // 全件が残るなら「銘柄名で絞れた」ことにならない
+    expect(nameCodes.length).toBeGreaterThan(0)
+    expect(nameCodes.length).toBeLessThan(TOTAL)
+    expect(store.symbolName).toBe(SYMBOL_NAME)
+    expect(store.total).toBe(nameCodes.length)
+    expect(codes(store)).toEqual(nameCodes.slice(0, PAGE_SIZE))
+  })
+
+  it('[STS-28] 事前確認で対象の件数と一覧が入り、確認中は vwapBulkPreviewing が立つ', async () => {
+    const store = useSymbolsStore()
+    await store.load()
+    const before = store.items.map((item) => item.vwapTarget)
+
+    const pending = store.previewDisableAllVwap()
+    expect(store.vwapBulkPreviewing).toBe(true)
+
+    const result = await pending
+    expect(store.vwapBulkPreviewing).toBe(false)
+    expect(result).toBe(store.vwapBulkPreview)
+    expect(store.vwapBulkPreview).toMatchObject({
+      dryRun: true,
+      // 候補は有効な全銘柄、対象はそのうち値が変わる（いま VWAP対象の）銘柄
+      candidateCount: TOTAL,
+      targetCount: vwapTargetCodes.length,
+      updatedCount: 0,
+    })
+    expect(store.vwapBulkPreview.symbols.map((symbol) => symbol.symbolCode)).toEqual(
+      vwapTargetCodes,
+    )
+    // dry-run なので一覧は変わらない
+    expect(store.items.map((item) => item.vwapTarget)).toEqual(before)
+    expect(store.vwapBulkPreviewError).toBeNull()
+  })
+
+  it('[STS-29] 事前確認が失敗したときは vwapBulkPreviewError に入り、件数は空のまま', async () => {
+    failVwapPreview()
+    const store = useSymbolsStore()
+
+    const result = await store.previewDisableAllVwap()
+
+    expect(result).toBeNull()
+    expect(store.vwapBulkPreviewError.message).toBe(ERROR_MESSAGE)
+    expect(store.vwapBulkPreview).toBeNull()
+    // 確認の失敗と実行の失敗は別の入れ物
+    expect(store.vwapBulkError).toBeNull()
+  })
+
+  it('[STS-30] 本実行で全行が対象外になり、onSuccess は読み直しより先に呼ばれる', async () => {
+    const store = useSymbolsStore()
+    await store.load()
+    // 1 ページ目に VWAP対象の行が無ければ、このシナリオは意味を失う
+    expect(store.items.some((item) => item.vwapTarget === VWAP_ON)).toBe(true)
+    const changedCodes = codes(store).filter((code) => vwapTargetCodes.includes(code))
+
+    let seenAtSuccess = null
+    const result = await store.disableAllVwap({
+      onSuccess: (received) => {
+        seenAtSuccess = {
+          updatedCount: received.updatedCount,
+          // この時点ではまだ読み直していない（ダイアログを閉じるのを読み直しの後に回さない）
+          stillHasTargets: store.items.some((item) => item.vwapTarget === VWAP_ON),
+        }
+      },
+    })
+
+    expect(seenAtSuccess).toEqual({ updatedCount: vwapTargetCodes.length, stillHasTargets: true })
+    expect(result).toMatchObject({ dryRun: false, updatedCount: vwapTargetCodes.length })
+
+    // 読み直し後は全行が対象外。変わった行には手動操作の印が付く。件数は変わらない
+    expect(store.items.every((item) => item.vwapTarget === VWAP_OFF)).toBe(true)
+    for (const item of store.items.filter((row) => changedCodes.includes(row.symbolCode))) {
+      expect(item.userModified).toBe(true)
+    }
+    expect(store.total).toBe(TOTAL)
+    expect(store.vwapBulkError).toBeNull()
+  })
+
+  it('[STS-31] VWAP対象で絞り込んだまま実行すると読み直しで 0 件になり、条件は残る', async () => {
+    const store = useSymbolsStore()
+    await store.load({ vwapTarget: VWAP_ON })
+    expect(store.total).toBe(vwapTargetCodes.length)
+
+    await store.disableAllVwap()
+
+    expect(store.vwapTarget).toBe(VWAP_ON)
+    expect(store.total).toBe(0)
+    expect(store.isEmpty).toBe(true)
+  })
+
+  it('[STS-32] 本実行が失敗したときは vwapBulkError に入り、一覧は変わらない', async () => {
+    failVwapBulk()
+    const store = useSymbolsStore()
+    await store.load()
+    const before = store.items.map((item) => item.vwapTarget)
+    let successCalls = 0
+
+    const result = await store.disableAllVwap({ onSuccess: () => (successCalls += 1) })
+
+    expect(result).toBeNull()
+    expect(successCalls).toBe(0)
+    expect(store.vwapBulkError.message).toBe(ERROR_MESSAGE)
+    // 確認の失敗と実行の失敗は別の入れ物
+    expect(store.vwapBulkPreviewError).toBeNull()
+    expect(store.items.map((item) => item.vwapTarget)).toEqual(before)
+    expect(before).toContain(VWAP_ON)
+  })
+
+  it('[STS-33] clearVwapBulkError は前回の件数と失敗をどちらも消す', async () => {
+    const store = useSymbolsStore()
+    await store.previewDisableAllVwap()
+    expect(store.vwapBulkPreview).not.toBeNull()
+    failVwapBulk()
+    await store.disableAllVwap()
+    expect(store.vwapBulkError).not.toBeNull()
+
+    store.clearVwapBulkError()
+
+    expect(store.vwapBulkPreview).toBeNull()
+    expect(store.vwapBulkPreviewError).toBeNull()
+    expect(store.vwapBulkError).toBeNull()
   })
 })

@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { blackoutDates } from '../src/mocks/fixtures/blackoutDates'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/blackout-dates.md（タイトル先頭の [BD-xx] が対応 ID）
 // ページ位置と検索条件は URL クエリを正とするため、URL と画面の同期をここで守る。
-// mockApi() は固定の body を返すだけで offset / start_date / end_date を解釈しない。
-// ページングと絞り込み（BD-02 / 03 / 04 / 07 / 10）は
+// mockApi() は固定の body を返すだけで offset / blackout_date を解釈しない。
+// ページングと絞り込み（BD-02 / 03 / 04 / 07 / 31）は
 // クエリを実際に処理する既定ハンドラで検証する。
 
 const PATH = '/masters/blackout-dates'
@@ -31,7 +32,10 @@ const toRow = (blackout) => {
 // フィクスチャは実 API と同じ受注不可日の降順なので、この並びがそのまま 1 ページ目になる
 const allRows = blackoutDates.map(toRow)
 const secondPage = allRows.slice(PAGE_SIZE)
-const year2025 = allRows.filter((row) => row.date >= '2025-01-01' && row.date <= '2025-12-31')
+
+// 日付 1 欄の検索で探す行。1 ページ目に無い行を選び、画面上の絞り込みではなく
+// サーバ（既定ハンドラ）側で絞れていることを見る（BD-03 / 04 / 31）
+const SEARCH_TARGET = secondPage[0]
 
 const firstBlackoutDate = allRows[0]
 
@@ -54,12 +58,11 @@ const duplicateMessage = (row) => `受注不可日(${row.date.replaceAll('-', ''
 const REASON_MAX_LENGTH = 45
 
 /*
- * 降順の先頭から PAGE_SIZE + 1 件目の行。その日付を date_from にすると
- * 既定ハンドラの絞り込みがちょうど 51 件になり、offset=50 の 2 ページ目が
- * 「最後の 1 件」＝ この行だけになる（BD-23）。
+ * BD-23 の最終ページ。日付 1 欄の絞り込みは高々 1 件で 2 ページ目を作れないので、
+ * 絞り込まずに 2 ページ目（secondPage）を開き、末尾の 1 件を残して先に消す。
  */
-const LAST_PAGE_TARGET = allRows[PAGE_SIZE]
-const LAST_PAGE_FROM = LAST_PAGE_TARGET.date
+const LAST_PAGE_TARGET = secondPage[secondPage.length - 1]
+const LAST_PAGE_OTHERS = secondPage.slice(0, -1)
 
 /** 0 件の応答（BlackoutDateListResponse の形） */
 const EMPTY_LIST = { total: 0, limit: PAGE_SIZE, offset: 0, blackout_dates: [] }
@@ -98,10 +101,7 @@ test.describe('受注不可日マスタ一覧', () => {
   test('[BD-01] サイドメニューから開くと一覧と件数が表示される', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: '受注不可日マスタ', exact: true })
-      .click()
+    await clickSideMenuLink(page, '受注不可日マスタ')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '受注不可日マスタ', exact: true })).toBeVisible()
@@ -135,41 +135,47 @@ test.describe('受注不可日マスタ一覧', () => {
     )
   })
 
-  test('[BD-03] 日付で絞り込むと URL と一覧に反映される', async ({ page }) => {
+  test('[BD-03] 日付で検索するとその日の行だけが出て URL に反映される', async ({ page }) => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await page.getByTestId('blackout-dates-date-from').fill('2025-01-01')
-    await page.getByTestId('blackout-dates-date-to').fill('2025-12-31')
+    await page.getByTestId('blackout-dates-date').fill(SEARCH_TARGET.date)
     await page.getByTestId('blackout-dates-search-submit').click()
 
-    await expect(page).toHaveURL(/date_from=2025-01-01/)
-    await expect(page).toHaveURL(/date_to=2025-12-31/)
+    await expect(page).toHaveURL(new RegExp(`[?&]date=${SEARCH_TARGET.date}(&|$)`))
 
-    await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${year2025.length} 件`)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText('1 件')
 
     const rows = rowsOf(page)
-    await expect(rows).toHaveCount(year2025.length)
-    for (const blackout of year2025) {
-      await expect(rows.filter({ hasText: blackout.date })).toHaveCount(1)
-    }
+    await expect(rows).toHaveCount(1)
+    await expect(rows.first()).toContainText(SEARCH_TARGET.date)
+    await expect(rows.first()).toContainText(SEARCH_TARGET.reason)
   })
 
   test('[BD-04] 「クリア」を押すと絞り込みが解除される', async ({ page }) => {
     await page.goto(PATH)
 
-    await page.getByTestId('blackout-dates-date-from').fill('2025-01-01')
-    await page.getByTestId('blackout-dates-date-to').fill('2025-12-31')
+    await page.getByTestId('blackout-dates-date').fill(SEARCH_TARGET.date)
     await page.getByTestId('blackout-dates-search-submit').click()
-    await expect(rowsOf(page)).toHaveCount(year2025.length)
+    await expect(rowsOf(page)).toHaveCount(1)
 
     await page.getByTestId('blackout-dates-search-clear').click()
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${blackoutDates.length} 件`)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
-    await expect(page.getByTestId('blackout-dates-date-from')).toHaveValue('')
-    await expect(page.getByTestId('blackout-dates-date-to')).toHaveValue('')
+    await expect(page.getByTestId('blackout-dates-date')).toHaveValue('')
+  })
+
+  test('[BD-31] 日付付きの URL を直接開くと検索欄と一覧が復元される', async ({ page }) => {
+    await page.goto(`${PATH}?date=${SEARCH_TARGET.date}`)
+
+    await expect(page.getByTestId('blackout-dates-date')).toHaveValue(SEARCH_TARGET.date)
+    await expect(page.getByTestId('blackout-dates-count')).toHaveText('1 件')
+
+    const rows = rowsOf(page)
+    await expect(rows).toHaveCount(1)
+    await expect(rows.first()).toContainText(SEARCH_TARGET.date)
   })
 
   test('[BD-05] API がエラーを返したときエラー表示と再試行ボタンが出る', async ({ page }) => {
@@ -526,10 +532,21 @@ test.describe('受注不可日マスタ 削除', () => {
   })
 
   test('[BD-23] 最終ページの最後の 1 件を消すと 1 ページ前に戻る', async ({ page }) => {
-    // 51 件に絞った 2 ページ目。行はちょうど 1 件になる
-    await page.goto(`${PATH}?date_from=${LAST_PAGE_FROM}&offset=${PAGE_SIZE}`)
+    // 絞り込まない 2 ページ目。末尾の 1 件を残して先に消し、「最後の 1 件」の状態を作る
+    await page.goto(`${PATH}?offset=${PAGE_SIZE}`)
 
     const rows = rowsOf(page)
+    await expect(rows).toHaveCount(secondPage.length)
+
+    for (const [index, blackout] of LAST_PAGE_OTHERS.entries()) {
+      await deleteButtonOf(page, blackout).click()
+      await page.getByTestId('blackout-dates-delete-submit').click()
+      await expect(deleteDialogOf(page)).toBeHidden()
+      await expect(page.getByTestId('blackout-dates-count')).toHaveText(
+        `${blackoutDates.length - index - 1} 件`,
+      )
+    }
+
     await expect(rows).toHaveCount(1)
     await expect(rows.first()).toContainText(LAST_PAGE_TARGET.date)
 
@@ -537,7 +554,7 @@ test.describe('受注不可日マスタ 削除', () => {
     await page.getByTestId('blackout-dates-delete-submit').click()
 
     // 戻る直前に空状態が一瞬描画されるため、最終状態だけを web-first assertion で待つ
-    await expect(page).toHaveURL(new RegExp(`\\${PATH}\\?date_from=${LAST_PAGE_FROM}$`))
+    await expect(page).toHaveURL(new RegExp(`\\${PATH}$`))
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(page.getByTestId('blackout-dates-count')).toHaveText(`${PAGE_SIZE} 件`)
   })

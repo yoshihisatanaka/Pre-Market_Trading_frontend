@@ -25,8 +25,8 @@ MSW の既定ハンドラ（`src/mocks/handlers/orders.js`）に当てる。`bef
 | OAS-09 | #41（全部出来）を読んである | `amend({ quantity: 1 })` | `amendError.message` にサーバの理由が入り、`amendResult` は null、`order` は残る | 実装済 |
 | OAS-10 | #36 を読んである | `cancel()` | いまの注文（#36）に対して送られ、`cancelResult` が `orderId: '36'` とサーバの文言になる。`canceling` は false に戻る | 実装済 |
 | OAS-11 | #41（全部出来）を読んである | `cancel()` | `cancelError.message` にサーバの理由が入り、`cancelResult` は null、`order` は残る | 実装済 |
-| OAS-12 | #35 の応答を遅らせて 500 にする | `load('35')` の直後に `load('36')` → #35 を解放する | 古い #35 の失敗で `error` が立たず、`order` は #36・`error` は null のまま | 保留 |
+| OAS-12 | #35 の応答を遅らせて 500 にする | `load('35')` の直後に `load('36')` → #35 を解放する | 古い #35 の失敗で `error` が立たず、`order` は #36・`error` は null のまま | 実装済 |
 
-OAS-12 は保留。古い応答を捨てるのは成功時の `order` だけで、古い応答の**失敗**は `useAsync` がそのまま
-`error` に入れる（`src/stores/orderAction.js` の `fetchLatest`）。現状では #36 を表示できているのに
-画面がエラー表示に切り替わる。直すかどうかを決めてからテストを書く。
+OAS-12 は、古い応答の**失敗**も捨てることを固定する（`src/stores/orderAction.js` の `fetchLatest`。
+`stores/customerDetail.js` と同じ形）。捨てないと `useAsync` がそのまま `error` に入れ、
+#36 を表示できているのに画面がエラー表示に切り替わる。

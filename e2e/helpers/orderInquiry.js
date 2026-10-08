@@ -42,11 +42,9 @@ export const COLUMNS = [
  * あのファイルは '@/utils/format' を import しており、Playwright はエイリアスを解決できないので再掲する。
  */
 export const MARKET_SCOPE_LABELS = {
-  '01': 'プレ',
   '02': 'プレ＋レギュラー',
   '03': 'レギュラー',
   '04': 'プレ＋レギュラー＋アフター',
-  '05': 'レギュラー＋アフター',
   '06': 'アフター',
 }
 

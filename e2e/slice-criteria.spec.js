@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/slice-criteria.md（タイトル先頭の [SC-xx] が対応 ID）
@@ -63,7 +64,7 @@ test.describe('スライス基準マスタ', () => {
   test('[SC-05] サイドメニューから遷移できる', async ({ page }) => {
     await page.goto('/')
 
-    await page.getByRole('link', { name: 'スライス基準マスタ', exact: true }).click()
+    await clickSideMenuLink(page, 'スライス基準マスタ')
 
     await expect(page).toHaveURL(/\/masters\/hard-limits$/)
     await expect(page.getByTestId('slice-criteria-current')).toBeVisible()

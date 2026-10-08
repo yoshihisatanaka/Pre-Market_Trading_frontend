@@ -169,14 +169,18 @@ export function toIsoDate(value) {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
 }
 
-/** 画面から送られた更新系の本文・応答を標準出力に残す（実 API との食い違いを報告するための材料） */
+/**
+ * 画面から送られた更新系の本文・応答を標準出力に残す（実 API との食い違いを報告するための材料）。
+ * res は画面の Response でも、apiContext から直接送った APIResponse でもよい（後者は request() を持たない）
+ */
 export async function logExchange(label, res) {
   const body = await res.text()
+  const request = typeof res.request === 'function' ? res.request() : null
   // spec から呼ぶ報告用の出力（spec は no-console の対象外だが、helpers は対象に入るため）
   // eslint-disable-next-line no-console
   console.log(
-    `[${label}] ${res.request().method()} ${new URL(res.url()).pathname}\n` +
-      `  request : ${res.request().postData()}\n` +
+    `[${label}] ${request?.method() ?? '(API 直接)'} ${new URL(res.url()).pathname}\n` +
+      `  request : ${request?.postData() ?? '-'}\n` +
       `  status  : ${res.status()}\n` +
       `  response: ${body}`,
   )

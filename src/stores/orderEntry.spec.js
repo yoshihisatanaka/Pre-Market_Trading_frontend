@@ -11,6 +11,7 @@ const latestUsdFxRate = fxRates.at(-1)
 import { FIRST_ORDER_ID } from '@/mocks/fixtures/orderEntry'
 import { HOLIDAY_TYPE } from '@/utils/apiEnums'
 import { CALENDAR_LOOKAHEAD_DAYS } from '@/utils/orderEntryForm'
+import { ORDER_PERSON_MAX_LENGTH, SECURITIES_DELIVERY_DEFAULT } from '@/utils/orderEntryOptions'
 import { useOrderEntryStore } from './orderEntry'
 
 /*
@@ -56,7 +57,7 @@ function order(overrides = {}) {
     expiryDate: '2026-09-29',
     settlementCurrency: '0',
     depositCategory: '0',
-    securitiesDelivery: '500',
+    securitiesDelivery: SECURITIES_DELIVERY_DEFAULT,
     transactionType: '100',
     solicitation: '1',
     orderMethod: '3',
@@ -66,7 +67,8 @@ function order(overrides = {}) {
     vwap: false,
     orderDate: '2026-09-29',
     orderTime: '10:30',
-    orderPerson: 'test-user',
+    // 受注者は 1〜4 文字（MSW も 4 文字を超えると 422 を返す）
+    orderPerson: 'T'.padEnd(ORDER_PERSON_MAX_LENGTH, '0'),
     forced: false,
     createdBy: 'test-user',
     ...overrides,
@@ -222,18 +224,28 @@ describe('useOrderEntryStore', () => {
     expect(store.customerError).toBeNull()
   })
 
-  it('[NOS-08] ?ticker= で照会し、Ticker の完全一致だけを採る', async () => {
+  it('[NOS-08] ?symbol= で照会し、完全一致だけを採る', async () => {
     const seen = recordUrls('get', SYMBOLS_PATH)
     const store = useOrderEntryStore()
 
     await store.lookupSymbol('AAPL')
-    expect(seen[0].searchParams.get('ticker')).toBe('AAPL')
+    expect(seen[0].searchParams.get('symbol')).toBe('AAPL')
     expect(store.symbolLookup.symbol.symbolCode).toBe(aapl.銘柄コード)
 
     // AAP は AAPL に部分一致するが、完全一致の行は無い
     expect(symbols.some((row) => row.Ticker.includes('AAP') && row.Ticker !== 'AAP')).toBe(true)
     await store.lookupSymbol('AAP')
     expect(store.symbolLookup).toEqual({ ticker: 'AAP', symbol: null })
+  })
+
+  it('[NOS-17] 銘柄コードでも引け、入力は銘柄コードのまま残る', async () => {
+    const store = useOrderEntryStore()
+
+    await store.lookupSymbol(aapl.銘柄コード)
+
+    expect(store.symbolLookup.ticker).toBe(aapl.銘柄コード)
+    expect(store.symbolLookup.symbol.ticker).toBe(aapl.Ticker)
+    expect(store.symbolLookup.symbol.symbolCode).toBe(aapl.銘柄コード)
   })
 
   it('[NOS-09] 追い越された顧客の照会結果で上書きしない', async () => {
@@ -252,7 +264,7 @@ describe('useOrderEntryStore', () => {
   })
 
   it('[NOS-10] 追い越された銘柄の照会結果で上書きしない', async () => {
-    const release = gateWhere('get', SYMBOLS_PATH, (url) => url.searchParams.get('ticker') === 'AAPL')
+    const release = gateWhere('get', SYMBOLS_PATH, (url) => url.searchParams.get('symbol') === 'AAPL')
     const store = useOrderEntryStore()
 
     const older = store.lookupSymbol('AAPL')

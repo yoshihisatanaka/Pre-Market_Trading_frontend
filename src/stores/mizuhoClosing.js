@@ -39,12 +39,23 @@ export const useMizuhoClosingStore = defineStore('mizuhoClosing', () => {
   }
 
   /*
-   * 締め・締め解除の応答は操作後の ClosingStatusResponse そのものなので、取り直さずに差し替える。
-   * 照会（GET）は 更新日時 / 実行者 を返さないため、取り直すと状態変更履歴の 1 行が消えてしまう。
+   * 状態変更履歴を読み直す口。締め・締め解除のあとに裏で使う（締めカードをローディングにしない）。
+   * 失敗しても操作の応答で差し替えた状態が残るだけなので、error は画面に出さない。
+   */
+  const { execute: refreshStatus } = useAsync(fetchMizuhoClosingStatus)
+
+  /*
+   * 締め・締め解除の応答は操作後の ClosingStatusResponse なので、まずそれで差し替える。
+   * 応答の履歴は直近の 1 回分しか組めないことがあるので、照会（GET）で履歴を読み直して置き換える。
+   * 読み直した締め状態が操作の結果と食い違うとき（照会が操作より古い状態を返した）は置き換えない。
    */
   async function changeStatus(action) {
     const next = await executeAction(action)
-    if (next) status.value = next
+    if (!next) return next
+
+    status.value = next
+    const latest = await refreshStatus()
+    if (latest && latest.closed === next.closed) status.value = latest
     return next
   }
 

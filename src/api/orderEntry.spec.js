@@ -4,6 +4,7 @@ import { server } from '@/mocks/server'
 import { customers } from '@/mocks/fixtures/customers'
 import { symbols } from '@/mocks/fixtures/symbols'
 import { FIRST_ORDER_ID, orderMessages } from '@/mocks/fixtures/orderEntry'
+import { ORDER_PERSON_MAX_LENGTH, SECURITIES_DELIVERY_DEFAULT } from '@/utils/orderEntryOptions'
 import { ApiError } from './client'
 import { createOrder, validateOrder } from './orderEntry'
 
@@ -19,6 +20,9 @@ const quietCustomer = customers.find((row) => row.コンプラランク === 'C' 
 const tradable = symbols.find((row) => row.Ticker === 'AAPL')
 const prohibited = symbols.find((row) => row.規制情報 === '1')
 
+/** 受注者（最大文字数ちょうどの社員コード） */
+const ORDER_PERSON = 'T'.padEnd(ORDER_PERSON_MAX_LENGTH, '0')
+
 /** 送る注文（アプリ内モデル）。既定は成行の買い 10 株 */
 function order(overrides = {}) {
   return {
@@ -33,7 +37,7 @@ function order(overrides = {}) {
     expiryDate: '2026-10-05',
     settlementCurrency: '0',
     depositCategory: '0',
-    securitiesDelivery: '500',
+    securitiesDelivery: SECURITIES_DELIVERY_DEFAULT,
     transactionType: '100',
     solicitation: '1',
     orderMethod: '3',
@@ -43,7 +47,8 @@ function order(overrides = {}) {
     vwap: false,
     orderDate: '2026-09-29',
     orderTime: '10:30',
-    orderPerson: 'test-user',
+    // 受注者は 1〜4 文字（MSW も 4 文字を超えると 422 を返す）
+    orderPerson: ORDER_PERSON,
     forced: false,
     createdBy: 'test-user',
     ...overrides,
@@ -80,7 +85,7 @@ describe('api/orderEntry', () => {
       指成区分: 'MO',
       指値単価: null,
       決済通貨区分: '0',
-      証券受渡方法: '500',
+      証券受渡方法: SECURITIES_DELIVERY_DEFAULT,
       預り売買区分: '0',
       取引: '100',
       勧誘区分: '1',
@@ -91,7 +96,7 @@ describe('api/orderEntry', () => {
       金銭受渡方法: '000',
       受注日: '20260929',
       受注時刻: '10:30',
-      受注者: 'test-user',
+      受注者: ORDER_PERSON,
       強制区分: 0,
       発注範囲: '03',
       作成者: 'test-user',
@@ -100,14 +105,24 @@ describe('api/orderEntry', () => {
     expect(typeof bodies[0].口座番号).toBe('number')
   })
 
-  it('[NOA-02] 成行の指値単価・空の受注者は null、フラグなしは 0', async () => {
+  it('[NOA-02] 成行の指値単価・空の受注者は null、フラグなしは 0。受注者の欠けはサーバの 422', async () => {
     const bodies = recordBodies(VALIDATE_PATH)
-    await validateOrder(order({ orderPerson: '' }))
+    const error = await validateOrder(order({ orderPerson: '' })).catch((e) => e)
 
     expect(bodies[0].指値単価).toBeNull()
     expect(bodies[0].受注者).toBeNull()
     expect(bodies[0].強制区分).toBe(0)
     expect(bodies[0].VWAP区分).toBe(0)
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.status).toBe(422)
+  })
+
+  it('[NOA-11] 受注者が最大文字数を超えるとサーバの 422 で ApiError', async () => {
+    const tooLong = 'X'.repeat(ORDER_PERSON_MAX_LENGTH + 1)
+
+    const error = await createOrder(order({ orderPerson: tooLong })).catch((e) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.status).toBe(422)
   })
 
   it('[NOA-03] 指値単価は数値、強制区分・VWAP区分は 1', async () => {

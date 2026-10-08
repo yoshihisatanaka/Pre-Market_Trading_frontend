@@ -54,9 +54,10 @@ async function mountView(query = {}) {
         children: [
           { path: 'summary', name: 'customer-summary', component: Page },
           { path: 'orders', name: 'customer-orders', component: CustomerOrdersView },
+          { path: 'order-entry', name: 'customer-order-entry', component: Page },
+          { path: 'calculations', name: 'customer-calculations', component: Page },
         ],
       },
-      { path: '/orders/new', name: 'order-new', component: Page },
       { path: '/orders/:orderId(\\d+)/amend', name: 'order-amend', component: Page },
       { path: '/orders/:orderId(\\d+)/cancel', name: 'order-cancel', component: Page },
       { path: '/:pathMatch(.*)*', component: Page },
@@ -254,14 +255,14 @@ describe('CustomerOrdersView', () => {
     expect(rowIds(wrapper)).toEqual(CUSTOMER_GROUPS)
   })
 
-  it('[COV-11] 「新規注文」は顧客の部店と口座番号を引き継いで /orders/new へ移る', async () => {
+  it('[COV-11] 「新規注文」は顧客の部店と口座番号を引き継いで注文入力タブへ移る', async () => {
     const { wrapper, router } = await mountView()
     await settle()
 
     await wrapper.find('[data-testid="customer-orders-new-order"]').trigger('click')
     await settle()
 
-    expect(router.currentRoute.value.path).toBe('/orders/new')
+    expect(router.currentRoute.value.path).toBe(`/customers/${CUSTOMER.ID}/order-entry`)
     expect(router.currentRoute.value.query).toEqual({
       branch_code: BRANCH,
       account_number: ACCOUNT,

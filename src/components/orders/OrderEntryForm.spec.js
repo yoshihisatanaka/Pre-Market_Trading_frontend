@@ -3,7 +3,7 @@ import { h, reactive } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { buildExpiryOptions, createOrderForm } from '@/utils/orderEntryForm'
-import { ORDER_TYPE, SIDE } from '@/utils/orderEntryOptions'
+import { ORDER_PERSON_MAX_LENGTH, ORDER_TYPE, SIDE } from '@/utils/orderEntryOptions'
 import OrderEntryForm from './OrderEntryForm.vue'
 
 /*
@@ -35,6 +35,15 @@ const segment = (wrapper, testid, value) => wrapper.find(`[data-testid="${testid
 
 // シナリオ: docs/unit/components-orders-order-entry-form.md
 describe('OrderEntryForm', () => {
+  it('[NOC-13] 受注者の欄は最大文字数までしか打てず、入力が orderPerson に入る', async () => {
+    const { wrapper, form } = mountForm()
+    const input = find(wrapper, 'order-entry-order-person')
+
+    expect(input.attributes('maxlength')).toBe(String(ORDER_PERSON_MAX_LENGTH))
+    await input.setValue('T001')
+    expect(form.orderPerson).toBe('T001')
+  })
+
   it('[NOC-01] 売買区分でフォームの色が変わる', async () => {
     const { wrapper, form } = mountForm()
     const root = find(wrapper, 'order-entry-form')
@@ -132,10 +141,19 @@ describe('OrderEntryForm', () => {
     expect(accountHint.classes()).toContain('is-found')
     expect(tickerHint.text()).toBe('銘柄なし')
     expect(tickerHint.classes()).toContain('is-not-found')
+    expect(find(wrapper, 'order-entry-ticker-code').exists()).toBe(false)
+
+    const code = 'ティッカー：AAPL ／ 銘柄コード：S001'
+    const { wrapper: found } = mountForm({
+      props: { symbolHint: { text: 'Apple Inc.', tone: 'found', code } },
+    })
+    expect(find(found, 'order-entry-ticker-code').text()).toBe(code)
+    expect(find(found, 'order-entry-ticker-hint').text()).toBe('Apple Inc.')
 
     const { wrapper: empty } = mountForm({ props: { customerHint: { text: '', tone: '' } } })
     expect(find(empty, 'order-entry-account-hint').exists()).toBe(false)
     expect(find(empty, 'order-entry-ticker-hint').exists()).toBe(false)
+    expect(find(empty, 'order-entry-ticker-code').exists()).toBe(false)
   })
 
   it('[NOC-08] フロコン警告ありのときだけ強制区分の注記が出る', () => {

@@ -139,6 +139,22 @@ describe('useCurrentOperatorStore', () => {
     expect(store.can('order')).toBe(true)
   })
 
+  it('[COS-13] 預託先参照権限は can(depositary) で読み、管理責任者は true・営業員は false', async () => {
+    // フィクスチャの前提が崩れたら、このシナリオは意味を失う
+    expect(supervisorOperator.権限.depositary).toBe(true)
+    expect(salesOperator.権限.depositary).toBe(false)
+
+    const supervisor = useCurrentOperatorStore()
+    await supervisor.ensureLoaded()
+    expect(supervisor.can('depositary')).toBe(true)
+
+    setActivePinia(createPinia())
+    respond(salesOperator)
+    const sales = useCurrentOperatorStore()
+    await sales.ensureLoaded()
+    expect(sales.can('depositary')).toBe(false)
+  })
+
   it('[COS-11] 読み込み中は loading が立ち、完了すると下りる', async () => {
     server.use(
       http.get(PATH, async () => {

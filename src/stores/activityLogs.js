@@ -24,8 +24,18 @@ export const ACTIVITY_LOGS_PAGE_SIZE = DEFAULT_PAGE_SIZE
 export const useActivityLogsStore = defineStore('activityLogs', () =>
   useCrudList({
     pageSize: ACTIVITY_LOGS_PAGE_SIZE,
-    // sort も検索条件と同じく URL クエリが正（並び替えはサーバの責務で、ここでは触らない）
-    filterKeys: ['dateFrom', 'dateTo', 'operator', 'operation', 'targetType', 'targetKey', 'sort'],
+    // sort も検索条件と同じく URL クエリが正（並び替えはサーバの責務で、ここでは触らない）。
+    // targetTypes は対象種別コードの並び（画面の 区分 / 対象機能 を展開したもの）。他は文字列
+    filterKeys: [
+      'dateFrom',
+      'dateTo',
+      'operator',
+      'actorGroup',
+      'operation',
+      'targetTypes',
+      'targetKey',
+      'sort',
+    ],
     fetchPage: fetchActivityLogs,
   }),
 )

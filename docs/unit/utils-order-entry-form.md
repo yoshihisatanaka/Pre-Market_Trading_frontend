@@ -23,9 +23,9 @@
 | NOF-10 | 口座番号 `'12a'`・数量 `'0'`・受注時刻 `'24:00'` | `validateOrderForm()` | 「口座番号を数値で入力してください。」「注文数量を整数で入力してください。」「受注時刻は数値4桁（hhnn）で入力してください。」 | 実装済 |
 | NOF-11 | 指値 | 指値価格を `''` / `'abc'` / `'0'` / `'1.23456'` / `'200.1234'` にして `validateOrderForm()` | 順に必須・数値・正の数・小数第 4 位以内の文言、最後は `''`。成行のときは価格が何であっても `''` | 実装済 |
 | NOF-12 | 預り売買区分 = 成長投資枠 | 買い / 売りで `validateOrderForm()` | 買いのときだけ `depositCategory` に「買付時に「成長投資枠」を選択することはできません。」 | 実装済 |
-| NOF-13 | 注文種別 = VWAP | VWAP 対象の銘柄・対象外の銘柄・銘柄なしで `validateOrderForm()` | 対象外のときだけ `vwap` に「この銘柄は現在、VWAP対象外です。通常注文で入力してください。」。銘柄なしのときは `vwap` は `''` で `ticker` が「銘柄コードが見つかりません。…」 | 実装済 |
-| NOF-14 | 銘柄なし・照会に失敗 | `validateOrderForm(form, { symbolLookupFailed: true })` | `ticker` が「ティッカーコードを照会できませんでした。…」（「見つかりません」と言わない） | 実装済 |
-| NOF-15 | 成行・VWAP なし | `buildOrderInput()` | 銘柄コードは照会した銘柄の `symbolCode`（ティッカーではない）、取引 `'100'`・証券受渡方法 `'500'`、数量は数値、`limitPrice` は `null`、`vwap` は false、受注日は `'YYYY-MM-DD'`、部店・口座番号・受注者は前後の空白を落とす | 実装済 |
+| NOF-13 | 注文種別 = VWAP | VWAP 対象の銘柄・対象外の銘柄・銘柄なしで `validateOrderForm()` | 対象外のときだけ `vwap` に「この銘柄は現在、VWAP対象外です。通常注文で入力してください。」。銘柄なしのときは `vwap` は `''` で `ticker` が「ティッカーが見つかりません。…」 | 実装済 |
+| NOF-14 | 銘柄なし・照会に失敗 | `validateOrderForm(form, { symbolLookupFailed: true })` | `ticker` が「ティッカーを照会できませんでした。…」（「見つかりません」と言わない） | 実装済 |
+| NOF-15 | 成行・VWAP なし | `buildOrderInput()` | 銘柄コードは照会した銘柄の `symbolCode`（ティッカーではない）、取引 `'100'`・証券受渡方法 `SECURITIES_DELIVERY_DEFAULT`（当社保管 `'100'`）、数量は数値、`limitPrice` は `null`、`vwap` は false、受注日は `'YYYY-MM-DD'`、部店・口座番号・受注者は前後の空白を落とす | 実装済 |
 | NOF-16 | 指値 `'200.5'`・VWAP・強制区分あり | `buildOrderInput()` | `limitPrice` が数値 `200.5`、`vwap` と `forced` が true、`createdBy` が渡した値 | 実装済 |
 | NOF-17 | 今日 = 2026-09-29（火）・休日なし | `buildExpiryOptions()` | 15 件（`EXPIRY_OPTION_COUNT`）で、先頭が「当日中（9/29）」、2 件目が「1営業日後（9/30）」、土日を含まず、最後が「14営業日後（10/19）」 | 実装済 |
 | NOF-18 | 今日 = 2026-09-29・`closedDates` に 9/30 | `buildExpiryOptions()` | 9/30 が並ばず、2 件目が「1営業日後（10/1）」 | 実装済 |
@@ -40,3 +40,6 @@
 | NOF-27 | 指値・為替を読み込み中 | `buildEstimateReadback({ fxLoading: true })` | 外貨は指値 × 数量で出るが、円貨と注記の為替は `'…'`。注記の単価の出所は「指値価格」 | 実装済 |
 | NOF-28 | 顧客詳細の預りの「売り」から引き継ぐ（ティッカー・`SIDE.SELL`・預り区分 = 一般） | `createOrderForm({ ticker, side, depositCategory })` | `ticker` / `side` が引き継がれ、`depositCategory` は `ORDER_FORM_DEFAULTS` の既定（特定）より引き継いだ値が優先される。ほかの区分は既定のまま | 実装済 |
 | NOF-29 | 引き継ぐ預り区分が空文字 | `createOrderForm({ depositCategory: '' })` | `depositCategory` は `ORDER_FORM_DEFAULTS` の既定のまま（空で上書きしない） | 実装済 |
+| NOF-30 | ほかは埋まったフォーム | 受注者を 4 文字・前後に空白付きの 4 文字・`ORDER_PERSON_MAX_LENGTH` + 1 文字・空白だけ にして `validateOrderForm()` | 4 文字は前後の空白があっても `''`、5 文字は「受注者は4文字以内で入力してください。」、空白だけは「受注者を入力してください。」 | 実装済 |
+| NOF-31 | — | `defaultOrderPerson()` を 4 文字・前後に空白付きの 4 文字・5 文字・`null`・`undefined` で呼ぶ | 4 文字は前後の空白を落としてそのまま、5 文字以上と `null` / `undefined` は `''`（開いた直後から検証で止まる値を初期値にしない） | 実装済 |
+| NOF-32 | 預りの「売り」から売却可能株数 `'1500'` を引き継ぐ / 引き継がない | `createOrderForm({ quantity: '1500' })` / `createOrderForm()` | 前者の `quantity` は入力欄と同じ 3 桁区切りの `'1,500'`、後者は `''` | 実装済 |

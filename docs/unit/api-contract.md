@@ -16,6 +16,8 @@
 
 リクエストは MSW(node) の `request:start` で捕まえる。`src/api/` の関数を絞り込み条件をすべて埋めて
 1 回ずつ呼び、応答は見ない（404 / 409 / 422 で例外になってもリクエストの形は既に出ている）。
+MSW のハンドラを消した（実 API に素通しする）エンドポイント（2026-10-07 時点ではコンファメーション取込）は、
+`vitest.setup.js` の `onUnhandledRequest: 'error'` に掛からないよう、その probe の間だけ `server.use()` で応答を差し込む。
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
@@ -23,6 +25,6 @@
 | CON-02 | 同上 | 各行のキーを対応スキーマの `required` と比べる | 必須項目を欠く行が 1 つも無い | 実装済 |
 | CON-03 | 同上 | 各項目の値を対応スキーマの型（`integer` / `string` / nullable の `anyOf` / `enum` / 入れ子）と比べる | 型の合わない項目が 1 つも無い | 実装済 |
 | CON-04 | `src/api/` の全関数を 1 回ずつ呼ぶ | 捕まえたリクエストの `メソッド + パス` を `openapi.json` の `paths` に当てる（`/api` の目印は剥がす。静的なパスを `{param}` より優先） | 仕様に無いパスへの送信が無い。`KNOWN_GAPS` の path（`/operations/stalled-orders`）は対象外 | 実装済 |
-| CON-05 | 同上 | 捕まえたクエリ名を、そのオペレーションの `parameters`（`in: query`）と比べる | 仕様に無いクエリ名を送っていない。`KNOWN_GAPS` の query（顧客の `handler_code` ほか・操作ログの 5 つ）は対象外 | 実装済 |
+| CON-05 | 同上 | 捕まえたクエリ名を、そのオペレーションの `parameters`（`in: query`）と比べる | 仕様に無いクエリ名を送っていない（操作ログの `actor_group`・操作者一覧の `include_inactive` を含む）。`KNOWN_GAPS` の query は対象外（2026-10-07 時点で該当なし） | 実装済 |
 | CON-06 | 同上 | パステンプレートの `{param}` の位置の値を、宣言が `integer` のときだけ検査する | 整数以外を送っていない。`minimum` / `maximum` があれば範囲内。string の宣言は見ない（`{symbol}` に id を送っても検出できない。パスキーの方針は `CLAUDE.md`「リリースまでの進め方」） | 実装済 |
 | CON-07 | `KNOWN_GAPS` の各行 | fixture はスキーマとまだ合わないこと、path は仕様にまだ無いこと、query はまだ `parameters` に無いことを確かめる | すべて「まだ食い違っている」。1 つでも解消していたら落ちる（メッセージに「一覧から外す」対象が出る） | 実装済 |

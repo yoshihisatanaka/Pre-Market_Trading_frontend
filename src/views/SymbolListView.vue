@@ -12,6 +12,7 @@ import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import SymbolFormFields from '@/components/symbol/SymbolFormFields.vue'
+import VwapBulkDisableDialog from '@/components/symbol/VwapBulkDisableDialog.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { SYMBOLS_PAGE_SIZE, useSymbolsStore } from '@/stores/symbols'
 import { formatQuantity, formatUsdUnit } from '@/utils/format'
@@ -45,6 +46,11 @@ const {
   updateValidationErrors,
   deleting,
   deleteError,
+  vwapBulkPreview,
+  vwapBulkPreviewing,
+  vwapBulkPreviewError,
+  vwapBulkUpdating,
+  vwapBulkError,
 } = storeToRefs(store)
 
 /*
@@ -78,13 +84,14 @@ const columns = [
  * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
  * URL 上のクエリ名（symbol_code / regulation / …）はこの filters 定義にだけ現れる。
  *
- * 検索欄は画面モックどおり 4 つだが、実 API は銘柄コード・Ticker・銘柄名を別々の
- * パラメータに分けていて 1 語でまとめて探せない。この欄は `symbol` に乗るので、
- * 効くのは銘柄コードと Ticker だけ（ラベルもそう書いてある）。
+ * 検索欄は 5 つ。画面モックは「銘柄コード・銘柄名」の 1 欄だが、実 API は銘柄コード・Ticker・銘柄名を
+ * 別々のパラメータに分けていて 1 語でまとめて探せないので、「銘柄コード・ティッカーコード」と
+ * 「銘柄名」の 2 欄に分けている（銘柄名の送り先の決めかたは src/api/symbols.js）。
  */
 const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
   filters: [
     { key: 'symbolCode', query: 'symbol_code' },
+    { key: 'symbolName', query: 'symbol_name' },
     // 未知のコード（?regulation=9 など）は条件なしとして捨てる
     {
       key: 'regulation',
@@ -158,12 +165,13 @@ function emptyForm() {
     name: '',
     nameEn: '',
     /*
-     * 区分 3 つは未選択を作らず、実 API の既定と同じ '0' から始める
+     * 区分 3 つは未選択を作らず、選択肢の先頭（取引可 / IB証券 / 対象）から始める
      * （注文ルートは型宣言が null を許さない。理由は api 層の toSymbolRequest）。
+     * 並びは #42 で画面モック順に固定したので、先頭を引けば並びと初期値がずれない。
      */
-    regulation: '0',
-    orderRoute: '0',
-    vwapTarget: '0',
+    regulation: REGULATION_OPTIONS[0].value,
+    orderRoute: ORDER_ROUTE_OPTIONS[0].value,
+    vwapTarget: VWAP_TARGET_OPTIONS[0].value,
     // 数値 2 つは入力欄が文字列を持つ。数値への変換は api 層に任せる
     previousClose: '',
     averageVolume: '',
@@ -368,6 +376,44 @@ async function submitDelete() {
   stepBackIfPageEmpty()
 }
 
+/*
+ * VWAP対象の一括対象外化（画面モックのヘッダボタン「VWAP対象を一括で対象外へ」）。
+ * 行単位の追加・編集・削除とは別系統で、対象は「いま VWAP対象のすべての有効な銘柄」。
+ *
+ * 画面モックは confirm() で確認するだけだが、実 API には事前確認（dry-run）があるので、
+ * ダイアログを開いた時点で件数と対象の一覧を取りに行き、何が変わるかを見せてから実行させる。
+ * 変える銘柄が 0 件なら実行ボタンは押せない（ダイアログ側が判定する）。
+ *
+ * エラーは 2 系統。事前確認の失敗と本実行の失敗は、どちらもダイアログ内に出すが入れ物を分ける
+ * （事前確認が失敗したときは実行させない。本実行が失敗したときは件数を見せたまま理由を出す）。
+ */
+const isVwapBulkOpen = ref(false)
+
+function openVwapBulk() {
+  // 前回の確認結果・失敗・成功をどれも持ち込まない
+  store.clearVwapBulkError()
+  noticeMessage.value = ''
+  isVwapBulkOpen.value = true
+  store.previewDisableAllVwap()
+}
+
+function closeVwapBulk() {
+  // 実行中に閉じると結果の行き先が無くなるので、終わるまで閉じさせない
+  if (vwapBulkUpdating.value) return
+  isVwapBulkOpen.value = false
+}
+
+async function submitVwapBulk() {
+  await store.disableAllVwap({
+    // 追加・編集・削除と同じく、一覧の読み直しを待たずに閉じる。失敗時は呼ばれないので
+    // ダイアログは開いたままになり、理由（vwapBulkError）を読ませられる
+    onSuccess: (result) => {
+      isVwapBulkOpen.value = false
+      noticeMessage.value = `VWAP対象の銘柄 ${result.updatedCount} 件を対象外にしました。`
+    },
+  })
+}
+
 /**
  * 読み直した結果が 0 件になったら 1 ページ戻す。
  * 最終ページの最後の 1 件が今の offset から居なくなる操作（削除、絞り込み中の変更）で使う。
@@ -390,7 +436,11 @@ function symbolLabel(symbol) {
 <template>
   <section class="symbol-list">
     <!-- 見出しはヘッダが meta.title から出す。画面固有の操作だけをヘッダへ差し込む -->
+    <!-- 並びは画面モックどおり（一括操作が左、新規追加が右） -->
     <Teleport defer to="#topbar-actions">
+      <BaseButton variant="secondary" data-testid="symbols-vwap-bulk" @click="openVwapBulk">
+        VWAP対象を一括で対象外へ
+      </BaseButton>
       <BaseButton data-testid="symbols-add" @click="openAdd">新規追加</BaseButton>
     </Teleport>
 
@@ -416,6 +466,14 @@ function symbolLabel(symbol) {
           v-model="inputs.symbolCode"
           placeholder="例: S001 / AAPL"
           data-testid="symbols-symbol-code"
+        />
+      </FormField>
+      <FormField v-slot="{ field }" label="銘柄名">
+        <BaseInput
+          v-bind="field"
+          v-model="inputs.symbolName"
+          placeholder="例: アップル / Apple"
+          data-testid="symbols-symbol-name"
         />
       </FormField>
       <FormField v-slot="{ field }" label="取引可否">
@@ -571,6 +629,18 @@ function symbolLabel(symbol) {
       :error="deleteError"
       @close="closeDelete"
       @confirm="submitDelete"
+    />
+
+    <VwapBulkDisableDialog
+      :open="isVwapBulkOpen"
+      testid-prefix="symbols"
+      :preview="vwapBulkPreview"
+      :previewing="vwapBulkPreviewing"
+      :preview-error="vwapBulkPreviewError"
+      :pending="vwapBulkUpdating"
+      :error="vwapBulkError"
+      @close="closeVwapBulk"
+      @confirm="submitVwapBulk"
     />
   </section>
 </template>

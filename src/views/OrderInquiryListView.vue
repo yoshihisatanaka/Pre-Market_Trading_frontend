@@ -38,8 +38,8 @@ const canOrder = computed(() => operator.can('order'))
 const operatorPending = computed(() => !operator.operator && !operator.error)
 
 /*
- * 出来状況の選択肢はコードマスタ `注文照会出来状況`（依頼中の契約提案）から。値は処理状況コードで、
- * URL クエリ（status）にも API の status にもそのまま載る。
+ * 出来状況の選択肢はコードマスタ `注文照会出来状況` から。値は処理状況コードで、
+ * URL クエリ（status）にはそのまま載る。API へは取消済・注文エラーを api 層が 2 コードに広げて送る。
  * App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で選択肢は揃っている。
  */
 const codes = useCodesStore()
@@ -66,11 +66,12 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
 })
 
 /*
- * 新規注文（/orders/new。views/OrderEntryView.vue）へ移る。
+ * 顧客検索（/customers/search）へ移る。注文は顧客を選んでから顧客詳細の注文入力タブで入れる
+ * （モックの /orders/new は顧客の指定が無いと顧客検索へ回す。python_app/routers/orders.py の order_new_get）。
  * ボタンは発注権限のある利用者にだけ出す（上の canOrder。無ければ「発注権限なし」）。
  */
 function goToNewOrder() {
-  router.push('/orders/new')
+  router.push({ name: 'customer-search' })
 }
 
 /*

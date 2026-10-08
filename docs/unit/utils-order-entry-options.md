@@ -14,9 +14,10 @@
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
 | NOP-01 | — | 各 `*_OPTIONS`（売買・指成・市場区分・決済通貨・預り売買・勧誘・受注方法・資金性格・注文チャネル・金銭受渡）の value を `apiEnums.js` の対応する `*_VALUES` と突き合わせる | すべての value が enum に含まれる | 実装済 |
-| NOP-02 | — | 画面に欄の無い固定値（取引 = 委託・証券受渡方法 = 他社保管）を enum と突き合わせる | `TRANSACTION_TYPE_VALUES` / `SECURITIES_DELIVERY_VALUES` に含まれる | 実装済 |
+| NOP-02 | — | 画面に欄の無い固定値（取引 = 委託・証券受渡方法 = 当社保管）を enum と `openapi.json` の OrderRequest と突き合わせる | `TRANSACTION_TYPE_VALUES` / `SECURITIES_DELIVERY_VALUES` に含まれ、証券受渡方法は OrderRequest の既定値（`'100'`）と一致する | 実装済 |
 | NOP-03 | — | `ORDER_FORM_DEFAULTS` の各既定値を対応する選択肢と突き合わせる | どの既定値も選択肢の value のどれかに一致する（画面の初期表示で未選択の欄が出ない） | 実装済 |
 | NOP-04 | — | 売買区分の選択肢を読む | 買い = `'3'`（tone `buy`）・売り = `'1'`（tone `sell`）で、先頭が買い | 実装済 |
 | NOP-05 | — | 指成区分の選択肢を読む | 成行 = `'MO'`・指値 = `'LO'` | 実装済 |
-| NOP-06 | — | 市場区分の選択肢を読む | value の並びが `01, 02, 04, 03, 05, 06`（コード順ではなく時間帯の順）で、enum の 6 値を過不足なく含む | 実装済 |
+| NOP-06 | — | 市場区分の選択肢を読む | value の並びが `02, 04, 03, 06`（コード順ではなく時間帯の順）で、enum の 4 値を過不足なく含む（`01` / `05` は 2026-10-02 の取り込みで外れた） | 実装済 |
 | NOP-07 | — | `optionLabel()` を既知の値・未知の値・空文字・`undefined` で呼ぶ | 既知は表示名、それ以外は `'—'` | 実装済 |
+| NOP-08 | — | `ORDER_PERSON_MAX_LENGTH` を `openapi.json` の OrderRequest.受注者 と突き合わせる | `maxLength`（4）と一致する | 実装済 |

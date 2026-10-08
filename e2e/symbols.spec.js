@@ -1,12 +1,13 @@
 import { expect, test } from '@playwright/test'
+import { clickSideMenuLink } from './helpers/sideMenu'
 import { symbols } from '../src/mocks/fixtures/symbols'
 import { formatQuantity, formatUsdUnit } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/symbols.md（タイトル先頭の [SM-xx] が対応 ID）
 // ページ位置と検索条件は URL クエリを正とするため、URL と画面の同期をここで守る。
-// mockApi() は固定の body を返すだけで offset / 銘柄コード / 区分 3 つを解釈しない。
-// ページングと絞り込み（SM-02〜SM-07）は
+// mockApi() は固定の body を返すだけで offset / 銘柄コード / 銘柄名 / 区分 3 つを解釈しない。
+// ページングと絞り込み（SM-02〜SM-07、SM-35〜SM-36）は
 // クエリを実際に処理する既定ハンドラで検証する。
 
 const PATH = '/masters/symbols'
@@ -65,10 +66,28 @@ const byRouteAndVwap = allRows.filter(
 // 相場の値が未取得（null）の行。1 ページ目に 1 件だけ置いてある
 const NO_QUOTE_INDEX = firstPage.findIndex((row) => row.previousClose === null)
 
-// DataTable の列順（SymbolListView.vue の columns）。相場の 3 列の位置
-const COLUMN_INDEX = { previousClose: 4, previousVolume: 5, averageVolume: 6 }
+// DataTable の列順（SymbolListView.vue の columns）。相場の 3 列と VWAP対象区分の位置
+const COLUMN_INDEX = { previousClose: 4, previousVolume: 5, averageVolume: 6, vwapTarget: 9 }
 
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
+
+/*
+ * 「銘柄名」欄の検索語。日本語名はそのまま、英語名は先頭の 1 語を小文字にして
+ * 「大文字小文字を区別しない部分一致」であることも一緒に見る（'アップル' / 'apple' を直接書かない）。
+ * 日本語か英語かの振り分けは api 層（ASCII 以外を含むか）が行い、境界値は単体テスト側。
+ */
+const NAME_JA = firstRow.name
+const byNameJa = allRows.filter((row) => row.name.includes(NAME_JA))
+const NAME_EN = firstRow.nameEn.split(' ')[0].toLowerCase()
+const byNameEn = allRows.filter((row) => row.nameEn.toUpperCase().includes(NAME_EN.toUpperCase()))
+
+/*
+ * 一括対象外化の対象 = VWAP対象区分が「対象」の有効な銘柄（母数は有効な全件）。
+ * ダイアログの一覧は既定ハンドラがフィクスチャの順（= 銘柄コードの昇順）で返す。
+ */
+const VWAP_TARGET_ON = '1' // src/utils/symbolTypes.js の VWAP_TARGET_OPTIONS（1: 対象）
+const vwapTargets = allRows.filter((row) => row.vwapTarget === VWAP_TARGET_ON)
+const successMessageOf = (count) => `VWAP対象の銘柄 ${count} 件を対象外にしました。`
 
 /** 表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function rowsOf(page) {
@@ -120,6 +139,22 @@ const OPEN_REGULATION = '0'
 const byOpenRegulation = allRows.filter((row) => row.regulation === OPEN_REGULATION)
 const lastPageRow = byOpenRegulation[PAGE_SIZE]
 
+/** 一括対象外化のダイアログ。追加・編集・削除と同じくタイトルで絞る */
+function vwapBulkDialogOf(page) {
+  return page.getByRole('dialog', { name: 'VWAP対象を一括で対象外へ' })
+}
+
+/** ヘッダの「VWAP対象を一括で対象外へ」を押す（開いた時点で事前確認が走る） */
+async function openVwapBulk(page) {
+  await page.getByTestId('symbols-vwap-bulk').click()
+  await expect(vwapBulkDialogOf(page)).toBeVisible()
+}
+
+/** 行の VWAP対象区分 のセル */
+function vwapCellOf(row) {
+  return row.locator('td').nth(COLUMN_INDEX.vwapTarget)
+}
+
 /** 必須 3 項目を埋める */
 async function fillRequired(page, symbol = NEW_SYMBOL) {
   await page.getByTestId('symbols-add-symbol-code').fill(symbol.symbolCode)
@@ -131,15 +166,13 @@ test.describe('銘柄マスタ一覧', () => {
   test('[SM-01] サイドメニューから開くと一覧と件数が表示される', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('navigation', { name: 'メインメニュー' })
-      .getByRole('link', { name: '銘柄マスタ', exact: true })
-      .click()
+    await clickSideMenuLink(page, '銘柄マスタ')
 
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByRole('heading', { name: '銘柄マスタ', exact: true })).toBeVisible()
-    // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている
+    // 画面固有の操作がヘッダ（#topbar-actions）へ差し込まれている（一括操作が左、新規追加が右）
     await expect(page.getByTestId('symbols-add')).toBeVisible()
+    await expect(page.getByTestId('symbols-vwap-bulk')).toBeVisible()
 
     await expect(page.getByTestId('symbols-count')).toHaveText(`${TOTAL} 件`)
 
@@ -220,6 +253,7 @@ test.describe('銘柄マスタ一覧', () => {
     await page.goto(PATH)
 
     await page.getByTestId('symbols-symbol-code').fill(TICKER)
+    await page.getByTestId('symbols-symbol-name').fill(NAME_JA)
     await page.getByTestId('symbols-search-submit').click()
     await expect(rowsOf(page)).toHaveCount(byTicker.length)
 
@@ -228,13 +262,15 @@ test.describe('銘柄マスタ一覧', () => {
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
     await expect(page.getByTestId('symbols-count')).toHaveText(`${TOTAL} 件`)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    // 文字の欄は 2 つとも空に戻る
     await expect(page.getByTestId('symbols-symbol-code')).toHaveValue('')
+    await expect(page.getByTestId('symbols-symbol-name')).toHaveValue('')
   })
 
-  test('[SM-07] 銘柄名では絞れず空状態になる', async ({ page }) => {
+  test('[SM-07] 銘柄コード欄に銘柄名を入れても絞れず空状態になる', async ({ page }) => {
     await page.goto(PATH)
 
-    // 検索欄は実 API の `銘柄コード` にだけ乗るので、銘柄名を入れても当たらない
+    // この欄は実 API の `symbol`（銘柄コード・Ticker）にだけ乗るので、銘柄名を入れても当たらない
     await page.getByTestId('symbols-symbol-code').fill(firstRow.name)
     await page.getByTestId('symbols-search-submit').click()
 
@@ -295,8 +331,14 @@ test.describe('銘柄マスタ一覧', () => {
       '',
     ])
 
-    // 追加はヘッダから行う。行の操作は編集が左・削除が右端（破壊的な操作を最後にする）
-    await expect(page.getByTestId('symbols-add')).toBeVisible()
+    // 追加と一括操作はヘッダから行う。並びは画面モックどおり一括操作が左・新規追加が右
+    const add = page.getByTestId('symbols-add')
+    const bulk = page.getByTestId('symbols-vwap-bulk')
+    await expect(add).toBeVisible()
+    await expect(bulk).toHaveText('VWAP対象を一括で対象外へ')
+    expect((await bulk.boundingBox()).x).toBeLessThan((await add.boundingBox()).x)
+
+    // 行の操作は編集が左・削除が右端（破壊的な操作を最後にする）
     const rowButtons = rowsOf(page).first().getByRole('button')
     await expect(rowButtons).toHaveCount(2)
     await expect(rowButtons).toHaveText(['編集', '削除'])
@@ -342,6 +384,35 @@ test.describe('銘柄マスタ一覧', () => {
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
     await expect(rowsOf(page).first()).toContainText(firstRow.symbolCode)
   })
+
+  test('[SM-35] 銘柄名欄に日本語名を入れると URL と一覧に反映される', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await page.getByTestId('symbols-symbol-name').fill(NAME_JA)
+    await page.getByTestId('symbols-search-submit').click()
+
+    // クエリ名は 1 つ（symbol_name）。日本語名に乗せるのは api 層の仕事で、URL には現れない
+    await expect(page).toHaveURL((url) => url.searchParams.get('symbol_name') === NAME_JA)
+    await expect(page.getByTestId('symbols-count')).toHaveText(`${byNameJa.length} 件`)
+
+    const rows = rowsOf(page)
+    await expect(rows).toHaveCount(byNameJa.length)
+    await expect(rows.first()).toContainText(byNameJa[0].symbolCode)
+    await expect(rows.first()).toContainText(byNameJa[0].ticker)
+  })
+
+  test('[SM-36] URL の symbol_name は英語名に大文字小文字を無視して当たる', async ({ page }) => {
+    await page.goto(`${PATH}?symbol_name=${NAME_EN}`)
+
+    // URL → 画面の同期（入力欄に値が入る）
+    await expect(page.getByTestId('symbols-symbol-name')).toHaveValue(NAME_EN)
+    await expect(page.getByTestId('symbols-count')).toHaveText(`${byNameEn.length} 件`)
+
+    const rows = rowsOf(page)
+    await expect(rows).toHaveCount(byNameEn.length)
+    await expect(rows.first()).toContainText(byNameEn[0].nameEn)
+  })
 })
 
 /*
@@ -381,8 +452,8 @@ test.describe('銘柄マスタ 新規追加', () => {
       await expect(page.getByTestId(`symbols-add-${name}`)).toHaveValue('')
     }
     await expect(page.getByTestId('symbols-add-regulation')).toHaveValue('0')
-    await expect(page.getByTestId('symbols-add-order-route')).toHaveValue('0')
-    await expect(page.getByTestId('symbols-add-vwap-target')).toHaveValue('0')
+    await expect(page.getByTestId('symbols-add-order-route')).toHaveValue('1')
+    await expect(page.getByTestId('symbols-add-vwap-target')).toHaveValue('1')
 
     // 入力項目は 10（input 7 + select 3）。市場名・前日出来高・Pre区分 は持たない
     const form = dialog.getByTestId('symbols-add-form')
@@ -524,8 +595,9 @@ test.describe('銘柄マスタ 新規追加', () => {
     await fillRequired(page)
     await page.getByTestId('symbols-add-name-en').fill('Test Inc.')
     await page.getByTestId('symbols-add-regulation').selectOption('1')
-    await page.getByTestId('symbols-add-order-route').selectOption('1')
-    await page.getByTestId('symbols-add-vwap-target').selectOption('1')
+    // 初期値（IB証券 / 対象）から変えて、選んだ値が届くことを見る
+    await page.getByTestId('symbols-add-order-route').selectOption('0')
+    await page.getByTestId('symbols-add-vwap-target').selectOption('0')
     await page.getByTestId('symbols-add-previous-close').fill('123.45')
     await page.getByTestId('symbols-add-average-volume').fill('1000000')
     await page.getByTestId('symbols-add-note').fill('追加した銘柄')
@@ -542,8 +614,8 @@ test.describe('銘柄マスタ 新規追加', () => {
     await expect(row).toContainText(NEW_SYMBOL.name)
     await expect(row).toContainText('Test Inc.')
     await expect(row).toContainText('取引不可')
-    await expect(row).toContainText('IB証券')
-    await expect(row).toContainText('対象')
+    await expect(row).toContainText('みずほ証券')
+    await expect(row).toContainText('対象外')
     await expect(row).toContainText(formatUsdUnit(123.45))
     await expect(row).toContainText(formatQuantity(1_000_000))
     await expect(row).toContainText('追加した銘柄')
@@ -819,5 +891,195 @@ test.describe('銘柄マスタ 削除', () => {
     await expect(page.getByTestId('symbols-count')).toHaveText(
       `${byOpenRegulation.length - 1} 件`,
     )
+  })
+})
+
+/*
+ * VWAP対象を一括で対象外へ（SM-37〜42）。「事前確認（dry-run）→ 実行」の 2 段で、
+ * ダイアログを開いた時点で事前確認が走り、何件・どの銘柄が変わるかを実行前に見せる。
+ *
+ * エラーの出し先は 2 系統（どちらもダイアログ内。入れ物は別）:
+ *   事前確認の失敗 … symbols-vwap-bulk-preview-error（件数の代わりに出て、実行させない。SM-40）
+ *   実行の失敗     … symbols-vwap-bulk-error（件数を見せたまま理由を出す。SM-41）
+ * 事前確認と実行は別パス（/vwap-target/validate と /vwap-target）なので、mockApi() で一方だけを差し替えられる。
+ * 対象 0 件は既定モックでは起こせないので、事前確認の応答を差し替えて出しかただけを見る（SM-42）。
+ *
+ * 既定ハンドラは実行後の値を保持するので、一覧が読み直されて全行「対象外」になるところまで見る。
+ * モックの可変状態はページを開き直すと初期化されるため、テスト間で持ち越さない。
+ */
+test.describe('銘柄マスタ VWAP対象の一括対象外化', () => {
+  const previewFailure = (page) =>
+    mockApi(page, [
+      {
+        method: 'post',
+        path: '*/api/masters/symbols/vwap-target/validate',
+        status: 500,
+        body: { detail: ERROR_MESSAGE },
+      },
+    ])
+
+  test('[SM-37] ボタンを押すと件数と変わる銘柄の一覧が出る', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openVwapBulk(page)
+
+    const dialog = vwapBulkDialogOf(page)
+    // 取引可否には触れないことを本文で明記する（画面モックの confirm() の文言）
+    await expect(dialog).toContainText(
+      'VWAP対象の銘柄をすべて対象外へ変更します。通常注文の取引可否は変更しません。',
+    )
+    await expect(page.getByTestId('symbols-vwap-bulk-count')).toHaveText(
+      `対象 ${vwapTargets.length} 件（有効な銘柄 ${TOTAL} 件中）`,
+    )
+
+    // 件数だけでは何が変わるか分からないので、変わる銘柄が並ぶ（銘柄コードの昇順）
+    const items = page.getByTestId('symbols-vwap-bulk-list').getByRole('listitem')
+    await expect(items).toHaveCount(vwapTargets.length)
+    await expect(items.first()).toContainText(vwapTargets[0].symbolCode)
+    await expect(items.first()).toContainText(vwapTargets[0].ticker)
+    await expect(items.first()).toContainText(vwapTargets[0].name)
+
+    await expect(page.getByTestId('symbols-vwap-bulk-submit')).toHaveText('対象外にする')
+    await expect(page.getByTestId('symbols-vwap-bulk-submit')).toBeEnabled()
+    await expect(page.getByTestId('symbols-vwap-bulk-cancel')).toBeVisible()
+  })
+
+  test('[SM-38] キャンセルすると何も変わらない', async ({ page }) => {
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openVwapBulk(page)
+    await expect(page.getByTestId('symbols-vwap-bulk-count')).toBeVisible()
+    await page.getByTestId('symbols-vwap-bulk-cancel').click()
+
+    await expect(vwapBulkDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('symbols-count')).toHaveText(`${TOTAL} 件`)
+    // 1 行目（フィクスチャでは VWAP対象）はそのまま
+    await expect(vwapCellOf(rowsOf(page).first())).toHaveText('対象')
+    await expect(page.getByTestId('symbols-notice')).toBeHidden()
+  })
+
+  test('[SM-39] 実行すると全行が対象外になり、変わった行に色が付く', async ({ page }) => {
+    // 変わる行（対象・自動取込のまま）と、元から対象外で自動取込のままの行を 1 ページ目から選ぶ
+    const changedIndex = firstPage.findIndex(
+      (row) => row.vwapTarget === VWAP_TARGET_ON && !row.userModified,
+    )
+    const plainIndex = firstPage.findIndex(
+      (row) => row.vwapTarget === VWAP_TARGET && !row.userModified,
+    )
+    expect(changedIndex).toBeGreaterThanOrEqual(0)
+    expect(plainIndex).toBeGreaterThanOrEqual(0)
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+    // 実行前は「対象」が混ざっている
+    await expect(vwapCellOf(rowsOf(page).nth(changedIndex))).toHaveText('対象')
+
+    await openVwapBulk(page)
+    await expect(page.getByTestId('symbols-vwap-bulk-count')).toBeVisible()
+    await page.getByTestId('symbols-vwap-bulk-submit').click()
+
+    await expect(vwapBulkDialogOf(page)).toBeHidden()
+    await expect(page.getByTestId('symbols-notice')).toHaveText(
+      successMessageOf(vwapTargets.length),
+    )
+
+    // 件数は変わらず、1 ページ目の全行が「対象外」になる
+    const rows = rowsOf(page)
+    await expect(page.getByTestId('symbols-count')).toHaveText(`${TOTAL} 件`)
+    await expect(rows).toHaveCount(PAGE_SIZE)
+    // VWAP対象区分 のセルが「対象外」でない行が 1 つも残らない（has の中の locator は行を起点に探す）
+    const stillTargeted = rows.filter({
+      hasNot: page.locator('td').nth(COLUMN_INDEX.vwapTarget).filter({ hasText: /^対象外$/ }),
+    })
+    await expect(stillTargeted).toHaveCount(0)
+
+    // 変わった行には手動操作の印（背景色）が付き、触っていない行とは異なる
+    expect(await backgroundColorOf(rows.nth(changedIndex))).not.toBe(
+      await backgroundColorOf(rows.nth(plainIndex)),
+    )
+
+    // 一覧の単方向フローには触らない（URL は変わらない）
+    await expect(page).toHaveURL(new RegExp(`${PATH}$`))
+
+    // 2 ページ目も含めて「対象」が残っていない
+    await page.getByTestId('symbols-vwap-target').selectOption(VWAP_TARGET_ON)
+    await page.getByTestId('symbols-search-submit').click()
+    await expect(page.getByTestId('symbols-empty')).toHaveText('該当する銘柄はありません。')
+  })
+
+  test('[SM-40] 事前確認に失敗すると理由が出て実行できない', async ({ page }) => {
+    await previewFailure(page)
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openVwapBulk(page)
+
+    await expect(page.getByTestId('symbols-vwap-bulk-preview-error')).toContainText(ERROR_MESSAGE)
+    // 件数も一覧も出ず、実行させない
+    await expect(page.getByTestId('symbols-vwap-bulk-count')).toHaveCount(0)
+    await expect(page.getByTestId('symbols-vwap-bulk-list')).toHaveCount(0)
+    await expect(page.getByTestId('symbols-vwap-bulk-submit')).toBeDisabled()
+  })
+
+  test('[SM-41] 実行に失敗するとダイアログは開いたまま理由を出す', async ({ page }) => {
+    // 事前確認（…/vwap-target/validate）はパスが別なので既定ハンドラのまま通る
+    await mockApi(page, [
+      {
+        method: 'post',
+        path: '*/api/masters/symbols/vwap-target',
+        status: 500,
+        body: { detail: ERROR_MESSAGE },
+      },
+    ])
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openVwapBulk(page)
+    await expect(page.getByTestId('symbols-vwap-bulk-count')).toBeVisible()
+    await page.getByTestId('symbols-vwap-bulk-submit').click()
+
+    await expect(vwapBulkDialogOf(page)).toBeVisible()
+    await expect(page.getByTestId('symbols-vwap-bulk-error')).toContainText(ERROR_MESSAGE)
+    // 件数は見せたまま（事前確認の枠には出さない）
+    await expect(page.getByTestId('symbols-vwap-bulk-count')).toBeVisible()
+    await expect(page.getByTestId('symbols-vwap-bulk-preview-error')).toHaveCount(0)
+
+    // 一覧は変わらず、成功メッセージも出ない
+    await expect(page.getByTestId('symbols-count')).toHaveText(`${TOTAL} 件`)
+    await expect(vwapCellOf(rowsOf(page).first())).toHaveText('対象')
+    await expect(page.getByTestId('symbols-notice')).toBeHidden()
+  })
+
+  test('[SM-42] 対象が 0 件なら実行できない', async ({ page }) => {
+    // 既定モックでは起こせないので、事前確認の応答（VwapTargetBulkResponse）を差し替える
+    await mockApi(page, [
+      {
+        method: 'post',
+        path: '*/api/masters/symbols/vwap-target/validate',
+        body: {
+          success: true,
+          dry_run: true,
+          mode: 'set',
+          VWAP対象区分: VWAP_TARGET,
+          候補件数: TOTAL,
+          対象件数: 0,
+          更新件数: 0,
+          symbols: [],
+          message: '',
+        },
+      },
+    ])
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    await openVwapBulk(page)
+
+    await expect(page.getByTestId('symbols-vwap-bulk-empty')).toHaveText(
+      '対象外へ変更する銘柄はありません（VWAP対象の銘柄が無い）。',
+    )
+    await expect(page.getByTestId('symbols-vwap-bulk-count')).toHaveCount(0)
+    await expect(page.getByTestId('symbols-vwap-bulk-submit')).toBeDisabled()
   })
 })

@@ -17,18 +17,13 @@ export function resetBlackoutDateRows() {
   blackoutDateRows = [...blackoutDates, ...canceledBlackoutDates]
 }
 
-/**
- * 受注不可日の一覧が 1 ページで返す件数。
- * 実 API 側はクエリで変えられない固定値なので、モックも定数で持つ
- * （海外休場日は limit を受け付けるので、そちらはクエリから読む）。
- */
-const BLACKOUT_DATES_PER_PAGE = 50
+/** 受注不可日の一覧が 1 ページで返す件数の既定値（実 API は limit 1〜200・既定 50） */
+const BLACKOUT_DATES_DEFAULT_LIMIT = 50
 
 export const blackoutDateHandlers = [
   /*
    * 受注不可日マスタの一覧。取消済み（取消区分 1）は既定で返さない。
-   * 実 API は 1 ページ 50 件で固定されていて limit というクエリを持たないので、
-   * ここも limit を読まない（応答の limit は常に 50）。
+   * limit は #21 で入った（2026-09-30）。クエリが無いときは既定 50 で返す。
    */
   http.get('*/api/masters/blackout-dates', ({ request }) => {
     const params = new URL(request.url).searchParams
@@ -36,6 +31,7 @@ export const blackoutDateHandlers = [
     const endDate = toNonNegativeInt(params.get('end_date'), 0)
     const blackoutDate = toNonNegativeInt(params.get('blackout_date'), 0)
     const includeDeleted = params.get('include_deleted') === 'true'
+    const limit = toNonNegativeInt(params.get('limit'), BLACKOUT_DATES_DEFAULT_LIMIT)
     const offset = toNonNegativeInt(params.get('offset'), 0)
 
     // 受注不可日は YYYYMMDD の integer なので、数値の大小がそのまま日付の大小になる。
@@ -53,9 +49,9 @@ export const blackoutDateHandlers = [
     return HttpResponse.json({
       // total は絞り込み後・ページ切り出し前の件数
       total: filtered.length,
-      limit: BLACKOUT_DATES_PER_PAGE,
+      limit,
       offset,
-      blackout_dates: filtered.slice(offset, offset + BLACKOUT_DATES_PER_PAGE),
+      blackout_dates: filtered.slice(offset, offset + limit),
     })
   }),
 

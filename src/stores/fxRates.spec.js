@@ -32,6 +32,9 @@ const AFTER_ALL_DATE = addDays(
 )
 
 const NEW_RATE = LATEST.為替レート + 1
+const NEW_WITHHOLDING_RATE = LATEST.源泉レート + 1
+// 保存の引数（公示レートと源泉レート）
+const NEW_RATES = { rate: NEW_RATE, withholdingRate: NEW_WITHHOLDING_RATE }
 // モックの事前検証が警告を返す、一般的な範囲（50〜300 円）から外れるレート
 const OUT_OF_RANGE_RATE = LATEST.為替レート * 10
 // 本文の型違反（正の数でない）。事前検証の段階で 422 になる
@@ -44,6 +47,7 @@ const REJECT_REASON = `基準日 ${LATEST.基準日} の ${CURRENCY_CODE} は既
 
 const LATEST_PATH = '*/api/masters/fx/latest'
 const VALIDATE_PATH = '*/api/masters/fx/validate'
+const CREATE_PATH = '*/api/masters/fx'
 // `:fxId` にすると latest まで拾うので、対象の ID を直接書いたパスで差し替える
 const LATEST_DETAIL_PATH = `*/api/masters/fx/${LATEST.ID}`
 
@@ -80,6 +84,7 @@ describe('useFxRatesStore', () => {
       baseDate: LATEST_DATE,
       currencyCode: LATEST.通貨コード,
       rate: LATEST.為替レート,
+      withholdingRate: LATEST.源泉レート,
       updatedAt: LATEST.更新日時,
       updatedBy: LATEST.更新者,
       createdAt: LATEST.作成日時,
@@ -139,12 +144,13 @@ describe('useFxRatesStore', () => {
     const store = useFxRatesStore()
     await store.load()
 
-    const saved = await store.save({ rate: NEW_RATE })
+    const saved = await store.save(NEW_RATES)
 
     expect(saved).toMatchObject({
       baseDate: AFTER_ALL_DATE,
       currencyCode: CURRENCY_CODE,
       rate: NEW_RATE,
+      withholdingRate: NEW_WITHHOLDING_RATE,
     })
     expect(saved.id).not.toBe(LATEST_ID)
     expect(store.rate).toEqual(saved)
@@ -158,9 +164,14 @@ describe('useFxRatesStore', () => {
     const store = useFxRatesStore()
     await store.load()
 
-    const saved = await store.save({ rate: NEW_RATE })
+    const saved = await store.save(NEW_RATES)
 
-    expect(saved).toMatchObject({ id: LATEST_ID, baseDate: LATEST_DATE, rate: NEW_RATE })
+    expect(saved).toMatchObject({
+      id: LATEST_ID,
+      baseDate: LATEST_DATE,
+      rate: NEW_RATE,
+      withholdingRate: NEW_WITHHOLDING_RATE,
+    })
     expect(store.rate).toEqual(saved)
     expect(store.saveError).toBeNull()
   })
@@ -174,7 +185,7 @@ describe('useFxRatesStore', () => {
         putRequest = { pathname: new URL(request.url).pathname, body }
         return HttpResponse.json({
           success: true,
-          exchange_rate: { ...LATEST, 為替レート: body.為替レート },
+          exchange_rate: { ...LATEST, 為替レート: body.為替レート, 源泉レート: body.源泉レート },
           message: '為替レートを変更しました',
         })
       }),
@@ -182,13 +193,14 @@ describe('useFxRatesStore', () => {
     const store = useFxRatesStore()
     await store.load()
 
-    await store.save({ rate: NEW_RATE })
+    await store.save(NEW_RATES)
 
     expect(putRequest.pathname).toBe(`/api/masters/fx/${LATEST_ID}`)
     expect(putRequest.body).toEqual({
       基準日: LATEST.基準日,
       通貨コード: CURRENCY_CODE,
       為替レート: NEW_RATE,
+      源泉レート: NEW_WITHHOLDING_RATE,
       更新日時: LATEST.更新日時,
     })
   })
@@ -297,5 +309,39 @@ describe('useFxRatesStore', () => {
     expect(store.validationErrors).not.toEqual([])
     store.clearSaveError()
     expect(store.validationErrors).toEqual([])
+  })
+
+  it('[FXS-15] 登録では事前検証と登録の本文の両方に源泉レートが載る', async () => {
+    const bodies = { validate: null, create: null }
+    // 記録だけして既定ハンドラへ流す（応答は既定の振る舞いのまま）
+    server.use(
+      http.post(VALIDATE_PATH, async ({ request }) => {
+        bodies.validate = await request.clone().json()
+      }),
+      http.post(CREATE_PATH, async ({ request }) => {
+        bodies.create = await request.clone().json()
+      }),
+    )
+    const store = useFxRatesStore()
+    await store.load()
+
+    const saved = await store.save(NEW_RATES)
+
+    expect(saved).not.toBeNull()
+    expect(bodies.validate.源泉レート).toBe(NEW_WITHHOLDING_RATE)
+    expect(bodies.create.源泉レート).toBe(NEW_WITHHOLDING_RATE)
+  })
+
+  it('[FXS-16] 源泉レートの型違反は 422 として saveError に項目名付きで入る', async () => {
+    const store = useFxRatesStore()
+    await store.load()
+    const before = store.rate
+
+    const saved = await store.save({ rate: NEW_RATE, withholdingRate: INVALID_RATE })
+
+    expect(saved).toBeNull()
+    expect(store.saveError.status).toBe(422)
+    expect(store.saveError.message).toMatch(/^源泉レート: /)
+    expect(store.rate).toEqual(before)
   })
 })

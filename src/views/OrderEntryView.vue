@@ -19,6 +19,7 @@ import {
   buildOrderInput,
   buildOrderReadback,
   createOrderForm,
+  defaultOrderPerson,
   hasOrderFormErrors,
   validateOrderForm,
 } from '@/utils/orderEntryForm'
@@ -38,7 +39,9 @@ import { parseOrderEntryQuery } from '@/utils/orderEntryQuery'
  * 顧客詳細（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）からは、部店・口座番号・銘柄・
  * 売買・預り区分が URL クエリで引き継がれて入る（utils/orderEntryQuery.js）。引き継いだ値は入力欄の
  * 初期値にするだけで、顧客と銘柄は口座番号・ティッカーを打ったときと同じ照会で引き当てる。
- * モックの「顧客詳細から入ったときの大きな顧客カードとタブ」（customer_context）は持たない。
+ * 顧客詳細からの導線（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）は、この画面を顧客詳細の
+ * 子ルート（/customers/:customerId/order-entry）として描く。大きな顧客カードとタブ（モックの customer_context）は親の CustomerDetailView が持つ。
+ * そのときはフォームの上の顧客バーを出さない（モックも customer_context では出さない。氏名・預り金が二重になる）。
  */
 
 /** 照会を始めるまでの待ち（モックと同じ 400ms。打っている途中の値で API を叩かない） */
@@ -122,12 +125,12 @@ const isEmpty = computed(
 /** 新しいフォーム。期間指定は先頭（当日中）を入れておく */
 function newForm(customer = {}) {
   return {
-    ...createOrderForm({ orderPerson: operatorCode.value, ...customer }),
+    ...createOrderForm({ orderPerson: defaultOrderPerson(operatorCode.value), ...customer }),
     expiryDate: expiryOptions.value[0]?.value ?? '',
   }
 }
 
-// 顧客詳細から入ったときは、URL クエリで引き継いだ顧客・銘柄・売買・預り区分を初期値にする
+// 顧客詳細から入ったときは、URL クエリで引き継いだ顧客・銘柄・売買・預り区分・数量を初期値にする
 const form = ref(newForm(parseOrderEntryQuery(route.query)))
 
 // 休日を読み終えたら期間指定の先頭を入れる（開いた直後は選択肢がまだ無い）
@@ -179,6 +182,9 @@ const currentSymbolLookup = computed(() =>
 const customer = computed(() => currentCustomerLookup.value?.customer ?? null)
 const symbol = computed(() => currentSymbolLookup.value?.symbol ?? null)
 
+/** 顧客詳細の子ルートとして描いている（顧客カードは親が出す） */
+const inCustomerDetail = computed(() => route.name === 'customer-order-entry')
+
 /*
  * 照会結果のヒント。照会の失敗は何も出さない（モックと同じ。入力は続けられ、送信時に理由が出る）。
  */
@@ -201,16 +207,20 @@ const customerHint = computed(() =>
   }),
 )
 
-const symbolHint = computed(() =>
-  lookupHint({
+// 銘柄名の前に、引き当てた銘柄のティッカーと銘柄コードを並べる（どちらで入力しても両方が判る。モックと同じ）
+const symbolHint = computed(() => {
+  const hint = lookupHint({
     hasInput: Boolean(tickerKey.value),
     loading: symbolLoading.value,
     failed: Boolean(symbolError.value),
     lookup: currentSymbolLookup.value,
     foundText: symbol.value?.nameEn || symbol.value?.name,
     notFoundText: '銘柄なし',
-  }),
-)
+  })
+  if (hint.tone !== 'found') return hint
+  const { ticker, symbolCode } = symbol.value
+  return { ...hint, code: `ティッカー：${ticker || '—'} ／ 銘柄コード：${symbolCode || '—'}` }
+})
 
 let customerTimer = null
 let symbolTimer = null
@@ -370,13 +380,11 @@ async function confirmOrder() {
 /* ---------- 完了 → 次の注文 ---------- */
 
 /**
- * 入力画面に戻して次の注文を始める。
- *
- * @param {boolean} keepCustomer 部店と口座番号を引き継ぐ（モックの「同顧客で新規注文」）
+ * 入力画面に戻して、同じ顧客で次の注文を始める（モックの「同顧客で新規注文」）。部店と口座番号を引き継ぐ。
  */
-function startNewOrder(keepCustomer) {
+function startNewOrderSameCustomer() {
   const { branchCode, accountNumber } = pending.value?.form ?? {}
-  form.value = newForm(keepCustomer ? { branchCode, accountNumber } : {})
+  form.value = newForm({ branchCode, accountNumber })
   fieldErrors.value = {}
   serverErrors.value = []
   serverWarnings.value = []
@@ -387,8 +395,12 @@ function startNewOrder(keepCustomer) {
   store.clearSymbol()
   store.clearValidateError()
   store.clearSubmitError()
-  if (!keepCustomer) store.clearCustomer()
   step.value = 'input'
+}
+
+/** 別の顧客の注文は顧客を選び直すところから（/orders/new の「顧客の指定が無ければ顧客検索へ」と同じ） */
+function goToCustomerSearch() {
+  router.push({ name: 'customer-search' })
 }
 
 function goToInquiry() {
@@ -410,8 +422,9 @@ store.loadContext(today)
 if (customerKey.value.accountNumber) store.lookupCustomer(customerKey.value)
 if (tickerKey.value) store.lookupSymbol(tickerKey.value)
 // 起動時に main.js が読み始めているので、たいていは読み終えている。受注者が空なら埋める
+// （社員コードが 5 文字以上なら空のまま。受注者は 4 文字までなので手で入れてもらう）
 operatorStore.ensureLoaded().then(() => {
-  if (!form.value.orderPerson) form.value.orderPerson = operatorCode.value
+  if (!form.value.orderPerson) form.value.orderPerson = defaultOrderPerson(operatorCode.value)
 })
 </script>
 
@@ -473,7 +486,7 @@ operatorStore.ensureLoaded().then(() => {
           @submit="submitInput"
         >
           <template #customer>
-            <OrderCustomerBar v-if="customer" :customer="customer" />
+            <OrderCustomerBar v-if="customer && !inCustomerDetail" :customer="customer" />
           </template>
         </OrderEntryForm>
       </template>
@@ -573,14 +586,14 @@ operatorStore.ensureLoaded().then(() => {
             <BaseButton
               variant="secondary"
               data-testid="order-entry-new-same-customer"
-              @click="startNewOrder(true)"
+              @click="startNewOrderSameCustomer"
             >
               同じ顧客で新規注文
             </BaseButton>
             <BaseButton
               variant="secondary"
               data-testid="order-entry-new-order"
-              @click="startNewOrder(false)"
+              @click="goToCustomerSearch"
             >
               別の顧客で新規注文
             </BaseButton>

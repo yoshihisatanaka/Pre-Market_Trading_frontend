@@ -33,8 +33,9 @@ export const symbolHandlers = [
    * `symbol` の絞り込みは実 API の `LIKE %s` に合わせた**部分一致**で、
    * 画面の検索欄 1 つで銘柄コードと Ticker のどちらにも当たるようにしてある
    * （実 API の `symbol` が Ticker にも当たるかは未確認。当たらないなら検索欄を 2 つに分ける）。
-   * **銘柄名では絞らない**（実 API は `name_ja` / `name_en` を別のパラメータに分けている）。
-   * 区分 3 つは完全一致。
+   * 銘柄名は `symbol_name_ja`（銘柄名）/ `symbol_name_en`（銘柄名_英字）の別パラメータで、
+   * それぞれ部分一致（大文字小文字を区別しない）。画面の「銘柄名」欄はどちらか 1 つにだけ乗せる
+   * （src/api/symbols.js の toSymbolNameQuery）。区分 3 つは完全一致。
    * `ticker`（新規注文のティッカー照会）は Ticker だけに当てる。一致の仕方は仕様に無いので
    * `symbol` と同じ部分一致にしておく（完全一致への絞り込みは呼び出し側がする）。
    *
@@ -45,6 +46,8 @@ export const symbolHandlers = [
     // DB 照合は大文字小文字を区別しないので、モックも大文字に寄せてから比べる
     const symbolCode = (params.get('symbol') ?? '').trim().toUpperCase()
     const ticker = (params.get('ticker') ?? '').trim().toUpperCase()
+    const nameJa = (params.get('symbol_name_ja') ?? '').trim().toUpperCase()
+    const nameEn = (params.get('symbol_name_en') ?? '').trim().toUpperCase()
     const regulation = params.get('restriction') ?? ''
     const orderRoute = params.get('route') ?? ''
     const vwapTarget = params.get('vwap_target') ?? ''
@@ -60,6 +63,8 @@ export const symbolHandlers = [
             symbol.銘柄コード.toUpperCase().includes(symbolCode) ||
             symbol.Ticker.toUpperCase().includes(symbolCode)) &&
           (!ticker || symbol.Ticker.toUpperCase().includes(ticker)) &&
+          (!nameJa || (symbol.銘柄名 ?? '').toUpperCase().includes(nameJa)) &&
+          (!nameEn || (symbol.銘柄名_英字 ?? '').toUpperCase().includes(nameEn)) &&
           (!regulation || symbol.規制情報 === regulation) &&
           (!orderRoute || symbol.注文ルート === orderRoute) &&
           (!vwapTarget || symbol.VWAP対象区分 === vwapTarget),
@@ -80,6 +85,26 @@ export const symbolHandlers = [
       // 配列名だけワイヤ上は stocks（SymbolListResponse の項目名）
       stocks: filtered.slice(offset, offset + limit),
     })
+  }),
+
+  /*
+   * VWAP対象区分の一括更新の事前確認（dry-run）と本実行。
+   *
+   * 本文は VwapTargetBulkRequest（`mode` / `VWAP対象区分` / `symbol_ids`）。画面は `mode=set` と
+   * `VWAP対象区分='0'`（全銘柄を対象外へ）だけを送るが、仕様どおり `mode=reset`（初期VWAP対象区分へ戻す）
+   * と `symbol_ids`（対象の絞り込み）も受ける。現在値が同じ銘柄は対象に含めない。
+   * 本実行は対象の行の VWAP対象区分 を書き換え、ユーザー操作フラグ=1 を立てる（履歴は持たない）。
+   *
+   * **静的なパスなので `:id` を取る PUT / DELETE とは衝突しない**（メソッドも違う）。
+   */
+  http.post('*/api/masters/symbols/vwap-target/validate', async ({ request }) => {
+    const body = await request.json().catch(() => null)
+    return vwapTargetBulk(body, { dryRun: true })
+  }),
+
+  http.post('*/api/masters/symbols/vwap-target', async ({ request }) => {
+    const body = await request.json().catch(() => null)
+    return vwapTargetBulk(body, { dryRun: false })
   }),
 
   /*
@@ -220,6 +245,76 @@ export const symbolHandlers = [
     return HttpResponse.json({ success: true, stock: deleted, message: '銘柄を削除しました' })
   }),
 ]
+
+/**
+ * VWAP対象区分の一括更新（事前確認・本実行で共用）。
+ *
+ * 応答は VwapTargetBulkResponse。`候補件数` は絞り込み前の有効な銘柄数、`対象件数` は値が変わる銘柄数、
+ * `更新件数` は実際に更新した件数（dry-run では 0）。`symbols` は値が変わる（変わった）銘柄の一覧。
+ *
+ * @param {object|null} body VwapTargetBulkRequest
+ * @param {{ dryRun: boolean }} options
+ */
+function vwapTargetBulk(body, { dryRun }) {
+  const mode = body?.mode
+  if (mode !== 'set' && mode !== 'reset') {
+    return requestValidationError(['body', 'mode'], "Input should be 'set' or 'reset'", 'enum')
+  }
+
+  const target = body?.VWAP対象区分
+  if (mode === 'set' && !Object.hasOwn(VWAP_TARGET_NAMES, target)) {
+    return detailError(400, 'mode=set のとき VWAP対象区分（0/1）は必須です')
+  }
+
+  const ids = Array.isArray(body?.symbol_ids) ? body.symbol_ids : null
+  if (ids && ids.some((id) => !Number.isInteger(id))) {
+    return requestValidationError(['body', 'symbol_ids'], 'Input should be a valid integer', 'int_type')
+  }
+
+  // 候補は有効な銘柄（symbol_ids があればその中から）。現在値が同じ銘柄は対象から外す
+  const candidates = symbolRows.filter(
+    (row) => row.取消区分 === 0 && (!ids || ids.includes(row.ID)),
+  )
+  const nextValueOf = (row) => (mode === 'set' ? target : (row.初期VWAP対象区分 ?? row.VWAP対象区分))
+  const changes = candidates.filter((row) => row.VWAP対象区分 !== nextValueOf(row))
+
+  if (!dryRun && changes.length > 0) {
+    const changedIds = new Set(changes.map((row) => row.ID))
+    symbolRows = symbolRows.map((row) =>
+      changedIds.has(row.ID)
+        ? {
+            ...row,
+            VWAP対象区分: nextValueOf(row),
+            VWAP対象区分名: VWAP_TARGET_NAMES[nextValueOf(row)] ?? null,
+            ユーザー操作フラグ: 1,
+            更新日時: nowIsoTimestamp(),
+            更新者: '006',
+          }
+        : row,
+    )
+  }
+
+  return HttpResponse.json({
+    success: true,
+    dry_run: dryRun,
+    mode,
+    VWAP対象区分: mode === 'set' ? target : null,
+    候補件数: candidates.length,
+    対象件数: changes.length,
+    更新件数: dryRun ? 0 : changes.length,
+    symbols: changes.map((row) => ({
+      ID: row.ID,
+      銘柄コード: row.銘柄コード,
+      Ticker: row.Ticker,
+      銘柄名: row.銘柄名,
+      変更前: row.VWAP対象区分,
+      変更後: nextValueOf(row),
+    })),
+    message: dryRun
+      ? `${changes.length} 件が対象です（更新は行っていません）`
+      : `${changes.length} 件の VWAP対象区分を更新しました`,
+  })
+}
 
 /**
  * `SymbolRequest` の宣言（pydantic）で弾かれるもの。

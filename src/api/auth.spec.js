@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { supervisorOperator, viewerOperator } from '@/mocks/fixtures/currentOperator'
+import { salesOperator, supervisorOperator, viewerOperator } from '@/mocks/fixtures/currentOperator'
 import { fetchCurrentOperator } from './auth'
 
 /*
@@ -42,6 +42,7 @@ const toModel = (raw) => ({
     master: raw.権限.master,
     operation: raw.権限.operation,
     branchAll: raw.権限.branch_all,
+    depositary: raw.権限.depositary,
   },
   authzEnforced: raw.認可強制,
 })
@@ -79,7 +80,7 @@ describe('api/auth', () => {
     expect(operator.branchCode).toBe(viewerOperator.部店コード)
   })
 
-  it('[AUA-04] 権限の無い応答は 4 つとも false になる', async () => {
+  it('[AUA-04] 権限の無い応答は 5 つとも false になる', async () => {
     const withoutFlags = Object.fromEntries(
       Object.entries(supervisorOperator).filter(([key]) => key !== '権限'),
     )
@@ -92,7 +93,22 @@ describe('api/auth', () => {
       master: false,
       operation: false,
       branchAll: false,
+      depositary: false,
     })
+  })
+
+  it('[AUA-07] 預託先参照権限は 権限.depositary から真偽値で入り、欠けていれば false', async () => {
+    record(supervisorOperator)
+    expect((await fetchCurrentOperator()).permissions.depositary).toBe(true)
+
+    record(salesOperator)
+    expect((await fetchCurrentOperator()).permissions.depositary).toBe(false)
+
+    const flagsWithoutDepositary = Object.fromEntries(
+      Object.entries(supervisorOperator.権限).filter(([key]) => key !== 'depositary'),
+    )
+    record({ ...supervisorOperator, 権限: flagsWithoutDepositary })
+    expect((await fetchCurrentOperator()).permissions.depositary).toBe(false)
   })
 
   it('[AUA-05] 未登録の操作者はロールコードと氏名が空文字で registered が false になる', async () => {

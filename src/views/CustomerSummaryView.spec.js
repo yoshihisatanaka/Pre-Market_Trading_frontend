@@ -8,6 +8,7 @@ import { server } from '@/mocks/server'
 import { noOperationOperator } from '@/mocks/fixtures/currentOperator'
 import { customers } from '@/mocks/fixtures/customers'
 import { holdings } from '@/mocks/fixtures/holdings'
+import { SPECIFIC_DEPOSIT } from '@/utils/apiEnums'
 import { DEPOSIT_CATEGORY } from '@/utils/orderEntryOptions'
 import CustomerDetailView from './CustomerDetailView.vue'
 import CustomerSummaryView from './CustomerSummaryView.vue'
@@ -47,9 +48,10 @@ async function mountView(path) {
         children: [
           { path: 'summary', name: 'customer-summary', component: CustomerSummaryView },
           { path: 'orders', name: 'customer-orders', component: Page },
+          { path: 'order-entry', name: 'customer-order-entry', component: Page },
+          { path: 'calculations', name: 'customer-calculations', component: Page },
         ],
       },
-      { path: '/orders/new', name: 'order-new', component: Page },
       { path: '/:pathMatch(.*)*', component: Page },
     ],
   })
@@ -188,7 +190,7 @@ describe('CustomerSummaryView', () => {
 
     const buy = rowOf(wrapper, 'AAPL').find('[data-testid="customer-holdings-buy"]')
     expect(linkOf(buy)).toEqual({
-      path: '/orders/new',
+      path: '/customers/1/order-entry',
       query: { ...FIRST_KEY, ticker: 'AAPL', side: 'buy', deposit: DEPOSIT_CATEGORY.SPECIFIC },
     })
   })
@@ -197,6 +199,7 @@ describe('CustomerSummaryView', () => {
     const { wrapper } = await mountView('/customers/1/summary')
     await settle()
 
+    const nvda = FIRST_HOLDINGS.find((holding) => holding.ティッカー === 'NVDA')
     const row = rowOf(wrapper, 'NVDA')
     expect(linkOf(row.find('[data-testid="customer-holdings-buy"]')).query).toEqual({
       ...FIRST_KEY,
@@ -208,6 +211,28 @@ describe('CustomerSummaryView', () => {
       ticker: 'NVDA',
       side: 'sell',
       deposit: DEPOSIT_CATEGORY.GROWTH,
+      quantity: String(nvda.売却可能株数),
+    })
+  })
+
+  it('[CSM-15] 特定預りの「売り」は注文の特定に読み替え、売却可能株数を数量として引き継ぐ', async () => {
+    const aapl = FIRST_HOLDINGS.find((holding) => holding.ティッカー === 'AAPL')
+    // 預りの特定預り区分 1（特定）。保有数量と売却可能株数が違う明細で確かめる
+    expect(aapl.預り売買区分).toBe(SPECIFIC_DEPOSIT.SPECIFIC)
+    expect(aapl.売却可能株数).toBeLessThan(aapl.数量)
+    const { wrapper } = await mountView('/customers/1/summary')
+    await settle()
+
+    const sell = rowOf(wrapper, 'AAPL').find('[data-testid="customer-holdings-sell"]')
+    expect(linkOf(sell)).toEqual({
+      path: '/customers/1/order-entry',
+      query: {
+        ...FIRST_KEY,
+        ticker: 'AAPL',
+        side: 'sell',
+        deposit: DEPOSIT_CATEGORY.SPECIFIC,
+        quantity: String(aapl.売却可能株数),
+      },
     })
   })
 
@@ -224,7 +249,7 @@ describe('CustomerSummaryView', () => {
     expect(row.find('[data-testid="customer-holdings-buy"]').element.tagName).toBe('A')
   })
 
-  it('[CSM-10] 発注権限が無ければ「閲覧のみ」で発注の導線を出さない', async () => {
+  it('[CSM-10] 発注権限が無ければ「閲覧のみ」で発注の導線を出さない（仮計算は出す）', async () => {
     server.use(http.get(AUTH_ME, () => HttpResponse.json(noOperationOperator)))
     const { wrapper } = await mountView('/customers/1/summary')
     await settle()
@@ -235,6 +260,10 @@ describe('CustomerSummaryView', () => {
     expect(exists(wrapper, 'customer-holdings-buy')).toBe(false)
     expect(exists(wrapper, 'customer-holdings-sell')).toBe(false)
     expect(exists(wrapper, 'customer-holdings-new-order')).toBe(false)
+    expect(wrapper.findAll('[data-testid="customer-holdings-calculation"]')).toHaveLength(
+      FIRST_HOLDINGS.length,
+    )
+    expect(exists(wrapper, 'customer-holdings-calculation-entry')).toBe(true)
   })
 
   it('[CSM-11] 見出しの「新規注文」は顧客の部店と口座番号を引き継ぐ', async () => {
@@ -242,7 +271,7 @@ describe('CustomerSummaryView', () => {
     await settle()
 
     expect(linkOf(wrapper.find('[data-testid="customer-holdings-new-order"]'))).toEqual({
-      path: '/orders/new',
+      path: '/customers/1/order-entry',
       query: FIRST_KEY,
     })
   })
@@ -258,5 +287,33 @@ describe('CustomerSummaryView', () => {
     expect(rows(wrapper)).toHaveLength(noCaHoldings.length)
     expect(exists(wrapper, 'customer-holdings-ca-warning')).toBe(false)
     expect(exists(wrapper, 'customer-holdings-ca-mark')).toBe(false)
+  })
+
+  it('[CSM-13] 行の「仮計算」は銘柄・売り・預り区分を仮計算タブへ引き継ぐ', async () => {
+    const { wrapper } = await mountView('/customers/1/summary')
+    await settle()
+
+    const calculationOf = (ticker) =>
+      linkOf(rowOf(wrapper, ticker).find('[data-testid="customer-holdings-calculation"]'))
+    expect(calculationOf('AAPL')).toEqual({
+      path: '/customers/1/calculations',
+      query: { symbol: 'AAPL', side: 'sell', specific_deposit: SPECIFIC_DEPOSIT.SPECIFIC },
+    })
+    // 成長投資枠も売りの概算なのでそのまま渡す（新規注文の「買い」と違い、落とさない）
+    expect(calculationOf('NVDA').query).toEqual({
+      symbol: 'NVDA',
+      side: 'sell',
+      specific_deposit: SPECIFIC_DEPOSIT.GROWTH_QUOTA,
+    })
+  })
+
+  it('[CSM-14] 見出しの「仮計算」は引き継ぎなしで仮計算タブを指す', async () => {
+    const { wrapper } = await mountView('/customers/1/summary')
+    await settle()
+
+    expect(linkOf(wrapper.find('[data-testid="customer-holdings-calculation-entry"]'))).toEqual({
+      path: '/customers/1/calculations',
+      query: {},
+    })
   })
 })

@@ -14,7 +14,7 @@ import CustomerSearchView from './CustomerSearchView.vue'
 /*
  * 画面テスト。実際の Pinia ストア + vue-router + MSW(node) を通し、
  * 4 状態の出し分けと「URL クエリが正」の単方向フローを検証する。
- * 顧客名のリンク先（名前付きルート customer-summary）を解決できるよう、テスト用ルータに同名のルートを置く。
+ * 行のクリックの移り先（名前付きルート customer-summary）を解決できるよう、テスト用ルータに同名のルートを置く。
  */
 const PATH = '/customers/search'
 const LIST_PATH = '*/api/masters/customers'
@@ -258,14 +258,18 @@ describe('CustomerSearchView', () => {
     expect(countText(wrapper)).toContain(String(TOTAL))
   })
 
-  it('[CSW-11] 顧客名は顧客詳細へのリンクになる', async () => {
-    const { wrapper } = await mountView()
+  it('[CSW-11] 行を click すると顧客詳細へ移る', async () => {
+    const { wrapper, router } = await mountView()
     await settle()
 
-    const link = wrapper.find(`[data-testid="customer-search-detail-${head.ID}"]`)
-    expect(link.exists()).toBe(true)
-    expect(link.text()).toBe(head.顧客名)
-    expect(link.attributes('href')).toBe(`/customers/${head.ID}/summary`)
+    const name = wrapper.find(`[data-testid="customer-search-detail-${head.ID}"]`)
+    expect(name.text()).toBe(head.顧客名)
+    expect(name.element.tagName).not.toBe('A')
+
+    await cellsFor(wrapper, head.口座番号)[2].trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe(`/customers/${head.ID}/summary`)
   })
 
   it('[CSW-12] 要注意のコンプラランクは buy、それ以外は gray のバッジ', async () => {

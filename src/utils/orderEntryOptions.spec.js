@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import openapi from '../../docs/api/openapi.json'
 import {
   CASH_DELIVERY_VALUES,
   DEPOSIT_CATEGORY_VALUES,
@@ -23,13 +24,17 @@ import {
   ORDER_METHOD_OPTIONS,
   ORDER_TYPE_OPTIONS,
   optionLabel,
-  SECURITIES_DELIVERY_OTHER,
+  ORDER_PERSON_MAX_LENGTH,
+  SECURITIES_DELIVERY_DEFAULT,
   SETTLEMENT_CURRENCY_OPTIONS,
   SIDE_OPTIONS,
   SOLICITATION_OPTIONS,
   TRANSACTION_TYPE_CONSIGNMENT,
   VWAP_OPTIONS,
 } from './orderEntryOptions'
+
+/** 送る本文のスキーマ（既定値と文字数の出どころ） */
+const ORDER_REQUEST = openapi.components.schemas.OrderRequest
 
 /** 画面の選択肢と、その値が属する enum（openapi.json の写し） */
 const OPTION_ENUMS = [
@@ -71,9 +76,14 @@ describe('orderEntryOptions', () => {
     }
   })
 
-  it('[NOP-02] 固定値（取引・証券受渡方法）が enum に含まれる', () => {
+  it('[NOP-02] 固定値（取引・証券受渡方法）が enum に含まれ、証券受渡方法は OrderRequest の既定値', () => {
     expect(TRANSACTION_TYPE_VALUES).toContain(TRANSACTION_TYPE_CONSIGNMENT)
-    expect(SECURITIES_DELIVERY_VALUES).toContain(SECURITIES_DELIVERY_OTHER)
+    expect(SECURITIES_DELIVERY_VALUES).toContain(SECURITIES_DELIVERY_DEFAULT)
+    expect(SECURITIES_DELIVERY_DEFAULT).toBe(ORDER_REQUEST.properties.証券受渡方法.default)
+  })
+
+  it('[NOP-08] 受注者の最大文字数が OrderRequest.受注者 の maxLength と一致する', () => {
+    expect(ORDER_PERSON_MAX_LENGTH).toBe(ORDER_REQUEST.properties.受注者.maxLength)
   })
 
   it('[NOP-03] 入力画面の既定値がどれも選択肢に含まれる', () => {
@@ -95,8 +105,8 @@ describe('orderEntryOptions', () => {
     expect(optionLabel(ORDER_TYPE_OPTIONS, 'LO')).toBe('指値')
   })
 
-  it('[NOP-06] 市場区分は時間帯の順に並び、enum の 6 値を過不足なく含む', () => {
-    expect(valuesOf(EXECUTION_SCOPE_OPTIONS)).toEqual(['01', '02', '04', '03', '05', '06'])
+  it('[NOP-06] 市場区分は時間帯の順に並び、enum の 4 値を過不足なく含む', () => {
+    expect(valuesOf(EXECUTION_SCOPE_OPTIONS)).toEqual(['02', '04', '03', '06'])
     expect([...valuesOf(EXECUTION_SCOPE_OPTIONS)].sort()).toEqual([...EXECUTION_SCOPE_VALUES].sort())
   })
 

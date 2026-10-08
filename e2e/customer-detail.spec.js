@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { calculationMessages, FEE_PATTERNS } from '../src/mocks/fixtures/calculations'
 import { noOperationOperator } from '../src/mocks/fixtures/currentOperator'
 import { customers } from '../src/mocks/fixtures/customers'
 import { holdings } from '../src/mocks/fixtures/holdings'
@@ -8,8 +9,8 @@ import { mockApi } from './helpers/mockApi'
 import { COLUMNS as INQUIRY_COLUMNS, expectedRowIds } from './helpers/orderInquiry'
 
 // シナリオ: docs/e2e/customer-detail.md（タイトル先頭の [CDT-nn] が対応 ID）
-// 顧客詳細（枠 = 顧客カードとタブ、子 = 外株預り / 注文照会）。顧客・預り・注文の 3 か所の 4 状態、
-// タブと URL の同期、新規注文への引き継ぎ（新規注文の入力欄に値が入るまで）、発注権限での出し分けを守る。
+// 顧客詳細（枠 = 顧客カードとタブ、子 = 外株預り / 注文照会 / 仮計算）。顧客・預り・注文の 3 か所の 4 状態、
+// タブと URL の同期、新規注文・仮計算への引き継ぎ（入力欄に値が入るまで）、発注権限での出し分けを守る。
 // mockApi() は固定の body を返すだけでクエリを解釈しない。注文照会タブの絞り込み（CDT-26〜30）は
 // クエリを実際に処理する既定ハンドラで検証する。
 
@@ -58,7 +59,7 @@ const CUSTOMER_QUERY = {
  */
 const DEPOSIT_FOR = {
   1: { query: '0', label: '特定' }, // 特定 → 特定
-  0: { query: '1', label: '一般' }, // 非特定 → 一般
+  0: { query: '1', label: '一般' }, // 一般 → 一般（コードは逆向き。#36 ⑥）
   6: { query: '6', label: '成長投資枠' },
 }
 
@@ -100,6 +101,7 @@ const sum = (values) => values.reduce((total, value) => total + value, 0)
 
 const summaryPath = (id) => `/customers/${id}/summary`
 const ordersPath = (id) => `/customers/${id}/orders`
+const calculationsPath = (id) => `/customers/${id}/calculations`
 
 /** 外株預りの表の行。data-table-row は全画面共通の名前なのでこの画面の表にスコープを切る */
 function holdingRows(page) {
@@ -132,7 +134,7 @@ function queryOf(page) {
   return Object.fromEntries(new URL(page.url()).searchParams)
 }
 
-/** 新規注文の切り替えボタン（売買・預り区分）が選ばれているか */
+/** 切り替えボタン（新規注文・仮計算の売買、新規注文の預り区分）が選ばれているか */
 function toggleButton(page, testId, name) {
   return page.getByTestId(testId).getByRole('button', { name, exact: true })
 }
@@ -143,13 +145,83 @@ async function openSummary(page, id = YAMADA.ID) {
   await expect(page.getByTestId('customer-info-bar')).toBeVisible()
 }
 
-/** 新規注文の入力フォームが出て、部店・口座番号が引き継がれている */
+/** 顧客詳細の注文入力タブ（引き継ぎのクエリ付き） */
+const ORDER_ENTRY_URL = new RegExp(`/customers/${YAMADA.ID}/order-entry\\?`)
+
+/**
+ * 注文入力タブに移り、顧客カードとタブを残したまま新規注文の入力フォームが出て、
+ * 部店・口座番号が引き継がれている。顧客は口座番号の横に出て、フォームの上の顧客バーは
+ * 顧客カードと二重になるので出さない
+ */
 async function expectOrderEntryCustomer(page) {
-  await expect(page).toHaveURL(/\/orders\/new\?/)
+  await expect(page).toHaveURL(ORDER_ENTRY_URL)
+  await expect(page.getByTestId('customer-info-name')).toHaveText(YAMADA.顧客名)
+  await expect(page.getByTestId('customer-detail-tab-order-entry')).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
   await expect(page.getByTestId('order-entry-form')).toBeVisible()
   await expect(page.getByTestId('order-entry-branch')).toHaveValue(YAMADA.部店コード)
   await expect(page.getByTestId('order-entry-account')).toHaveValue(String(YAMADA.口座番号))
-  await expect(page.getByTestId('order-entry-customer-name')).toHaveText(YAMADA.顧客名)
+  await expect(page.getByTestId('order-entry-account-hint')).toHaveText(YAMADA.顧客名)
+  await expect(page.getByTestId('order-entry-customer-bar')).toHaveCount(0)
+}
+
+/** 仮計算の入力（CDT-39〜44 で共通） */
+const CALC_QUANTITY = 10
+const CALC_UNIT_PRICE = '230.5'
+
+/** 入力不備の文言（src/utils/calculationForm.js の MESSAGES と numberFieldError の再掲） */
+const CALC_MESSAGES = {
+  symbolRequired: '銘柄コード／ティッカーを入力してください。',
+  quantity: '数量は9桁以内の1株以上で入力してください。',
+  unitPrice: '単価を入力してください。',
+}
+
+/*
+ * AAPL（特定）を 10 株・230.5 ドルで売ったときの明細（見出し → 値）。
+ * 既定モック（src/mocks/fixtures/calculations.js の buildCalculationResponse）で計算した値を画面で確かめたもの。
+ * 計算は浮動小数で末尾の桁を保証しないので、フィクスチャから組み立て直さずに直書きする。
+ */
+const AAPL_SELL_ROWS = {
+  外貨約定代金: '2,305.00 ドル',
+  '現地費用合計（手数料は自動）': '2.36 ドル',
+  '取引所税（自動）': '0.05 ドル',
+  '適用為替（為替 ± スプレッド）': '149.75 円/USD',
+  円換算精算金額: '344,821 円',
+  国内手数料: '1,551 円',
+  消費税: '155 円',
+}
+
+/** 仮計算の結果の明細行の見出しと値 */
+function calcRowLabels(page) {
+  return page.getByTestId('customer-calc-result-rows').locator('dt')
+}
+function calcRowValues(page) {
+  return page.getByTestId('customer-calc-result-rows').locator('dd')
+}
+
+/**
+ * 仮計算の入力欄を埋めて「仮計算を実行」を押す。渡さなかった項目は今の値のまま。
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{ symbol?: string, side?: string, deposit?: string, quantity?: number, unitPrice?: string, feePattern?: string }} input
+ *   side / deposit は画面の表示名（「売り」「成長投資枠」など）
+ */
+async function runCalculation(page, { symbol, side, deposit, quantity, unitPrice, feePattern }) {
+  if (symbol !== undefined) await page.getByTestId('customer-calc-symbol').fill(symbol)
+  if (side !== undefined) await toggleButton(page, 'customer-calc-side', side).click()
+  if (deposit !== undefined) {
+    await page.getByTestId('customer-calc-deposit').selectOption({ label: deposit })
+  }
+  if (quantity !== undefined) {
+    await page.getByTestId('customer-calc-quantity').fill(String(quantity))
+  }
+  if (unitPrice !== undefined) await page.getByTestId('customer-calc-unit-price').fill(unitPrice)
+  if (feePattern !== undefined) {
+    await page.getByTestId('customer-calc-fee-pattern').selectOption({ label: feePattern })
+  }
+  await page.getByTestId('customer-calc-submit').click()
 }
 
 /** フィクスチャがシナリオの前提を満たしているか（変わったらここで気づく） */
@@ -400,13 +472,13 @@ test.describe('顧客詳細 外株預り', () => {
     for (const holding of [AAPL, NVDA, TSLA]) {
       const sell = holdingRow(page, holding).getByTestId('customer-holdings-sell')
       await expect(sell).toBeEnabled()
-      await expect(sell).toHaveAttribute('href', /\/orders\/new\?/)
+      await expect(sell).toHaveAttribute('href', ORDER_ENTRY_URL)
     }
     await expect(page.getByTestId('customer-holdings-buy')).toHaveCount(yamadaHoldings.length)
     for (const holding of yamadaHoldings) {
       await expect(holdingRow(page, holding).getByTestId('customer-holdings-buy')).toHaveAttribute(
         'href',
-        /\/orders\/new\?/,
+        ORDER_ENTRY_URL,
       )
     }
   })
@@ -435,7 +507,9 @@ test.describe('顧客詳細 外株預り', () => {
     )
   })
 
-  test('[CDT-19] 非特定の「売り」は売りと預り区分「一般」を引き継ぐ', async ({ page }) => {
+  test('[CDT-19] 一般（特定預り区分 0）の「売り」は売り・預り区分「一般」・売却可能株数を引き継ぐ', async ({
+    page,
+  }) => {
     const deposit = DEPOSIT_FOR[TSLA.預り売買区分]
 
     await openSummary(page)
@@ -447,8 +521,12 @@ test.describe('顧客詳細 外株預り', () => {
       ticker: TSLA.ティッカー,
       side: 'sell',
       deposit: deposit.query,
+      quantity: String(TSLA.売却可能株数),
     })
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(TSLA.ティッカー)
+    await expect(page.getByTestId('order-entry-quantity')).toHaveValue(
+      TSLA.売却可能株数.toLocaleString('ja-JP'),
+    )
     await expect(toggleButton(page, 'order-entry-side', '売り')).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -486,7 +564,7 @@ test.describe('顧客詳細 外株預り', () => {
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue('')
   })
 
-  test('[CDT-22] タブの「注文入力」は部店と口座番号を引き継いで新規注文へ移る', async ({
+  test('[CDT-22] タブの「注文入力」は顧客カードとタブを残したまま部店と口座番号を引き継ぐ', async ({
     page,
   }) => {
     await openSummary(page)
@@ -494,9 +572,17 @@ test.describe('顧客詳細 外株預り', () => {
 
     await expectOrderEntryCustomer(page)
     expect(queryOf(page)).toEqual(CUSTOMER_QUERY)
+    await expect(page.getByRole('heading', { name: '顧客詳細', exact: true })).toBeVisible()
+
+    // ほかのタブへ戻れる
+    await page.getByTestId('customer-detail-tab-summary').click()
+    await expect(page).toHaveURL(new RegExp(`${summaryPath(YAMADA.ID)}$`))
+    await expect(holdingRows(page)).toHaveCount(yamadaHoldings.length)
   })
 
-  test('[CDT-34] 発注権限が無いと預りの操作は「閲覧のみ」で新規注文も出ない', async ({ page }) => {
+  test('[CDT-34] 発注権限が無いと預りの操作は「閲覧のみ」で新規注文も出ない（仮計算は出る）', async ({
+    page,
+  }) => {
     await mockApi(page, [{ path: '*/api/auth/me', body: noOperationOperator }])
     await openSummary(page)
     await expect(holdingRows(page)).toHaveCount(yamadaHoldings.length)
@@ -505,6 +591,231 @@ test.describe('顧客詳細 外株預り', () => {
     await expect(page.getByTestId('customer-holdings-buy')).toHaveCount(0)
     await expect(page.getByTestId('customer-holdings-sell')).toHaveCount(0)
     await expect(page.getByTestId('customer-holdings-new-order')).toHaveCount(0)
+    await expect(page.getByTestId('customer-holdings-calculation')).toHaveCount(
+      yamadaHoldings.length,
+    )
+    await expect(page.getByTestId('customer-holdings-calculation-entry')).toBeVisible()
+  })
+
+  test('[CDT-37] 行の「仮計算」は銘柄・売り・預り区分を仮計算タブへ引き継ぐ', async ({ page }) => {
+    await openSummary(page)
+    await holdingRow(page, TSLA).getByTestId('customer-holdings-calculation').click()
+
+    await expect(page).toHaveURL(new RegExp(`${calculationsPath(YAMADA.ID)}\\?`))
+    // 仮計算は特定預り区分のまま渡す（新規注文の deposit と違い、向きを読み替えない）
+    expect(queryOf(page)).toEqual({
+      symbol: TSLA.ティッカー,
+      side: 'sell',
+      specific_deposit: TSLA.預り売買区分,
+    })
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(TSLA.ティッカー)
+    await expect(toggleButton(page, 'customer-calc-side', '売り')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await expect(page.getByTestId('customer-calc-deposit').locator('option:checked')).toHaveText(
+      '一般',
+    )
+    await expect(page.getByTestId('customer-detail-tab-calculations')).toHaveAttribute(
+      'class',
+      /is-active/,
+    )
+  })
+
+  test('[CDT-38] 見出しの「仮計算」は引き継ぎなしで買いの仮計算を開く', async ({ page }) => {
+    await openSummary(page)
+    await page.getByTestId('customer-holdings-calculation-entry').click()
+
+    await expect(page).toHaveURL(new RegExp(`${calculationsPath(YAMADA.ID)}$`))
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveValue('')
+    await expect(toggleButton(page, 'customer-calc-side', '買い')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await expect(page.getByTestId('customer-calc-deposit').locator('option:checked')).toHaveText(
+      '特定',
+    )
+  })
+})
+
+test.describe('顧客詳細 仮計算', () => {
+  test('[CDT-36] タブ「仮計算」で入力フォームと結果のカードが出る', async ({ page }) => {
+    await openSummary(page)
+    await page.getByTestId('customer-detail-tab-calculations').click()
+
+    await expect(page).toHaveURL(new RegExp(`${calculationsPath(YAMADA.ID)}$`))
+    await expect(page.getByTestId('customer-detail-tab-calculations')).toHaveAttribute(
+      'class',
+      /is-active/,
+    )
+    await expect(page.getByTestId('customer-info-name')).toHaveText(YAMADA.顧客名)
+    await expect(page.getByTestId('customer-calc-form')).toBeVisible()
+    await expect(page.getByRole('heading', { name: /^現地費用/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /^手数料条件/ })).toBeVisible()
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText('買付概算 ／ 未実行')
+    await expect(page.getByTestId('customer-calc-total-label')).toHaveText('概算必要金額')
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('—')
+
+    // 空のまま実行すると項目の直下に不備が出て、計算はしない
+    await page.getByTestId('customer-calc-submit').click()
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveAccessibleDescription(
+      new RegExp(CALC_MESSAGES.symbolRequired),
+    )
+    await expect(page.getByTestId('customer-calc-quantity')).toHaveAccessibleDescription(
+      new RegExp(CALC_MESSAGES.quantity),
+    )
+    await expect(page.getByTestId('customer-calc-unit-price')).toHaveAccessibleDescription(
+      new RegExp(CALC_MESSAGES.unitPrice),
+    )
+    await expect(page).toHaveURL(new RegExp(`${calculationsPath(YAMADA.ID)}$`))
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText('買付概算 ／ 未実行')
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('—')
+
+    await page.getByTestId('customer-calc-back').click()
+    await expect(page).toHaveURL(new RegExp(`${summaryPath(YAMADA.ID)}$`))
+  })
+
+  test('[CDT-39] 預りの「仮計算」から実行すると売却概算の明細・受取金額・概算損益が出る', async ({
+    page,
+  }) => {
+    await openSummary(page)
+    await holdingRow(page, AAPL).getByTestId('customer-holdings-calculation').click()
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(AAPL.ティッカー)
+
+    await runCalculation(page, { quantity: CALC_QUANTITY, unitPrice: CALC_UNIT_PRICE })
+
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText(
+      `売却概算 ／ ${AAPL.ティッカー} ${CALC_QUANTITY}株`,
+    )
+    await expect(calcRowLabels(page)).toHaveText(Object.keys(AAPL_SELL_ROWS))
+    for (const [index, value] of Object.values(AAPL_SELL_ROWS).entries()) {
+      await expect(calcRowValues(page).nth(index)).toHaveText(value)
+    }
+    await expect(page.getByTestId('customer-calc-total-label')).toHaveText('概算受取金額')
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('343,115 円')
+    const profitLoss = page.getByTestId('customer-calc-profit-loss-value')
+    await expect(profitLoss).toHaveText('+43,115 円')
+    await expect(page.getByTestId('customer-calc-error')).toHaveCount(0)
+    await expect(page.getByTestId('customer-calc-warnings')).toHaveCount(0)
+
+    // 益の色は CSS クラス名ではなく、色のトークン（tokens.css の --color-profit）と見えかたで比べる
+    const [actual, expected] = await profitLoss.evaluate((el) => {
+      const probe = document.createElement('span')
+      probe.style.color = 'var(--color-profit)'
+      document.body.append(probe)
+      const tokenColor = getComputedStyle(probe).color
+      probe.remove()
+      return [getComputedStyle(el).color, tokenColor]
+    })
+    expect(actual).toBe(expected)
+  })
+
+  test('[CDT-40] 成長投資枠の買いは NISA の 2 行が加わり、概算損益は出ない', async ({ page }) => {
+    await page.goto(calculationsPath(YAMADA.ID))
+    await expect(page.getByTestId('customer-calc-form')).toBeVisible()
+
+    await runCalculation(page, {
+      symbol: NVDA.ティッカー,
+      deposit: '成長投資枠',
+      quantity: CALC_QUANTITY,
+      unitPrice: CALC_UNIT_PRICE,
+    })
+
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText(
+      `買付概算 ／ ${NVDA.ティッカー} ${CALC_QUANTITY}株`,
+    )
+    await expect(calcRowValues(page)).toHaveCount(9)
+    await expect(page.getByTestId('customer-calc-row-nisaFxRate')).toHaveText('157.76 円/USD')
+    await expect(page.getByTestId('customer-calc-row-nisaAmount')).toHaveText('363,636 円')
+    await expect(page.getByTestId('customer-calc-total-label')).toHaveText('概算必要金額')
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('349,547 円')
+    await expect(page.getByTestId('customer-calc-profit-loss')).toHaveCount(0)
+  })
+
+  test('[CDT-41] 銘柄マスタに無い銘柄は理由の帯を出し、金額は「—」のまま', async ({ page }) => {
+    const MISSING_SYMBOL = 'ZZZZ'
+
+    await page.goto(calculationsPath(YAMADA.ID))
+    await runCalculation(page, {
+      symbol: MISSING_SYMBOL,
+      quantity: CALC_QUANTITY,
+      unitPrice: CALC_UNIT_PRICE,
+    })
+
+    await expect(page.getByTestId('customer-calc-error')).toHaveText(
+      calculationMessages.symbolNotFound(MISSING_SYMBOL),
+    )
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText(
+      '買付概算 ／ 計算できませんでした',
+    )
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('—')
+  })
+
+  test('[CDT-42] サーバの注意（warnings）は結果と一緒に注意の帯に出る', async ({ page }) => {
+    const FEE_PATTERN = 'Z'
+    expect(FEE_PATTERNS[FEE_PATTERN]).toBeUndefined()
+    // 一般（非特定）の MSFT の預りは無い
+    expect(MSFT.預り売買区分).not.toBe('0')
+
+    await page.goto(calculationsPath(YAMADA.ID))
+    await runCalculation(page, {
+      symbol: MSFT.ティッカー,
+      side: '売り',
+      deposit: '一般',
+      quantity: CALC_QUANTITY,
+      unitPrice: CALC_UNIT_PRICE,
+      feePattern: FEE_PATTERN,
+    })
+
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText(
+      `売却概算 ／ ${MSFT.ティッカー} ${CALC_QUANTITY}株`,
+    )
+    await expect(page.getByTestId('customer-calc-warnings').getByRole('listitem')).toHaveText([
+      calculationMessages.unknownPattern(FEE_PATTERN),
+      calculationMessages.noHolding,
+    ])
+    await expect(page.getByTestId('customer-calc-error')).toHaveCount(0)
+  })
+
+  test('[CDT-43] 計算が失敗すると理由の帯を出し、入力は残る', async ({ page }) => {
+    await mockApi(page, [
+      { method: 'post', path: '*/api/calculations', status: 500, body: { detail: SERVER_ERROR } },
+    ])
+    await page.goto(calculationsPath(YAMADA.ID))
+    await runCalculation(page, {
+      symbol: AAPL.ティッカー,
+      quantity: CALC_QUANTITY,
+      unitPrice: CALC_UNIT_PRICE,
+    })
+
+    await expect(page.getByTestId('customer-calc-error')).toContainText(SERVER_ERROR)
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText(
+      '買付概算 ／ 計算できませんでした',
+    )
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('—')
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(AAPL.ティッカー)
+    await expect(page.getByTestId('customer-calc-quantity')).toHaveValue(String(CALC_QUANTITY))
+  })
+
+  test('[CDT-44] 計算の間は「計算中…」を出し、実行ボタンを押せない', async ({ page }) => {
+    // ?mockDelay=<ミリ秒> を付けた URL だけ /api/* の応答が遅れる（src/mocks/handlers/index.js）
+    await page.goto(`${calculationsPath(YAMADA.ID)}?mockDelay=1500`)
+    await expect(page.getByTestId('customer-calc-form')).toBeVisible({ timeout: 10_000 })
+
+    await runCalculation(page, {
+      symbol: AAPL.ティッカー,
+      quantity: CALC_QUANTITY,
+      unitPrice: CALC_UNIT_PRICE,
+    })
+
+    const caption = page.getByTestId('customer-calc-result-caption')
+    const submit = page.getByTestId('customer-calc-submit')
+    await expect(caption).toHaveText('買付概算 ／ 計算中…')
+    await expect(submit).toBeDisabled()
+    await expect(caption).toHaveText(`買付概算 ／ ${AAPL.ティッカー} ${CALC_QUANTITY}株`, {
+      timeout: 10_000,
+    })
+    await expect(submit).toBeEnabled()
   })
 })
 

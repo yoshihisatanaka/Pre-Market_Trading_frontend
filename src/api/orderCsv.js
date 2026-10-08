@@ -42,7 +42,7 @@ import { apiClient } from './client'
  *   cashDelivery: string, expiryDate: string, orderChannel: string,
  *   orderDate: string, orderTime: string, receiver: string, vwap: boolean, marketScope: string,
  * }} CsvOrder
- *   区分はコードのまま持つ（orderType は 'LO' / 'MO'、marketScope は '01'〜'06' …）。
+ *   区分はコードのまま持つ（orderType は 'LO' / 'MO'、marketScope は '02' / '03' / '04' / '06' …）。
  *   送り返すときに崩さないため、side と vwap のほかは値を加工しない。
  *   accountNumber / quantity はサーバが数値に直したもの（直せなかった行は 0 が来る）。
  *   expiryDate / orderDate は 'YYYYMMDD'、orderTime は 'HHMMSS' か 'HH:MM'（CSV に書かれたまま）。

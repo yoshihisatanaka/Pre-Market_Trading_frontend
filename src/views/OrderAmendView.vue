@@ -299,7 +299,17 @@ function goBack() {
           この注文は訂正できません（処理状況: {{ statusLabel }}）。
         </BaseAlert>
 
-        <form v-else class="order-amend__form" data-testid="order-amend-form" @submit.prevent="submit">
+        <!--
+          novalidate: required は必須マークと aria のためのもの。ブラウザ標準の吹き出し（英語）に
+          先を越されて空欄の文言が出なくならないよう、検証は submit に任せる
+        -->
+        <form
+          v-else
+          class="order-amend__form"
+          data-testid="order-amend-form"
+          novalidate
+          @submit.prevent="submit"
+        >
           <BaseAlert v-if="amendError" variant="error" data-testid="order-amend-submit-error">
             {{ amendError.message }}
           </BaseAlert>

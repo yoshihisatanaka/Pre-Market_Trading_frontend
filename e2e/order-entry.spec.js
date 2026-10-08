@@ -303,7 +303,27 @@ test.describe('新規注文 顧客・銘柄の照会', () => {
     await page.getByTestId('order-entry-ticker').fill(AAPL.Ticker.toLowerCase())
 
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(AAPL.Ticker)
+    await expect(page.getByTestId('order-entry-ticker-code')).toHaveText(
+      `ティッカー：${AAPL.Ticker} ／ 銘柄コード：${AAPL.銘柄コード}`,
+    )
     await expect(page.getByTestId('order-entry-ticker-hint')).toHaveText(AAPL.銘柄名_英字)
+  })
+
+  test('[NO-35] 銘柄コードで入れても同じ銘柄が引け、確認画面はティッカーで読み上げる', async ({
+    page,
+  }) => {
+    await openForm(page)
+    await goToConfirm(page, { ticker: AAPL.銘柄コード.toLowerCase() })
+
+    const symbol = page.getByTestId('order-readback-symbol')
+    await expect(symbol).toContainText(AAPL.Ticker)
+    await expect(symbol).toContainText(AAPL.銘柄名_英字)
+
+    await page.getByTestId('order-entry-back').click()
+    await expect(page.getByTestId('order-entry-ticker')).toHaveValue(AAPL.銘柄コード)
+    await expect(page.getByTestId('order-entry-ticker-code')).toHaveText(
+      `ティッカー：${AAPL.Ticker} ／ 銘柄コード：${AAPL.銘柄コード}`,
+    )
   })
 
   test('[NO-12] 存在しないティッカーは「銘柄なし」で送信すると項目の下に理由が出る', async ({

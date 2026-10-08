@@ -108,11 +108,19 @@ export const useOrderEntryStore = defineStore('orderEntry', () => {
     }
   }
 
+  /*
+   * ticker は入力欄の値（大文字）。ティッカーでも銘柄コードでもよい（モックの「ティッカー／銘柄コード」欄）。
+   * `symbol` は銘柄コードと Ticker の両方に部分一致するので、返った行から完全一致を探し、
+   * Ticker の一致を先に採る（ある銘柄の Ticker と別の銘柄のコードが同じ文字列でも、入力はティッカーとみなす）
+   */
   async function findSymbol(ticker) {
     const request = ++latestSymbolRequest
     try {
-      const { items } = await fetchSymbols({ ticker, limit: LOOKUP_LIMIT })
-      const symbol = items.find((item) => item.ticker.toUpperCase() === ticker) ?? null
+      const { items } = await fetchSymbols({ symbolCode: ticker, limit: LOOKUP_LIMIT })
+      const symbol =
+        items.find((item) => item.ticker.toUpperCase() === ticker) ??
+        items.find((item) => item.symbolCode.toUpperCase() === ticker) ??
+        null
       return request === latestSymbolRequest ? { ticker, symbol } : symbolLookup.value
     } catch (e) {
       if (request === latestSymbolRequest) throw e
@@ -146,10 +154,11 @@ export const useOrderEntryStore = defineStore('orderEntry', () => {
   }
 
   /**
-   * ティッカーから銘柄を引く。Ticker の完全一致（大文字）で 1 件に絞る。
+   * ティッカーまたは銘柄コードから銘柄を引く。Ticker → 銘柄コードの順に完全一致（大文字）で 1 件に絞る。
    *
-   * @param {string} ticker 大文字にしてから渡す
-   * @returns {Promise<{ ticker: string, symbol: object|null } | null>} 失敗したときは null
+   * @param {string} ticker 入力欄の値。大文字にしてから渡す
+   * @returns {Promise<{ ticker: string, symbol: object|null } | null>}
+   *   ticker は渡した入力のまま（銘柄コードで引いても Ticker に置き換えない）。失敗したときは null
    */
   function lookupSymbol(ticker) {
     return executeSymbol(ticker)

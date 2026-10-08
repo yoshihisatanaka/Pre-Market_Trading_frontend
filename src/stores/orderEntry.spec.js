@@ -224,18 +224,28 @@ describe('useOrderEntryStore', () => {
     expect(store.customerError).toBeNull()
   })
 
-  it('[NOS-08] ?ticker= で照会し、Ticker の完全一致だけを採る', async () => {
+  it('[NOS-08] ?symbol= で照会し、完全一致だけを採る', async () => {
     const seen = recordUrls('get', SYMBOLS_PATH)
     const store = useOrderEntryStore()
 
     await store.lookupSymbol('AAPL')
-    expect(seen[0].searchParams.get('ticker')).toBe('AAPL')
+    expect(seen[0].searchParams.get('symbol')).toBe('AAPL')
     expect(store.symbolLookup.symbol.symbolCode).toBe(aapl.銘柄コード)
 
     // AAP は AAPL に部分一致するが、完全一致の行は無い
     expect(symbols.some((row) => row.Ticker.includes('AAP') && row.Ticker !== 'AAP')).toBe(true)
     await store.lookupSymbol('AAP')
     expect(store.symbolLookup).toEqual({ ticker: 'AAP', symbol: null })
+  })
+
+  it('[NOS-17] 銘柄コードでも引け、入力は銘柄コードのまま残る', async () => {
+    const store = useOrderEntryStore()
+
+    await store.lookupSymbol(aapl.銘柄コード)
+
+    expect(store.symbolLookup.ticker).toBe(aapl.銘柄コード)
+    expect(store.symbolLookup.symbol.ticker).toBe(aapl.Ticker)
+    expect(store.symbolLookup.symbol.symbolCode).toBe(aapl.銘柄コード)
   })
 
   it('[NOS-09] 追い越された顧客の照会結果で上書きしない', async () => {
@@ -254,7 +264,7 @@ describe('useOrderEntryStore', () => {
   })
 
   it('[NOS-10] 追い越された銘柄の照会結果で上書きしない', async () => {
-    const release = gateWhere('get', SYMBOLS_PATH, (url) => url.searchParams.get('ticker') === 'AAPL')
+    const release = gateWhere('get', SYMBOLS_PATH, (url) => url.searchParams.get('symbol') === 'AAPL')
     const store = useOrderEntryStore()
 
     const older = store.lookupSymbol('AAPL')

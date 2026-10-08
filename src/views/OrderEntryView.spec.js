@@ -281,6 +281,9 @@ describe('OrderEntryView', () => {
         byTestId(wrapper, 'order-entry-ticker-hint').text() === aapl.銘柄名_英字,
     )
     expect(byTestId(wrapper, 'order-entry-customer-bar').exists()).toBe(true)
+    expect(byTestId(wrapper, 'order-entry-ticker-code').text()).toBe(
+      `ティッカー：${aapl.Ticker} ／ 銘柄コード：${aapl.銘柄コード}`,
+    )
 
     await byTestId(wrapper, 'order-entry-account').setValue('1239999')
     await byTestId(wrapper, 'order-entry-ticker').setValue('ZZZZZ')
@@ -291,6 +294,7 @@ describe('OrderEntryView', () => {
         byTestId(wrapper, 'order-entry-ticker-hint').exists() &&
         byTestId(wrapper, 'order-entry-ticker-hint').text() === '銘柄なし',
     )
+    expect(byTestId(wrapper, 'order-entry-ticker-code').exists()).toBe(false)
   })
 
   it('[NOV-09] 打ってすぐ送信しても照会してから検証する', async () => {

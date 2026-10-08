@@ -141,10 +141,19 @@ describe('OrderEntryForm', () => {
     expect(accountHint.classes()).toContain('is-found')
     expect(tickerHint.text()).toBe('銘柄なし')
     expect(tickerHint.classes()).toContain('is-not-found')
+    expect(find(wrapper, 'order-entry-ticker-code').exists()).toBe(false)
+
+    const code = 'ティッカー：AAPL ／ 銘柄コード：S001'
+    const { wrapper: found } = mountForm({
+      props: { symbolHint: { text: 'Apple Inc.', tone: 'found', code } },
+    })
+    expect(find(found, 'order-entry-ticker-code').text()).toBe(code)
+    expect(find(found, 'order-entry-ticker-hint').text()).toBe('Apple Inc.')
 
     const { wrapper: empty } = mountForm({ props: { customerHint: { text: '', tone: '' } } })
     expect(find(empty, 'order-entry-account-hint').exists()).toBe(false)
     expect(find(empty, 'order-entry-ticker-hint').exists()).toBe(false)
+    expect(find(empty, 'order-entry-ticker-code').exists()).toBe(false)
   })
 
   it('[NOC-08] フロコン警告ありのときだけ強制区分の注記が出る', () => {

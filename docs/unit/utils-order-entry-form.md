@@ -23,8 +23,8 @@
 | NOF-10 | 口座番号 `'12a'`・数量 `'0'`・受注時刻 `'24:00'` | `validateOrderForm()` | 「口座番号を数値で入力してください。」「注文数量を整数で入力してください。」「受注時刻は数値4桁（hhnn）で入力してください。」 | 実装済 |
 | NOF-11 | 指値 | 指値価格を `''` / `'abc'` / `'0'` / `'1.23456'` / `'200.1234'` にして `validateOrderForm()` | 順に必須・数値・正の数・小数第 4 位以内の文言、最後は `''`。成行のときは価格が何であっても `''` | 実装済 |
 | NOF-12 | 預り売買区分 = 成長投資枠 | 買い / 売りで `validateOrderForm()` | 買いのときだけ `depositCategory` に「買付時に「成長投資枠」を選択することはできません。」 | 実装済 |
-| NOF-13 | 注文種別 = VWAP | VWAP 対象の銘柄・対象外の銘柄・銘柄なしで `validateOrderForm()` | 対象外のときだけ `vwap` に「この銘柄は現在、VWAP対象外です。通常注文で入力してください。」。銘柄なしのときは `vwap` は `''` で `ticker` が「銘柄コードが見つかりません。…」 | 実装済 |
-| NOF-14 | 銘柄なし・照会に失敗 | `validateOrderForm(form, { symbolLookupFailed: true })` | `ticker` が「ティッカーコードを照会できませんでした。…」（「見つかりません」と言わない） | 実装済 |
+| NOF-13 | 注文種別 = VWAP | VWAP 対象の銘柄・対象外の銘柄・銘柄なしで `validateOrderForm()` | 対象外のときだけ `vwap` に「この銘柄は現在、VWAP対象外です。通常注文で入力してください。」。銘柄なしのときは `vwap` は `''` で `ticker` が「ティッカーが見つかりません。…」 | 実装済 |
+| NOF-14 | 銘柄なし・照会に失敗 | `validateOrderForm(form, { symbolLookupFailed: true })` | `ticker` が「ティッカーを照会できませんでした。…」（「見つかりません」と言わない） | 実装済 |
 | NOF-15 | 成行・VWAP なし | `buildOrderInput()` | 銘柄コードは照会した銘柄の `symbolCode`（ティッカーではない）、取引 `'100'`・証券受渡方法 `SECURITIES_DELIVERY_DEFAULT`（当社保管 `'100'`）、数量は数値、`limitPrice` は `null`、`vwap` は false、受注日は `'YYYY-MM-DD'`、部店・口座番号・受注者は前後の空白を落とす | 実装済 |
 | NOF-16 | 指値 `'200.5'`・VWAP・強制区分あり | `buildOrderInput()` | `limitPrice` が数値 `200.5`、`vwap` と `forced` が true、`createdBy` が渡した値 | 実装済 |
 | NOF-17 | 今日 = 2026-09-29（火）・休日なし | `buildExpiryOptions()` | 15 件（`EXPIRY_OPTION_COUNT`）で、先頭が「当日中（9/29）」、2 件目が「1営業日後（9/30）」、土日を含まず、最後が「14営業日後（10/19）」 | 実装済 |

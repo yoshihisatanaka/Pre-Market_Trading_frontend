@@ -352,7 +352,7 @@ test.describe('新規注文 入力の不備とサーバの判定', () => {
     const alerts = page.getByTestId('order-entry-form').getByRole('alert')
     await expect(alerts.filter({ hasText: '部店コードを入力してください。' })).toBeVisible()
     await expect(alerts.filter({ hasText: '口座番号を入力してください。' })).toBeVisible()
-    await expect(alerts.filter({ hasText: '銘柄コードを入力してください。' })).toBeVisible()
+    await expect(alerts.filter({ hasText: 'ティッカーを入力してください。' })).toBeVisible()
     await expect(alerts.filter({ hasText: '売買区分を選択してください。' })).toBeVisible()
     await expect(alerts.filter({ hasText: '注文数量を入力してください。' })).toBeVisible()
 

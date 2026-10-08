@@ -18,7 +18,8 @@ MSW の既定ハンドラ（顧客・銘柄・受注不可日・海外休場日�
 | NOS-05 | 既定モック | `lookupCustomer({ branchCode: '123', accountNumber: '1230001' })` | `customerLookup.customer` がフィクスチャのその口座（顧客名）になる | 実装済 |
 | NOS-06 | 既定モック | 部店を空で `lookupCustomer({ branchCode: '', accountNumber: '1230004' })` | 口座番号だけで引き当たる | 実装済 |
 | NOS-07 | 既定モック | 存在しない口座番号で `lookupCustomer()` | 例外にせず `customer` が null の結果になり、`customerError` は null | 実装済 |
-| NOS-08 | 既定モック | `lookupSymbol('AAPL')` / `lookupSymbol('AAP')` | `?ticker=` でティッカーが送られ、AAPL はフィクスチャの銘柄コードの銘柄が引ける。AAP は部分一致の行があっても完全一致しないので `symbol` が null | 実装済 |
+| NOS-08 | 既定モック | `lookupSymbol('AAPL')` / `lookupSymbol('AAP')` | `?symbol=` で入力が送られ、AAPL はフィクスチャの銘柄コードの銘柄が引ける。AAP は部分一致の行があっても完全一致しないので `symbol` が null | 実装済 |
+| NOS-17 | 既定モック | AAPL の銘柄コード（`S001`）で `lookupSymbol()` | 銘柄コードの完全一致で AAPL の銘柄が引け、`symbolLookup.ticker` は入力した銘柄コードのまま | 実装済 |
 | NOS-09 | 先の照会の応答を握る | 口座 A → 口座 B の順に照会し、B を先に、A を後に解決させる | `customerLookup` は B の結果のまま（A の遅れた応答で上書きしない） | 実装済 |
 | NOS-10 | 先の照会の応答を握る | ティッカー A → B の順に照会し、B を先に、A を後に解決させる | `symbolLookup` は B の結果のまま | 実装済 |
 | NOS-11 | 照会の応答を握る | 照会中に `clearCustomer()` / `clearSymbol()` を呼んでから解決させる | `customerLookup` / `symbolLookup` は null のまま（走っていた結果を捨てる） | 実装済 |

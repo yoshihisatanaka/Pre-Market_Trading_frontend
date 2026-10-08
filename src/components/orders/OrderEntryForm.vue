@@ -55,7 +55,10 @@ defineProps({
     type: Object,
     default: () => ({ text: '', tone: '' }),
   },
-  /** ティッカーの横の表示。形は customerHint と同じ */
+  /**
+   * ティッカー／銘柄コードの横の表示。形は customerHint と同じで、引き当てたときだけ
+   * code（「ティッカー：… ／ 銘柄コード：…」）が付き、銘柄名の前に出す
+   */
   symbolHint: {
     type: Object,
     default: () => ({ text: '', tone: '' }),
@@ -180,7 +183,7 @@ function selectOrderType(value) {
 
         <FormField
           v-slot="{ field }"
-          label="ティッカーコード"
+          label="ティッカー／銘柄コード"
           layout="inline"
           required
           :error="errors.ticker"
@@ -194,6 +197,13 @@ function selectOrderType(value) {
             data-testid="order-entry-ticker"
             @input="reformat($event, 'ticker', toUpperCase)"
           />
+          <span
+            v-if="symbolHint.text && symbolHint.code"
+            class="order-entry-form__hint-code"
+            data-testid="order-entry-ticker-code"
+          >
+            {{ symbolHint.code }}
+          </span>
           <span
             v-if="symbolHint.text"
             :class="['order-entry-form__hint', `is-${symbolHint.tone}`]"
@@ -530,6 +540,13 @@ function selectOrderType(value) {
   min-width: 100px;
   font-size: var(--font-size-md);
   font-weight: 600;
+}
+
+.order-entry-form__hint-code {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .order-entry-form__hint.is-found {

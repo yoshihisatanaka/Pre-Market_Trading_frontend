@@ -16,7 +16,7 @@
 | NOC-04 | — | 受注日に `'0929'`、受注時刻に `'1125'`、続けて受注日に `'09/29x'` を入れる | 受注日 `'09/29'`・受注時刻 `'11:25'` になり、`x` は表示に残らない | 実装済 |
 | NOC-05 | — | ティッカーに `'aapl'` を入れる | 表示と値が大文字の `'AAPL'` になる | 実装済 |
 | NOC-06 | errors に部店・売買区分・数量の文言 | マウントする | 各文言がフォームに表示される（項目の下の alert） | 実装済 |
-| NOC-07 | customerHint が `{ text: '山田 太郎', tone: 'found' }`、symbolHint が `{ text: '銘柄なし', tone: 'not-found' }` | マウントする | それぞれのヒントがその文言と tone の見た目（`is-found` / `is-not-found`）で出る。text が空ならヒントは出ない | 実装済 |
+| NOC-07 | customerHint が `{ text: '山田 太郎', tone: 'found' }`、symbolHint が `{ text: '銘柄なし', tone: 'not-found' }` | マウントする | それぞれのヒントがその文言と tone の見た目（`is-found` / `is-not-found`）で出る。symbolHint に `code` があれば（`{ text: 'Apple Inc.', tone: 'found', code: 'ティッカー：AAPL ／ 銘柄コード：S001' }`）銘柄名の前にその 1 行が出て、`code` が無いときは出ない。text が空ならヒントは出ない | 実装済 |
 | NOC-08 | `warned` が true / false | マウントする | true のときだけ「フロコン警告あり — 確認の上チェック」が出る | 実装済 |
 | NOC-09 | `disabled` / `submitting` | マウントする | どちらでも送信ボタンが押せない。`submitting` のときは文言が「確認中…」 | 実装済 |
 | NOC-10 | 既定 | フォームを submit する | `submit` が 1 回 emit される | 実装済 |

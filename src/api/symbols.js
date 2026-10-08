@@ -74,9 +74,9 @@ import { apiClient } from './client'
  * が含まれていれば日本語名（`symbol_name_ja`）、ASCII だけなら英語名（`symbol_name_en`）に当てる。
  * 英語名が未登録（null）の銘柄は英字で探しても当たらないが、その場合は Ticker で探せる。
  *
- * `ticker` は新規注文のティッカー照会が使う（`?ticker=` は実 API で Ticker に当たることを
- * 2026-09-25 に実測済み。docs/api/requests.md #19）。一致が完全か部分かは仕様に書かれていないので、
- * 呼び出し側（stores/orderEntry.js）が Ticker の完全一致で 1 件に絞る。
+ * `ticker`（`?ticker=` は実 API で Ticker に当たることを 2026-09-25 に実測済み。docs/api/requests.md #19）は
+ * いまは呼び出し元が無い。新規注文の照会はティッカーと銘柄コードのどちらでも引くので `symbol` に乗せ、
+ * 呼び出し側（stores/orderEntry.js）が完全一致で 1 件に絞る。
  *
  * @param {{
  *   limit?: number,

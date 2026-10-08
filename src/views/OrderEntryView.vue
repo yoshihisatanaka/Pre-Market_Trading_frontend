@@ -207,16 +207,20 @@ const customerHint = computed(() =>
   }),
 )
 
-const symbolHint = computed(() =>
-  lookupHint({
+// 銘柄名の前に、引き当てた銘柄のティッカーと銘柄コードを並べる（どちらで入力しても両方が判る。モックと同じ）
+const symbolHint = computed(() => {
+  const hint = lookupHint({
     hasInput: Boolean(tickerKey.value),
     loading: symbolLoading.value,
     failed: Boolean(symbolError.value),
     lookup: currentSymbolLookup.value,
     foundText: symbol.value?.nameEn || symbol.value?.name,
     notFoundText: '銘柄なし',
-  }),
-)
+  })
+  if (hint.tone !== 'found') return hint
+  const { ticker, symbolCode } = symbol.value
+  return { ...hint, code: `ティッカー：${ticker || '—'} ／ 銘柄コード：${symbolCode || '—'}` }
+})
 
 let customerTimer = null
 let symbolTimer = null

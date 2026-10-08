@@ -454,6 +454,7 @@ test.describe('預り検索（実 API 接続）', () => {
     // 保有のある口座が顧客マスタに無いことがある（docs/api/requests.md #32）ので、先に顧客マスタを読む
     const api = await apiContext(playwright)
     const customers = await fetchAll(api, CUSTOMERS_API_PATH, CUSTOMERS_LIST_KEY)
+    const holdings = await fetchAll(api, API_PATH, HOLDINGS_LIST_KEY)
     await api.dispose()
 
     await openListOrSkip(page)
@@ -461,11 +462,17 @@ test.describe('預り検索（実 API 接続）', () => {
     const [target] = await rowsInCustomerMaster(page, customers)
     test.skip(!target, '表示中の明細に顧客マスタにある口座が無い（docs/api/requests.md #32）')
 
-    const lookup = waitForApiRequest(page, CUSTOMERS_API_PATH, 'account_no', target.accountNumber)
+    // 明細に 口座ID があれば通信せずその ID へ移り、無ければ顧客マスタを引き直す
+    // （stores/holdingSearch.js の openCustomer。#36 ⑦）
+    const holding = await holdingOfRow(page, holdings, target.index)
+    const accountId = holding.口座ID == null ? '' : String(holding.口座ID)
+    const lookup = accountId
+      ? null
+      : waitForApiRequest(page, CUSTOMERS_API_PATH, 'account_no', target.accountNumber)
     await rowsOf(page).nth(target.index).getByTestId('holding-search-customer-link').click()
-    await lookup
+    if (lookup) await lookup
 
-    await expect(page).toHaveURL(new RegExp(`/customers/${target.customerId}/summary$`))
+    await expect(page).toHaveURL(new RegExp(`/customers/${accountId || target.customerId}/summary$`))
     await expect(page.getByTestId('customer-info-bar')).toBeVisible()
     await expect(page.getByTestId('customer-info-account')).toHaveText(target.accountNumber)
     await expect(page.getByTestId('holding-search-customer-error')).toHaveCount(0)

@@ -1,21 +1,52 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { clickSideMenuLink } from './helpers/sideMenu'
-import { stalledOrderErrors, stalledWorkingOrders } from '../src/mocks/fixtures/stalledOrders'
-import { formatUsd } from '../src/utils/format'
+import { orderInquiryRows } from '../src/mocks/fixtures/orderInquiry'
+import { formatQuantity, formatUsdUnit } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/stalled-orders.md（タイトル先頭の [SO-nn] が対応 ID）
 // 注文エラー / 注文中の 2 本の一覧の 4 状態と URL クエリの同期、フロントで組み立てる CSV 3 種の
 // ダウンロード（ファイル名と中身）、コンファメーション CSV の取込（成功 / 行エラー / 400 / 500）を
-// 実ブラウザで通す。取込は実 API が入ったので MSW の既定ハンドラが無い（素通し）。取込のシナリオは
-// 応答を mockApi() で page.goto() の前に差し込み、画面の出し分けだけを見る。mockApi() は固定応答しか
-// 返せず、一覧の GET も固定のフィクスチャなので、取込の結果が一覧に反映されることは検証しない。
-// CSV の値の変換の細かい分岐や props の境界は単体テスト側が担保する。
+// 実ブラウザで通す。一覧は注文照会と同じ GET /orders を処理状況で絞って 2 回引くので、期待値は
+// orderInquiryRows を処理状況で絞って導く（絞り込みはクエリを解釈する既定ハンドラで検証する）。
+// 取込は実 API が入ったので MSW の既定ハンドラが無い（素通し）。取込のシナリオは応答を mockApi() で
+// page.goto() の前に差し込み、画面の出し分けだけを見る。取込の結果が一覧に反映されることは検証しない。
+// CSV の値の変換の細かい分岐、エラー理由の選び分け、ページ送りは単体テスト側が担保する。
 
 const PATH = '/operations/stalled-orders'
-const LIST_PATH = '*/api/operations/stalled-orders'
+const LIST_PATH = '*/api/orders'
 const IMPORT_PATH = '*/api/operations/stalled-orders/confirmation-import'
+
+/*
+ * 2 本の一覧に載せる処理状況。src/api/stalledOrders.js の ORDER_ERROR_STATUSES / WORKING_STATUS の写し
+ * （api 層は import.meta.env を辿る api/client.js に依存しており Playwright からは import できない）。
+ * 並びはサーバの既定（注文 ID の降順）
+ */
+const ORDER_ERROR_STATUSES = ['101', '103']
+const WORKING_STATUS = '003'
+const byIdDesc = (a, b) => b.ID - a.ID
+const stalledOrderErrors = orderInquiryRows
+  .filter((row) => ORDER_ERROR_STATUSES.includes(row.処理状況))
+  .sort(byIdDesc)
+const stalledWorkingOrders = orderInquiryRows
+  .filter((row) => row.処理状況 === WORKING_STATUS)
+  .sort(byIdDesc)
+
+/** 売買区分コード → 表の表記 */
+const SIDE_LABELS = { 1: '売', 3: '買' }
+
+/** 表の価格セル（src/components/operations/StalledOrderTable.vue の priceLabel と同じ） */
+const priceLabel = (raw) => (raw.指成区分 === 'MO' ? '成行' : `指値 ${formatUsdUnit(raw.指値単価)}`)
+
+/*
+ * エラー理由（src/api/stalledOrders.js の toErrorReason の写し）。101 は Dreamエラー内容、
+ * それ以外は エラー内容 を先に見る
+ */
+const errorReasonOf = (raw) =>
+  raw.処理状況 === '101'
+    ? raw.Dreamエラー内容 || raw.エラー内容
+    : raw.エラー内容 || raw.Dreamエラー内容
 
 const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 
@@ -34,7 +65,8 @@ const CONFIRMATION_HEADER =
 /*
  * フィクスチャ（バックエンドの生の形）の 1 行 → 別システム発注 CSV の 1 行。
  * 対応は src/utils/stalledOrderCsv.js の toTwsOrderRow の仕様（売買区分 1/3 → SELL/BUY、
- * 指成区分 MO/LO → MKT/LMT、成行は価格が空欄、執行条件は常に DAY）を再掲したもの。
+ * 指成区分 MO/LO → MKT/LMT、成行は価格が空欄、執行条件は常に DAY）と、api 層の symbol
+ * （Ticker。無ければ銘柄コード）・market_category（発注範囲名）の取り方を再掲したもの。
  */
 const ACTIONS = { 1: 'SELL', 3: 'BUY' }
 const ORDER_TYPES = { MO: 'MKT', LO: 'LMT' }
@@ -43,7 +75,7 @@ function twsOrderLine(raw) {
   return [
     raw.ID,
     raw.口座番号,
-    raw.銘柄コード,
+    raw.Ticker || raw.銘柄コード,
     ACTIONS[raw.売買区分],
     raw.数量,
     orderType,
@@ -64,7 +96,32 @@ const errorRows = (page) =>
 const workingRows = (page) =>
   page.getByTestId('stalled-working-orders-table').getByTestId('data-table-row')
 
-const branch123Errors = stalledOrderErrors.filter((row) => row.部店 === '123')
+/*
+ * 片方の一覧だけが空になる絞り込み。部店 234 は注文エラーだけ、銘柄 AAPL は注文中だけに当たる
+ * （既定ハンドラは部店を完全一致、銘柄を銘柄コード / Ticker の部分一致で絞る）
+ */
+const ERROR_ONLY_BRANCH = '234'
+const WORKING_ONLY_SYMBOL = 'AAPL'
+const branchErrors = stalledOrderErrors.filter((row) => row.部店 === ERROR_ONLY_BRANCH)
+const symbolWorking = stalledWorkingOrders.filter(
+  (row) => row.銘柄コード.includes(WORKING_ONLY_SYMBOL) || row.Ticker.includes(WORKING_ONLY_SYMBOL),
+)
+
+/** 1 行の 12 セルが生の行の内容どおりかを確かめる（理由の列は variant ごとに渡す） */
+async function expectRow(row, raw, reason) {
+  const cells = row.getByRole('cell')
+  await expect(cells.nth(0)).toHaveText(`#${raw.ID}`)
+  await expect(cells.nth(1)).toHaveText(raw.部店)
+  await expect(cells.nth(2)).toHaveText(String(raw.口座番号))
+  await expect(cells.nth(3)).toHaveText(raw.顧客名)
+  await expect(cells.nth(4)).toHaveText(raw.Ticker || raw.銘柄コード)
+  await expect(cells.nth(5)).toHaveText(SIDE_LABELS[raw.売買区分])
+  await expect(cells.nth(6)).toHaveText(formatQuantity(raw.数量))
+  await expect(cells.nth(7)).toHaveText(priceLabel(raw))
+  await expect(cells.nth(8)).toHaveText(raw.発注範囲名)
+  await expect(cells.nth(10)).toHaveText(reason)
+  await expect(cells.nth(11)).toHaveText(raw.表示状況名 || raw.処理状況名)
+}
 
 /** 2 本の一覧の件数を確かめる */
 async function expectCounts(page, errors, working) {
@@ -91,12 +148,12 @@ async function chooseCsv(page, name, lines) {
 
 const importButton = (page) => page.getByTestId('stalled-orders-confirmation-import')
 
-/** #27（注文エラー）を約定、#26（注文エラー）を未約定にするコンファメーション */
-const [ORDER_27, ORDER_26] = stalledOrderErrors
+/** 注文エラーの 1 件目を約定、2 件目を未約定にするコンファメーション */
+const [FILLED_ORDER, WORKING_ORDER] = stalledOrderErrors
 const VALID_CONFIRMATION = [
   CONFIRMATION_HEADER,
-  `${ORDER_27.ID},TWS-1,FILLED,${ORDER_27.数量},410,2026-09-16 11:00:00,`,
-  `${ORDER_26.ID},TWS-2,WORKING,0,0,2026-09-16 11:00:00,`,
+  `${FILLED_ORDER.ID},TWS-1,FILLED,${FILLED_ORDER.数量},410,2026-09-16 11:00:00,`,
+  `${WORKING_ORDER.ID},TWS-2,WORKING,0,0,2026-09-16 11:00:00,`,
 ]
 const CONFIRMATION_NAME = 'confirmation.csv'
 
@@ -149,47 +206,39 @@ test.describe('滞留注文抽出', () => {
     await expect(workingRows(page)).toHaveCount(stalledWorkingOrders.length)
   })
 
-  test('[SO-02] 注文エラーの 1 行目に注文の内容が表示される', async ({ page }) => {
+  test('[SO-02] 注文エラーの 1 行目に注文の内容とエラー理由が表示される', async ({ page }) => {
     await page.goto(PATH)
 
     const first = stalledOrderErrors[0]
-    const cells = errorRows(page).first().getByRole('cell')
-    await expect(cells.nth(0)).toHaveText(`#${first.ID}`)
-    await expect(cells.nth(1)).toHaveText(first.部店)
-    await expect(cells.nth(2)).toHaveText(String(first.口座番号))
-    await expect(cells.nth(3)).toHaveText(first.顧客名)
-    await expect(cells.nth(4)).toHaveText(first.銘柄コード)
-    await expect(cells.nth(5)).toHaveText('買')
-    await expect(cells.nth(6)).toHaveText(String(first.数量))
-    await expect(cells.nth(7)).toHaveText('成行')
-    await expect(cells.nth(8)).toHaveText(first.発注範囲名)
-    await expect(cells.nth(11)).toHaveText(first.処理状況名)
+    // 1 行目は Dream発注失敗（101）の注文（既定モックの並びの前提を明示しておく）
+    expect(first.処理状況).toBe('101')
+    await expectRow(errorRows(page).first(), first, errorReasonOf(first))
   })
 
-  test('[SO-03] 注文中の 1 行目に注文の内容と確認状況が表示される', async ({ page }) => {
+  test('[SO-03] 注文中の 1 行目に注文の内容が出て確認状況は「—」になる', async ({ page }) => {
     await page.goto(PATH)
 
-    const first = stalledWorkingOrders[0]
-    const cells = workingRows(page).first().getByRole('cell')
-    await expect(cells.nth(0)).toHaveText(`#${first.ID}`)
-    await expect(cells.nth(4)).toHaveText(first.銘柄コード)
-    await expect(cells.nth(5)).toHaveText('売')
-    await expect(cells.nth(7)).toHaveText(`指値 ${formatUsd(first.指値単価)}`)
-    await expect(cells.nth(8)).toHaveText(first.発注範囲名)
-    await expect(cells.nth(10)).toHaveText(first.確認状況)
-    await expect(cells.nth(11)).toHaveText(first.処理状況名)
+    await expectRow(workingRows(page).first(), stalledWorkingOrders[0], '—')
+    // 確認状況はサーバに項目が無いので、注文中の全行で「—」
+    await expect(workingRows(page)).toHaveCount(stalledWorkingOrders.length)
+    for (let index = 0; index < stalledWorkingOrders.length; index += 1) {
+      await expect(workingRows(page).nth(index).getByRole('cell').nth(10)).toHaveText('—')
+    }
   })
 
   test('[SO-04] 部店コードで絞り込むと注文中だけが空になる', async ({ page }) => {
     await page.goto(PATH)
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
 
-    await page.getByTestId('stalled-orders-branch-code').fill('123')
+    await page.getByTestId('stalled-orders-branch-code').fill(ERROR_ONLY_BRANCH)
     await page.getByTestId('stalled-orders-search-submit').click()
 
-    await expect(page).toHaveURL(/[?&]branch_code=123(&|$)/)
-    await expectCounts(page, branch123Errors.length, 0)
-    await expect(errorRows(page)).toHaveCount(branch123Errors.length)
+    await expect(page).toHaveURL(new RegExp(`[?&]branch_code=${ERROR_ONLY_BRANCH}(&|$)`))
+    await expectCounts(page, branchErrors.length, 0)
+    await expect(errorRows(page)).toHaveCount(branchErrors.length)
+    await expect(errorRows(page).first().getByRole('cell').first()).toHaveText(
+      `#${branchErrors[0].ID}`,
+    )
     await expect(page.getByTestId('stalled-working-orders-empty')).toHaveText(
       'コンファメーション取込後に未約定となっている注文はありません',
     )
@@ -199,22 +248,24 @@ test.describe('滞留注文抽出', () => {
     await page.goto(PATH)
     await expectCounts(page, stalledOrderErrors.length, stalledWorkingOrders.length)
 
-    await page.getByTestId('stalled-orders-symbol').fill('AMZN')
+    await page.getByTestId('stalled-orders-symbol').fill(WORKING_ONLY_SYMBOL)
     await page.getByTestId('stalled-orders-search-submit').click()
 
-    const amzn = stalledWorkingOrders.filter((row) => row.銘柄コード === 'AMZN')
-    await expect(page).toHaveURL(/[?&]symbol=AMZN(&|$)/)
-    await expectCounts(page, 0, amzn.length)
+    await expect(page).toHaveURL(new RegExp(`[?&]symbol=${WORKING_ONLY_SYMBOL}(&|$)`))
+    await expectCounts(page, 0, symbolWorking.length)
     await expect(page.getByTestId('stalled-order-errors-empty')).toHaveText(
       '別システムで発注する注文エラーはありません',
     )
-    await expect(workingRows(page)).toHaveCount(amzn.length)
+    await expect(workingRows(page)).toHaveCount(symbolWorking.length)
+    await expect(workingRows(page).first().getByRole('cell').first()).toHaveText(
+      `#${symbolWorking[0].ID}`,
+    )
   })
 
   test('[SO-06] クリアでクエリと入力欄が空になり全件に戻る', async ({ page }) => {
-    await page.goto(`${PATH}?branch_code=123`)
-    await expectCounts(page, branch123Errors.length, 0)
-    await expect(page.getByTestId('stalled-orders-branch-code')).toHaveValue('123')
+    await page.goto(`${PATH}?branch_code=${ERROR_ONLY_BRANCH}`)
+    await expectCounts(page, branchErrors.length, 0)
+    await expect(page.getByTestId('stalled-orders-branch-code')).toHaveValue(ERROR_ONLY_BRANCH)
 
     await page.getByTestId('stalled-orders-search-clear').click()
 
@@ -320,17 +371,20 @@ test.describe('滞留注文抽出', () => {
 
     expect(file.name).toBe('tws_stalled_orders.csv')
     expect(file.text).toBe(csvText(TWS_ORDER_HEADER, stalledOrderErrors.map(twsOrderLine)))
-    // 成行の #27 は価格が空欄（出典どおりの 1 行を明示しておく）
-    expect(file.text).toContain(`${CRLF}27,200001,MSFT,BUY,35,MKT,,DAY,レギュラー${CRLF}`)
+    // 指値の #40 と、成行で価格が空欄の #29（シナリオに書いた 2 行を明示しておく）
+    expect(file.text).toContain(
+      `${CRLF}40,300003,AMZN,SELL,40,LMT,214.25,DAY,プレ＋レギュラー${CRLF}`,
+    )
+    expect(file.text).toContain(`${CRLF}29,200001,MSFT,BUY,35,MKT,,DAY,レギュラー${CRLF}`)
   })
 
   test('[SO-18] 絞り込んだ状態で出力すると画面の注文エラーの行だけになる', async ({ page }) => {
-    await page.goto(`${PATH}?branch_code=123`)
-    await expectCounts(page, branch123Errors.length, 0)
+    await page.goto(`${PATH}?branch_code=${ERROR_ONLY_BRANCH}`)
+    await expectCounts(page, branchErrors.length, 0)
 
     const file = await download(page, 'stalled-orders-export')
 
-    expect(file.text).toBe(csvText(TWS_ORDER_HEADER, branch123Errors.map(twsOrderLine)))
+    expect(file.text).toBe(csvText(TWS_ORDER_HEADER, branchErrors.map(twsOrderLine)))
   })
 
   test('[SO-19] 注文エラーが 0 件・取得失敗のときは出力を押せない', async ({ page }) => {
@@ -367,7 +421,7 @@ test.describe('滞留注文抽出', () => {
       CONFIRMATION_NAME,
     )
     await expect(importButton(page)).toBeDisabled()
-    // 一覧は出たまま（反映の中身はバックエンドの責務で、固定のフィクスチャでは見られない）
+    // 一覧は出たまま（反映の中身はバックエンドの責務で、mockApi() の固定応答では見られない）
     await expect(page.getByTestId('stalled-order-errors-table')).toBeVisible()
     await expect(page.getByTestId('stalled-working-orders-table')).toBeVisible()
   })
@@ -447,5 +501,18 @@ test.describe('滞留注文抽出', () => {
       CONFIRMATION_NAME,
     )
     await expect(importButton(page)).toBeEnabled()
+  })
+
+  test('[SO-25] 注文エラーに IB発注失敗（103）の注文が理由付きで載る', async ({ page }) => {
+    await page.goto(PATH)
+
+    const ibFailed = stalledOrderErrors.filter((row) => row.処理状況 === '103')
+    // 既定モックに 103 の行が無ければこのシナリオは成り立たない（フィクスチャの変更で黙って空振りさせない）
+    expect(ibFailed.length).toBeGreaterThan(0)
+    await expect(errorRows(page)).toHaveCount(stalledOrderErrors.length)
+    for (const raw of ibFailed) {
+      const index = stalledOrderErrors.indexOf(raw)
+      await expectRow(errorRows(page).nth(index), raw, errorReasonOf(raw))
+    }
   })
 })

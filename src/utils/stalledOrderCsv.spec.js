@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stalledOrderErrors } from '@/mocks/fixtures/stalledOrders'
+import { orderInquiryRows } from '@/mocks/fixtures/orderInquiry'
 import {
   CONFIRMATION_SAMPLE_CSV_FILENAME,
   TWS_ORDER_CSV_FILENAME,
@@ -11,7 +11,8 @@ import {
 
 /*
  * 別システム（TWS）向けの CSV 3 種。期待する行は公開モックの実物（docs/unit/utils-stalled-order-csv.md）。
- * 入力はアプリ内モデル（src/api/stalledOrders.js の StalledOrder）で、フィクスチャの値から組み立てる。
+ * 入力はアプリ内モデル（src/api/stalledOrders.js の StalledOrder）で、注文照会と共用のフィクスチャ
+ * （OrderItemResponse の生の形）のうち、滞留注文抽出の注文エラーに出る行から組み立てる。
  */
 const CRLF = '\r\n'
 const SIDES = { 1: 'sell', 3: 'buy' }
@@ -20,7 +21,7 @@ const SIDES = { 1: 'sell', 3: 'buy' }
 const toModel = (raw) => ({
   id: String(raw.ID),
   accountNumber: String(raw.口座番号),
-  symbol: raw.銘柄コード,
+  symbol: raw.Ticker || raw.銘柄コード,
   side: SIDES[raw.売買区分] ?? '',
   quantity: raw.数量,
   orderType: raw.指成区分,
@@ -28,9 +29,10 @@ const toModel = (raw) => ({
   marketCategoryName: raw.発注範囲名,
 })
 
-const byId = (id) => toModel(stalledOrderErrors.find((row) => row.ID === id))
-const MARKET_ORDER = byId(27)
-const LIMIT_ORDER = byId(26)
+const byId = (id) => toModel(orderInquiryRows.find((row) => row.ID === id))
+// 注文エラーの 2 行（#29 IB発注失敗・成行・買 / #40 Dream発注失敗・指値・売）
+const MARKET_ORDER = byId(29)
+const LIMIT_ORDER = byId(40)
 
 const TWS_HEADER =
   'order_id,account_number,symbol,action,quantity,order_type,limit_price,time_in_force,market_category'
@@ -49,13 +51,13 @@ describe('utils/stalledOrderCsv', () => {
 
   it('[SOU-02] 成行の注文は MKT で limit_price が空欄になる', () => {
     expect(lines(buildTwsOrderCsv([MARKET_ORDER]))[1]).toBe(
-      '27,200001,MSFT,BUY,35,MKT,,DAY,レギュラー',
+      '29,200001,MSFT,BUY,35,MKT,,DAY,レギュラー',
     )
   })
 
   it('[SOU-03] 指値の注文は LMT で指値をそのまま出す', () => {
     expect(lines(buildTwsOrderCsv([LIMIT_ORDER]))[1]).toBe(
-      '26,300001,AAPL,SELL,20,LMT,228.5,DAY,プレ＋レギュラー',
+      '40,300003,AMZN,SELL,40,LMT,214.25,DAY,プレ＋レギュラー',
     )
   })
 

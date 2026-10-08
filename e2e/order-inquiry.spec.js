@@ -33,7 +33,8 @@ const allRowIds = expectedRowIds(orderInquiryRows)
 /*
  * 選択肢のコード → API の status に載る処理状況コード。src/api/orderInquiry.js の STATUS_QUERY の写し
  * （api 層は import.meta.env を辿る api/client.js に依存しており Playwright からは import できない）。
- * 取消済（034）は 032,034、注文エラー（101）は 101,103 に広げて送る。既定モックに 032 / 103 の行は無い
+ * 取消済（034）は 032,034、注文エラー（101）は 101,103 に広げて送る。既定モックに 032 の行は無く、
+ * 103 は #29（IB発注失敗）の 1 行
  */
 const STATUS_QUERY = { '034': ['032', '034'], 101: ['101', '103'] }
 

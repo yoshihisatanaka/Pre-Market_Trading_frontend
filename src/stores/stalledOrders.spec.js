@@ -3,12 +3,14 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { createPinia, setActivePinia } from 'pinia'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { stalledOrderErrors, stalledWorkingOrders } from '@/mocks/fixtures/stalledOrders'
+import { orderInquiryRows } from '@/mocks/fixtures/orderInquiry'
 import { buildConfirmationSampleCsv } from '@/utils/stalledOrderCsv'
 import { useStalledOrdersStore } from './stalledOrders'
 
-const LIST_PATH = '*/api/operations/stalled-orders'
+// 一覧は注文照会と共用の GET /orders を処理状況で 2 本引く（src/api/stalledOrders.js）
+const LIST_PATH = '*/api/orders'
 const IMPORT_PATH = '*/api/operations/stalled-orders/confirmation-import'
+const WORKING_STATUS = '003'
 
 /*
  * jsdom の FormData は MSW(node) の XHR インターセプタが Fetch の Request に変換できず、
@@ -42,13 +44,22 @@ const confirmationFile = (lines) =>
 const confirmationLine = (orderId, status) =>
   `${orderId},TWS-TEST-${orderId},${status},0,0,2026-09-16 11:00:00,テスト`
 
-// 部店 123 の行（検索条件の引き継ぎを見るのに使う）
-const BRANCH = '123'
+/* 期待値はフィクスチャから導く。並びはサーバの既定（注文 ID の降順） */
+const byIdDesc = (a, b) => b.ID - a.ID
+const stalledOrderErrors = orderInquiryRows
+  .filter((row) => ['101', '103'].includes(row.処理状況))
+  .sort(byIdDesc)
+const stalledWorkingOrders = orderInquiryRows
+  .filter((row) => row.処理状況 === WORKING_STATUS)
+  .sort(byIdDesc)
+
+// 注文エラーを持つ部店（検索条件の引き継ぎを見るのに使う）
+const BRANCH = stalledOrderErrors[0].部店
 const branchErrors = stalledOrderErrors.filter((row) => row.部店 === BRANCH)
-// 部店 123 の注文エラーのうち 1 件を約定で消す
+// その部店の注文エラーのうち 1 件を約定で消す
 const CLOSED_TARGET = branchErrors[0]
 // 滞留一覧に無い注文 ID（フィクスチャの最大値より大きい）
-const UNKNOWN_ID = Math.max(...[...stalledOrderErrors, ...stalledWorkingOrders].map((r) => r.ID)) + 1
+const UNKNOWN_ID = Math.max(...orderInquiryRows.map((r) => r.ID)) + 1
 
 const ids = (orders) => orders.map((order) => order.id)
 const rawIds = (rows) => rows.map((row) => String(row.ID))
@@ -68,7 +79,20 @@ function gate(method, path, body) {
   return release
 }
 
-const emptyList = () => http.get(LIST_PATH, () => HttpResponse.json({ 注文エラー: [], 注文中: [] }))
+const EMPTY_PAGE = { orders: [], total: 0 }
+const emptyList = () => http.get(LIST_PATH, () => HttpResponse.json(EMPTY_PAGE))
+
+/**
+ * 一覧の応答を、注文エラー（status=101,103）と注文中（status=003）で出し分ける。
+ * どちらの本にもその行を 1 ページで返す。
+ */
+const listResponds = ({ errors = [], working = [] }, record) =>
+  http.get(LIST_PATH, ({ request }) => {
+    const params = new URL(request.url).searchParams
+    record?.(Object.fromEntries(params))
+    const rows = params.get('status') === WORKING_STATUS ? working : errors
+    return HttpResponse.json({ orders: rows, total: rows.length })
+  })
 
 /**
  * 取込の応答（CsvImportResponse の生の形）を差し込む。取込は実 API に素通しするので、
@@ -97,7 +121,7 @@ describe('useStalledOrdersStore', () => {
   })
 
   it('[SOS-03] 応答待ちの間は loading が true で空状態のフラグは立たない', async () => {
-    const release = gate('get', LIST_PATH, { 注文エラー: [], 注文中: [] })
+    const release = gate('get', LIST_PATH, EMPTY_PAGE)
     const store = useStalledOrdersStore()
 
     const pending = store.load()
@@ -133,9 +157,7 @@ describe('useStalledOrdersStore', () => {
   })
 
   it('[SOS-06] 注文エラーだけ 0 件なら注文エラーの空状態だけが立つ', async () => {
-    server.use(
-      http.get(LIST_PATH, () => HttpResponse.json({ 注文エラー: [], 注文中: stalledWorkingOrders })),
-    )
+    server.use(listResponds({ errors: [], working: stalledWorkingOrders }))
     const store = useStalledOrdersStore()
 
     await store.load()
@@ -157,7 +179,8 @@ describe('useStalledOrdersStore', () => {
 
     await store.reload()
 
-    expect(queries).toEqual([{ branch_code: BRANCH }, { branch_code: BRANCH }])
+    // 1 回の取得で注文エラー / 注文中の 2 本。load と reload で 4 本とも同じ部店
+    expect(queries.map((query) => query.branch_code)).toEqual([BRANCH, BRANCH, BRANCH, BRANCH])
     expect(ids(store.orderErrors)).toEqual(rawIds(branchErrors))
   })
 
@@ -184,12 +207,7 @@ describe('useStalledOrdersStore', () => {
     // 取込の後の一覧は、約定した 1 件が消えた応答に差し替える（反映の中身はバックエンドの責務）
     const remaining = branchErrors.filter((row) => row !== CLOSED_TARGET)
     const queries = []
-    server.use(
-      http.get(LIST_PATH, ({ request }) => {
-        queries.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json({ 注文エラー: remaining, 注文中: [] })
-      }),
-    )
+    server.use(listResponds({ errors: remaining, working: [] }, (query) => queries.push(query)))
     importResponds({
       success: true,
       total_count: 1,
@@ -204,8 +222,8 @@ describe('useStalledOrdersStore', () => {
     )
 
     expect(result).toMatchObject({ success: true, successCount: 1 })
-    // 引き直しも部店 123 の条件で、差し替えた応答の内容が入る
-    expect(queries).toEqual([{ branch_code: BRANCH }])
+    // 引き直しも同じ部店の条件（2 本とも）で、差し替えた応答の内容が入る
+    expect(queries.map((query) => query.branch_code)).toEqual([BRANCH, BRANCH])
     expect(ids(store.orderErrors)).toEqual(rawIds(remaining))
     expect(store.workingOrders).toEqual([])
     expect(store.importError).toBeNull()

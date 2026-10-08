@@ -3,6 +3,8 @@
 - 画面: `src/views/StalledOrderListView.vue`
 - 受け入れ条件: [docs/e2e/stalled-orders.md](../e2e/stalled-orders.md)
 - バックエンドへの依頼: [docs/api/requests.md](../api/requests.md) の #1
+- API: 一覧は注文照会と同じ `GET /orders` を処理状況で 2 回引く（注文エラー `status=101,103` / 注文中 `status=003`）。
+  取込は `POST /operations/stalled-orders/confirmation-import`。CSV 3 種はフロントで組み立てる
 
 この画面が業務でどう使われるかと、用語「コンファメーション」の意味をまとめる（2026-09-28 時点）。
 

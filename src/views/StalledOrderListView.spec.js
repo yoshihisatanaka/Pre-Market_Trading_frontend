@@ -6,7 +6,7 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { stalledOrderErrors, stalledWorkingOrders } from '@/mocks/fixtures/stalledOrders'
+import { orderInquiryRows } from '@/mocks/fixtures/orderInquiry'
 import { downloadCsv } from '@/utils/download'
 import {
   CONFIRMATION_SAMPLE_CSV_FILENAME,
@@ -28,7 +28,9 @@ import StalledOrderListView from './StalledOrderListView.vue'
 vi.mock('@/utils/download', () => ({ downloadCsv: vi.fn() }))
 
 const PATH = '/operations/stalled-orders'
-const LIST_PATH = '*/api/operations/stalled-orders'
+// 一覧は注文照会と共用の GET /orders を処理状況で 2 本引く（src/api/stalledOrders.js）
+const LIST_PATH = '*/api/orders'
+const WORKING_STATUS = '003'
 const IMPORT_PATH = '*/api/operations/stalled-orders/confirmation-import'
 
 /*
@@ -76,14 +78,37 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-/* 期待値はフィクスチャから導く（件数・注文 ID を直接書かない） */
-const BRANCH = '123'
+/*
+ * 期待値はフィクスチャから導く（件数・注文 ID を直接書かない）。
+ * 注文エラーは処理状況 101 / 103、注文中は 003 の行で、並びはサーバの既定（注文 ID の降順）
+ */
+const byIdDesc = (a, b) => b.ID - a.ID
+const stalledOrderErrors = orderInquiryRows
+  .filter((row) => ['101', '103'].includes(row.処理状況))
+  .sort(byIdDesc)
+const stalledWorkingOrders = orderInquiryRows
+  .filter((row) => row.処理状況 === WORKING_STATUS)
+  .sort(byIdDesc)
+// 注文エラーの 1 行目の部店（絞り込むと両方の件数が既定より減る）
+const BRANCH = stalledOrderErrors[0].部店
 const branchErrors = stalledOrderErrors.filter((row) => row.部店 === BRANCH)
 const branchWorking = stalledWorkingOrders.filter((row) => row.部店 === BRANCH)
 const SIDE_LABELS = { 1: '売', 3: '買' }
-const orderedAt = (row) => `${row.受注日}T${row.受注時刻}`
-const byOrderedAtDesc = (a, b) => orderedAt(b).localeCompare(orderedAt(a)) || b.ID - a.ID
 const hashIds = (rows) => rows.map((row) => `#${row.ID}`)
+
+/** 一覧の応答を、注文エラー（status=101,103）と注文中（status=003）の本で出し分ける */
+const listHandler = ({ errors, working }, options) =>
+  http.get(
+    LIST_PATH,
+    ({ request }) => {
+      const isWorking = new URL(request.url).searchParams.get('status') === WORKING_STATUS
+      const rows = isWorking ? working : errors
+      // undefined の本は既定のハンドラへ流す
+      if (rows === undefined) return undefined
+      return HttpResponse.json({ orders: rows, total: rows.length })
+    },
+    options,
+  )
 
 /*
  * 取込は実 API に素通しする（MSW のハンドラは消した）ので、取込を押すテストは必ず応答を差し込む。
@@ -171,10 +196,13 @@ async function settle() {
 const byTestId = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`)
 const exists = (wrapper, testid) => byTestId(wrapper, testid).exists()
 const countText = (wrapper, prefix) => byTestId(wrapper, `${prefix}-count`).text()
+// 0 件で表が出ていない（空の文言に替わっている）ときは空配列
 const tableIds = (wrapper, testid) =>
-  byTestId(wrapper, testid)
-    .findAll('[data-testid="data-table-row"]')
-    .map((row) => row.find('td').text())
+  exists(wrapper, testid)
+    ? byTestId(wrapper, testid)
+        .findAll('[data-testid="data-table-row"]')
+        .map((row) => row.find('td').text())
+    : []
 const isDisabled = (wrapper, testid) => byTestId(wrapper, testid).attributes('disabled') !== undefined
 const importButton = (wrapper) => byTestId(wrapper, 'stalled-orders-confirmation-import')
 const dropZone = (wrapper) => byTestId(wrapper, 'stalled-orders-confirmation-file')
@@ -235,8 +263,7 @@ function gateImport() {
 const ERROR_MESSAGE = '滞留注文を取得できませんでした。'
 const errorHandler = (options) =>
   http.get(LIST_PATH, () => HttpResponse.json({ message: ERROR_MESSAGE }, { status: 500 }), options)
-const emptyHandler = (options) =>
-  http.get(LIST_PATH, () => HttpResponse.json({ 注文エラー: [], 注文中: [] }), options)
+const emptyHandler = (options) => listHandler({ errors: [], working: [] }, options)
 
 /** CSV 本文の order_id 列（BOM とヘッダを除く） */
 const csvOrderIds = (text) =>
@@ -269,11 +296,12 @@ describe('StalledOrderListView', () => {
     const firstRow = byTestId(wrapper, 'stalled-order-errors-table')
       .findAll('[data-testid="data-table-row"]')[0]
       .text()
-    expect(first.指成区分).toBe('MO')
-    expect(firstRow).toContain(first.銘柄コード)
+    expect(first.指成区分).toBe('LO')
+    expect(firstRow).toContain(`#${first.ID}`)
+    expect(firstRow).toContain(first.Ticker)
     expect(firstRow).toContain(SIDE_LABELS[first.売買区分])
-    expect(firstRow).toContain('成行')
-    expect(firstRow).toContain(first.処理状況名)
+    expect(firstRow).toContain('指値')
+    expect(firstRow).toContain(first.表示状況名)
   })
 
   it('[SOV-03] 500 のとき 2 つのカードにその message と「再試行」が出て表は出ない', async () => {
@@ -311,7 +339,10 @@ describe('StalledOrderListView', () => {
     expect(router.currentRoute.value.query).toEqual({ branch_code: BRANCH })
     expect(countText(wrapper, 'stalled-order-errors')).toBe(`${branchErrors.length} 件`)
     expect(countText(wrapper, 'stalled-working-orders')).toBe(`${branchWorking.length} 件`)
-    expect(branchWorking).toHaveLength(0)
+    // 絞り込みが効いたことが件数で見分けられる
+    expect(branchErrors.length + branchWorking.length).toBeLessThan(
+      stalledOrderErrors.length + stalledWorkingOrders.length,
+    )
   })
 
   it('[SOV-06] URL の部店コードが入力欄に入る', async () => {
@@ -427,9 +458,8 @@ describe('StalledOrderListView', () => {
   })
 
   it('[SOV-18] 注文エラーが 0 件なら「注文エラーをCSV出力」が押せない', async () => {
-    server.use(
-      http.get(LIST_PATH, () => HttpResponse.json({ 注文エラー: [], 注文中: stalledWorkingOrders })),
-    )
+    // 注文エラーの本だけ 0 件にし、注文中は既定のハンドラに任せる
+    server.use(listHandler({ errors: [] }))
     const { wrapper } = await mountView()
     await settle()
 
@@ -479,12 +509,11 @@ describe('StalledOrderListView', () => {
     const remainingErrors = stalledOrderErrors.filter(
       (row) => row !== CLOSED_TARGET && row !== WORKING_TARGET,
     )
-    const nextWorking = [...stalledWorkingOrders, WORKING_TARGET].sort(byOrderedAtDesc)
-    server.use(
-      http.get(LIST_PATH, () =>
-        HttpResponse.json({ 注文エラー: remainingErrors, 注文中: nextWorking }),
-      ),
-    )
+    const nextWorking = [
+      ...stalledWorkingOrders,
+      { ...WORKING_TARGET, 処理状況: WORKING_STATUS, 表示状況名: '注文中' },
+    ].sort(byIdDesc)
+    server.use(listHandler({ errors: remainingErrors, working: nextWorking }))
     importResponds(importSuccessBody)
 
     await submitImport(wrapper)

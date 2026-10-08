@@ -17,7 +17,6 @@ import { permissionHandlers, resetPermissionRows } from './permissions'
 import { marketStatusHandlers } from './marketStatus'
 import { announcementHandlers, resetAnnouncementState } from './announcements'
 import { bannerHandlers } from './banner'
-import { stalledOrderHandlers } from './stalledOrders'
 import { userHandlers } from './users'
 import { incidentHandlers, resetIncidentState } from './incidents'
 import { mizuhoExecutionHandlers } from './mizuhoExecutions'
@@ -136,7 +135,6 @@ export const handlers = [
   ...marketStatusHandlers,
   ...announcementHandlers,
   ...bannerHandlers,
-  ...stalledOrderHandlers,
   ...incidentHandlers,
   // みずほ（route=0）の問い合わせだけを先に拾い、それ以外は約定照会のモックへ流す
   ...mizuhoExecutionHandlers,

@@ -126,7 +126,7 @@
   --space-6: 32px;
 
   /* typography */
-  /* Noto Sans JP はモックの指定に合わせる（フォントファイルは同梱しない。無ければ以降にフォールバック） */
+  /* Noto Sans JP はモックの指定に合わせる（Web フォントは src/main.js が @fontsource/noto-sans-jp から読む） */
   --font-family-base: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic UI', Meiryo, sans-serif;
   --font-family-numeric: 'SF Mono', Consolas, 'Roboto Mono', monospace;
   --font-size-xs: 11px;

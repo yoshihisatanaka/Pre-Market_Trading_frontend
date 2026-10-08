@@ -355,16 +355,19 @@ test.describe('顧客詳細（実 API 接続）', () => {
     const customer = await openHoldingsWithActions(page)
 
     // 売却不可の明細は押せないボタン（<button disabled>）なので、リンク（href あり）の「売り」を探す
-    const sellLinks = holdings.rowsOf(page).locator('a[data-testid="customer-holdings-sell"]')
-    test.skip((await sellLinks.count()) === 0, '押せる「売り」が無い（全行が売却不可）')
-    const row = holdings.rowsOf(page).filter({ has: sellLinks.first() }).first()
+    // filter の has には行の中から探す locator を渡す（行の外から始まる locator だと一致しない）
+    const sellLink = page.locator('a[data-testid="customer-holdings-sell"]')
+    const row = holdings.rowsOf(page).filter({ has: sellLink }).first()
+    test.skip((await row.count()) === 0, '押せる「売り」が無い（全行が売却不可）')
     const ticker = await tickerOf(row)
 
-    const query = await followOrderEntryLink(page, sellLinks.first(), customer)
+    const query = await followOrderEntryLink(page, row.locator(sellLink), customer)
 
-    const { deposit, ...rest } = query
+    // 「売り」は売却可能株数を quantity で引き継ぐ（正の整数のときだけ載る。#36 ⑤）
+    const { deposit, quantity, ...rest } = query
     expect(rest).toEqual({ ...customer.query, side: 'sell', ...(ticker ? { ticker } : {}) })
     if (deposit !== undefined) expect(['0', '1', '6']).toContain(deposit)
+    if (quantity !== undefined) expect(quantity).toMatch(/^[1-9]\d*$/)
 
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(ticker)
     await expectTradeToggles(page, query, '売り')

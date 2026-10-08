@@ -165,6 +165,17 @@ test.describe('注文訂正', () => {
     await expect(page.getByTestId('order-amend-back')).toBeVisible()
   })
 
+  test('[OAM-07] 数量が空だと止める', async ({ page }) => {
+    await openAmend(page, PENDING)
+
+    await page.getByTestId('order-amend-quantity').fill('')
+    // フォームは novalidate なので、ブラウザ標準の検証ではなく画面の検査が止める
+    await page.getByTestId('order-amend-submit').click()
+
+    await expect(fieldError(page, '注文数量を入力してください。')).toBeVisible()
+    await expectNotSubmitted(page)
+  })
+
   test('[OAM-08] 数量が整数でないと止める', async ({ page }) => {
     await openAmend(page, PENDING)
 
@@ -197,6 +208,16 @@ test.describe('注文訂正', () => {
         `注文数量は出来数量（${formatQuantity(PARTIAL.出来数量)}株）より大きい数を入力してください。`,
       ),
     ).toBeVisible()
+    await expectNotSubmitted(page)
+  })
+
+  test('[OAM-11] 指値価格が空だと止める', async ({ page }) => {
+    await openAmend(page, PENDING)
+
+    await page.getByTestId('order-amend-limit-price').fill('')
+    await page.getByTestId('order-amend-submit').click()
+
+    await expect(fieldError(page, '指値価格を入力してください。')).toBeVisible()
     await expectNotSubmitted(page)
   })
 

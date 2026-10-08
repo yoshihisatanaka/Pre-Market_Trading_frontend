@@ -193,4 +193,19 @@ describe('useOrderActionStore', () => {
     expect(store.cancelResult).toBeNull()
     expect(store.order.id).toBe(idOf(FILLED))
   })
+
+  it('[OAS-12] 古い注文の失敗で新しい注文をエラー表示にしない', async () => {
+    const release = gate('get', DETAIL, { onlyId: idOf(PARTIAL), respond: serverError })
+    const store = useOrderActionStore()
+
+    const stale = store.load(idOf(PARTIAL))
+    await store.load(idOf(PENDING))
+    expect(store.order.id).toBe(idOf(PENDING))
+
+    release()
+    await stale
+
+    expect(store.order.id).toBe(idOf(PENDING))
+    expect(store.error).toBeNull()
+  })
 })

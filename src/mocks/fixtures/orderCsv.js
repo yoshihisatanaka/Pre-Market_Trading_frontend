@@ -5,10 +5,13 @@ import { symbols } from './symbols'
  * モックのレスポンス実体（CSV一括注文）。
  * ここに書くのは「バックエンドが返す生の形」であり、アプリ内モデルではない。
  *
- * `GET /orders/csv-spec` の応答（CsvHeaderSpecResponse）。全 22 列の中身は
+ * `GET /orders/csv-spec` の応答（CsvHeaderSpecResponse）。1〜22 列の中身は
  * バックエンドの CSV_BULK_ORDER_SPEC_METADATA（app/services/order_service.py）の写しで、
  * allowed_values は同じくバックエンドのコードマスタ（app/config/codes.json）から引いたもの。
  * 実 API は区分の列にだけ allowed_values を付け、それ以外は null を返す。
+ *
+ * 23 列目の「強制区分」は実 API に無い**契約提案**（docs/api/requests.md #58）。画面モックの CSV の
+ * 任意列（1 で強制）に合わせて先に置いた。ヘッダーに無くても受け付ける（既存の 22 列の CSV を通すため）。
  *
  * 画面モック（docs/mock/orders-csv-upload/）の表は英語名の 17 列だが、実 API の列に合わせた
  * （2026-09-29 にユーザ確認済み）。
@@ -295,7 +298,24 @@ export const orderCsvColumns = [
       ['06', 'アフター'],
     ]),
   },
+  {
+    index: 23,
+    name: '強制区分',
+    required: false,
+    type: 'integer',
+    description:
+      '強制区分コード（0: 通常, 1: 強制）。フロコン警告を確認して強制する場合は1。空欄は0',
+    example: 0,
+    condition: null,
+    allowed_values: allowed([
+      ['0', '通常'],
+      ['1', '強制'],
+    ]),
+  },
 ]
+
+/** ヘッダーに無くてもよい列（契約提案の列。既存の 22 列の CSV もそのまま通す） */
+const OPTIONAL_HEADER_NAMES = ['強制区分']
 
 /** `GET /orders/csv-spec` の応答そのもの */
 export const orderCsvSpecResponse = {
@@ -307,6 +327,11 @@ export const orderCsvSpecResponse = {
 export const orderCsvColumnNames = [...orderCsvColumns]
   .sort((a, b) => a.index - b.index)
   .map((column) => column.name)
+
+/** ヘッダー行に無いと事前検証が 400 になる列名（index の順） */
+export const orderCsvRequiredHeaderNames = orderCsvColumnNames.filter(
+  (name) => !OPTIONAL_HEADER_NAMES.includes(name),
+)
 
 const [firstCustomer, secondCustomer] = customers
 const [firstSymbol, secondSymbol] = symbols
@@ -340,6 +365,7 @@ const sampleOrder = {
   受注者: '999',
   VWAP区分: 0,
   発注範囲: '03',
+  強制区分: 0,
 }
 
 export const orderCsvSampleOrders = [
@@ -373,7 +399,7 @@ function toCsvLine(order) {
 
 /**
  * `GET /orders/csv-template` の本文。実 API と同じく UTF-8 の BOM 付き・CRLF 区切りで、
- * ヘッダー 22 列＋サンプル 3 行。
+ * ヘッダー 23 列（強制区分を含む）＋サンプル 3 行。
  */
 export const orderCsvTemplateText =
   BOM + [orderCsvColumnNames.join(','), ...orderCsvSampleOrders.map(toCsvLine)].join('\r\n') + '\r\n'

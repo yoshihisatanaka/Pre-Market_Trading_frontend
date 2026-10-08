@@ -51,6 +51,8 @@ const COLUMNS = [
   { key: 'settlementCurrency', label: '決済' },
   { key: 'depositCategory', label: '預り売買区分' },
   { key: 'received', label: '受注情報' },
+  // 画面モックのプレビューには無い。CSV の強制区分で警告を押し切る行を、受付の前に見落とさせないため
+  { key: 'forced', label: '強制' },
   { key: 'messages', label: 'エラー内容' },
 ]
 
@@ -212,6 +214,18 @@ store.clearSubmitError()
             <span class="order-csv-preview__sub">受注者：{{ row.order.receiver || '—' }}</span>
           </template>
 
+          <!-- 注文照会の「強制」ラベル（OrderInquiryCells）と同じ見た目。操作は持たない -->
+          <template #cell-forced="{ row }">
+            <span
+              v-if="row.order.forced"
+              class="order-csv-preview__forced"
+              data-testid="order-csv-preview-forced"
+            >
+              強制
+            </span>
+            <template v-else>—</template>
+          </template>
+
           <!--
             エラーと警告を同じ欄に色を分けて並べる（警告はモックに無いが、サーバは返す）。
             色だけでは読み上げで区別できないので、種別を支援技術向けに添える
@@ -367,6 +381,19 @@ store.clearSubmitError()
 
 .order-csv-preview__at {
   font-variant-numeric: tabular-nums;
+}
+
+.order-csv-preview__forced {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  color: var(--color-danger-text);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-danger-text);
+  border-radius: var(--radius-sm);
 }
 
 /*

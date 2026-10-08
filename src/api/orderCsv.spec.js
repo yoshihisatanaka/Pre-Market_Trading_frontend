@@ -8,6 +8,7 @@ import {
   orderCsvColumns,
   orderCsvCustomerNameOf,
   orderCsvDetailsOf,
+  orderCsvRequiredHeaderNames,
   orderCsvSampleOrders,
   orderCsvTemplateText,
   orderCsvValidateResponse,
@@ -110,12 +111,22 @@ const toExpectedOrder = (raw) => ({
   receiver: raw.受注者,
   vwap: raw.VWAP区分 === 1,
   marketScope: raw.発注範囲,
+  forced: raw.強制区分 === 1,
 })
+
+/** 列の並び（既定は全列）と注文の行から CSV の本文を組む（null は空欄） */
+const csvOf = (orders, header = orderCsvColumnNames) =>
+  [
+    header.join(','),
+    ...orders.map((order) =>
+      header.map((name) => (order[name] == null ? '' : String(order[name]))).join(','),
+    ),
+  ].join('\r\n') + '\r\n'
 
 /** ヘッダーの列が足りない CSV（先頭 2 列だけ）と、そのとき handler が返す detail */
 const SHORT_HEADER = orderCsvColumnNames.slice(0, 2)
 const SHORT_HEADER_CSV = `${SHORT_HEADER.join(',')}\r\n`
-const SHORT_HEADER_DETAIL = `CSVヘッダーに不足があります: 不足項目=[${orderCsvColumnNames
+const SHORT_HEADER_DETAIL = `CSVヘッダーに不足があります: 不足項目=[${orderCsvRequiredHeaderNames
   .filter((name) => !SHORT_HEADER.includes(name))
   .map((name) => `'${name}'`)
   .join(', ')}]`
@@ -436,5 +447,45 @@ describe('api/orderCsv', () => {
 
     expect(error).toBeInstanceOf(ApiError)
     expect(error.status).toBe(422)
+  })
+
+  it('[OCA-22] 強制区分が 1 の行だけ forced が true になる', async () => {
+    const [base] = orderCsvValidateResponse.rows
+    const withForced = (value) => ({ ...base, data: { ...base.data, 強制区分: value } })
+    const withoutForced = { ...base, data: { ...base.data } }
+    delete withoutForced.data.強制区分
+    respondValidate({
+      ...orderCsvValidateResponse,
+      rows: [withForced(1), withForced(0), withForced('1'), withForced(null), withoutForced],
+    })
+
+    const result = await validateOrderCsv(csvFile('x'))
+
+    expect(result.rows.map((row) => row.order.forced)).toEqual([true, false, false, false, false])
+  })
+
+  it('[OCA-23] 強制区分を付けた行だけ 強制区分 1 で一括受付に送る', async () => {
+    const orders = orderCsvSampleOrders.map((order, index) => ({
+      ...order,
+      強制区分: index === 1 ? 1 : 0,
+    }))
+    const validation = await validateOrderCsv(csvFile(csvOf(orders)))
+    const bodies = recordBulk()
+
+    await bulkCreateOrders(validation.rows.map((row) => row.order))
+
+    expect(bodies[0].orders.map((order) => order.強制区分)).toEqual(orders.map((o) => o.強制区分))
+  })
+
+  it('[OCA-24] 強制区分の列が無い CSV も通り、どの行も強制にならない', async () => {
+    const header = orderCsvColumnNames.filter((name) => name !== '強制区分')
+    // 前提: 強制区分を外すと必須のヘッダーだけが残る
+    expect(header).toEqual(orderCsvRequiredHeaderNames)
+
+    const result = await validateOrderCsv(csvFile(csvOf(orderCsvSampleOrders, header)))
+
+    expect(result.allValid).toBe(true)
+    expect(result.rows).toHaveLength(orderCsvSampleOrders.length)
+    expect(result.rows.every((row) => row.order.forced === false)).toBe(true)
   })
 })

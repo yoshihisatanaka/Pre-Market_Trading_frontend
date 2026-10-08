@@ -9,6 +9,10 @@ import { apiClient } from './client'
  * `POST /orders/bulk-create` がある。取込み画面の「CSVフォーマット」表は `GET /orders/csv-spec` で埋める。
  * 列の定義（全 22 列の列名・必須・説明・例）はバックエンドが持っていて、画面は写しを持たない。
  *
+ * 「強制区分」（行ごとに 1 で強制）は画面モックの CSV にあって実 API に無い**契約提案**
+ * （docs/api/requests.md #58）。事前検証の行に来れば読み、一括受付でその行の `強制区分` として送り返す。
+ * 来なければ通常（0）として送るので、実 API がいまのままでも挙動は変わらない。
+ *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり:
  *   - snake_case（total_columns / row_number / all_valid / order_ids …）
  *   - 列の仕様の例（example）の型が列ごとに違う（'A0001' / 1000113 / 150.0）。アプリ内は文字列に揃える
@@ -41,9 +45,11 @@ import { apiClient } from './client'
  *   transactionType: string, solicitation: string, orderMethod: string, fundNature: string,
  *   cashDelivery: string, expiryDate: string, orderChannel: string,
  *   orderDate: string, orderTime: string, receiver: string, vwap: boolean, marketScope: string,
+ *   forced: boolean,
  * }} CsvOrder
  *   区分はコードのまま持つ（orderType は 'LO' / 'MO'、marketScope は '02' / '03' / '04' / '06' …）。
- *   送り返すときに崩さないため、side と vwap のほかは値を加工しない。
+ *   送り返すときに崩さないため、side・vwap・forced のほかは値を加工しない。
+ *   forced は行の `強制区分` が 1 のときだけ true（契約提案。実 API が返さないうちは常に false）。
  *   accountNumber / quantity はサーバが数値に直したもの（直せなかった行は 0 が来る）。
  *   expiryDate / orderDate は 'YYYYMMDD'、orderTime は 'HHMMSS' か 'HH:MM'（CSV に書かれたまま）。
  */
@@ -197,6 +203,8 @@ function toCsvOrder(raw) {
     receiver: raw?.受注者 ?? '',
     vwap: raw?.VWAP区分 === 1,
     marketScope: raw?.発注範囲 ?? '',
+    // 1 のときだけ強制。欠けた値や知らない値を強制に倒すと、警告を確かめないまま発注が通る
+    forced: raw?.強制区分 === 1,
   }
 }
 
@@ -224,7 +232,7 @@ export async function bulkCreateOrders(orders, { createdBy = '' } = {}) {
 
 /**
  * CsvOrder → OrderRequest。toCsvOrder の逆に `作成者` を足す。
- * 強制区分・元注文ID・メモは CSV に無いので送らない（サーバの既定に任せる）。
+ * 元注文ID・メモは CSV に無いので送らない（サーバの既定に任せる）。
  */
 function toOrderRequest(order, createdBy) {
   return {
@@ -250,6 +258,7 @@ function toOrderRequest(order, createdBy) {
     受注者: order.receiver,
     VWAP区分: order.vwap ? 1 : 0,
     発注範囲: order.marketScope,
+    強制区分: order.forced ? 1 : 0,
     作成者: createdBy,
   }
 }

@@ -35,14 +35,14 @@ const LARGE_QUANTITY_WARNING = largeQuantityRow.warnings[0]
 const MISSING_LIMIT_PRICE_ERROR = missingLimitPriceRow.errors[0]
 const BAD_ACCOUNT_ERROR = badAccountRow.errors[0]
 
-/** 1 行の注文（列名のキー）を CSV の 1 行にする（null は空欄） */
-function toCsvLine(order) {
-  return orderCsvColumnNames.map((name) => (order[name] == null ? '' : String(order[name]))).join(',')
+/** 1 行の注文（列名のキー）を、ヘッダーの列の並びで CSV の 1 行にする（null は空欄） */
+function toCsvLine(order, header) {
+  return header.map((name) => (order[name] == null ? '' : String(order[name]))).join(',')
 }
 
-/** ヘッダー（既定は 22 列すべて）と注文の行から CSV の本文を組む */
+/** ヘッダー（既定は全列）と注文の行から CSV の本文を組む */
 function csvOf(orders, header = orderCsvColumnNames) {
-  return [header.join(','), ...orders.map(toCsvLine)].join('\r\n') + '\r\n'
+  return [header.join(','), ...orders.map((order) => toCsvLine(order, header))].join('\r\n') + '\r\n'
 }
 
 /** CSV を取込み口に渡す */
@@ -77,8 +77,8 @@ function completeRowsOf(page) {
   return page.getByTestId('order-csv-complete-table').getByTestId('data-table-row')
 }
 
-// 必須でない列（既定モックでは「指値単価」の 1 列だけ）。件数や位置はフィクスチャから導く
-const optionalColumn = orderCsvColumns.find((column) => !column.required)
+// 条件付きで必須になる列（既定モックでは「指値単価」の 1 列だけ）。件数や位置はフィクスチャから導く
+const optionalColumn = orderCsvColumns.find((column) => !column.required && column.condition)
 const optionalIndex = orderCsvColumns.indexOf(optionalColumn)
 const firstColumn = orderCsvColumns[0]
 const lastColumn = orderCsvColumns[orderCsvColumns.length - 1]
@@ -167,7 +167,7 @@ test.describe('CSV一括注文', () => {
     await expect(rows.last().getByRole('cell').first()).toHaveText(lastColumn.name)
   })
 
-  test('[OC-05] 条件付きの列だけ「任意」で、条件が説明に添えられる', async ({ page }) => {
+  test('[OC-05] 条件付きの列は「任意」で、条件が説明に添えられる', async ({ page }) => {
     await page.goto(UPLOAD_PATH)
 
     const rows = formatRowsOf(page)
@@ -179,7 +179,7 @@ test.describe('CSV一括注文', () => {
     await expect(cells.nth(1)).toContainText(optionalColumn.condition)
     await expect(cells.nth(3)).toContainText('任意')
 
-    // 必須欄（4 列目）が「必須」になる行は、必須でない 1 列を除いた残り全部
+    // 必須欄（4 列目）が「必須」になる行は、必須でない列（指値単価・強制区分）を除いた残り全部
     const requiredCells = rows.locator('td:nth-child(4)', { hasText: '必須' })
     await expect(requiredCells).toHaveCount(orderCsvColumns.filter((c) => c.required).length)
   })
@@ -505,5 +505,40 @@ test.describe('CSV一括注文', () => {
     )
     await expect(page.getByTestId('order-csv-preview-submit')).toHaveCount(0)
     await expect(page.getByTestId('order-csv-preview-table')).toHaveCount(0)
+  })
+
+  test('[OC-25] 強制区分を 1 にした行にだけ「強制」のラベルが出て、そのまま受付できる', async ({
+    page,
+  }) => {
+    const orders = orderCsvSampleOrders.map((order, index) => ({
+      ...order,
+      強制区分: index === 1 ? 1 : 0,
+    }))
+    await goToPreview(page, csvOf(orders))
+
+    const rows = previewRowsOf(page)
+    await expect(rows).toHaveCount(orders.length)
+    await expect(rows.nth(1).getByTestId('order-csv-preview-forced')).toHaveText('強制')
+    await expect(page.getByTestId('order-csv-preview-forced')).toHaveCount(1)
+
+    const submit = page.getByTestId('order-csv-preview-submit')
+    await expect(submit).toHaveText(`${orders.length}件を受付する`)
+    await submit.click()
+    await expect(page).toHaveURL(new RegExp(`${COMPLETE_PATH}$`))
+  })
+
+  test('[OC-26] 強制区分の列が無い CSV もプレビューへ進み、どの行も強制にならない', async ({
+    page,
+  }) => {
+    const header = orderCsvColumnNames.filter((name) => name !== '強制区分')
+    await goToPreview(page, csvOf(orderCsvSampleOrders, header))
+
+    const rows = previewRowsOf(page)
+    await expect(rows).toHaveCount(orderCsvSampleOrders.length)
+    for (let index = 0; index < orderCsvSampleOrders.length; index += 1) {
+      await expect(rows.nth(index).getByRole('cell').nth(1)).toHaveText('OK')
+    }
+    await expect(page.getByTestId('order-csv-preview-forced')).toHaveCount(0)
+    await expect(page.getByTestId('order-csv-preview-submit')).toBeEnabled()
   })
 })

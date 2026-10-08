@@ -36,6 +36,7 @@ const toModel = (raw) => ({
   roleCode: raw.ロールコード ?? '',
   roleLabel: raw.ロール名 ?? '',
   branchCode: raw.部店コード ?? '',
+  orderTakerCode: raw.受注者コード ?? '',
   registered: raw.登録済,
   permissions: {
     order: raw.権限.order,
@@ -119,6 +120,22 @@ describe('api/auth', () => {
     expect(operator.roleCode).toBe('')
     expect(operator.name).toBe('')
     expect(operator.registered).toBe(false)
+  })
+
+  it('[AUA-08] 受注者コードはそのまま入り、null・欠けは空文字になる', async () => {
+    record(salesOperator)
+    expect((await fetchCurrentOperator()).orderTakerCode).toBe(salesOperator.受注者コード)
+
+    // フィクスチャの管理責任者（admin）は受注者コードが未設定（null）
+    expect(supervisorOperator.受注者コード).toBeNull()
+    record(supervisorOperator)
+    expect((await fetchCurrentOperator()).orderTakerCode).toBe('')
+
+    const withoutOrderTaker = Object.fromEntries(
+      Object.entries(salesOperator).filter(([key]) => key !== '受注者コード'),
+    )
+    record(withoutOrderTaker)
+    expect((await fetchCurrentOperator()).orderTakerCode).toBe('')
   })
 
   it('[AUA-06] 500 は detail を message に持つ ApiError になる', async () => {

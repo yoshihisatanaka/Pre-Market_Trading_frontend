@@ -41,5 +41,7 @@
 | NOF-28 | 顧客詳細の預りの「売り」から引き継ぐ（ティッカー・`SIDE.SELL`・預り区分 = 一般） | `createOrderForm({ ticker, side, depositCategory })` | `ticker` / `side` が引き継がれ、`depositCategory` は `ORDER_FORM_DEFAULTS` の既定（特定）より引き継いだ値が優先される。ほかの区分は既定のまま | 実装済 |
 | NOF-29 | 引き継ぐ預り区分が空文字 | `createOrderForm({ depositCategory: '' })` | `depositCategory` は `ORDER_FORM_DEFAULTS` の既定のまま（空で上書きしない） | 実装済 |
 | NOF-30 | ほかは埋まったフォーム | 受注者を 4 文字・前後に空白付きの 4 文字・`ORDER_PERSON_MAX_LENGTH` + 1 文字・空白だけ にして `validateOrderForm()` | 4 文字は前後の空白があっても `''`、5 文字は「受注者は4文字以内で入力してください。」、空白だけは「受注者を入力してください。」 | 実装済 |
-| NOF-31 | — | `defaultOrderPerson()` を 4 文字・前後に空白付きの 4 文字・5 文字・`null`・`undefined` で呼ぶ | 4 文字は前後の空白を落としてそのまま、5 文字以上と `null` / `undefined` は `''`（開いた直後から検証で止まる値を初期値にしない） | 実装済 |
+| NOF-31 | — | `defaultOrderPerson()`（受注者コード → 受注者の初期値）を 4 文字・前後に空白付きの 4 文字・5 文字・`null`・`undefined` で呼ぶ | 4 文字は前後の空白を落としてそのまま、5 文字以上と `null` / `undefined` は `''`（開いた直後から検証で止まる値を初期値にしない） | 実装済 |
 | NOF-32 | 預りの「売り」から売却可能株数 `'1500'` を引き継ぐ / 引き継がない | `createOrderForm({ quantity: '1500' })` / `createOrderForm()` | 前者の `quantity` は入力欄と同じ 3 桁区切りの `'1,500'`、後者は `''` | 実装済 |
+| NOF-33 | ほかは埋まったフォーム | 市場区分 `02` × 成行 / `02` × 指値 / `03` × 成行 で `validateOrderForm()` | `LIMIT_ONLY_EXECUTION_SCOPES` は `['02']`。`02` × 成行だけ `orderType` に「市場区分「プレ＋レギュラー」は指値のみです。指値で入力してください。」が入り、ほかは `''`（docs/api/requests.md #50 ④） | 実装済 |
+| NOF-34 | — | `buildReceptionStatus()` を Dream 未登録（`0`）/ 登録対象外（`8`）/ 処理状況名なしの `8` / Dream の状況なし / どれも無し で呼ぶ | 「Dream登録待ち」/「未発注（Dream 登録対象外）」/「Dream 登録対象外」/「未発注」/ `''`（docs/api/requests.md #52） | 実装済 |

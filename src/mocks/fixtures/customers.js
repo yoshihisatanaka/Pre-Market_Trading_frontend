@@ -361,3 +361,11 @@ export const canceledCustomers = [
     canceled: true,
   }),
 ]
+
+/**
+ * 取消済みの口座番号を新規で検証したときの再有効化の警告（実 API の文言。docs/api/requests.md #55）。
+ * POST /masters/customers/validate（is_update=false）が valid:true のまま warnings に入れて返す。
+ */
+export function reactivationWarning(accountNumber) {
+  return `口座番号 ${accountNumber} は以前登録され取消済みです。登録すると再度有効になります`
+}

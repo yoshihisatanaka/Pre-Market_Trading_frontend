@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { blackoutDates } from '../src/mocks/fixtures/blackoutDates'
-import { noOperationOperator } from '../src/mocks/fixtures/currentOperator'
+import { noOperationOperator, salesOperator } from '../src/mocks/fixtures/currentOperator'
 import { customers } from '../src/mocks/fixtures/customers'
 import { fxRates } from '../src/mocks/fixtures/fxRates'
 
@@ -35,8 +35,8 @@ const BRANCH = '123'
 
 /*
  * 受注者（必須・4 文字以内。src/utils/orderEntryOptions.js の ORDER_PERSON_MAX_LENGTH と同じ値）。
- * 初期値は社員コードが 4 文字以内のときだけ入るが、MSW の /auth/me の操作者コード
- * （src/mocks/fixtures/currentOperator.js）はどれも 5 文字以上なので、MSW 版では空で始まる。
+ * 初期値は /auth/me の受注者コードだが、MSW の既定の操作者（管理責任者 admin。
+ * src/mocks/fixtures/currentOperator.js）は未設定なので、MSW 版では空で始まる。
  * 確認画面へ進む行はこの値を入れてから送信する
  */
 const ORDER_PERSON = '001'
@@ -373,6 +373,44 @@ test.describe('新規注文 入力の不備とサーバの判定', () => {
     await expect(orderPerson).toHaveValue('1234')
   })
 
+  test('[NO-36] ログイン中の操作者に受注者コードがあれば受注者の初期値に入る', async ({ page }) => {
+    expect(salesOperator.受注者コード).toBeTruthy()
+    await mockApi(page, [{ path: '*/api/auth/me', body: salesOperator }])
+    await openForm(page)
+
+    await expect(page.getByTestId('order-entry-order-person')).toHaveValue(
+      salesOperator.受注者コード,
+    )
+  })
+
+  test('[NO-37] 市場区分はプレ＋レギュラーとレギュラーだけで、プレ＋レギュラーの成行は価格の下に理由が出て止まる', async ({
+    page,
+  }) => {
+    await openForm(page)
+
+    const scope = page.getByTestId('order-entry-execution-scope')
+    await expect(scope.locator('option')).toHaveText(['プレ＋レギュラー', 'レギュラー'])
+
+    await fillOrder(page)
+    await scope.selectOption({ label: 'プレ＋レギュラー' })
+    await submitInput(page)
+
+    await expect(
+      page.getByTestId('order-entry-form').getByRole('alert').filter({
+        hasText: '市場区分「プレ＋レギュラー」は指値のみです。指値で入力してください。',
+      }),
+    ).toBeVisible()
+    await expectStillInput(page)
+    await expect(page.getByTestId('order-entry-errors')).toHaveCount(0)
+
+    // 指値にすれば確認へ進む
+    await page.getByTestId('order-entry-order-type').getByRole('button', { name: '指値' }).click()
+    await page.getByTestId('order-entry-limit-price').fill('200')
+    await submitInput(page)
+    await expect(page.getByTestId('order-entry-confirm')).toBeVisible()
+    await expect(page.getByTestId('order-readback-market-expiry')).toContainText('プレ＋レギュラー')
+  })
+
   test('[NO-33] 受注者が空のまま送信すると受注者の下に理由が出て止まる', async ({ page }) => {
     await openForm(page)
     await fillOrder(page, { orderPerson: '' })
@@ -565,14 +603,14 @@ test.describe('新規注文 確認', () => {
 })
 
 test.describe('新規注文 確定と次の注文', () => {
-  test('[NO-24] 注文を確定すると完了画面に受付の文言と注文 ID が出る', async ({ page }) => {
+  test('[NO-24] 注文を確定すると完了画面に受付状況と注文 ID が出る', async ({ page }) => {
     await openForm(page)
     await goToConfirm(page)
     await confirmOrder(page)
 
     await expect(page.getByTestId('order-entry-complete')).toBeVisible()
-    await expect(page.getByTestId('order-entry-complete-message')).toContainText(
-      orderMessages.created,
+    await expect(page.getByTestId('order-entry-complete-message')).toHaveText(
+      '受付状況：Dream登録待ち ／ 受付結果と注文IDを確認し、以後の状況は注文照会でご確認ください。',
     )
     await expect(page.getByTestId('order-entry-order-id')).toHaveText(`注文ID #${FIRST_ORDER_ID}`)
   })
@@ -592,7 +630,7 @@ test.describe('新規注文 確定と次の注文', () => {
     await expect(page.getByTestId('order-entry-account')).toHaveValue(String(PLAIN.口座番号))
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue('')
     await expect(page.getByTestId('order-entry-quantity')).toHaveValue('')
-    // 受注者は社員コードの初期値に戻る（MSW の操作者コードは 5 文字以上なので空）
+    // 受注者は受注者コードの初期値に戻る（MSW の既定の操作者は未設定なので空）
     await expect(page.getByTestId('order-entry-order-person')).toHaveValue('')
 
     await page.getByTestId('order-entry-ticker').fill(AAPL.Ticker)

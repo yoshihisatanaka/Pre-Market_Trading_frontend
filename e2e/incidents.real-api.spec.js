@@ -115,15 +115,21 @@ async function getHistoryPage(offset) {
 
 /**
  * 履歴 1 件が画面に出るはずの 4 列（変更日時 / 制御内容 / 停止理由 / 更新者）。
- * 変更日時は年なしの書式。更新者は 操作者（コード）だけ（氏名 操作者名 は依頼中 #48 で、実 API はまだ返さない）
+ * 変更日時は年なしの書式。更新者は 操作者（コード）の下に 操作者名（氏名。#48 で 2026-10-08 に入った）。
+ * コードと氏名は別の要素なので、間の空白の有無は問わない
  */
 function historyCellsOf(item) {
+  const operator = [item['操作者'], item['操作者名']].filter(Boolean).map(escapeRegExp)
   return [
     formatMonthDayTime(item['操作日時']),
     `${item['停止対象名']}：${item['操作区分名']}`,
     item['変更後データ']?.['停止理由'] ?? '—',
-    item['操作者'],
+    new RegExp(`^${operator.join('\\s*')}$`),
   ]
+}
+
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function paginationOf(page) {

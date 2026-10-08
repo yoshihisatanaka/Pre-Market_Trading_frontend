@@ -6,7 +6,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { codeEntries } from '@/mocks/fixtures/codes'
-import { canceledCustomers, customers } from '@/mocks/fixtures/customers'
+import { canceledCustomers, customers, reactivationWarning } from '@/mocks/fixtures/customers'
 import { useCodesStore } from '@/stores/codes'
 import { CUSTOMERS_PAGE_SIZE } from '@/stores/customers'
 import { CUSTOMER_FIELDS, emptyCustomerForm } from '@/utils/customerFields'
@@ -633,7 +633,7 @@ describe('CustomerListView', () => {
 
     expect(exists(wrapper, 'customers-add-form')).toBe(true)
     expect(messagesOf(wrapper, 'customers-add-validation-warning')).toEqual([
-      `口座番号 ${CANCELED_NUMBER} は削除済みです。登録すると再有効化されます`,
+      reactivationWarning(CANCELED_NUMBER),
     ])
     expect(exists(wrapper, 'customers-add-validation-error')).toBe(false)
     // 警告の段階ではまだ登録していない
@@ -731,7 +731,7 @@ describe('CustomerListView', () => {
     await openAddModal(wrapper)
     await fill(addInput, wrapper, { ...NEW_CUSTOMER, accountNumber: CANCELED_NUMBER })
     await submit(wrapper, 'add')
-    const warning = [`口座番号 ${CANCELED_NUMBER} は削除済みです。登録すると再有効化されます`]
+    const warning = [reactivationWarning(CANCELED_NUMBER)]
     expect(messagesOf(wrapper, 'customers-add-validation-warning')).toEqual(warning)
 
     // 警告を見たあとで入力を変えて押す（警告の確認を経ずに別の内容を登録させない）

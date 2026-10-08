@@ -32,9 +32,9 @@ export const ORDER_TYPE_OPTIONS = [
 ]
 
 /**
- * 市場区分 → 発注範囲（ExecutionScopeEnum）。
+ * 市場区分 → 発注範囲（ExecutionScopeEnum）。enum の 4 値すべての表示名（確認画面の読み上げ用）。
  * 並びは画面モックのとおり（始まる時間帯の順）で、**コードの順とは違う**（04 が 03 より前に来る）。
- * 「＋」は全角（モックの表記）。
+ * 「＋」は全角（モックの表記）。入力欄に出すのは ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS。
  */
 export const EXECUTION_SCOPE_OPTIONS = [
   // '01'（プレ）と '05'（レギュラー＋アフター）は 2026-10-02 の取り込みで enum から外れた
@@ -43,6 +43,24 @@ export const EXECUTION_SCOPE_OPTIONS = [
   { value: '03', label: 'レギュラー' },
   { value: '06', label: 'アフター' },
 ]
+
+/**
+ * フェーズ 1 で受け付ける市場区分。アフターを含む 04 / 06 は PH1 では受け付けない（業務回答 2026-10-08。
+ * サーバの事前検証も弾く）。どれを出すかはフロント判断に任されたので、**選べない値は出さない**
+ * （docs/api/requests.md #50 ②）。フェーズ 2 でアフターに対応したらここに足す。
+ */
+const PHASE1_EXECUTION_SCOPES = ['02', '03']
+
+/** 新規注文の入力欄に出す市場区分（並びは EXECUTION_SCOPE_OPTIONS のまま） */
+export const ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS = EXECUTION_SCOPE_OPTIONS.filter((option) =>
+  PHASE1_EXECUTION_SCOPES.includes(option.value),
+)
+
+/**
+ * 指値しか受け付けない市場区分。02（プレ＋レギュラー）の成行はサーバの事前検証でも弾かれるので、
+ * 画面で先に止める（docs/api/requests.md #50 ④。業務合意は照会中）
+ */
+export const LIMIT_ONLY_EXECUTION_SCOPES = ['02']
 
 /** 決済通貨区分（SettlementCurrencyEnum） */
 export const SETTLEMENT_CURRENCY_OPTIONS = [

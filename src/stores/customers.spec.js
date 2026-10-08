@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
-import { canceledCustomers, customers } from '@/mocks/fixtures/customers'
+import { canceledCustomers, customers, reactivationWarning } from '@/mocks/fixtures/customers'
 import { toCustomerForm } from '@/utils/customerFields'
 import { CUSTOMERS_PAGE_SIZE, useCustomersStore } from './customers'
 
@@ -280,9 +280,7 @@ describe('stores/customers', () => {
     const first = await store.create(input)
 
     expect(first).toBeNull()
-    expect(store.validationWarnings).toEqual([
-      `口座番号 ${CANCELED_NUMBER} は削除済みです。登録すると再有効化されます`,
-    ])
+    expect(store.validationWarnings).toEqual([reactivationWarning(CANCELED_NUMBER)])
     expect(store.validationErrors).toEqual([])
     expect(store.total).toBe(TOTAL)
 

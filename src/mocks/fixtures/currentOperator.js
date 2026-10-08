@@ -14,6 +14,10 @@
  * admin / manager01 / sales01 / ifa01 にするとその操作者が返る（反映には frontend の再起動が要る）。
  * ログイン機能が入るまでのつなぎ。
  *
+ * 受注者コード（新規注文の受注者の初期値。docs/api/requests.md #51）は、バックエンドのシナリオ操作者に
+ * 設定された値（ifa01=9101 / sales01=9102 / manager01=9103）に揃える。開発用の admin は設定が無い（null）ので、
+ * 既定の新規注文は受注者が空欄で始まる。
+ *
  * ブラウザ(MSW worker)・単体テスト・E2E で共用する。
  */
 
@@ -24,6 +28,7 @@ export const supervisorOperator = {
   ロールコード: 'supervisor',
   ロール名: '管理責任者',
   部店コード: null,
+  受注者コード: null,
   登録済: true,
   権限: { order: true, master: true, operation: true, branch_all: true, depositary: true },
   認可強制: false,
@@ -39,6 +44,7 @@ export const salesOperator = {
   ロールコード: 'sales',
   ロール名: '営業員',
   部店コード: '123',
+  受注者コード: '9102',
   登録済: true,
   権限: { order: true, master: false, operation: false, branch_all: true, depositary: false },
   認可強制: false,
@@ -54,6 +60,7 @@ export const noOperationOperator = {
   ロールコード: 'ifa',
   ロール名: 'IFA',
   部店コード: '123',
+  受注者コード: '9101',
   登録済: true,
   権限: { order: false, master: false, operation: false, branch_all: false, depositary: false },
   認可強制: false,
@@ -66,6 +73,7 @@ export const viewerOperator = {
   ロールコード: 'manager',
   ロール名: '管理者',
   部店コード: '001',
+  受注者コード: '9103',
   登録済: true,
   権限: { order: true, master: true, operation: true, branch_all: true, depositary: true },
   認可強制: false,

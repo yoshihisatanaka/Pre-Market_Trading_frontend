@@ -6,7 +6,10 @@ import {
   FIRST_ORDER_ID,
   FLOCON_FX_RATE,
   LARGE_TRADE_THRESHOLD_JPY,
+  acceptedStatus,
+  acceptedVwapStatus,
   orderMessages,
+  rejectedStatus,
 } from '../fixtures/orderEntry'
 import { requestValidationError } from './_shared'
 
@@ -130,6 +133,7 @@ export const orderEntryHandlers = [
         message: orderMessages.rejected,
         errors,
         warnings,
+        ...rejectedStatus,
       })
     }
     // 警告は強制区分を付けたときだけ突破できる
@@ -140,6 +144,7 @@ export const orderEntryHandlers = [
         message: orderMessages.unacknowledgedWarnings,
         errors: [],
         warnings,
+        ...rejectedStatus,
       })
     }
 
@@ -151,6 +156,8 @@ export const orderEntryHandlers = [
       message: orderMessages.created,
       errors: [],
       warnings,
+      // 受付直後の状況。VWAP は Dream 登録の対象外（実 API と同じ。自己取引はこの画面に無い）
+      ...(body.VWAP区分 === 1 ? acceptedVwapStatus : acceptedStatus),
     })
   }),
 ]

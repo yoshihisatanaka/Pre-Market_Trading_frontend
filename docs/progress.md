@@ -130,7 +130,7 @@
 |---|---|---|---|---|---|---|---|---|
 | お知らせ管理 | お知らせの更新（表示切替・本文） | ✅ | ✅ | ✅ | ✅ | 2026-09-30 | 2026-09-24 | `AN-01〜13/16〜18` / `ANA` / `ANS` / `ANV` / `BNA` / `BTX`。実 API スモーク `ANR-01/02` `実装済` |
 | お知らせ管理 | 更新履歴 | ✅ | ✅ | ✅ | 🟡 | - | 2026-09-24 | `AN-04/05/14/15` / `ANS` / `ANV`。操作区分名のバッジ・`limit` / `offset` のページング |
-| 滞留注文抽出 | 検索・一覧 | ✅ | ✅ | ✅ | ❌ | - | 2026-09-28 | `/operations/stalled-orders` / `StalledOrderListView.vue`。`SO-01〜10/13/14` / `SOA` `SOS` `SOV` `SOC` `SOT`。一覧は requests #1① が 09-30 に「`GET /orders` を拡張」で決着済み（`?status=101,003`）。**`src/api/stalledOrders.js` がまだ創作パスを叩いている**（`KNOWN_GAPS`）ので、`GET /orders` への書き直しが実 API の前提。`確認状況` だけ #1② 待ち |
+| 滞留注文抽出 | 検索・一覧 | ✅ | ✅ | ✅ | ❌ | - | 2026-09-28 | `/operations/stalled-orders` / `StalledOrderListView.vue`。`SO-01〜10/13/14` / `SOA` `SOS` `SOV` `SOC` `SOT`。一覧は requests #1① が 09-30 に「`GET /orders` を拡張」で決着済み（`?status=101,003`）。**10-08 に `src/api/stalledOrders.js` を `GET /orders` の 2 回呼び（`101,103` / `003`）へ書き直し**、MSW の専用ハンドラと `KNOWN_GAPS` の行を外した（残るのは実 API のシナリオ）。`確認状況` だけ #1② 待ち |
 | 滞留注文抽出 | 滞留注文の CSV 出力 | ✅ | ✅ | ✅ | — | 2026-09-28 | 2026-10-08 | `5205251`。フロントで組み立て（`utils/stalledOrderCsv.js`）。`SO-17〜19` / `SOV` / CSV の単体。**10-08 に実 API の軸を対象外にした**（フロントで組み立て・API を呼ばない） |
 | 滞留注文抽出 | TWS投入CSV サンプルのダウンロード | ✅ | ✅ | ✅ | — | 2026-09-28 | 2026-10-08 | `5205251`。`SO-15` / CSV の単体。**10-08 に実 API の軸を対象外にした**（フロントで組み立て・API を呼ばない） |
 | 滞留注文抽出 | コンファメーションCSV の取込 | ✅ | ✅ | ✅ | ❌ | - | 2026-09-28 | `1830b3d`。10-07 の取り込みで `POST /operations/stalled-orders/confirmation-import` が提案どおり仕様に入った（`01b5d04`・`KNOWN_GAPS` から外した）。実 API のシナリオは未作成。`SO-20〜24` / `SOA` / `SOS` / `SOV` |
@@ -252,7 +252,7 @@
 | 残高マスタ / 一覧・新規保有の実 API 残り | 1.0 | 実API追加 | 実測 | A | `/masters/balance-adjustments` 配下 | - |
 | お知らせ管理 / 更新履歴の実 API E2E（`ANR-05`） | 0.5 | 実API追加 | 実測 | A | `/operations/announcements/history` | - |
 | 滞留注文抽出 / コンファメーションCSV 取込の実 API E2E | 1.0 | 実API追加 | 実測 | B | `/operations/stalled-orders/confirmation-import` | - （10-07 に仕様入り） |
-| 滞留注文抽出 / 検索・一覧の実 API E2E（CSV 出力・サンプル 2 種は 10-08 に対象外） | 1.0 | 実API追加 | 実測 | B | `GET /orders`（`status` の複数指定） | - （先に `src/api/stalledOrders.js` を `GET /orders` へ書き直す。`確認状況` は #1② 待ち） |
+| 滞留注文抽出 / 検索・一覧の実 API E2E（CSV 出力・サンプル 2 種は 10-08 に対象外） | 1.0 | 実API追加 | 実測 | B | `GET /orders`（`status` の複数指定） | - （api 層の `GET /orders` への書き直しは 10-08 に済んだ。`確認状況` は #1② 待ち） |
 
 ### 2 通りの割り方
 

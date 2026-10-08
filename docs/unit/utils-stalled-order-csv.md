@@ -7,14 +7,15 @@
 
 別システム発注 CSV・そのサンプル・コンファメーション CSV のサンプルを、サーバを通さずに組み立てる。
 列・値・ファイル名は公開モックの実物（2026-09-28 採取）。入力は `StalledOrder[]`
-（形は `src/api/stalledOrders.js` の JSDoc）で、テストではフィクスチャの値から組み立てる。
+（形は `src/api/stalledOrders.js` の JSDoc）で、テストでは注文照会と共用のフィクスチャ
+（`src/mocks/fixtures/orderInquiry.js` の `orderInquiryRows`）のうち、注文エラーに出る #29・#40 の値から組み立てる。
 BOM・CRLF・クォートは [utils-csv.md](utils-csv.md) の責務なので、ここでは行の中身だけを見る。
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
 | SOU-01 | 注文 1 件 | `buildTwsOrderCsv` を呼ぶ | 1 行目が `order_id,account_number,symbol,action,quantity,order_type,limit_price,time_in_force,market_category` | 実装済 |
-| SOU-02 | fixture の #27（成行・買） | `buildTwsOrderCsv` を呼ぶ | データ行が `27,200001,MSFT,BUY,35,MKT,,DAY,レギュラー`（成行は limit_price が空欄） | 実装済 |
-| SOU-03 | fixture の #26（指値 228.5・売） | `buildTwsOrderCsv` を呼ぶ | データ行が `26,300001,AAPL,SELL,20,LMT,228.5,DAY,プレ`（指値は桁を整えない） | 実装済 |
+| SOU-02 | fixture の #29（成行・買） | `buildTwsOrderCsv` を呼ぶ | データ行が `29,200001,MSFT,BUY,35,MKT,,DAY,レギュラー`（成行は limit_price が空欄） | 実装済 |
+| SOU-03 | fixture の #40（指値 214.25・売） | `buildTwsOrderCsv` を呼ぶ | データ行が `40,300003,AMZN,SELL,40,LMT,214.25,DAY,プレ＋レギュラー`（指値は桁を整えない） | 実装済 |
 | SOU-04 | `side` が未知（空） | `buildTwsOrderCsv` を呼ぶ | action が空欄になる（推測で埋めない） | 実装済 |
 | SOU-05 | `orderType` が未知 | `buildTwsOrderCsv` を呼ぶ | order_type が空欄になる（推測で埋めない） | 実装済 |
 | SOU-06 | 0 件 | `buildTwsOrderCsv` を呼ぶ | ヘッダの 1 行だけになる | 実装済 |

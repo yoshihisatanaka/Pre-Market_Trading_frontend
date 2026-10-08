@@ -564,6 +564,49 @@ test.describe('残高マスタ（実 API 接続）', () => {
     await expect(columnOf(page, '部店')).toHaveText(Array(shown).fill(branchCode))
   })
 
+  test('[BAR-07] 銘柄名で絞り込むと symbol_name_ja が送られ、銘柄名（日本語）に当たる行だけが返る', async ({
+    page,
+    playwright,
+  }) => {
+    await openList(page)
+    const total = await countOf(page)
+    test.skip(total === 0, '残高が 0 件なので絞り込みを確かめられない')
+
+    /*
+     * 銘柄名列は API の 銘柄名（m_銘柄情報 の日本語名）をそのまま出す（BalanceAdjustmentListView.vue の
+     * #cell-symbolName。英字名は出さない）。銘柄マスタに無い銘柄の行は空（—）なので、名前のある行を選ぶ
+     */
+    const names = (await columnOf(page, '銘柄名').allTextContents()).map((text) => text.trim())
+    const name = names.find((text) => text !== '' && text !== '—') ?? ''
+    test.skip(name === '', '1 ページ目に銘柄名のある行が無い')
+
+    // 画面の URL は symbol_name、実 API へは symbol_name_ja で送る（src/api/balanceAdjustments.js の冒頭コメント 1 番）
+    const request = waitForListRequest(page, 'symbol_name_ja', name)
+    await page.getByTestId('balance-adjustments-symbol-name').fill(name)
+    await page.getByTestId('balance-adjustments-search-submit').click()
+    const sent = await request
+    console.log(`[BAR-07] GET ${new URL(sent.url()).pathname}${new URL(sent.url()).search}`)
+
+    await expect(page).toHaveURL(/symbol_name=/)
+    const filtered = await countOf(page)
+    expect(filtered).toBeGreaterThan(0)
+    expect(filtered).toBeLessThanOrEqual(total)
+    await expect(rowsOf(page)).toHaveCount(Math.min(filtered, PAGE_SIZE))
+
+    // 件数表示は API の total と一致し、返った行はすべて銘柄名（日本語）に条件を含む
+    const api = await apiContext(playwright)
+    const matched = await fetchAll(api, API_PATH, LIST_KEY, { symbol_name_ja: name })
+    await api.dispose()
+    console.log(`[BAR-07] symbol_name_ja=${name}: 全件 ${total} → ${matched.length} 件`)
+    expect(matched).toHaveLength(filtered)
+    for (const row of matched) {
+      expect(
+        row.銘柄名 ?? '',
+        `symbol_name_ja=${name} の結果に当たらない行がある: ${row.口座番号}/${row.銘柄コード}`,
+      ).toContain(name)
+    }
+  })
+
   test('[BAR-08] 「次のページ」で 2 ページ目が実データで出る', async ({ page }) => {
     await openList(page)
     const total = await countOf(page)

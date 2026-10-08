@@ -20253,6 +20253,12 @@
             "type": "string",
             "title": "操作者"
           },
+          "操作者名": {
+            "type": "string",
+            "title": "操作者名",
+            "description": "操作者の氏名（m_操作者 の氏名。マスタに無い操作者は「システム」）",
+            "default": "システム"
+          },
           "変更前データ": {
             "anyOf": [
               {
@@ -23655,6 +23661,20 @@
             "title": "為替レート",
             "description": "為替レート（手入力）。指定時はスプレッド 0。未指定時は m_為替 の直近有効レート＋仮計算マスタのスプレッド"
           },
+          "約定日": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 99991231.0,
+                "minimum": 19000101.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "約定日",
+            "description": "約定日（YYYYMMDD）。未指定は当日。成長投資枠（特定預り区分 6）の NISA 取引年（受渡年。年末は受渡日が翌年になると翌年扱い）の基準にのみ使う。為替レートには影響しない"
+          },
           "現地手数料1": {
             "anyOf": [
               {
@@ -25331,6 +25351,18 @@
               }
             ],
             "title": "部店コード"
+          },
+          "受注者コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注者コード",
+            "description": "注文の受注者の初期値に使う Dream 受注担当者コード（m_操作者。4 文字以内。未設定は null）"
           },
           "登録済": {
             "type": "boolean",
@@ -27435,7 +27467,7 @@
           "口座番号"
         ],
         "title": "CustomerValidateRequest",
-        "description": "口座情報事前検証APIの入力モデル（口座番号のみ必須、他項目は任意）\n\n新規検証（is_update=False）では登録 API（CustomerRequest）の必須項目・業務ルール\n（コンプラランク許容値 A〜J/X/Y/Z、個人の氏名空白規則、法人の固定値 など）で検証される。\n未送信の金額項目（円貨預り金・外貨預り金・総預り資産・NISA買付可能額）は 0 として扱う。"
+        "description": "口座情報事前検証APIの入力モデル（口座番号のみ必須、他項目は任意）\n\n新規検証（is_update=False）では登録 API（CustomerRequest）の必須項目・業務ルール\n（コンプラランク許容値 A〜J/X/Y/Z、個人の氏名空白規則、法人の固定値 など）で検証される。\n未送信の金額項目（円貨預り金・外貨預り金・総預り資産・NISA買付可能額）は 0 として扱う。\n新規検証で取消済み（論理削除済み）の口座番号を指定した場合はエラーにせず、\nwarnings に「再度有効になります」の警告（口座番号つき）を返す。登録 API はそのまま再有効化する。"
       },
       "CustomerValidationResponse": {
         "properties": {
@@ -33164,6 +33196,18 @@
             ],
             "title": "部店コード"
           },
+          "受注者コード": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注者コード",
+            "description": "注文の受注者に入れる Dream 受注担当者コード（4 文字以内。未設定は null）"
+          },
           "有効フラグ": {
             "type": "integer",
             "title": "有効フラグ"
@@ -33262,6 +33306,19 @@
               }
             ],
             "title": "部店コード"
+          },
+          "受注者コード": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注者コード",
+            "description": "Dream 受注担当者コード（4 文字以内）。未指定は null で上書き"
           },
           "有効フラグ": {
             "type": "integer",
@@ -33431,6 +33488,54 @@
             "type": "array",
             "title": "Warnings",
             "default": []
+          },
+          "処理状況": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "処理状況",
+            "description": "受付直後の処理状況コード（通常 000: 未発注）"
+          },
+          "処理状況名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "処理状況名",
+            "description": "処理状況の表示名"
+          },
+          "Dream登録状況": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream登録状況",
+            "description": "受付直後の Dream 登録状況コード（0: 未登録＝Dream登録待ち / 8: 登録対象外＝VWAP・自己取引）"
+          },
+          "Dream登録状況名": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream登録状況名",
+            "description": "Dream登録状況の表示名"
           }
         },
         "type": "object",
@@ -36844,6 +36949,12 @@
             "title": "操作者",
             "description": "操作者"
           },
+          "操作者名": {
+            "type": "string",
+            "title": "操作者名",
+            "description": "操作者の氏名（m_操作者 の氏名。マスタに無い操作者は「システム」）",
+            "default": "システム"
+          },
           "変更前データ": {
             "anyOf": [
               {
@@ -38287,7 +38398,8 @@
                 "type": "null"
               }
             ],
-            "title": "Estimated Cost"
+            "title": "Estimated Cost",
+            "description": "概算金額（USD）。単価（指値: 指値単価 / 成行: 前日終値）× 数量。手数料・税は含まない。買いのみ設定（売りは null）。手数料込みの概算は calculation_estimate を参照"
           },
           "available_purchasing_power": {
             "anyOf": [

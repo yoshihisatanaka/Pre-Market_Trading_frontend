@@ -28,7 +28,11 @@ import {
  * 発注権限（GET /auth/me の order）は .env の VITE_USER_CODE で決まりテストからは変えられないので、
  * 無ければ（行の操作が「閲覧のみ」なら）スキップする。保有 0 件のときも「買い」「売り」はスキップ。
  *
- * 顧客詳細は読むだけの画面なので、このファイルは実 DB に書き込まない（GET だけ）。
+ * CDTR-08 以降は仮計算タブ（/customers/<id>/calculations）。POST /calculations を送るが、
+ * openapi.json の説明は「DB更新なし」。金額は期待値に書かず、画面が送った本文を同じまま直接 POST し直した
+ * 応答と、画面の表示を突き合わせる。銘柄は GET /masters/symbols の先頭を使う（0 件ならスキップ）。
+ *
+ * 顧客詳細は読むだけの画面なので、このファイルは実 DB に書き込まない。
  */
 
 const SEARCH_PATH = '/customers/search'
@@ -223,6 +227,125 @@ async function expectTradeToggles(page, query, sideLabel) {
   }
 }
 
+/* ---------- 仮計算タブ（CDTR-08 以降） ---------- */
+
+// 実 API のパス（openapi.json）。POST /calculations は「DB更新なし」
+const CALCULATIONS_API_PATH = '/api/calculations'
+const SYMBOLS_API_PATH = '/api/masters/symbols'
+// 銘柄一覧の応答の配列キー（src/api/symbols.js の fetchSymbols）
+const SYMBOLS_LIST_KEY = 'stocks'
+
+// 送出の確認に使う入力。結果の値は期待値に書かず、同じ本文を直接 POST し直した応答と突き合わせる
+const CALC_QUANTITY = '1'
+const CALC_UNIT_PRICE = '100'
+const CALC_FX_RATE = '150'
+const CALC_LOCAL_FEE_1 = '1.23'
+
+/** 入力不備の文言（src/utils/calculationForm.js の MESSAGES と numberFieldError の再掲） */
+const CALC_MESSAGES = {
+  symbolRequired: '銘柄コード／ティッカーを入力してください。',
+  quantity: '数量は9桁以内の1株以上で入力してください。',
+  unitPrice: '単価を入力してください。',
+}
+
+/** 金額の表示（src/utils/format.js の formatJpyUnit の再掲。Playwright から import できない） */
+const jpy = (value) => `${new Intl.NumberFormat('ja-JP').format(value)} 円`
+
+/** 為替の表示（src/utils/calculationForm.js の formatFxRate の再掲） */
+const fxRateText = (value) =>
+  `${new Intl.NumberFormat('ja-JP', { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(value)} 円/USD`
+
+/** POST /calculations の応答か */
+function isCalculationResponse(res) {
+  return (
+    res.request().method() === 'POST' && new URL(res.url()).pathname === CALCULATIONS_API_PATH
+  )
+}
+
+/** 顧客詳細（先頭の顧客）から仮計算タブを開く。顧客カードの値を返す */
+async function openCalculationTab(page) {
+  const { customerId, holdingsRequest } = await openFirstCustomer(page)
+  await holdingsRequest
+  const customer = await readCustomerCard(page)
+
+  await page.getByTestId('customer-detail-tab-calculations').click()
+  await expect(page).toHaveURL(new RegExp(`/customers/${customerId}/calculations$`))
+  await expect(page.getByTestId('customer-calc-form')).toBeVisible()
+  return { customerId, ...customer }
+}
+
+/** 銘柄マスタの先頭の銘柄コード。0 件ならスキップ */
+async function firstSymbolCode(playwright) {
+  const api = await apiContext(playwright)
+  const res = await api.get(SYMBOLS_API_PATH, { params: { limit: 1 } })
+  expect(res.ok(), `${SYMBOLS_API_PATH} が ${res.status()} を返した`).toBe(true)
+  const rows = (await res.json())[SYMBOLS_LIST_KEY] ?? []
+  await api.dispose()
+  test.skip(rows.length === 0, '銘柄マスタが 0 件なので仮計算する銘柄が無い')
+  return String(rows[0].銘柄コード)
+}
+
+/** 入力欄を埋める。渡さなかった項目は今の値のまま。side は画面の表示名（「売り」など） */
+async function fillCalculation(page, { symbol, side, quantity, unitPrice, fxRate, localFee1 }) {
+  if (symbol !== undefined) await page.getByTestId('customer-calc-symbol').fill(symbol)
+  if (side !== undefined) await toggleButton(page, 'customer-calc-side', side).click()
+  if (quantity !== undefined) await page.getByTestId('customer-calc-quantity').fill(quantity)
+  if (unitPrice !== undefined) await page.getByTestId('customer-calc-unit-price').fill(unitPrice)
+  if (fxRate !== undefined) await page.getByTestId('customer-calc-fx-rate').fill(fxRate)
+  if (localFee1 !== undefined) await page.getByTestId('customer-calc-local-fee-1').fill(localFee1)
+}
+
+/**
+ * 「仮計算を実行」を押し、画面が送った本文・画面が受けた応答・同じ本文を直接 POST し直した応答を返す。
+ * 応答は押す前から待ち受ける。
+ */
+async function submitCalculation(page, playwright) {
+  const responsePromise = page.waitForResponse(isCalculationResponse)
+  await page.getByTestId('customer-calc-submit').click()
+  const response = await responsePromise
+  const body = response.request().postDataJSON()
+
+  const api = await apiContext(playwright)
+  const direct = await api.post(CALCULATIONS_API_PATH, { data: body })
+  const result = {
+    body,
+    status: response.status(),
+    json: await response.json(),
+    directStatus: direct.status(),
+    directJson: await direct.json(),
+  }
+  await api.dispose()
+  return result
+}
+
+/** 仮計算マスタ（db/migrate_calculation_setting.py）が未投入の DB で POST /calculations が返す 400 の理由 */
+const CALC_MASTER_MISSING = /仮計算マスタが初期化されていません/
+
+/**
+ * 応答が 200 で、直接 POST し直した応答と計算結果が一致する。
+ * 仮計算マスタが未投入の DB では計算できないのでスキップする（フロントの不具合ではない。シナリオでは保留）
+ */
+function expectSameCalculation(result) {
+  test.skip(
+    result.status === 400 && CALC_MASTER_MISSING.test(String(result.json?.detail ?? '')),
+    '仮計算マスタが未投入（バックエンドの db/migrate_calculation_setting.py が未実行）',
+  )
+  expect(result.status, `POST /calculations が ${result.status}: ${JSON.stringify(result.json)}`).toBe(
+    200,
+  )
+  expect(result.directStatus).toBe(200)
+  expect(result.json.外貨).toEqual(result.directJson.外貨)
+  expect(result.json.円貨).toEqual(result.directJson.円貨)
+}
+
+/** 明細行の見出し（dt）。値の dd に testid があるので、その行の dt を引く */
+function calcRowLabel(page, key) {
+  // 行の器（div）は testid を持たない（src/views/CustomerCalculationView.vue）。dd の testid から辿る
+  return page
+    .getByTestId('customer-calc-result-rows')
+    .locator(`div:has(> dd[data-testid="customer-calc-row-${key}"]) > dt`)
+}
+
 test.describe('顧客詳細（実 API 接続）', () => {
   skipUnlessRealApi(test)
 
@@ -390,5 +513,213 @@ test.describe('顧客詳細（実 API 接続）', () => {
 
     expect(query).toEqual(customer.query)
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue('')
+  })
+
+  test('[CDTR-08] タブの「仮計算」で入力フォームと未実行の結果カードが出て、開いただけでは計算しない', async ({
+    page,
+  }) => {
+    const calculationRequests = []
+    page.on('request', (req) => {
+      if (req.method() === 'POST' && new URL(req.url()).pathname === CALCULATIONS_API_PATH) {
+        calculationRequests.push(req)
+      }
+    })
+
+    const customer = await openCalculationTab(page)
+
+    await expect(page.getByTestId('customer-info-account')).toHaveText(customer.accountNumber)
+    await expect(page.getByTestId('customer-detail-tab-calculations')).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    for (const testId of [
+      'customer-calc-symbol',
+      'customer-calc-side',
+      'customer-calc-deposit',
+      'customer-calc-quantity',
+      'customer-calc-unit-price',
+      'customer-calc-submit',
+    ]) {
+      await expect(page.getByTestId(testId)).toBeVisible()
+    }
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText('買付概算 ／ 未実行')
+    await expect(page.getByTestId('customer-calc-total-label')).toHaveText('概算必要金額')
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('—')
+    await expect(page.getByTestId('customer-calc-error')).toHaveCount(0)
+    await expect(page.getByTestId('customer-calc-warnings')).toHaveCount(0)
+    expect(calculationRequests).toHaveLength(0)
+  })
+
+  test('[CDTR-09] 有効な入力で POST /calculations が送られ、応答の金額が結果のカードに出る', async ({
+    page,
+    playwright,
+  }) => {
+    const symbol = await firstSymbolCode(playwright)
+    const customer = await openCalculationTab(page)
+
+    await fillCalculation(page, { symbol, quantity: CALC_QUANTITY, unitPrice: CALC_UNIT_PRICE })
+    const result = await submitCalculation(page, playwright)
+
+    // 本文（src/api/calculations.js の toCalculationRequest）。空欄の任意項目は null（サーバが補完）
+    expect(result.body).toMatchObject({
+      口座番号: Number(customer.accountNumber),
+      銘柄コード: symbol.toUpperCase(),
+      売買区分: '3',
+      数量: Number(CALC_QUANTITY),
+      単価: Number(CALC_UNIT_PRICE),
+      特定預り区分: '1',
+      為替レート: null,
+      現地手数料1: null,
+      現地手数料2: null,
+      手数料パターン: null,
+    })
+    expectSameCalculation(result)
+
+    const shown = result.json.Ticker || result.json.銘柄コード
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText(
+      `買付概算 ／ ${shown} ${CALC_QUANTITY}株`,
+    )
+    await expect(page.getByTestId('customer-calc-total-label')).toHaveText('概算必要金額')
+    await expect(page.getByTestId('customer-calc-total')).toHaveText(
+      jpy(result.json.円貨.最終精算金額),
+    )
+    await expect(page.getByTestId('customer-calc-error')).toHaveCount(0)
+  })
+
+  test('[CDTR-10] 空のまま実行すると入力不備が出て、POST /calculations は送られない', async ({
+    page,
+  }) => {
+    const calculationRequests = []
+    page.on('request', (req) => {
+      if (req.method() === 'POST' && new URL(req.url()).pathname === CALCULATIONS_API_PATH) {
+        calculationRequests.push(req)
+      }
+    })
+    await openCalculationTab(page)
+
+    await page.getByTestId('customer-calc-submit').click()
+
+    // 説明はヒントと不備の連結（銘柄欄は aria-describedby にヒントも持つ）なので、不備の文を含むかで見る
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveAccessibleDescription(
+      new RegExp(CALC_MESSAGES.symbolRequired),
+    )
+    await expect(page.getByTestId('customer-calc-quantity')).toHaveAccessibleDescription(
+      new RegExp(CALC_MESSAGES.quantity),
+    )
+    await expect(page.getByTestId('customer-calc-unit-price')).toHaveAccessibleDescription(
+      new RegExp(CALC_MESSAGES.unitPrice),
+    )
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText('買付概算 ／ 未実行')
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('—')
+    expect(calculationRequests).toHaveLength(0)
+  })
+
+  test('[CDTR-11] 銘柄マスタに無い銘柄は API の 400 の理由を帯に出し、金額は「—」のまま', async ({
+    page,
+    playwright,
+  }) => {
+    // 実行のたびに変わる、銘柄マスタに無いはずの値（銘柄コードは 14 文字以内）
+    const missingSymbol = `ZQ${Date.now().toString(36).toUpperCase()}`.slice(0, 14)
+    await openCalculationTab(page)
+
+    await fillCalculation(page, {
+      symbol: missingSymbol,
+      quantity: CALC_QUANTITY,
+      unitPrice: CALC_UNIT_PRICE,
+    })
+    const result = await submitCalculation(page, playwright)
+
+    expect(result.body.銘柄コード).toBe(missingSymbol)
+    expect(result.status, `銘柄 ${missingSymbol} で 400 にならない`).toBe(400)
+    expect(result.directStatus).toBe(400)
+    const detail = result.directJson.detail
+    expect(typeof detail, 'ErrorResponse の detail が文字列でない').toBe('string')
+    // 仮計算マスタが未初期化の DB でも 400 が返る。それは「銘柄が無い」の 400 ではないので通さない
+    expect(detail, '400 の理由が銘柄ではなく仮計算マスタの未初期化').not.toMatch(
+      CALC_MASTER_MISSING,
+    )
+
+    await expect(page.getByTestId('customer-calc-error')).toContainText(detail)
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText(
+      '買付概算 ／ 計算できませんでした',
+    )
+    await expect(page.getByTestId('customer-calc-total')).toHaveText('—')
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(missingSymbol)
+  })
+
+  test('[CDTR-12] 売りの仮計算は受取金額を出し、warnings と概算損益は応答のとおりに出し分ける', async ({
+    page,
+    playwright,
+  }) => {
+    const symbol = await firstSymbolCode(playwright)
+    await openCalculationTab(page)
+
+    await fillCalculation(page, {
+      symbol,
+      side: '売り',
+      quantity: CALC_QUANTITY,
+      unitPrice: CALC_UNIT_PRICE,
+    })
+    const result = await submitCalculation(page, playwright)
+
+    expect(result.body).toMatchObject({ 売買区分: '1', 特定預り区分: '1' })
+    expectSameCalculation(result)
+
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText(/^売却概算 ／ /)
+    await expect(page.getByTestId('customer-calc-total-label')).toHaveText('概算受取金額')
+    await expect(page.getByTestId('customer-calc-total')).toHaveText(
+      jpy(result.json.円貨.最終精算金額),
+    )
+
+    const warnings = result.json.warnings ?? []
+    if (warnings.length > 0) {
+      await expect(
+        page.getByTestId('customer-calc-warnings').getByRole('listitem'),
+      ).toHaveText(warnings)
+    } else {
+      await expect(page.getByTestId('customer-calc-warnings')).toHaveCount(0)
+    }
+
+    const profitLoss = page.getByTestId('customer-calc-profit-loss')
+    if (typeof result.json.円貨.概算譲渡損益 === 'number') {
+      await expect(profitLoss).toBeVisible()
+    } else {
+      await expect(profitLoss).toHaveCount(0)
+    }
+    await expect(page.getByTestId('customer-calc-error')).toHaveCount(0)
+  })
+
+  test('[CDTR-13] 現地手数料①が空なら自動計算、為替・現地手数料①を入れるとハンド入力が優先される', async ({
+    page,
+    playwright,
+  }) => {
+    const symbol = await firstSymbolCode(playwright)
+    await openCalculationTab(page)
+
+    // 1 回目: 現地手数料①は空（仮計算マスタの率で自動計算。画面モック 18ed9d1）
+    await fillCalculation(page, { symbol, quantity: CALC_QUANTITY, unitPrice: CALC_UNIT_PRICE })
+    const auto = await submitCalculation(page, playwright)
+    expect(auto.body.現地手数料1).toBeNull()
+    expectSameCalculation(auto)
+    expect(auto.json.手数料パラメータ?.現地手数料出所).toBe('計算')
+    await expect(calcRowLabel(page, 'localCost')).toHaveText('現地費用合計（手数料は自動）')
+
+    // 2 回目: 為替と現地手数料①をハンド入力
+    await fillCalculation(page, { fxRate: CALC_FX_RATE, localFee1: CALC_LOCAL_FEE_1 })
+    const hand = await submitCalculation(page, playwright)
+    expect(hand.body).toMatchObject({
+      為替レート: Number(CALC_FX_RATE),
+      現地手数料1: Number(CALC_LOCAL_FEE_1),
+    })
+    expectSameCalculation(hand)
+    expect(hand.json.為替レート).toBe(Number(CALC_FX_RATE))
+    expect(hand.json.為替レート取得元).toBe('ハンド入力')
+    expect(hand.json.手数料パラメータ?.現地手数料出所).toBe('ハンド入力')
+
+    await expect(calcRowLabel(page, 'localCost')).toHaveText('現地費用合計')
+    await expect(calcRowLabel(page, 'tradeFxRate')).toHaveText('適用為替（手入力）')
+    await expect(page.getByTestId('customer-calc-row-tradeFxRate')).toHaveText(
+      fxRateText(hand.json.円貨.約定為替レート),
+    )
   })
 })

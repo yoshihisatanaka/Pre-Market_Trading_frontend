@@ -298,6 +298,46 @@ async function expectOrderEntryPrefilled(page, api, expected) {
   }
 }
 
+/* ---------- 仮計算導線（HSR-12〜13）。顧客詳細の仮計算タブへ URL クエリで引き継ぐ ---------- */
+
+const CALCULATIONS_API_PATH = '/api/calculations'
+/**
+ * 仮計算で選べる預り区分（src/utils/calculationOptions.js の CALCULATION_DEPOSIT_OPTIONS の値）。
+ * 預りの 預り売買区分 と同じ向きなので読み替えない。4 NISA / 8 継続管理勘定はクエリに載らない
+ */
+const CALCULATION_DEPOSITS = ['1', '0', '6']
+// 預り区分のクエリが無いときの仮計算フォームの既定（src/utils/calculationForm.js の createCalculationForm）
+const DEFAULT_CALCULATION_DEPOSIT = '1'
+
+/** 実 API の明細 1 件から、「仮計算」が組み立てる URL クエリの期待値（src/utils/calculationQuery.js。空の値は載らない） */
+function expectedCalculationQuery(holding) {
+  const deposit = String(holding.預り売買区分 ?? '')
+  const entries = [
+    ['symbol', holding.ティッカー || holding.銘柄コード || ''],
+    ['side', 'sell'],
+    ['specific_deposit', CALCULATION_DEPOSITS.includes(deposit) ? deposit : ''],
+  ]
+  return Object.fromEntries(entries.filter(([, value]) => value))
+}
+
+/** n 行目の「仮計算」。発注権限を読み終えるまで操作列は空なので、出るまで待ってから返す */
+async function calculationButtonOf(page, index) {
+  const button = rowsOf(page).nth(index).getByTestId('holding-search-calculation')
+  await expect(button).toBeVisible()
+  return button
+}
+
+/** 仮計算の実行（POST /calculations）が飛んでいないことを見るために、送った POST を数える */
+function recordCalculationPosts(page) {
+  const posts = []
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && new URL(req.url()).pathname === CALCULATIONS_API_PATH) {
+      posts.push(req.url())
+    }
+  })
+  return posts
+}
+
 test.describe('預り検索（実 API 接続）', () => {
   skipUnlessRealApi(test)
 
@@ -553,5 +593,100 @@ test.describe('預り検索（実 API 接続）', () => {
         await expect(row.getByTestId('holding-search-sell')).toBeEnabled()
       }
     }
+  })
+
+  test('[HSR-12] 顧客マスタにある口座の明細の「仮計算」で仮計算タブへ移り、実 API のその明細の銘柄・売り・預り区分が引き継がれる', async ({
+    page,
+    playwright,
+  }) => {
+    // 保有のある口座が顧客マスタに無いことがある（docs/api/requests.md #32）ので、先に顧客マスタを読む
+    const api = await apiContext(playwright)
+    const customers = await fetchAll(api, CUSTOMERS_API_PATH, CUSTOMERS_LIST_KEY)
+    const holdings = await fetchAll(api, API_PATH, HOLDINGS_LIST_KEY)
+    await api.dispose()
+
+    const posts = recordCalculationPosts(page)
+    await openListOrSkip(page)
+
+    const [target] = await rowsInCustomerMaster(page, customers)
+    test.skip(!target, '表示中の明細に顧客マスタにある口座が無い（docs/api/requests.md #32）')
+
+    const holding = await holdingOfRow(page, holdings, target.index)
+    const expected = expectedCalculationQuery(holding)
+    // 明細に 口座ID があれば通信せずその ID へ移り、無ければ顧客マスタを引き直す（stores/holdingSearch.js の openCustomer）
+    const accountId = holding.口座ID == null ? '' : String(holding.口座ID)
+    const lookup = accountId
+      ? null
+      : waitForApiRequest(page, CUSTOMERS_API_PATH, 'account_no', target.accountNumber)
+    await (await calculationButtonOf(page, target.index)).click()
+    if (lookup) await lookup
+
+    await expect(page).toHaveURL(
+      new RegExp(`/customers/${accountId || target.customerId}/calculations(\\?|$)`),
+    )
+    expect(queryOf(page)).toEqual(expected)
+    await expect(page.getByTestId('holding-search-customer-error')).toHaveCount(0)
+
+    await expect(page.getByTestId('customer-info-bar')).toBeVisible()
+    await expect(page.getByTestId('customer-info-account')).toHaveText(target.accountNumber)
+    await expect(page.getByTestId('customer-detail-tab-calculations')).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+
+    // 仮計算フォームの初期値（src/utils/calculationQuery.js の parseCalculationQuery → calculationForm.js）
+    await expect(page.getByTestId('customer-calc-form')).toBeVisible()
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(
+      (expected.symbol ?? '').toUpperCase(),
+    )
+    await expect(
+      page.getByTestId('customer-calc-side').getByRole('button', { name: '売り', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('customer-calc-deposit')).toHaveValue(
+      expected.specific_deposit ?? DEFAULT_CALCULATION_DEPOSIT,
+    )
+    await expect(page.getByTestId('customer-calc-quantity')).toHaveValue('')
+
+    // 移っただけで仮計算は実行しない（実行は customer-detail-real-api.md の担当）
+    expect(posts).toEqual([])
+  })
+
+  test('[HSR-13] 顧客マスタに無い口座の明細の「仮計算」は、顧客を引けなかった帯を出して預り検索に留まる', async ({
+    page,
+    playwright,
+  }) => {
+    const api = await apiContext(playwright)
+    const customers = await fetchAll(api, CUSTOMERS_API_PATH, CUSTOMERS_LIST_KEY)
+    const holdings = await fetchAll(api, API_PATH, HOLDINGS_LIST_KEY)
+    await api.dispose()
+
+    await openListOrSkip(page)
+
+    // 口座ID の無い明細のうち、顧客マスタで引けない口座の最初の行（口座ID があると通信せずに移ってしまう）
+    const inMaster = new Set((await rowsInCustomerMaster(page, customers)).map(({ index }) => index))
+    const shown = await rowsOf(page).count()
+    let index = -1
+    for (let i = 0; i < shown; i += 1) {
+      if (inMaster.has(i)) continue
+      const holding = await holdingOfRow(page, holdings, i)
+      if (holding.口座ID == null) {
+        index = i
+        break
+      }
+    }
+    test.skip(index < 0, '表示中に、口座ID が空で顧客マスタに無い口座の明細が無い')
+
+    const accountNumber = await cellText(page, '口座番号', index)
+    const lookup = waitForApiRequest(page, CUSTOMERS_API_PATH, 'account_no', accountNumber)
+    await (await calculationButtonOf(page, index)).click()
+    await lookup
+
+    // 文言は src/stores/holdingSearch.js の findCustomerId と HoldingSearchView.vue の帯
+    const band = page.getByTestId('holding-search-customer-error')
+    await expect(band).toContainText('顧客詳細を開けませんでした。')
+    await expect(band).toContainText(`口座番号 ${accountNumber} の顧客が顧客マスタに見つかりません。`)
+    await expect(page).toHaveURL(new RegExp(`${PATH}(\\?|$)`))
+    await expect(page.getByTestId('holding-search-table')).toBeVisible()
+    await expect(rowsOf(page)).toHaveCount(shown)
   })
 })

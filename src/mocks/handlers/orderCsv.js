@@ -6,6 +6,7 @@ import {
   orderCsvColumns,
   orderCsvCustomerNameOf,
   orderCsvDetailsOf,
+  orderCsvRequiredHeaderNames,
   orderCsvSpecResponse,
   orderCsvTemplateText,
 } from '../fixtures/orderCsv'
@@ -21,6 +22,10 @@ import { detailError, requestValidationError } from './_shared'
  * CSV を渡して、OK の行・NG の行・警告の行を作り分けられるようにするため。検査は画面の出し分けに
  * 要る分だけで、本物の検証（余力・期限・銘柄の取引規制など）はバックエンドの責務。
  * CSV は素朴に `,` で割るだけにしてある（クォート付きの値は扱わない）。
+ *
+ * 「強制区分」の列は実 API に無い契約提案（docs/api/requests.md #58）。ヘッダーに無くても通し、
+ * 値は VWAP区分 と同じく 0 / 1 の数値に寄せて rows[].data に返す。強制で警告に格下げする検証は
+ * バックエンドの責務なので、モックは値を写すだけ。
  */
 export const orderCsvHandlers = [
   http.get('*/api/orders/csv-spec', () => HttpResponse.json(orderCsvSpecResponse)),
@@ -54,7 +59,7 @@ export const orderCsvHandlers = [
     const [headerLine = '', ...lines] = text.split(/\r?\n/)
 
     const header = headerLine.split(',').map((cell) => cell.trim())
-    const missing = orderCsvColumnNames.filter((name) => !header.includes(name))
+    const missing = orderCsvRequiredHeaderNames.filter((name) => !header.includes(name))
     if (missing.length > 0) {
       // 文言は実 API のまま（不足項目は Python の list の表記）
       const names = missing.map((name) => `'${name}'`).join(', ')
@@ -113,7 +118,7 @@ const BOM = String.fromCharCode(0xfeff)
 /** 数量がこれ以上の行に警告を付ける（モックだけの仮の規則。画面の警告の出し分けを確かめるためのもの） */
 const LARGE_QUANTITY = 10000
 
-/** 1 行をヘッダーの列名で引ける形にする（22 列だけ。知らない列は捨てる） */
+/** 1 行をヘッダーの列名で引ける形にする（仕様の列だけ。知らない列は捨て、ヘッダーに無い列は空） */
 function toCells(header, line) {
   const values = line.split(',')
   return Object.fromEntries(
@@ -145,6 +150,7 @@ function validateRow(cells, rowNumber) {
     指値単価: Number.isFinite(limitPrice) ? limitPrice : null,
     金銭受渡方法: ['0', '00'].includes(cells.金銭受渡方法) ? '000' : cells.金銭受渡方法,
     VWAP区分: cells.VWAP区分 === '1' ? 1 : 0,
+    強制区分: cells.強制区分 === '1' ? 1 : 0,
   }
 
   const conversionErrors = [

@@ -14,6 +14,9 @@
 - 事前検証: multipart で `file` を送り、日本語キー 22 列の行を camelCase の注文にする。
   `valid` / 売買区分 / 件数 / 行番号の欠けや知らない値は、正常や片方の向きに倒さない（OCA-13〜17）
 - 一括受付: 事前検証の注文を日本語キーに戻し、`作成者` を足して送る（OCA-18〜21）
+- 強制区分: 画面モックの CSV にあって実 API に無い**契約提案**の列（`docs/api/requests.md` #58）。
+  行の `強制区分` が 1 のときだけ `forced` にし、一括受付でその行の `強制区分` として 1 / 0 を送る。
+  ヘッダーに列が無い CSV（いまの 22 列）も通る（OCA-22〜24）
 
 multipart は jsdom の FormData が MSW(node) を通らないので、テストの間だけ Node の FormData と File に差し替える
 （`src/api/stalledOrders.spec.js` と同じ）。期待値は `src/mocks/fixtures/orderCsv.js` から導く。
@@ -45,3 +48,6 @@ E2E（実ブラウザの MSW）か実 API で確かめる。
 | OCA-19 | 既定モック | `createdBy` を渡さずに `bulkCreateOrders(orders)` を呼ぶ | `作成者` が空文字で届き、422 にならない | 実装済 |
 | OCA-20 | 既定モック | `bulkCreateOrders([])` を呼ぶ | handler の detail を message に持つ status 400 の `ApiError` が投げられる | 実装済 |
 | OCA-21 | 一括受付が 422 | `bulkCreateOrders(orders)` を呼ぶ | status 422 の `ApiError` が投げられる | 実装済 |
+| OCA-22 | 行の `強制区分` が `1` / `0` / `'1'`（文字列）/ `null` / 欠落の応答 | `validateOrderCsv(file)` を呼ぶ | `forced` は `1` の行だけ true、ほかは false（欠けた値や知らない値を強制に倒さない） | 実装済 |
+| OCA-23 | 既定モック・2 行目だけ `強制区分` を 1 にしたテンプレートの CSV | 事前検証の `order` を `bulkCreateOrders(orders)` で送る | 2 行目の `強制区分` が 1、ほかの行が 0 で届く | 実装済 |
+| OCA-24 | 既定モック・`強制区分` の列が無い 22 列の CSV | `validateOrderCsv(file)` を呼ぶ | 400 にならず全行が正常で、どの行も `forced` が false | 実装済 |

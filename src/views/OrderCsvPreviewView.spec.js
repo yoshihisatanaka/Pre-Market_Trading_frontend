@@ -318,4 +318,24 @@ describe('OrderCsvPreviewView', () => {
       expect(router.currentRoute.value.name).toBe('order-csv-upload')
     }
   })
+
+  it('[OCP-15] 強制区分が 1 の行にだけ「強制」のラベルが出る', async () => {
+    const response = {
+      ...orderCsvValidateResponse,
+      rows: orderCsvValidateResponse.rows.map((row, index) => ({
+        ...row,
+        data: { ...row.data, 強制区分: index === 1 ? 1 : 0 },
+      })),
+    }
+    const { pinia } = await prepare({ response })
+    const { wrapper } = await mountView(pinia)
+
+    rows(wrapper).forEach((row, index) => {
+      const forced = cell(wrapper, row, '強制')
+      const label = forced.find('[data-testid="order-csv-preview-forced"]')
+      expect(label.exists()).toBe(index === 1)
+      expect(forced.text()).toBe(index === 1 ? '強制' : '—')
+      expect(forced.find('button').exists()).toBe(false)
+    })
+  })
 })

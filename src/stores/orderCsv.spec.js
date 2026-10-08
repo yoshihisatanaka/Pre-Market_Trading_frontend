@@ -10,6 +10,7 @@ import {
   bulkOrderCreateResponse,
   orderCsvColumnNames,
   orderCsvColumns,
+  orderCsvRequiredHeaderNames,
   orderCsvSampleOrders,
   orderCsvTemplateText,
   orderCsvValidateResponse,
@@ -50,7 +51,7 @@ const templateFile = () => csvFile(orderCsvTemplateText)
 /** ヘッダーの列が足りない CSV（先頭 2 列だけ）と、そのとき handler が返す detail */
 const SHORT_HEADER = orderCsvColumnNames.slice(0, 2)
 const shortHeaderFile = () => csvFile(`${SHORT_HEADER.join(',')}\r\n`)
-const SHORT_HEADER_DETAIL = `CSVヘッダーに不足があります: 不足項目=[${orderCsvColumnNames
+const SHORT_HEADER_DETAIL = `CSVヘッダーに不足があります: 不足項目=[${orderCsvRequiredHeaderNames
   .filter((name) => !SHORT_HEADER.includes(name))
   .map((name) => `'${name}'`)
   .join(', ')}]`

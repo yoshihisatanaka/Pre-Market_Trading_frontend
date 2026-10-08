@@ -3,7 +3,12 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { customers } from '@/mocks/fixtures/customers'
 import { symbols } from '@/mocks/fixtures/symbols'
-import { FIRST_ORDER_ID, orderMessages } from '@/mocks/fixtures/orderEntry'
+import {
+  FIRST_ORDER_ID,
+  acceptedStatus,
+  acceptedVwapStatus,
+  orderMessages,
+} from '@/mocks/fixtures/orderEntry'
 import { ORDER_PERSON_MAX_LENGTH, SECURITIES_DELIVERY_DEFAULT } from '@/utils/orderEntryOptions'
 import { ApiError } from './client'
 import { createOrder, validateOrder } from './orderEntry'
@@ -19,6 +24,8 @@ const CREATE_PATH = '*/api/orders'
 const quietCustomer = customers.find((row) => row.コンプラランク === 'C' && !row.取引停止区分_全取引)
 const tradable = symbols.find((row) => row.Ticker === 'AAPL')
 const prohibited = symbols.find((row) => row.規制情報 === '1')
+// VWAP 対象で取引できる銘柄（VWAP の受付に使う）
+const vwapTarget = symbols.find((row) => row.VWAP対象区分 === '1' && row.規制情報 !== '1')
 
 /** 受注者（最大文字数ちょうどの社員コード） */
 const ORDER_PERSON = 'T'.padEnd(ORDER_PERSON_MAX_LENGTH, '0')
@@ -167,6 +174,10 @@ describe('api/orderEntry', () => {
       message: '',
       errors: [],
       warnings: [],
+      status: '',
+      statusName: '',
+      dreamStatus: '',
+      dreamStatusName: '',
     })
   })
 
@@ -178,14 +189,26 @@ describe('api/orderEntry', () => {
     expect(error.status).toBe(500)
   })
 
-  it('[NOA-08] 登録できたら採番された注文 ID を文字列で返す', async () => {
+  it('[NOA-08] 登録できたら採番された注文 ID を文字列で返し、受付直後の状況も返す', async () => {
     await expect(createOrder(order())).resolves.toEqual({
       success: true,
       orderId: String(FIRST_ORDER_ID),
       message: orderMessages.created,
       errors: [],
       warnings: [],
+      status: acceptedStatus.処理状況,
+      statusName: acceptedStatus.処理状況名,
+      dreamStatus: acceptedStatus.Dream登録状況,
+      dreamStatusName: acceptedStatus.Dream登録状況名,
     })
+  })
+
+  it('[NOA-12] VWAP の受付は Dream登録状況 が登録対象外（8）で返る', async () => {
+    const result = await createOrder(order({ symbolCode: vwapTarget.銘柄コード, vwap: true }))
+
+    expect(result.success).toBe(true)
+    expect(result.dreamStatus).toBe(acceptedVwapStatus.Dream登録状況)
+    expect(result.dreamStatusName).toBe(acceptedVwapStatus.Dream登録状況名)
   })
 
   it('[NOA-09] 登録の 200 の不合格は例外にせず success: false', async () => {

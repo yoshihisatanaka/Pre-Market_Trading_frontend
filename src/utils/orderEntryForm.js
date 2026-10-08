@@ -5,6 +5,7 @@ import {
   DEPOSIT_CATEGORY_OPTIONS,
   EXECUTION_SCOPE_OPTIONS,
   FUND_NATURE_OPTIONS,
+  LIMIT_ONLY_EXECUTION_SCOPES,
   ORDER_CHANNEL_OPTIONS,
   ORDER_FORM_DEFAULTS,
   ORDER_METHOD_OPTIONS,
@@ -62,6 +63,8 @@ const MESSAGES = {
   limitPriceNumeric: '指値を正しい数値で入力してください。',
   limitPricePositive: '指値価格は0より大きい数値を入力してください。',
   limitPriceScale: '指値には、「小数点第４位以内」で入力してください。',
+  // 02（プレ＋レギュラー）は指値のみ（docs/api/requests.md #50 ④）。モックの原文に無いので画面の文言
+  marketNotAllowed: (scopeLabel) => `市場区分「${scopeLabel}」は指値のみです。指値で入力してください。`,
   expiryRequired: '期間指定を選択してください。',
   growthOnBuy: '買付時に「成長投資枠」を選択することはできません。',
   vwapNotTarget: 'この銘柄は現在、VWAP対象外です。通常注文で入力してください。',
@@ -101,7 +104,7 @@ function daysBetween(from, to) {
 /**
  * 入力画面の初期値。
  *
- * 受注日・受注時刻は開いた時点の日時、受注者はログイン中の社員コード（モックの初期表示）。
+ * 受注日・受注時刻は開いた時点の日時、受注者はログイン中の操作者の受注者コード（defaultOrderPerson）。
  * 期間指定は選択肢が決まってから画面が先頭（当日中）を入れるので、ここでは空。
  *
  * @param {{
@@ -284,6 +287,11 @@ export function validateOrderForm(form, { symbol, symbolLookupFailed = false, to
     ticker: tickerError(form.ticker, { symbol, symbolLookupFailed }),
     side: form.side ? '' : MESSAGES.sideRequired,
     quantity: quantityError(form.quantity),
+    orderType:
+      form.orderType === ORDER_TYPE.MARKET &&
+      LIMIT_ONLY_EXECUTION_SCOPES.includes(form.executionScope)
+        ? MESSAGES.marketNotAllowed(optionLabel(EXECUTION_SCOPE_OPTIONS, form.executionScope))
+        : '',
     limitPrice: form.orderType === ORDER_TYPE.LIMIT ? limitPriceError(form.limitPrice) : '',
     expiryDate: form.expiryDate ? '' : MESSAGES.expiryRequired,
     depositCategory:
@@ -305,11 +313,12 @@ function orderPersonError(text) {
 }
 
 /**
- * 受注者の初期値。ログイン中の社員コードが受注者に入る長さ（4 文字以内）のときだけ使う。
- * 長いコードを入れておくと、開いた直後から検証で止まる値を既定にしてしまうので空にして入力させる。
+ * 受注者の初期値。ログイン中の操作者の受注者コード（`/auth/me` の 受注者コード。Dream の受注担当者コード）を使う。
+ * 社員コード（操作者コード）とは別物なので、受注者コードが未設定なら空にして入力させる（docs/api/requests.md #51）。
+ * サーバは 4 文字以内しか持たないが、長い値が来ても開いた直後から検証で止まる値を既定にしない。
  */
-export function defaultOrderPerson(operatorCode) {
-  const code = String(operatorCode ?? '').trim()
+export function defaultOrderPerson(orderTakerCode) {
+  const code = String(orderTakerCode ?? '').trim()
   return code.length <= ORDER_PERSON_MAX_LENGTH ? code : ''
 }
 
@@ -473,6 +482,27 @@ export function buildOrderReadback(form, { customer, symbol, expiryOptions }) {
     solicitationMethod: `${optionLabel(SOLICITATION_OPTIONS, form.solicitation)} ／ ${optionLabel(ORDER_METHOD_OPTIONS, form.orderMethod)}`,
     fundChannel: `${optionLabel(FUND_NATURE_OPTIONS, form.fundNature)} ／ ${optionLabel(ORDER_CHANNEL_OPTIONS, form.orderChannel)}`,
   }
+}
+
+/** Dream登録状況 0（未登録）。受付直後にこの値なら画面モックの「Dream登録待ち」 */
+const DREAM_UNREGISTERED = '0'
+
+/**
+ * 完了画面の受付状況（モックの「受付状況：Dream登録待ち」）。
+ *
+ * 受付直後の状況は 処理状況 ＋ Dream登録状況 の組み合わせで、「Dream登録待ち」の専用コードは無い
+ * （docs/api/requests.md #52）。
+ *   Dream登録状況 0（未登録）   … 「Dream登録待ち」（通常の受付。処理状況は 000 未発注）
+ *   それ以外（8 登録対象外 など）… 「未発注（Dream 登録対象外）」のように 2 つの名称を並べる
+ *
+ * @param {{ statusName: string, dreamStatus: string, dreamStatusName: string }} result
+ *   src/api/orderEntry.js の createOrder の結果
+ * @returns {string} 応答に状況が無ければ ''（画面はサーバの message を出す）
+ */
+export function buildReceptionStatus({ statusName, dreamStatus, dreamStatusName }) {
+  if (dreamStatus === DREAM_UNREGISTERED) return 'Dream登録待ち'
+  if (!dreamStatusName) return statusName
+  return statusName ? `${statusName}（Dream ${dreamStatusName}）` : `Dream ${dreamStatusName}`
 }
 
 const fxRateFormat = new Intl.NumberFormat('ja-JP', {

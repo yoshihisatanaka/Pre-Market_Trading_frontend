@@ -17,3 +17,4 @@
 | AUA-05 | API が未登録の操作者（`ロールコード` / `氏名` が null、`登録済: false`）を返す | `fetchCurrentOperator()` を呼ぶ | `roleCode` と `name` が空文字、`registered` が `false` になる | 実装済 |
 | AUA-06 | API が 500（`detail` 付き）を返す | `fetchCurrentOperator()` を呼ぶ | `status` 500 の `ApiError` になり、`message` にサーバの `detail` が入る | 実装済 |
 | AUA-07 | API が管理責任者（`depositary: true`）/ 営業員（`depositary: false`）/ `権限` に `depositary` キーの無い本文を返す | `fetchCurrentOperator()` を呼ぶ | `permissions.depositary` が `true` / `false` / `false`（欠けたら持っていない側に倒す） | 実装済 |
+| AUA-08 | API が営業員（`受注者コード` あり）/ 管理責任者（`受注者コード: null`）/ `受注者コード` の無い本文を返す | `fetchCurrentOperator()` を呼ぶ | `orderTakerCode` がその受注者コード / 空文字 / 空文字（新規注文の受注者の初期値。docs/api/requests.md #51） | 実装済 |

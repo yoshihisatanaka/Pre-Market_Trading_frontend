@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEPOSIT_CATEGORY,
+  LIMIT_ONLY_EXECUTION_SCOPES,
   ORDER_FORM_DEFAULTS,
   ORDER_PERSON_MAX_LENGTH,
   ORDER_TYPE,
@@ -13,6 +14,7 @@ import {
   buildExpiryOptions,
   buildOrderInput,
   buildOrderReadback,
+  buildReceptionStatus,
   createOrderForm,
   defaultOrderPerson,
   estimateOrderAmount,
@@ -168,6 +170,7 @@ describe('orderEntryForm', () => {
       ticker: MESSAGES.tickerRequired,
       side: MESSAGES.sideRequired,
       quantity: MESSAGES.quantityRequired,
+      orderType: '',
       limitPrice: '',
       expiryDate: MESSAGES.expiryRequired,
       depositCategory: '',
@@ -233,7 +236,7 @@ describe('orderEntryForm', () => {
     expect(personError('   ')).toBe(MESSAGES.orderPersonRequired)
   })
 
-  it('[NOF-31] defaultOrderPerson は最大文字数以内の社員コードだけを初期値にする', () => {
+  it('[NOF-31] defaultOrderPerson は最大文字数以内の受注者コードだけを初期値にする', () => {
     const tooLong = 'X'.repeat(ORDER_PERSON_MAX_LENGTH + 1)
 
     expect(defaultOrderPerson(ORDER_PERSON)).toBe(ORDER_PERSON)
@@ -241,6 +244,34 @@ describe('orderEntryForm', () => {
     expect(defaultOrderPerson(tooLong)).toBe('')
     expect(defaultOrderPerson(null)).toBe('')
     expect(defaultOrderPerson(undefined)).toBe('')
+  })
+
+  it('[NOF-33] 指値のみの市場区分（プレ＋レギュラー）では成行を弾き、指値は通す', () => {
+    const orderTypeError = (executionScope, orderType) =>
+      validate(validForm({ executionScope, orderType, limitPrice: '200' })).orderType
+    const message = '市場区分「プレ＋レギュラー」は指値のみです。指値で入力してください。'
+
+    expect(LIMIT_ONLY_EXECUTION_SCOPES).toEqual(['02'])
+    expect(orderTypeError('02', ORDER_TYPE.MARKET)).toBe(message)
+    expect(orderTypeError('02', ORDER_TYPE.LIMIT)).toBe('')
+    expect(orderTypeError('03', ORDER_TYPE.MARKET)).toBe('')
+    expect(hasOrderFormErrors(validate(validForm({ executionScope: '02' })))).toBe(true)
+  })
+
+  it('[NOF-34] buildReceptionStatus は Dream 未登録を「Dream登録待ち」、ほかは名称を並べる', () => {
+    expect(
+      buildReceptionStatus({ statusName: '未発注', dreamStatus: '0', dreamStatusName: '未登録' }),
+    ).toBe('Dream登録待ち')
+    expect(
+      buildReceptionStatus({ statusName: '未発注', dreamStatus: '8', dreamStatusName: '登録対象外' }),
+    ).toBe('未発注（Dream 登録対象外）')
+    expect(
+      buildReceptionStatus({ statusName: '', dreamStatus: '8', dreamStatusName: '登録対象外' }),
+    ).toBe('Dream 登録対象外')
+    expect(buildReceptionStatus({ statusName: '未発注', dreamStatus: '', dreamStatusName: '' })).toBe(
+      '未発注',
+    )
+    expect(buildReceptionStatus({ statusName: '', dreamStatus: '', dreamStatusName: '' })).toBe('')
   })
 
   it('[NOF-15] buildOrderInput は銘柄マスタのコードと固定値を入れ、成行の単価は null', () => {

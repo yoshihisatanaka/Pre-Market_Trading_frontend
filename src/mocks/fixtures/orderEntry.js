@@ -36,6 +36,32 @@ export const orderMessages = {
     `約定金額（約${amount.toLocaleString('en-US')}円）が5,000万円を超過しています。大口取引として確認が必要です。`,
 }
 
+/**
+ * 受付直後の状況（OrderCreateResponse の 処理状況 / 処理状況名 / Dream登録状況 / Dream登録状況名。
+ * docs/api/requests.md #52）。通常は 000 未発注 ＋ Dream 0 未登録（画面モックの「Dream登録待ち」）、
+ * VWAP・自己取引は Dream 8 登録対象外。名称はコードマスタの 処理状況 / Dream登録状況 と同じ。
+ */
+export const acceptedStatus = {
+  処理状況: '000',
+  処理状況名: '未発注',
+  Dream登録状況: '0',
+  Dream登録状況名: '未登録',
+}
+
+export const acceptedVwapStatus = {
+  ...acceptedStatus,
+  Dream登録状況: '8',
+  Dream登録状況名: '登録対象外',
+}
+
+/** 受け付けなかったときの状況（注文が作られないので 4 項目とも null） */
+export const rejectedStatus = {
+  処理状況: null,
+  処理状況名: null,
+  Dream登録状況: null,
+  Dream登録状況名: null,
+}
+
 /** OrderValidationResponse の見本（契約テスト用。合格 / 不合格 / 警告あり） */
 export const orderValidationExamples = [
   { valid: true, errors: [], warnings: [], details: null },
@@ -43,7 +69,7 @@ export const orderValidationExamples = [
   { valid: true, errors: [], warnings: [orderMessages.complianceRank('A')], details: null },
 ]
 
-/** OrderCreateResponse の見本（契約テスト用。受付 / 拒否） */
+/** OrderCreateResponse の見本（契約テスト用。受付 / VWAP の受付 / 拒否） */
 export const orderCreateExamples = [
   {
     success: true,
@@ -51,6 +77,15 @@ export const orderCreateExamples = [
     message: orderMessages.created,
     errors: [],
     warnings: [],
+    ...acceptedStatus,
+  },
+  {
+    success: true,
+    order_id: FIRST_ORDER_ID + 1,
+    message: orderMessages.created,
+    errors: [],
+    warnings: [],
+    ...acceptedVwapStatus,
   },
   {
     success: false,
@@ -58,5 +93,6 @@ export const orderCreateExamples = [
     message: orderMessages.rejected,
     errors: [orderMessages.prohibited],
     warnings: [],
+    ...rejectedStatus,
   },
 ]

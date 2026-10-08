@@ -149,7 +149,7 @@ async function fillOrder(page, { ticker = stock.Ticker } = {}) {
   await page.getByTestId('order-entry-ticker').fill(ticker)
   await sideButton(page, '買い').click()
   await page.getByTestId('order-entry-quantity').fill('1')
-  // 受注者は操作者の社員コードが既定で入る。読めなかったときだけ試験用のコードで埋める
+  // 受注者は /auth/me の受注者コードが既定で入る（#51）。未設定のときだけ試験用のコードで埋める
   const orderPerson = page.getByTestId('order-entry-order-person')
   if ((await orderPerson.inputValue()) === '') await orderPerson.fill(USER_CODE)
 }

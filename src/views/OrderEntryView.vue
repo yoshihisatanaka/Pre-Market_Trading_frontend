@@ -18,6 +18,7 @@ import {
   buildExpiryOptions,
   buildOrderInput,
   buildOrderReadback,
+  buildReceptionStatus,
   createOrderForm,
   defaultOrderPerson,
   hasOrderFormErrors,
@@ -91,8 +92,11 @@ const {
  */
 const today = new Date()
 
-/** 受注者の既定値と作成者。ログイン中の社員コード（読めなければ .env の VITE_USER_CODE） */
+/** 作成者。ログイン中の社員コード（読めなければ .env の VITE_USER_CODE） */
 const operatorCode = computed(() => operator.value?.operatorCode || OPERATOR_CODE)
+
+/** 受注者の既定値。社員コードとは別の受注者コード（未設定・読めなければ空欄で手入力） */
+const orderTakerCode = computed(() => operator.value?.orderTakerCode ?? '')
 
 /* ---------- 送信を受け付けない状態 ---------- */
 
@@ -125,7 +129,7 @@ const isEmpty = computed(
 /** 新しいフォーム。期間指定は先頭（当日中）を入れておく */
 function newForm(customer = {}) {
   return {
-    ...createOrderForm({ orderPerson: defaultOrderPerson(operatorCode.value), ...customer }),
+    ...createOrderForm({ orderPerson: defaultOrderPerson(orderTakerCode.value), ...customer }),
     expiryDate: expiryOptions.value[0]?.value ?? '',
   }
 }
@@ -377,6 +381,9 @@ async function confirmOrder() {
   step.value = 'complete'
 }
 
+/** 完了画面の受付状況（「Dream登録待ち」など。応答に状況が無ければ ''） */
+const receptionStatus = computed(() => (result.value ? buildReceptionStatus(result.value) : ''))
+
 /* ---------- 完了 → 次の注文 ---------- */
 
 /**
@@ -422,9 +429,9 @@ store.loadContext(today)
 if (customerKey.value.accountNumber) store.lookupCustomer(customerKey.value)
 if (tickerKey.value) store.lookupSymbol(tickerKey.value)
 // 起動時に main.js が読み始めているので、たいていは読み終えている。受注者が空なら埋める
-// （社員コードが 5 文字以上なら空のまま。受注者は 4 文字までなので手で入れてもらう）
+// （受注者コードが未設定なら空のまま。手で入れてもらう）
 operatorStore.ensureLoaded().then(() => {
-  if (!form.value.orderPerson) form.value.orderPerson = defaultOrderPerson(operatorCode.value)
+  if (!form.value.orderPerson) form.value.orderPerson = defaultOrderPerson(orderTakerCode.value)
 })
 </script>
 
@@ -562,9 +569,15 @@ operatorStore.ensureLoaded().then(() => {
       <div v-else class="order-entry__review" data-testid="order-entry-complete">
         <div :class="['order-entry__result', `is-${pending.readback.tone}`]">
           <strong>注文を受け付けました</strong>
-          <!-- 受付の文言はサーバが返す。自前で組み立てない -->
+          <!-- 受付状況はサーバの状況コードから組む。状況が返らなければサーバの文言を出す -->
           <span data-testid="order-entry-complete-message">
-            {{ result.message }} ／ 以後の状況は注文照会でご確認ください。
+            <template v-if="receptionStatus">
+              受付状況：<span data-testid="order-entry-reception-status">{{ receptionStatus }}</span>
+              ／ 受付結果と注文IDを確認し、以後の状況は注文照会でご確認ください。
+            </template>
+            <template v-else>
+              {{ result.message }} ／ 以後の状況は注文照会でご確認ください。
+            </template>
           </span>
         </div>
 

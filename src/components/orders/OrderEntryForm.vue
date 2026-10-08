@@ -20,9 +20,9 @@ import FormField from '@/components/ui/FormField.vue'
 import {
   CASH_DELIVERY_OPTIONS,
   DEPOSIT_CATEGORY_OPTIONS,
-  EXECUTION_SCOPE_OPTIONS,
   FUND_NATURE_OPTIONS,
   ORDER_CHANNEL_OPTIONS,
+  ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS,
   ORDER_METHOD_OPTIONS,
   ORDER_PERSON_MAX_LENGTH,
   ORDER_TYPE,
@@ -228,7 +228,7 @@ function selectOrderType(value) {
           <BaseSelect
             v-bind="field"
             v-model="form.executionScope"
-            :options="EXECUTION_SCOPE_OPTIONS"
+            :options="ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS"
             variant="underline"
             class="order-entry-form__market"
             data-testid="order-entry-execution-scope"
@@ -255,7 +255,13 @@ function selectOrderType(value) {
           <span class="order-entry-form__unit">株</span>
         </FormField>
 
-        <FormField label="価格" layout="inline" required :error="errors.limitPrice">
+        <!-- 成行を選べない市場区分（02）の不備も価格の欄に出す -->
+        <FormField
+          label="価格"
+          layout="inline"
+          required
+          :error="errors.orderType || errors.limitPrice"
+        >
           <BaseSegmentedControl
             :model-value="form.orderType"
             :options="ORDER_TYPE_OPTIONS"

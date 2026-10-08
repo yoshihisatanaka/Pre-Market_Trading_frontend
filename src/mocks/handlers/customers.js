@@ -6,6 +6,7 @@ import {
   SUSPENSION_NAMES,
   canceledCustomers,
   customers,
+  reactivationWarning,
 } from '../fixtures/customers'
 import {
   detailError,
@@ -174,7 +175,7 @@ export const customerHandlers = [
       if (sameNumber.some((row) => row.取消区分 === 0)) {
         errors.push(`口座番号 ${body.口座番号} は既に登録されています`)
       } else if (sameNumber.length > 0) {
-        warnings.push(`口座番号 ${body.口座番号} は削除済みです。登録すると再有効化されます`)
+        warnings.push(reactivationWarning(body.口座番号))
       }
     }
 

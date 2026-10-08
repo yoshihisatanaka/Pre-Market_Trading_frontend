@@ -23,6 +23,8 @@ import { apiClient } from './client'
  * @property {string} roleCode ロールコード（ifa / sales / manager / supervisor。未登録なら空文字）
  * @property {string} roleLabel ロール名
  * @property {string} branchCode 部店コード
+ * @property {string} orderTakerCode 受注者コード（Dream の受注担当者コード。4 文字以内。未設定は空文字）。
+ *   新規注文の受注者の初期値に使う。操作者コード（社員コード）とは別物（docs/api/requests.md #51）
  * @property {boolean} registered 操作者マスタに有効な行があるか
  * @property {{
  *   order: boolean, master: boolean, operation: boolean, branchAll: boolean, depositary: boolean,
@@ -49,6 +51,7 @@ function toCurrentOperator(raw) {
     roleCode: raw?.['ロールコード'] ?? '',
     roleLabel: raw?.['ロール名'] ?? '',
     branchCode: raw?.['部店コード'] ?? '',
+    orderTakerCode: raw?.['受注者コード'] ?? '',
     registered: Boolean(raw?.['登録済']),
     // 欠けている権限は「持っていない」と読む（誤って操作を出さない側に倒す）
     permissions: {

@@ -20,6 +20,7 @@ import {
   EXECUTION_SCOPE_OPTIONS,
   FUND_NATURE_OPTIONS,
   ORDER_CHANNEL_OPTIONS,
+  ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS,
   ORDER_FORM_DEFAULTS,
   ORDER_METHOD_OPTIONS,
   ORDER_TYPE_OPTIONS,
@@ -52,7 +53,8 @@ const OPTION_ENUMS = [
 
 /** ORDER_FORM_DEFAULTS のキー → その値を選ぶ選択肢 */
 const DEFAULT_OPTIONS = {
-  executionScope: EXECUTION_SCOPE_OPTIONS,
+  // 既定の市場区分は入力欄に出す（フェーズ 1 で選べる）値でなければならない
+  executionScope: ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS,
   orderType: ORDER_TYPE_OPTIONS,
   settlementCurrency: SETTLEMENT_CURRENCY_OPTIONS,
   depositCategory: DEPOSIT_CATEGORY_OPTIONS,
@@ -108,6 +110,13 @@ describe('orderEntryOptions', () => {
   it('[NOP-06] 市場区分は時間帯の順に並び、enum の 4 値を過不足なく含む', () => {
     expect(valuesOf(EXECUTION_SCOPE_OPTIONS)).toEqual(['02', '04', '03', '06'])
     expect([...valuesOf(EXECUTION_SCOPE_OPTIONS)].sort()).toEqual([...EXECUTION_SCOPE_VALUES].sort())
+  })
+
+  it('[NOP-09] 入力欄の市場区分はフェーズ 1 で受け付ける 02 / 03 だけで、表示名は同じ', () => {
+    expect(ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS).toEqual([
+      { value: '02', label: 'プレ＋レギュラー' },
+      { value: '03', label: 'レギュラー' },
+    ])
   })
 
   it('[NOP-07] optionLabel は既知の値を表示名に、それ以外を — にする', () => {

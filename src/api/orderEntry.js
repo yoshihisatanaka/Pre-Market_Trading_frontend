@@ -14,7 +14,8 @@ import { apiClient } from './client'
  * 呼び出し側（stores/orderEntry.js の useAsync）の error に入れる。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり。
- *   - プロパティ名が日本語（部店 / 口座番号 / 銘柄コード …）。応答だけは英語の snake_case
+ *   - プロパティ名が日本語（部店 / 口座番号 / 銘柄コード …）。応答は英語の snake_case
+ *     （登録の応答の受付状況 4 項目だけは日本語）
  *   - 口座番号・強制区分・VWAP区分 は integer。アプリ内は口座番号が文字列、2 つのフラグが boolean
  *   - 有効期限・受注日 は 'YYYYMMDD' の文字列。アプリ内は 'YYYY-MM-DD'
  *   - 指値単価 は成行のとき null（CSV 仕様は「省略か 0」。null は nullable の宣言どおり）
@@ -83,8 +84,15 @@ export async function validateOrder(order) {
  *
  * 登録できなかった理由が 200 の success:false で返ったときも例外にしない（errors に理由が入る）。
  *
+ * 受付直後の状況（処理状況 / Dream登録状況 とその名称）も返る（docs/api/requests.md #52）。
+ * 通常は 処理状況 000（未発注）＋ Dream登録状況 0（未登録）で、これが画面モックの「Dream登録待ち」に当たる。
+ * VWAP・自己取引は Dream登録状況 8（登録対象外）。どれも string | null で、無ければ ''。
+ *
  * @param {OrderInput} order
- * @returns {Promise<{ success: boolean, orderId: string, message: string, errors: string[], warnings: string[] }>}
+ * @returns {Promise<{
+ *   success: boolean, orderId: string, message: string, errors: string[], warnings: string[],
+ *   status: string, statusName: string, dreamStatus: string, dreamStatusName: string,
+ * }>}
  *   orderId は integer の注文 ID を文字列にしたもの（採番されなければ ''）。
  *   message はサーバの文言（画面はそのまま出す。自前で組み立てない）
  */
@@ -97,6 +105,10 @@ export async function createOrder(order) {
     message: data?.message ?? '',
     errors: toMessages(data?.errors),
     warnings: toMessages(data?.warnings),
+    status: data?.処理状況 ?? '',
+    statusName: data?.処理状況名 ?? '',
+    dreamStatus: data?.Dream登録状況 ?? '',
+    dreamStatusName: data?.Dream登録状況名 ?? '',
   }
 }
 

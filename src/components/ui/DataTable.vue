@@ -116,7 +116,12 @@ th {
   background-color: var(--color-surface-muted);
 }
 
-th.is-numeric {
+/*
+ * td の右寄せもここで指定する。グローバルの .numeric（main.css）は詳細度が上の
+ * scoped の `td[data-v-…] { text-align: left }` に負けるため、それだけでは効かない。
+ */
+th.is-numeric,
+td.numeric {
   text-align: right;
 }
 

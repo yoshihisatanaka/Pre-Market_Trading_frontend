@@ -7,9 +7,17 @@
  *
  * 画面モックの見どころをひととおり出せるように並べてある:
  *   - 訂正 1 回（#38 → #42）と訂正 2 回（#30 → #33 → #36）。`元注文ID` は起点を指す
- *   - スライス基準による自動分割（親 #35 と子注文 #43〜#45。`注文種別` が 'SLICE_CHILD'）
+ *   - スライス基準による自動分割（親 #35 は `注文種別` 'SLICE_PARENT'、子注文 #43〜#45 は 'SLICE_CHILD'）
  *   - 出来状況は 未出来 / 注文中 / 一部出来 / 全部出来 / 取消済 / 取消済（出来有）/ 注文エラー
  *   - VWAP 注文（`VWAP区分` 1）
+ *   - 強制発注（`強制区分` 1。#41）
+ *
+ * 親 #35 の `スライス適用上限数量` / `スライス適用理由` / `スライス平均出来高` / `スライス参照価格` は
+ * OrderItemResponse に無い**契約提案**（docs/api/requests.md #57。契約テストの KNOWN_GAPS に載せてある）。
+ * 値はスライス基準（fixtures/sliceCriteria.js の 5% / 10,000 株 / USD 1,000,000）で 3,000 株の成行を
+ * 判定した結果に揃えてある（平均出来高 24,000 株 × 5% = 1,200 株で関与率に掛かり、上限は 1,199 株。
+ * 参照価格 337.50 ドル × 3,000 株 = 1,012,500 ドルで金額にも掛かる。分割は 3 本の 1,000 株）。
+ * 理由の文言はバックエンドの判定（is_slice_candidate の matched_reasons）の書式の写し。
  *
  * コード値:
  *   売買区分 … '1' 売 / '3' 買（`GET /orders` の side クエリの説明による）
@@ -62,6 +70,7 @@ function order({
   limitPrice = null,
   scope = '02',
   vwap = 0,
+  forced = 0,
   date = '2026-09-28',
   time,
   status,
@@ -87,6 +96,7 @@ function order({
     指値単価: limitPrice,
     発注範囲: scope,
     VWAP区分: vwap,
+    強制区分: forced,
     注文ルート: vwap === 1 ? '2' : '1',
     注文ルート名: vwap === 1 ? 'VWAP' : 'IB',
     受注日: date,
@@ -178,6 +188,7 @@ export const orderInquiryRows = [
     quantity: 100,
     orderType: 'LO',
     limitPrice: 228.5,
+    forced: 1,
     time: '09:58:00',
     status: '011',
     displayStatus: '全部出来',
@@ -257,21 +268,32 @@ export const orderInquiryRows = [
     status: '000',
     displayStatus: '未出来',
   }),
-  order({
-    id: 35,
-    customer: CUSTOMERS.tanaka,
-    symbol: 'TSLA',
-    name: 'Tesla, Inc.',
-    side: '3',
-    quantity: 3000,
-    orderType: 'MO',
-    scope: '04',
-    time: '09:01:00',
-    status: '010',
-    displayStatus: '一部出来',
-    filled: 1200,
-    amountUsd: 406_250,
-  }),
+  {
+    ...order({
+      id: 35,
+      kind: 'SLICE_PARENT',
+      customer: CUSTOMERS.tanaka,
+      symbol: 'TSLA',
+      name: 'Tesla, Inc.',
+      side: '3',
+      quantity: 3000,
+      orderType: 'MO',
+      scope: '04',
+      time: '09:01:00',
+      status: '010',
+      displayStatus: '一部出来',
+      filled: 1200,
+      amountUsd: 406_250,
+    }),
+    // 契約提案（冒頭のコメント）
+    スライス適用上限数量: 1199,
+    スライス適用理由: [
+      '市場関与率超過 (注文数量: 3,000株 >= 出来高24,000株×5.00%=1,200.0株)',
+      '大口注文金額超過 (注文金額: $1,012,500.00 >= 閾値: $1,000,000.00)',
+    ],
+    スライス平均出来高: 24000,
+    スライス参照価格: 337.5,
+  },
   order({
     id: 34,
     customer: CUSTOMERS.kimura,

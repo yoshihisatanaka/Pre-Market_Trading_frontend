@@ -115,6 +115,7 @@ test.describe('注文照会', () => {
       formatJpyUnit(first.約定代金_JPY),
       MARKET_SCOPE_LABELS[first.発注範囲],
       first.表示状況名,
+      '—', // 強制区分なし
       '—', // 送信日時は値の出所が決まっていない
       new RegExp(first.受注時刻.slice(0, 5)),
       /訂正\s*取消/,
@@ -436,5 +437,32 @@ test.describe('注文照会', () => {
 
     await expect(page).toHaveURL(new RegExp(`/orders/${latest.ID}/cancel$`))
     await expect(page.getByRole('heading', { name: '注文取消', exact: true })).toBeVisible()
+  })
+
+  test('[OI-24] 強制発注の注文にだけ「強制」のラベルが出る', async ({ page }) => {
+    const forcedIds = orderInquiryRows.filter((row) => row.強制区分 === 1).map((row) => row.ID)
+    expect(forcedIds).toEqual([41])
+    await page.goto(INQUIRY_PATH)
+
+    const table = page.getByTestId('order-inquiry-table')
+    await expect(cellOf(rowOf(page, 41), '強制')).toHaveText('強制')
+    await expect(cellOf(rowOf(page, 35), '強制')).toHaveText('—')
+    await expect(table.getByTestId('order-inquiry-forced')).toHaveCount(1)
+    await expect(table.getByRole('button', { name: '強制' })).toHaveCount(0)
+  })
+
+  test('[OI-25] 自動分割の明細の見出しに親の判定結果が出る', async ({ page }) => {
+    const parent = fixtureRow(35)
+    await page.goto(INQUIRY_PATH)
+
+    await rowOf(page, parent.ID).getByTestId('order-inquiry-split-toggle').click()
+
+    const detail = page.getByTestId('order-inquiry-split-detail')
+    await expect(detail.locator('dd')).toHaveText([
+      `${formatQuantity(parent.スライス適用上限数量)} 株／スライス`,
+      parent.スライス適用理由.join('・'),
+      `${formatQuantity(parent.スライス平均出来高)} 株`,
+      formatUsd(parent.スライス参照価格),
+    ])
   })
 })

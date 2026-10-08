@@ -31,9 +31,16 @@ import { ApiError, apiClient } from './client'
  *   - 絞り込み（`status` も含む）も行単位なので、たとえば「取消済」で絞ると、訂正で取り消された
  *     原注文の版だけが当たって行になることがある（最新の版の状況で絞る画面モックとは違う）
  *
- * 画面モックにあってこの API に無い項目（送信日時・自動分割の適用上限 / 適用理由 /
- * 5 営業日平均出来高 / 参照価格）はアプリ内モデルに持たせない（無いものを null として運ばない）。
+ * 画面モックにあってこの API に無い項目（送信日時）はアプリ内モデルに持たせない（無いものを null として運ばない）。
  * 市場区分は `発注範囲` のコード（'02' / '03' / '04' / '06'）で運ぶ。名前は画面が src/utils/orderTypes.js で引く。
+ *
+ * 自動分割の明細の見出し（適用上限 / 適用理由 / 5 営業日平均出来高 / 参照価格）は**契約提案**で読む
+ * （docs/api/requests.md #57）。発注時のスライス判定の結果で、バックエンドは判定に使うだけで保存していない
+ * （d_スライス注文管理 は総数量・分割数・基準数量・端数だけ）。いまの設定で計算し直す
+ * `POST /masters/hard-limits/simulate` では設定や出来高が変わった後に発注時と違う値が出るので使わない。
+ * 項目は親（`注文種別` 'SLICE_PARENT'）の行に `スライス適用上限数量` / `スライス適用理由` /
+ * `スライス平均出来高` / `スライス参照価格` で載る想定で、MSW のフィクスチャだけが返す。
+ * 実 API では無いので slicePlan が null になり、画面は「—」を出す。
  */
 
 /**
@@ -45,13 +52,28 @@ import { ApiError, apiClient } from './client'
  *   canceledQuantity: number|null, orderType: string, limitPrice: number|null,
  *   filledQuantity: number|null, remainingQuantity: number|null,
  *   filledAmountUsd: number|null, filledAmountJpy: number|null,
- *   marketScope: string, vwap: boolean, statusName: string,
+ *   marketScope: string, vwap: boolean, forced: boolean, statusName: string,
  *   statusTone: ''|'pending'|'working'|'partial'|'filled'|'canceled'|'error',
  *   errorReason: string, orderedAt: string, amendable: boolean, cancelable: boolean,
+ *   slicePlan: SlicePlan|null,
  * }} OrderInquiryOrder
  *   orderType は 'LO'（指値）/ 'MO'（成行）。limitPrice は成行のとき null。
+ *   forced は強制区分付きで発注した注文（`強制区分` が 1）。
  *   statusName はサーバが付ける出来状況の表示名（表示状況名）、statusTone はその色分け。
  *   errorReason は注文エラーの行だけ埋まる。
+ *   slicePlan はスライスの親の行だけが持つ（4 項目のどれも来ない行は null）。
+ */
+
+/**
+ * 発注時のスライス判定の結果（契約提案。冒頭のコメントを参照）。
+ *
+ * @typedef {{
+ *   maxSliceQuantity: number|null, reasons: string[],
+ *   averageVolume: number|null, referencePrice: number|null,
+ * }} SlicePlan
+ *   maxSliceQuantity は子注文 1 本あたりの上限株数、reasons はスライス対象になった理由（サーバの文言）、
+ *   averageVolume は判定に使った 5 営業日平均出来高（銘柄マスタの取込値）、
+ *   referencePrice は金額の判定に使った単価（USD。指値なら指値単価、成行なら前日終値）。
  */
 
 /**
@@ -293,13 +315,35 @@ function toOrder(raw) {
     filledAmountJpy: toNumberOrNull(raw?.約定代金_JPY),
     marketScope: raw?.発注範囲 ?? '',
     vwap: raw?.VWAP区分 === 1,
+    forced: raw?.強制区分 === 1,
     statusName: raw?.表示状況名 ?? raw?.処理状況名 ?? '',
     statusTone: STATUS_TONES[status] ?? '',
     errorReason: raw?.エラー内容 ?? '',
     orderedAt: toOrderedAt(raw?.受注日, raw?.受注時刻),
     cancelable: CANCELABLE.has(status),
     amendable: AMENDABLE.has(status),
+    slicePlan: toSlicePlan(raw),
   }
+}
+
+/**
+ * 発注時のスライス判定（契約提案の 4 項目）→ SlicePlan。どれも来ない行（子注文・通常の注文・
+ * いまの実 API）は null にして、画面が「判定結果が無い」と見分けられるようにする。
+ */
+function toSlicePlan(raw) {
+  const reasons = toStrings(raw?.スライス適用理由)
+  const plan = {
+    maxSliceQuantity: toNumberOrNull(raw?.スライス適用上限数量),
+    reasons,
+    averageVolume: toNumberOrNull(raw?.スライス平均出来高),
+    referencePrice: toDecimalOrNull(raw?.スライス参照価格),
+  }
+  const empty =
+    plan.maxSliceQuantity === null &&
+    reasons.length === 0 &&
+    plan.averageVolume === null &&
+    plan.referencePrice === null
+  return empty ? null : plan
 }
 
 /**

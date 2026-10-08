@@ -1,16 +1,16 @@
 <script setup>
 /**
- * 注文照会の表の 1 注文ぶんのセル（部店 〜 受注日時の 16 列。showCustomer が false なら
- * 部店・口座番号・顧客名を除く 13 列）。
+ * 注文照会の表の 1 注文ぶんのセル（部店 〜 受注日時の 17 列。showCustomer が false なら
+ * 部店・口座番号・顧客名を除く 14 列）。
  *
  * 表の行には「元注文ごとの行」と、その下に畳む「訂正前の版の行」の 2 種類があり、
- * 中ほどの 16 列は同じ並び・同じ整形なのでここにまとめてある。行ごとに違う先頭の
+ * 中ほどの 17 列は同じ並び・同じ整形なのでここにまとめてある。行ごとに違う先頭の
  * 注文ID 列と末尾の操作列は呼び出し側（OrderInquiryTable）が描く。
  *
  * ルート要素が複数の <td> なので、<tr> の中に直接置く。td の枠線・余白は
  * 呼び出し側の表が当てる（このファイルが持つのはセルの中身の見た目だけ）。
  *
- * 出す data-testid は無い。
+ * 出す data-testid: order-inquiry-forced（強制発注の注文の「強制」ラベル）
  */
 import { formatJpyUnit, formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
 import { marketScopeLabel } from '@/utils/orderTypes'
@@ -120,6 +120,17 @@ function priceLabel() {
   </td>
 
   <!--
+    強制。強制区分付きで発注した注文にだけ状態ラベルを出す。画面モック（2026-10-08）は理由のホバー・
+    モーダルをやめて押せないラベルだけにしたので、ここもボタンにしない
+  -->
+  <td class="order-inquiry-cells__center">
+    <span v-if="order.forced" class="order-inquiry-cells__forced" data-testid="order-inquiry-forced">
+      強制
+    </span>
+    <template v-else>—</template>
+  </td>
+
+  <!--
     送信日時。OrderItemResponse に対応する項目が無く、値の出所が決まっていない。
     見出しだけ確保し、セルは常に '—' にしてある（顧客マスタの米国株評価額と同じ扱い）。
   -->
@@ -162,6 +173,20 @@ function priceLabel() {
 .order-inquiry-cells__side.is-sell {
   color: var(--color-sell);
   font-weight: 600;
+}
+
+/* 強制のラベル。モックどおり白地に濃い赤の枠と文字で、押せるボタンに見えないよう小さく出す */
+.order-inquiry-cells__forced {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  color: var(--color-danger-text);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-danger-text);
+  border-radius: var(--radius-sm);
 }
 
 /* 未出来残数量は「いま生きている株数」なので、他の数量より一段強く出す */

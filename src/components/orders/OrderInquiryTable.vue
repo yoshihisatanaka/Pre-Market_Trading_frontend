@@ -14,14 +14,14 @@
  * 出す data-testid:
  *   order-inquiry-row（元注文の行） / order-inquiry-history-toggle / order-inquiry-history-row /
  *   order-inquiry-split-toggle / order-inquiry-split-detail / order-inquiry-amend / order-inquiry-cancel /
- *   order-inquiry-view-only
+ *   order-inquiry-view-only / order-inquiry-forced（OrderInquiryCells が描く）
  *   表そのものの testid は呼び出し側がフォールスルーで渡す。
  */
 import { computed, reactive } from 'vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import OrderInquiryCells from '@/components/orders/OrderInquiryCells.vue'
-import { formatQuantity } from '@/utils/format'
+import { formatQuantity, formatUsd } from '@/utils/format'
 
 const props = defineProps({
   /** 元注文ごとのまとまり（src/api/orderInquiry.js の OrderInquiryGroup）の配列 */
@@ -52,7 +52,7 @@ const emit = defineEmits(['amend', 'cancel'])
 /** 顧客を特定する 3 列（showCustomer が false のときに外す） */
 const CUSTOMER_COLUMN_KEYS = ['branchCode', 'accountNumber', 'customerName']
 
-/** 列の並びは画面モックのとおり。中ほどの 16 列は OrderInquiryCells が描く */
+/** 列の並びは画面モックのとおり。中ほどの 17 列は OrderInquiryCells が描く */
 const COLUMNS = [
   { key: 'id', label: '注文ID' },
   { key: 'branchCode', label: '部店' },
@@ -69,6 +69,7 @@ const COLUMNS = [
   { key: 'filledAmountJpy', label: '約定代金（円貨）', numeric: true },
   { key: 'marketScope', label: '市場区分' },
   { key: 'statusName', label: '出来状況' },
+  { key: 'forced', label: '強制' },
   { key: 'sentAt', label: '送信日時' },
   { key: 'orderedAt', label: '受注日時' },
   { key: 'actions', label: '操作' },
@@ -80,12 +81,33 @@ const columns = computed(() =>
     : COLUMNS.filter((column) => !CUSTOMER_COLUMN_KEYS.includes(column.key)),
 )
 
-/*
- * 自動分割の明細の見出しにある 4 項目。一覧 API（OrderItemResponse）には値が無いので、
- * いまは項目名だけ置いて値は '—' にしてある。
- * TODO(処理実装): 値の出所（スライス基準の判定結果）が決まったら差し替える
+/**
+ * 自動分割の明細の見出しにある 4 項目（発注時のスライス判定の結果。src/api/orderInquiry.js の SlicePlan）。
+ * 値は親の行（latest）が持つ。OrderItemResponse に無い契約提案（docs/api/requests.md #57）なので、
+ * いまの実 API では plan が null で、4 項目とも '—' になる。
+ *
+ * @param {object|null} plan SlicePlan（無ければ null）
+ * @returns {{ label: string, value: string }[]}
  */
-const SPLIT_META_LABELS = ['適用上限', '適用理由', '5営業日平均出来高（取込値）', '参照価格']
+function splitMeta(plan) {
+  return [
+    {
+      label: '適用上限',
+      value: withUnit(plan?.maxSliceQuantity, (value) => `${formatQuantity(value)} 株／スライス`),
+    },
+    { label: '適用理由', value: plan?.reasons.length ? plan.reasons.join('・') : '—' },
+    {
+      label: '5営業日平均出来高（取込値）',
+      value: withUnit(plan?.averageVolume, (value) => `${formatQuantity(value)} 株`),
+    },
+    { label: '参照価格', value: withUnit(plan?.referencePrice, formatUsd) },
+  ]
+}
+
+/** 値が無ければ単位を付けずに '—'（「— 株」にしない） */
+function withUnit(value, format) {
+  return value == null ? '—' : format(value)
+}
 
 /** 開いている元注文の id。reactive な Set なので has() がテンプレートの依存になる */
 const openHistories = reactive(new Set())
@@ -198,9 +220,9 @@ function versionLabel(index) {
                 </p>
 
                 <dl class="order-inquiry-table__split-meta">
-                  <div v-for="label in SPLIT_META_LABELS" :key="label">
-                    <dt>{{ label }}</dt>
-                    <dd>—</dd>
+                  <div v-for="meta in splitMeta(group.latest.slicePlan)" :key="meta.label">
+                    <dt>{{ meta.label }}</dt>
+                    <dd>{{ meta.value }}</dd>
                   </div>
                 </dl>
 
@@ -258,7 +280,7 @@ function versionLabel(index) {
 </template>
 
 <style scoped>
-/* 列が 18 本あるので横に流す。見た目は DataTable（flat）に揃える */
+/* 列が 19 本あるので横に流す。見た目は DataTable（flat）に揃える */
 .order-inquiry-table {
   overflow-x: auto;
   background-color: var(--color-surface);

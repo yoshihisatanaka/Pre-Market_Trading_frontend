@@ -318,8 +318,18 @@ async function submitCalculation(page, playwright) {
   return result
 }
 
-/** 応答が 200 で、直接 POST し直した応答と計算結果が一致する */
+/** 仮計算マスタ（db/migrate_calculation_setting.py）が未投入の DB で POST /calculations が返す 400 の理由 */
+const CALC_MASTER_MISSING = /仮計算マスタが初期化されていません/
+
+/**
+ * 応答が 200 で、直接 POST し直した応答と計算結果が一致する。
+ * 仮計算マスタが未投入の DB では計算できないのでスキップする（フロントの不具合ではない。シナリオでは保留）
+ */
 function expectSameCalculation(result) {
+  test.skip(
+    result.status === 400 && CALC_MASTER_MISSING.test(String(result.json?.detail ?? '')),
+    '仮計算マスタが未投入（バックエンドの db/migrate_calculation_setting.py が未実行）',
+  )
   expect(result.status, `POST /calculations が ${result.status}: ${JSON.stringify(result.json)}`).toBe(
     200,
   )
@@ -589,14 +599,15 @@ test.describe('顧客詳細（実 API 接続）', () => {
 
     await page.getByTestId('customer-calc-submit').click()
 
+    // 説明はヒントと不備の連結（銘柄欄は aria-describedby にヒントも持つ）なので、不備の文を含むかで見る
     await expect(page.getByTestId('customer-calc-symbol')).toHaveAccessibleDescription(
-      CALC_MESSAGES.symbolRequired,
+      new RegExp(CALC_MESSAGES.symbolRequired),
     )
     await expect(page.getByTestId('customer-calc-quantity')).toHaveAccessibleDescription(
-      CALC_MESSAGES.quantity,
+      new RegExp(CALC_MESSAGES.quantity),
     )
     await expect(page.getByTestId('customer-calc-unit-price')).toHaveAccessibleDescription(
-      CALC_MESSAGES.unitPrice,
+      new RegExp(CALC_MESSAGES.unitPrice),
     )
     await expect(page.getByTestId('customer-calc-result-caption')).toHaveText('買付概算 ／ 未実行')
     await expect(page.getByTestId('customer-calc-total')).toHaveText('—')
@@ -623,6 +634,10 @@ test.describe('顧客詳細（実 API 接続）', () => {
     expect(result.directStatus).toBe(400)
     const detail = result.directJson.detail
     expect(typeof detail, 'ErrorResponse の detail が文字列でない').toBe('string')
+    // 仮計算マスタが未初期化の DB でも 400 が返る。それは「銘柄が無い」の 400 ではないので通さない
+    expect(detail, '400 の理由が銘柄ではなく仮計算マスタの未初期化').not.toMatch(
+      CALC_MASTER_MISSING,
+    )
 
     await expect(page.getByTestId('customer-calc-error')).toContainText(detail)
     await expect(page.getByTestId('customer-calc-result-caption')).toHaveText(

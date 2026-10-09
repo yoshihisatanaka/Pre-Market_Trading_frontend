@@ -11,7 +11,14 @@
  * 宣言されたので、{ 表示フラグ, 本文 } の object をそのまま置く。
  * 2026-09-29 の実測では実 API が JSON 文字列で返していた（src/api/announcements.js は両方を読む）。
  * 実 API の中身は行の全項目（ID / 更新日時 …）の写しだが、画面が読むのは 本文 だけなので 2 項目に絞る。
+ *
+ * 操作者名 は操作者の氏名（docs/api/requests.md #48。2026-10-08 の取り込みで AnnouncementHistoryItem に入った）。
+ * 実 API と同じく m_操作者（fixtures/users.js）から引く。
  */
+import { users } from './users'
+
+/** 操作者コード → 氏名（m_操作者）。マスタに無い操作者は実 API と同じく「システム」 */
+const OPERATOR_NAMES = Object.fromEntries(users.map((user) => [user.操作者コード, user.氏名]))
 
 /** 本文の見本。画面モックのプレースホルダと同じ系統の文面 */
 const MESSAGES = [
@@ -60,12 +67,14 @@ function buildHistories() {
     const next =
       operation === 'HIDE' ? { 表示フラグ: 0, 本文: null } : { 表示フラグ: 1, 本文: message }
 
+    const operator = OPERATORS[index % OPERATORS.length]
     const row = {
       ID: index + 1,
       お知らせID: 1,
       操作区分: operation,
       操作区分名: OPERATION_LABELS[operation],
-      操作者: OPERATORS[index % OPERATORS.length],
+      操作者: operator,
+      操作者名: OPERATOR_NAMES[operator] ?? 'システム',
       変更前データ: state,
       変更後データ: next,
       差分データ: diff(state, next),

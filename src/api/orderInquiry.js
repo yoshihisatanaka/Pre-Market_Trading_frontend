@@ -213,6 +213,23 @@ export async function fetchOrderInquiry({
 }
 
 /**
+ * 出来状況が「注文エラー」の注文の件数（サイドメニューの注文照会に添える件数）。
+ *
+ * 注文照会を出来状況「注文エラー」で絞ったときの件数と同じになるよう、同じ `status`（101,103）で
+ * 1 件だけ引いて `total` を返す。部店の範囲は一覧と同じくサーバが操作者の権限で決める。
+ * `GET /orders/error-summary` は基準日（当日）だけを数え、IB の取消失敗（131）なども含むので、
+ * 注文照会の件数と合わない（使わない）。
+ *
+ * @returns {Promise<number>}
+ */
+export async function fetchOrderErrorCount() {
+  const { data } = await apiClient.get('/orders', {
+    params: { limit: 1, offset: 0, status: STATUS_QUERY[101] },
+  })
+  return data?.total ?? 0
+}
+
+/**
  * 1 注文を読む（訂正・取消の画面の対象注文）。
  *
  * 一覧から行を受け渡さず、画面を開くたびにここで読み直す。URL を直接開いても表示でき、

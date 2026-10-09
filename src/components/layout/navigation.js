@@ -13,6 +13,9 @@
  *
  * 区分はアコーディオンで開閉する。defaultOpen: false を付けた区分は畳んだ状態で始まる（省略時は開）。
  * ただし現在のページを含む区分は、既定に関わらず開く（AppSidebar）。
+ *
+ * 項目に badge を付けると、ラベルの右に件数を出す（1 件以上のときだけ。画面モックの赤い件数表示）。
+ * key は stores/navBadges.js の counts のキー、label は読み上げの文言（「注文エラー 3 件」の「注文エラー」）。
  */
 export const navSections = [
   {
@@ -27,8 +30,16 @@ export const navSections = [
     // 新規注文はモックどおりサイドメニューに置かない。顧客を選んでから顧客詳細の注文入力タブで入れる
     items: [
       { label: 'CSV一括注文', to: '/orders/csv/upload' },
-      { label: '注文照会', to: '/orders/inquiry' },
-      { label: 'Dream登録状況', to: '/orders/dream-status' },
+      {
+        label: '注文照会',
+        to: '/orders/inquiry',
+        badge: { key: 'orderErrors', label: '注文エラー' },
+      },
+      {
+        label: 'Dream登録状況',
+        to: '/orders/dream-status',
+        badge: { key: 'dreamErrors', label: 'Dream登録エラー' },
+      },
       // モックは /executions/ だが、ルートは末尾スラッシュ無しで統一する
       { label: '約定照会', to: '/executions' },
       // 公開モックでは約定照会の直後

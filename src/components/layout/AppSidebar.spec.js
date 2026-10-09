@@ -22,6 +22,32 @@ import { navItems, navSections } from './navigation'
  */
 const Page = { render: () => h('div') }
 const AUTH_ME = '*/api/auth/me'
+/** サイドメニューの件数（注文エラー / Dream登録エラー）を引く 2 本 */
+const ORDERS = '*/api/orders'
+const DREAM_STATUS = '*/api/orders/dream-status'
+
+/** 件数を出す項目（navigation.js の badge 付き）と、出さない項目 */
+const BADGE_ITEMS = navItems.filter((item) => item.badge)
+const PLAIN_ITEMS = navItems.filter((item) => !item.badge)
+
+/**
+ * 2 本の件数 API が返す total を差し替える。呼ばれた回数を数えて返す
+ * @param {{ orderErrors: number, dreamErrors: number }} totals
+ */
+function respondCounts({ orderErrors, dreamErrors }) {
+  const calls = { orderErrors: 0, dreamErrors: 0 }
+  server.use(
+    http.get(ORDERS, () => {
+      calls.orderErrors += 1
+      return HttpResponse.json({ orders: [], total: orderErrors })
+    }),
+    http.get(DREAM_STATUS, () => {
+      calls.dreamErrors += 1
+      return HttpResponse.json({ orders: [], total: dreamErrors })
+    }),
+  )
+  return calls
+}
 
 const MASTER_SECTION = navSections.find((s) => s.requiredPermission === 'master')
 const OPERATION_SECTION = navSections.find((s) => s.requiredPermission === 'operation')
@@ -36,6 +62,8 @@ const operatorWithout = (permission) => ({
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  // 件数が載るとリンクの text() が揺れる。既定は 0 件（数字を出さない）にして ASB-01〜20 を決定的にする
+  respondCounts({ orderErrors: 0, dreamErrors: 0 })
 })
 
 /**
@@ -87,6 +115,24 @@ const spinnerLabels = (wrapper) =>
     .findAll('a')
     .filter((link) => link.find('.base-spinner').exists())
     .map((link) => link.text())
+
+const linkTo = (wrapper, item) => wrapper.find(`a[href="${item.to}"]`)
+const badgeOf = (wrapper, item) => wrapper.find(`[data-testid="sidebar-badge-${item.badge.key}"]`)
+/** 件数の数字を持つリンクの行き先 */
+const badgedHrefs = (wrapper) =>
+  wrapper
+    .findAll('a')
+    .filter((link) => link.find('[data-testid^="sidebar-badge-"]').exists())
+    .map((link) => link.attributes('href'))
+/**
+ * リンク名の近似。jsdom は accessible name を計算しないので、読み上げから外れる子
+ * （aria-hidden / hidden）を除いた文字列で見る
+ */
+function accessibleText(link) {
+  const clone = link.element.cloneNode(true)
+  clone.querySelectorAll('[aria-hidden="true"], [hidden]').forEach((el) => el.remove())
+  return clone.textContent.trim()
+}
 
 const headings = (wrapper) => wrapper.findAll('h2').map((el) => el.text())
 const hrefs = (wrapper) => wrapper.findAll('a').map((link) => link.attributes('href'))
@@ -337,5 +383,90 @@ describe('AppSidebar', () => {
     await linkByLabel(wrapper, '顧客検索').trigger('pointerenter')
 
     expect(loader).toHaveBeenCalledTimes(1)
+  })
+
+  // 件数は前提として置く値（項目ごとに違う数にして取り違えを見分ける）
+  const TOTALS = { orderErrors: 3, dreamErrors: 5 }
+
+  it('[ASB-21] 件数が 1 以上の項目にだけその件数の数字を出す', async () => {
+    respondCounts(TOTALS)
+    const { wrapper } = await mountAt('/')
+    await flushPromises()
+
+    // badge 付きの項目が navigation.js に無いと、このシナリオは意味を失う
+    expect(BADGE_ITEMS.map((item) => item.badge.key).sort()).toEqual(Object.keys(TOTALS).sort())
+    expect(badgedHrefs(wrapper)).toEqual(BADGE_ITEMS.map((item) => item.to))
+    for (const item of BADGE_ITEMS) {
+      // 数字はその項目のリンクの中に出る
+      const badge = linkTo(wrapper, item).find(`[data-testid="sidebar-badge-${item.badge.key}"]`)
+      expect(badge.text()).toBe(String(TOTALS[item.badge.key]))
+    }
+    for (const item of PLAIN_ITEMS) {
+      expect(linkTo(wrapper, item).attributes('aria-describedby'), item.to).toBeUndefined()
+    }
+  })
+
+  it('[ASB-22] 数字は読み上げから外し、リンク名はラベルのまま件数の文を aria-describedby で添える', async () => {
+    respondCounts(TOTALS)
+    const { wrapper } = await mountAt('/')
+    await flushPromises()
+
+    for (const item of BADGE_ITEMS) {
+      const link = linkTo(wrapper, item)
+      const count = TOTALS[item.badge.key]
+
+      expect(badgeOf(wrapper, item).attributes('aria-hidden')).toBe('true')
+      expect(accessibleText(link)).toBe(item.label)
+      // 隠れた要素も数える名前の計算（Playwright の includeHidden）でもラベルのままになるよう、名前を明示する
+      expect(link.attributes('aria-label')).toBe(item.label)
+
+      const describedBy = link.attributes('aria-describedby')
+      expect(describedBy).toBeTruthy()
+      const description = wrapper.find(`[id="${describedBy}"]`)
+      expect(description.exists()).toBe(true)
+      expect(description.attributes('hidden')).toBeDefined()
+      expect(description.text()).toBe(`${item.badge.label} ${count} 件`)
+    }
+  })
+
+  it('[ASB-23] 件数が 0 なら数字も aria-describedby も出さない', async () => {
+    respondCounts({ orderErrors: 0, dreamErrors: 0 })
+    const { wrapper } = await mountAt('/')
+    await flushPromises()
+
+    expect(badgedHrefs(wrapper)).toEqual([])
+    for (const item of navItems) {
+      expect(linkTo(wrapper, item).attributes('aria-describedby'), item.to).toBeUndefined()
+      expect(linkTo(wrapper, item).attributes('aria-label'), item.to).toBeUndefined()
+      expect(accessibleText(linkTo(wrapper, item))).toBe(item.label)
+    }
+  })
+
+  it('[ASB-24] 件数 API が 500 なら数字も aria-describedby も出さない', async () => {
+    const fail = () => HttpResponse.json({ detail: 'x' }, { status: 500 })
+    server.use(http.get(ORDERS, fail), http.get(DREAM_STATUS, fail))
+    const { wrapper } = await mountAt('/')
+    await flushPromises()
+
+    expect(badgedHrefs(wrapper)).toEqual([])
+    for (const item of navItems) {
+      expect(linkTo(wrapper, item).attributes('aria-describedby'), item.to).toBeUndefined()
+    }
+  })
+
+  it('[ASB-25] path が変わると件数を取り直し、クエリだけの変化では取り直さない', async () => {
+    const calls = respondCounts(TOTALS)
+    const { router } = await mountAt('/')
+    await flushPromises()
+    expect(calls).toEqual({ orderErrors: 1, dreamErrors: 1 })
+
+    await router.push('/customers/search')
+    await flushPromises()
+    expect(calls).toEqual({ orderErrors: 2, dreamErrors: 2 })
+
+    await router.push('/customers/search?page=2')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/customers/search?page=2')
+    expect(calls).toEqual({ orderErrors: 2, dreamErrors: 2 })
   })
 })

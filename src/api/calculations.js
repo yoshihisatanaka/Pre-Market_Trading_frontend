@@ -17,7 +17,8 @@ import { apiClient } from './client'
  * 銘柄コード は銘柄コードでもティッカーでもよい（サーバが銘柄コードで引けなければ Ticker で引き直し、
  * 応答の 銘柄コード は正式なコードになる）。画面の「銘柄コード／ティッカー」はそのまま送る。
  *
- * 画面の 国内約定日・現地手数料区分 は CalculationRequest に項目が無いので送らない（docs/api/requests.md #47）。
+ * 画面の 国内約定日 は送らない（CalculationRequest に `約定日` は入ったが、繋ぐかは業務確認の回答待ち。
+ * docs/api/requests.md #47）。
  */
 
 /**

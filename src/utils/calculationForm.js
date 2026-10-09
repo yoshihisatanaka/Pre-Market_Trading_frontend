@@ -1,5 +1,4 @@
 import { SPECIFIC_DEPOSIT } from './apiEnums'
-import { LOCAL_FEE_CATEGORY_OPTIONS } from './calculationOptions'
 import { formatJpyUnit, formatQuantity, formatUsdUnit } from './format'
 import { SIDE } from './orderEntryOptions'
 import { formatSignedJpyUnit, profitLossTone } from './profitLoss'
@@ -77,7 +76,6 @@ export function createCalculationForm({
     domesticTradeDate: toCompactDate(now),
     localFee1: '',
     localFee2: '',
-    localFeeCategory: LOCAL_FEE_CATEGORY_OPTIONS[0].value,
     localTax1: '',
     localTax2: '',
     localTax3: '',
@@ -164,7 +162,7 @@ function optionalNumber(text) {
  * 送る条件（src/api/calculations.js の CalculationInput）を組み立てる。
  * validateCalculationForm を通ったフォームにだけ使う（数量・単価は変換できる前提）。
  *
- * 国内約定日・現地手数料区分は送らない（CalculationRequest に項目が無い。docs/api/requests.md #47）。
+ * 国内約定日は送らない（docs/api/requests.md #47。`約定日` として送れるようになったが、繋ぐかは業務確認の回答待ち）。
  *
  * @param {ReturnType<typeof createCalculationForm>} form
  * @param {{ accountNumber: string }} context 顧客詳細で開いている顧客の口座番号

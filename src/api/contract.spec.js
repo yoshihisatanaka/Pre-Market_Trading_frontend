@@ -58,7 +58,13 @@ import {
 import { orderCreateExamples, orderValidationExamples } from '../mocks/fixtures/orderEntry'
 import { calculationExamples } from '../mocks/fixtures/calculations'
 import { fetchOrders } from './orders'
-import { amendOrder, cancelOrder, fetchOrderDetail, fetchOrderInquiry } from './orderInquiry'
+import {
+  amendOrder,
+  cancelOrder,
+  fetchOrderDetail,
+  fetchOrderErrorCount,
+  fetchOrderInquiry,
+} from './orderInquiry'
 import { fetchBranches, fetchCodes, fetchHandlers } from './codes'
 import { fetchCustomer, fetchCustomers } from './customers'
 import { fetchHoldings } from './holdings'
@@ -131,7 +137,12 @@ import { fetchMizuhoExecutions } from './mizuhoExecutions'
 import { closeMizuhoOrders, fetchMizuhoClosingStatus, reopenMizuhoOrders } from './closing'
 import { exportMizuhoOrderSheet } from './mizuho'
 import { exportExecutionsCsv, fetchExecutions } from './executions'
-import { changeDreamStatus, fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
+import {
+  changeDreamStatus,
+  fetchDreamErrorCount,
+  fetchDreamOrders,
+  fetchDreamStatusCodes,
+} from './dreamStatus'
 import {
   bulkCreateOrders,
   fetchOrderCsvSpec,
@@ -557,6 +568,7 @@ const PROBES = [
         executionStatus: '003',
       }),
   },
+  { name: 'fetchOrderErrorCount', run: () => fetchOrderErrorCount() },
   { name: 'fetchOrderDetail', run: () => fetchOrderDetail('35') },
   {
     name: 'amendOrder',
@@ -913,6 +925,7 @@ const PROBES = [
         receiptNumber: 'DR-20260928-0002',
       }),
   },
+  { name: 'fetchDreamErrorCount', run: () => fetchDreamErrorCount() },
   { name: 'fetchDreamStatusCodes', run: () => fetchDreamStatusCodes() },
   {
     name: 'changeDreamStatus',

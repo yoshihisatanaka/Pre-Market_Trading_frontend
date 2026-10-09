@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { CORPORATE_TYPE, NISA_CONTRACT } from './apiEnums'
 import {
   CUSTOMER_FIELD_GROUPS,
   CUSTOMER_FIELDS,
+  corporateFixedValues,
   emptyCustomerForm,
   hasCustomerFormErrors,
+  isLockedByCorporateType,
   toCustomerForm,
   validateCustomerForm,
 } from './customerFields'
@@ -38,6 +41,26 @@ function validForm() {
 }
 
 const birthDate = CUSTOMER_FIELDS.find((field) => field.key === 'birthDate')
+
+/** 法人のとき固定する NISA の 3 項目（CustomerRequest.NISA契約 の description「法人は '0' 固定」） */
+const NISA_KEYS = ['nisaContract', 'growthQuota', 'growthQuotaNext']
+const lockableFields = CUSTOMER_FIELDS.filter((field) => field.corporateValue !== undefined)
+const corporateForm = (overrides = {}) => ({
+  ...emptyCustomerForm(),
+  corporateType: CORPORATE_TYPE.CORPORATE,
+  ...overrides,
+})
+const individualForm = (overrides = {}) => ({
+  ...emptyCustomerForm(),
+  corporateType: CORPORATE_TYPE.INDIVIDUAL,
+  ...overrides,
+})
+/** NISA の 3 項目を固定値と違う値（契約済み・買付可能額あり）にした差分 */
+const nisaInUse = {
+  nisaContract: NISA_CONTRACT.CONTRACTED,
+  growthQuota: '1200000',
+  growthQuotaNext: '2400000',
+}
 
 // シナリオ: docs/unit/utils-customer-fields.md
 describe('utils/customerFields', () => {
@@ -192,5 +215,35 @@ describe('utils/customerFields', () => {
     const target = CUSTOMER_FIELDS.find((field) => field.required)
     const broken = validateCustomerForm({ ...validForm(), [target.key]: '' })
     expect(hasCustomerFormErrors(broken)).toBe(true)
+  })
+
+  it('[CFF-11] 法人のときだけ NISA の 3 項目が入力不可になる', () => {
+    // 固定値を宣言しているのは NISA の 3 項目で、値はどれも '0'
+    expect(lockableFields.map((field) => field.key)).toEqual(NISA_KEYS)
+    for (const field of lockableFields) expect(field.corporateValue, field.key).toBe('0')
+
+    for (const field of CUSTOMER_FIELDS) {
+      const lockable = NISA_KEYS.includes(field.key)
+      expect(isLockedByCorporateType(field, corporateForm()), field.key).toBe(lockable)
+      expect(isLockedByCorporateType(field, individualForm()), field.key).toBe(false)
+    }
+    // フォームが未用意（null / undefined）でも落ちずに false
+    expect(isLockedByCorporateType(lockableFields[0], null)).toBe(false)
+    expect(isLockedByCorporateType(lockableFields[0], undefined)).toBe(false)
+  })
+
+  it('[CFF-12] 法人なら固定値と違う NISA の項目だけを固定値で返し、個人なら空を返す', () => {
+    const allFixed = Object.fromEntries(lockableFields.map((field) => [field.key, field.corporateValue]))
+
+    // 法人で 3 項目とも固定値と違う → 3 項目すべて
+    expect(corporateFixedValues(corporateForm(nisaInUse))).toEqual(allFixed)
+    // 法人で揃っている項目は含めない（1 項目だけ違う → その 1 項目）
+    expect(corporateFixedValues(corporateForm({ ...allFixed, growthQuota: '5000' }))).toEqual({
+      growthQuota: allFixed.growthQuota,
+    })
+    // 法人で 3 項目とも固定値 → 空（watchEffect が無限に書き戻さない前提）
+    expect(corporateFixedValues(corporateForm(allFixed))).toEqual({})
+    // 個人は NISA を使っていても触らない
+    expect(corporateFixedValues(individualForm(nisaInUse))).toEqual({})
   })
 })

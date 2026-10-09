@@ -18,11 +18,18 @@
  * その間は pendingPath（所有者の AppLayout が router から配る）に一致する項目を読み込み中の見た目にし、
  * 押した瞬間に反応が返るようにする。マウスが乗った / フォーカスした時点でチャンクを先読みするのも
  * 同じ理由（loadRouteLocation は解決済みなら何もしない）。
+ *
+ * 項目の件数（navigation.js の badge。注文エラー / Dream登録エラー）は、画面を移るたびに取り直す
+ * （画面モックはページを開くたびにサーバが数え直す）。同じ画面で検索条件（クエリ）だけが変わっても取り直さない。
+ * 件数はリンク名に混ぜない（E2E と読み上げがラベルで項目を指すため）。読み上げには aria-describedby で添える。
+ * 件数を出している間はリンクに aria-label（ラベルと同じ文字列）も付ける。数字は aria-hidden、読み上げ文は hidden だが、
+ * 隠れた要素も数える名前の計算（Playwright の includeHidden: true）では中身が名前に混ざるため。
  */
 import { computed, reactive, watch } from 'vue'
 import { RouterLink, loadRouteLocation, useRoute, useRouter } from 'vue-router'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
+import { useNavBadgesStore } from '@/stores/navBadges'
 import { navSections } from './navigation'
 
 defineProps({
@@ -72,6 +79,19 @@ watch(
   },
   { immediate: true },
 )
+
+const badges = useNavBadgesStore()
+watch(
+  () => route.path,
+  () => badges.load(),
+  { immediate: true },
+)
+
+/** 項目に添える件数。badge の無い項目・未取得・0 件は 0（何も出さない） */
+const badgeCount = (item) => (item.badge ? (badges.counts[item.badge.key] ?? 0) : 0)
+
+/** 件数の読み上げ文（「注文エラー 3 件」）を置く要素の id */
+const badgeLabelId = (item) => `sidebar-badge-${item.badge.key}-label`
 </script>
 
 <template>
@@ -126,10 +146,25 @@ watch(
             class="sidebar__link"
             :class="{ 'is-pending': item.to === pendingPath }"
             active-class="is-active"
+            :aria-label="badgeCount(item) > 0 ? item.label : undefined"
+            :aria-describedby="badgeCount(item) > 0 ? badgeLabelId(item) : undefined"
             @pointerenter="prefetch(item.to)"
             @focus="prefetch(item.to)"
           >
             {{ item.label }}
+            <!-- 数字は見た目だけ（リンク名は aria-label のラベル）。読み上げは hidden の文を aria-describedby で指す -->
+            <template v-if="badgeCount(item) > 0">
+              <span
+                class="sidebar__badge"
+                aria-hidden="true"
+                :data-testid="`sidebar-badge-${item.badge.key}`"
+              >
+                {{ badgeCount(item) }}
+              </span>
+              <span :id="badgeLabelId(item)" hidden>
+                {{ item.badge.label }} {{ badgeCount(item) }} 件
+              </span>
+            </template>
             <!-- 読み上げは AppLayout のバーに任せる（リンク名をラベルだけに保つ） -->
             <BaseSpinner
               v-if="item.to === pendingPath"
@@ -297,6 +332,31 @@ watch(
 /* 読み込み中の回転マークはラベルの右端に寄せる */
 .sidebar__pending {
   margin-left: auto;
+}
+
+/*
+ * 件数（モックの .sidebar-failure-badge）。ラベルの右端に寄せ、回転マークが出るときはその左に並ぶ。
+ * 寸法はモックの値（17px 角・角丸 3px）
+ */
+.sidebar__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 3px;
+  background-color: var(--color-danger-hover);
+  color: var(--color-sidebar-text-active);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* 間に hidden の読み上げ文が挟まるので、隣接（+）ではなく後続（~）で指す */
+.sidebar__badge ~ .sidebar__pending {
+  margin-left: 0;
 }
 
 /* 0s にすると visibility の遅延も 0s になり、その場で切り替わる */

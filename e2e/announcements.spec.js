@@ -134,6 +134,25 @@ test.describe('お知らせ管理 表示', () => {
     await expect(page.getByTestId('announcements-history-table')).toHaveCount(0)
     await expect(page.getByTestId('announcements-history-pagination')).toHaveCount(0)
   })
+
+  test('[AN-19] 履歴の操作者列にコードと氏名が出る', async ({ page }) => {
+    // 氏名は fixtures/users.js 由来。マスタに無い操作者だと「システム」になり、氏名の確認にならない
+    expect(latestHistory.操作者名).toBeTruthy()
+    expect(latestHistory.操作者名).not.toBe(latestHistory.操作者)
+
+    await openLoaded(page)
+
+    // 列は AnnouncementsView の HISTORY_COLUMNS の順（操作日時 / 操作区分 / 本文 / 操作者）
+    const operatorCell = historyRowsOf(page).first().getByRole('cell').nth(3)
+    await expect(operatorCell.getByTestId('announcements-history-operator-code')).toHaveText(
+      latestHistory.操作者,
+    )
+    // コード → 氏名の順に並ぶ（別要素なので間の空白の有無は問わない）
+    const escape = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    await expect(operatorCell).toHaveText(
+      new RegExp(`^${escape(latestHistory.操作者)}\\s*${escape(latestHistory.操作者名)}$`),
+    )
+  })
 })
 
 test.describe('お知らせ管理 保存', () => {
@@ -343,12 +362,12 @@ test.describe('お知らせ管理 運用状態', () => {
   })
 })
 
-// 全画面共通のお知らせ帯（ヘッダ直下）への追随。帯そのものの出し分けは docs/e2e/layout.md（LAY-24〜）が持つ。
+// 全画面共通のお知らせ帯（ヘッダ直下）への追随。帯そのものの出し分けは docs/e2e/layout.md（LAY-27〜）が持つ。
 // 既定モックのバナーはお知らせの現在値から組み立てるので、保存後の取り直しで帯が変わる。
 test.describe('お知らせ管理 お知らせ帯への反映', () => {
   const bannerOf = (page) => page.getByTestId('operation-banner')
 
-  test('[AN-19] 本文を変えて保存するとお知らせ帯がその本文に変わる', async ({ page }) => {
+  test('[AN-20] 本文を変えて保存するとお知らせ帯がその本文に変わる', async ({ page }) => {
     await openLoaded(page)
     await expect(bannerOf(page).getByTestId('operation-banner-message')).toHaveText(
       CURRENT_MESSAGE,
@@ -362,7 +381,7 @@ test.describe('お知らせ管理 お知らせ帯への反映', () => {
     await expect(bannerOf(page).getByTestId('operation-banner-message')).toHaveText(NEW_MESSAGE)
   })
 
-  test('[AN-20] 表示を外して保存するとお知らせ帯が消える', async ({ page }) => {
+  test('[AN-21] 表示を外して保存するとお知らせ帯が消える', async ({ page }) => {
     await openLoaded(page)
     await expect(bannerOf(page)).toBeVisible()
 

@@ -303,8 +303,12 @@ bannerStore.load()
           <span v-else class="announcement__blank">—</span>
         </template>
 
-        <template #cell-operator="{ value }">
-          <span class="announcement__code">{{ value || '—' }}</span>
+        <!-- コードの下に氏名（障害管理の更新者列と同じ形）。氏名が無ければコードだけ -->
+        <template #cell-operator="{ row }">
+          <span class="announcement__code" data-testid="announcements-history-operator-code">
+            {{ row.operator || '—' }}
+          </span>
+          <span v-if="row.operatorName" class="announcement__sub">{{ row.operatorName }}</span>
         </template>
       </DataTable>
 
@@ -430,6 +434,13 @@ bannerStore.load()
   display: block;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+
+/* 操作者の氏名（モックの .text-xs .text-gray） */
+.announcement__sub {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 
 /* カードの外に出る 4 状態の表示。面と枠線を自前で持つ */

@@ -140,7 +140,15 @@ const submitForm = (wrapper) => find(wrapper, 'announcements-form').trigger('sub
 const noticeText = (wrapper) => find(wrapper, 'announcements-notice').text()
 const historyRows = (wrapper) =>
   find(wrapper, 'announcements-history-table').findAll('[data-testid="data-table-row"]')
-const historyCells = (row) => row.findAll('td').map((td) => td.text())
+/** 操作者の列（4 列目）の位置。コードの下に氏名が出るので、コードだけを testid で引く */
+const OPERATOR_COLUMN = 3
+const historyOperatorCode = (row) =>
+  row.find('[data-testid="announcements-history-operator-code"]').text()
+/** 履歴 1 行の表示。操作者の列はコードだけ（氏名は ANV-24 で見る） */
+const historyCells = (row) =>
+  row
+    .findAll('td')
+    .map((td, index) => (index === OPERATOR_COLUMN ? historyOperatorCode(row) : td.text()))
 const historyRange = (wrapper) =>
   find(wrapper, 'announcements-history-pagination').find('[data-testid="pagination-range"]').text()
 const pageButton = (wrapper, page) =>
@@ -161,7 +169,7 @@ const fieldHint = (wrapper, input) => {
   return found ? found.text() : ''
 }
 
-/** 履歴 1 行の表示（操作日時・操作区分名・本文・操作者）をフィクスチャの生の行から作る */
+/** 履歴 1 行の表示（操作日時・操作区分名・本文・操作者のコード）をフィクスチャの生の行から作る */
 const expectedCells = (raw) => [
   formatMonthDayTime(raw.操作日時),
   raw.操作区分名,
@@ -520,7 +528,7 @@ describe('AnnouncementsView', () => {
     expect(noticeText(wrapper)).toBe(UPDATED_MESSAGE)
   })
 
-  it('[ANV-24] 保存に成功するとバナーを取り直し、帯と共用のストアが保存した本文になる', async () => {
+  it('[ANV-25] 保存に成功するとバナーを取り直し、帯と共用のストアが保存した本文になる', async () => {
     const { wrapper } = await mountView()
     await settle()
     const bannerRequests = countRequests('get', BANNER_PATH)
@@ -535,5 +543,37 @@ describe('AnnouncementsView', () => {
     const bannerStore = useBannerStore(wrapper.vm.$pinia)
     expect(bannerStore.banner.kind).toBe('NOTICE')
     expect(bannerStore.banner.message).toBe(NEW_MESSAGE)
+  })
+
+  it('[ANV-24] 履歴の操作者はコードの下に氏名を出し、氏名が無い行はコードだけ', async () => {
+    const latest = announcementHistories[0]
+    // フィクスチャの先頭行は氏名を持つ（無いと「氏名あり」の行が成り立たない）
+    expect(latest.操作者名).toBeTruthy()
+    const { wrapper } = await mountView()
+    await settle()
+
+    const operatorCell = historyRows(wrapper)[0].findAll('td')[OPERATOR_COLUMN]
+    expect(historyOperatorCode(historyRows(wrapper)[0])).toBe(latest.操作者)
+    expect(operatorCell.text()).toContain(latest.操作者名)
+
+    // 氏名が無い行（キーが無い・null）はコードだけ
+    server.use(
+      http.get(HISTORY_PATH, () =>
+        HttpResponse.json({
+          total: 2,
+          limit: PAGE_SIZE,
+          offset: 0,
+          histories: [
+            { ...latest, ID: 1, 操作者名: undefined },
+            { ...latest, ID: 2, 操作者名: null },
+          ],
+        }),
+      ),
+    )
+    const { wrapper: codeOnly } = await mountView()
+    await settle()
+
+    const cells = historyRows(codeOnly).map((row) => row.findAll('td')[OPERATOR_COLUMN].text())
+    expect(cells).toEqual([latest.操作者, latest.操作者])
   })
 })

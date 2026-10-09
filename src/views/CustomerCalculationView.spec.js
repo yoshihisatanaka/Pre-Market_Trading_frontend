@@ -217,7 +217,6 @@ describe('CustomerCalculationView', () => {
     expect(selectedSide(wrapper).text()).toBe('買い')
     expect(selectedLabel(wrapper, 'customer-calc-deposit')).toBe('特定')
     expect(valueOf(wrapper, 'customer-calc-trade-date')).toBe('20261006')
-    expect(selectedLabel(wrapper, 'customer-calc-local-fee-category')).toBe('通常')
     expect(selectedLabel(wrapper, 'customer-calc-fee-pattern')).toBe('顧客属性を適用')
     expect(find(wrapper, 'customer-calc-tax-exempt').element.checked).toBe(false)
     expect(
@@ -414,7 +413,7 @@ describe('CustomerCalculationView', () => {
     expect(find(wrapper, 'customer-calc-result').attributes('aria-busy')).toBeUndefined()
   })
 
-  it('[CCV-13] 口座番号は integer、空欄の任意項目は null で送り、国内約定日と現地手数料区分は送らない', async () => {
+  it('[CCV-13] 口座番号は integer、空欄の任意項目は null で送り、国内約定日は送らない', async () => {
     const bodies = recordBodies()
     const { wrapper } = await mountView()
 
@@ -447,7 +446,16 @@ describe('CustomerCalculationView', () => {
     })
     expect(Number.isInteger(body.口座番号)).toBe(true)
     expect(Object.keys(body).some((key) => key.includes('約定日'))).toBe(false)
-    expect(Object.keys(body).some((key) => key.includes('手数料区分'))).toBe(false)
+  })
+
+  it('[CCV-15] 現地手数料区分の入力欄は無い', async () => {
+    const { wrapper } = await mountView()
+
+    expect(exists(wrapper, 'customer-calc-local-fee-category')).toBe(false)
+    expect(find(wrapper, 'customer-calc-form').text()).not.toContain('現地手数料区分')
+    // 現地費用の区画そのものは残っている（現地手数料①②は入力できる）
+    expect(exists(wrapper, 'customer-calc-local-fee-1')).toBe(true)
+    expect(exists(wrapper, 'customer-calc-local-fee-2')).toBe(true)
   })
 
   it('[CCV-14] タブを開き直すと前回の結果は消える', async () => {

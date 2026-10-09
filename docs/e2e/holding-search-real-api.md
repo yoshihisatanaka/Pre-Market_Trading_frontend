@@ -69,7 +69,7 @@
 
 **仮計算は実行しない**（`POST /calculations` は飛ばない。実行の噛み合わせは
 [customer-detail-real-api.md](customer-detail-real-api.md) の担当）。
-モック `18ed9d1` で削除された現地手数料区分は、いまの実装に残っているが（`customer-calc-local-fee-category`）、
+モック `18ed9d1` で削除された現地手数料区分は、2026-10-09 に実装からも外した（`customer-calc-local-fee-category` は無い）。
 ここでは前提にも期待値にも使わない。
 
 ## 実行方法

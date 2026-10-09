@@ -13,6 +13,7 @@ import { mockApi } from './helpers/mockApi'
 // 状態はページを開き直すと戻るのでテストごとに独立している。
 // mockApi() は固定の body を返すだけで offset や検索条件のクエリを解釈しない。
 // ページングと絞り込み（DS-04 / DS-11 / DS-12 / DS-15 / DS-16）はクエリを実際に処理する既定ハンドラで検証する。
+// STS変更でサイドメニューの件数が取り直されること（DS-23）もここで見る（件数そのものの出し分けは layout.spec.js の LAY-24〜26）。
 
 const PATH = '/orders/dream-status'
 const LIST_API = '*/api/orders/dream-status'
@@ -490,5 +491,27 @@ test.describe('Dream登録状況', () => {
     )
     await expect(rowsOf(page)).toHaveCount(errorOrders.length - 1)
     await expect(rowOf(page, registrationFailed)).toHaveCount(0)
+  })
+
+  test('[DS-23] STS変更に成功するとサイドメニューの Dream登録エラーの件数が 1 減る', async ({
+    page,
+  }) => {
+    // サイドメニューの件数は GET /orders/dream-status?dream_status=ERROR の total（= エラーの行の数）
+    expect(errorOrders).toContainEqual(registrationFailed)
+    const badge = page
+      .getByRole('navigation', { name: 'メインメニュー' })
+      .getByRole('link', { name: 'Dream登録状況', exact: true })
+      .getByTestId('sidebar-badge-dreamErrors')
+
+    await openList(page)
+    await expect(badge).toHaveText(String(errorOrders.length))
+
+    await chooseTransition(page, registrationFailed, '0')
+    await page.getByTestId('dream-status-change-submit').click()
+
+    await expect(page.getByTestId('dream-status-notice')).toBeVisible()
+    // 画面は移らないまま取り直される
+    await expect(page).toHaveURL(new RegExp(`${PATH}$`))
+    await expect(badge).toHaveText(String(errorOrders.length - 1))
   })
 })

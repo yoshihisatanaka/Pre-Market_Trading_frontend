@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { SPECIFIC_DEPOSIT } from './apiEnums'
-import { LOCAL_FEE_CATEGORY_OPTIONS } from './calculationOptions'
 import { SIDE } from './orderEntryOptions'
 import {
   buildCalculationInput,
@@ -141,7 +140,7 @@ const valueOf = (summary, key) => summary.rows.find((row) => row.key === key)?.v
 
 // シナリオ: docs/unit/utils-calculation-form.md
 describe('utils/calculationForm', () => {
-  it('[TCF-01] 初期値は買い・特定・今日の国内約定日・通常で、ほかは空', () => {
+  it('[TCF-01] 初期値は買い・特定・今日の国内約定日で、ほかは空（現地手数料区分の項目は無い）', () => {
     expect(createCalculationForm({ now: NOW })).toEqual({
       symbol: '',
       side: SIDE.BUY,
@@ -152,7 +151,6 @@ describe('utils/calculationForm', () => {
       domesticTradeDate: '20261006',
       localFee1: '',
       localFee2: '',
-      localFeeCategory: LOCAL_FEE_CATEGORY_OPTIONS[0].value,
       localTax1: '',
       localTax2: '',
       localTax3: '',
@@ -313,7 +311,6 @@ describe('utils/calculationForm', () => {
       feeMax: null,
     })
     expect(input).not.toHaveProperty('domesticTradeDate')
-    expect(input).not.toHaveProperty('localFeeCategory')
   })
 
   it('[TCF-13] 全角・カンマを正規化した数値にし、From/To は feeMin / feeMax に入る', () => {

@@ -53,3 +53,5 @@ MSW も一覧の行をそのまま（`注文ルートコード` を足して）�
 | OIA-33 | `強制区分` が `1` / `0` / `null` の行 | `fetchOrderInquiry()` | `forced` がそれぞれ true / false / false になる | 実装済 |
 | OIA-34 | 既定モック（#35 は契約提案の判定結果 4 項目を持つスライスの親） | `fetchOrderInquiry()` | #35 の `latest.slicePlan` が `{ maxSliceQuantity, reasons, averageVolume, referencePrice }` にフィクスチャの `スライス適用上限数量` / `スライス適用理由` / `スライス平均出来高` / `スライス参照価格` の値で入る。子注文と、ほかのまとまりの `latest` は `slicePlan` が `null` | 実装済 |
 | OIA-35 | `スライス適用理由` だけが `['理由A', null, '', '理由B']` の行 / `スライス参照価格` だけが `'337.5000'` の行 / `スライス適用理由` が `[]` だけの行 | `fetchOrderInquiry()` | 1 行目は `reasons` が `['理由A', '理由B']` でほかは `null`、2 行目は `referencePrice` が 337.5・`reasons` が `[]`、3 行目は `slicePlan` が `null`（4 項目のどれも無い行は null） | 実装済 |
+| OIA-36 | 一覧が `total` 付きの応答を返す（記録する） | `fetchOrderErrorCount()` | `GET /orders` に `limit=1` / `offset=0` / `status=101,103`（注文照会を出来状況「注文エラー」で絞ったときと同じ値）だけが載り、応答の `total` を数値で返す | 実装済 |
+| OIA-37 | 一覧の応答に `total` が無い | `fetchOrderErrorCount()` | 0 を返す（例外にならない） | 実装済 |

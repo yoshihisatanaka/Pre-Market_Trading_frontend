@@ -32,6 +32,8 @@ import {
  *   codesContext … 2 段のカテゴリ（投資方針）の 1 段目に使う、同じフォームの項目の key
  *   initial      … 新規追加で開いたときの値（未指定は ''）。区分は実 API の既定から始める
  *   lockedOnEdit … 編集で読み取り専用にする（業務キー。CustomerUpdateRequest に無い）
+ *   corporateValue … 法人では入力させず（無効にして）、この値に固定する。NISA は個人だけの制度で、
+ *                    CustomerRequest.NISA契約 の description が「法人は '0' 固定。0 のとき NISA買付可能額は 0」
  *   min / max    … 数値の範囲。pattern / patternMessage … 文字列の書式
  */
 
@@ -238,6 +240,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         required: true,
         options: NISA_CONTRACT_OPTIONS,
         initial: NISA_CONTRACT.NONE,
+        corporateValue: NISA_CONTRACT.NONE,
       },
       {
         key: 'growthQuota',
@@ -246,6 +249,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         control: 'integer',
         min: 0,
         max: 2400000,
+        corporateValue: '0',
       },
       {
         key: 'growthQuotaNext',
@@ -254,6 +258,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         control: 'integer',
         min: 0,
         max: 2400000,
+        corporateValue: '0',
       },
     ],
   },
@@ -327,6 +332,31 @@ export function toCustomerForm(customer) {
       const value = customer?.[field.key]
       return [field.key, value === null || value === undefined ? '' : String(value)]
     }),
+  )
+}
+
+/**
+ * 法人区分のせいで入力できない項目か（corporateValue を持つ項目 = NISA の 3 項目を、法人のときだけ無効にする）。
+ *
+ * @param {{ corporateValue?: string }} field
+ * @param {Record<string, string>} form
+ */
+export function isLockedByCorporateType(field, form) {
+  return field.corporateValue !== undefined && form?.corporateType === CORPORATE_TYPE.CORPORATE
+}
+
+/**
+ * 法人のときに固定値へ揃える項目とその値（揃っている項目は含めない）。個人なら空のオブジェクト。
+ * 個人に戻したときに値は戻さない（固定値のまま、入力できる状態に戻るだけ）。
+ *
+ * @param {Record<string, string>} form
+ * @returns {Record<string, string>}
+ */
+export function corporateFixedValues(form) {
+  return Object.fromEntries(
+    CUSTOMER_FIELDS.filter(
+      (field) => isLockedByCorporateType(field, form) && form[field.key] !== field.corporateValue,
+    ).map((field) => [field.key, field.corporateValue]),
   )
 }
 

@@ -3,7 +3,13 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { codeEntries } from '@/mocks/fixtures/codes'
 import { orderInquiryRows } from '@/mocks/fixtures/orderInquiry'
-import { amendOrder, cancelOrder, fetchOrderDetail, fetchOrderInquiry } from './orderInquiry'
+import {
+  amendOrder,
+  cancelOrder,
+  fetchOrderDetail,
+  fetchOrderErrorCount,
+  fetchOrderInquiry,
+} from './orderInquiry'
 
 /*
  * API 層のテスト。注文照会の一覧（GET /orders）の変換とまとめ方、
@@ -506,5 +512,23 @@ describe('api/orderInquiry', () => {
     expect(priceOnly.referencePrice).toBe(337.5)
     expect(priceOnly.reasons).toEqual([])
     expect(empty).toBeNull()
+  })
+
+  it('[OIA-36] 注文エラーの件数は limit=1・status=101,103 で引き、total を返す', async () => {
+    // 応答の total は前提として置く値（返り値がこれをそのまま運ぶことを見る）
+    const total = 7
+    const seen = recordList({ orders: [], total })
+
+    const count = await fetchOrderErrorCount()
+
+    expect(count).toBe(total)
+    expect(seen).toHaveLength(1)
+    expect(Object.fromEntries(seen[0])).toEqual({ limit: '1', offset: '0', status: '101,103' })
+  })
+
+  it('[OIA-37] 注文エラーの件数は total が無い応答なら 0', async () => {
+    recordList({ orders: [] })
+
+    await expect(fetchOrderErrorCount()).resolves.toBe(0)
   })
 })

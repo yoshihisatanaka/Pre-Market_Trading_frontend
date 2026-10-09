@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import {
   bulkOrderCreateResponse,
+  ORDER_CSV_TEMPLATE_FILENAME,
   orderCsvColumnNames,
   orderCsvColumns,
   orderCsvCustomerNameOf,
@@ -53,6 +54,15 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
 })
+
+/** jsdom の Blob をバイト列で読む（jsdom 26 の Blob には arrayBuffer() が無い） */
+const readBytes = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(new Uint8Array(reader.result))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsArrayBuffer(blob)
+  })
 
 /** 送る File も Node の実装にする（jsdom の File を Node の FormData に積むと文字列で届く） */
 const csvFile = (text, name = 'orders.csv') => new NodeFile([text], name, { type: 'text/csv' })
@@ -242,11 +252,16 @@ describe('api/orderCsv', () => {
     expect(error.message).toBe(detail)
   })
 
-  /*
-   * OCA-09（BOM 付きのバイト列がそのまま返る）は保留。MSW(node) の XHR インターセプタが
-   * responseType 'blob' の本文を一度テキストに復号してから Blob を作り直すため、BOM がテストの環境で落ちる
-   * （@mswjs/interceptors の XMLHttpRequest の "blob" 分岐）。製品コードの挙動とは切り分けられない。
-   */
+  it('[OCA-09] テンプレートは BOM を含むバイト列のまま、サーバのファイル名で返る', async () => {
+    const { blob, filename } = await fetchOrderCsvTemplate()
+
+    expect(filename).toBe(ORDER_CSV_TEMPLATE_FILENAME)
+    // text で読むと BOM が落ちるので、バイト列で比べる（TextEncoder は U+FEFF を EF BB BF にする）
+    // jsdom と Node で Uint8Array の realm が違い toEqual が型で落ちるので、素の配列で比べる
+    const bytes = Array.from(await readBytes(blob))
+    expect(bytes.slice(0, 3)).toEqual([0xef, 0xbb, 0xbf])
+    expect(bytes).toEqual(Array.from(new TextEncoder().encode(orderCsvTemplateText)))
+  })
 
   it('[OCA-10] Content-Disposition が無いときは既定のファイル名になる', async () => {
     server.use(
@@ -280,7 +295,7 @@ describe('api/orderCsv', () => {
     expect(filename).toBe('orders.csv')
   })
 
-  it('[OCA-12] テンプレートが 500 のとき ApiError になり、detail は読めない', async () => {
+  it('[OCA-12] テンプレートが 500 のとき detail を message に持つ ApiError になる', async () => {
     const detail = 'テンプレートを作れませんでした'
     server.use(http.get(TEMPLATE_PATH, () => HttpResponse.json({ detail }, { status: 500 })))
 
@@ -288,9 +303,8 @@ describe('api/orderCsv', () => {
 
     expect(error).toBeInstanceOf(ApiError)
     expect(error.status).toBe(500)
-    // 本文が Blob で来るので detail を取り出せず、status 既定の文言になる（今の仕様を固定する）
-    expect(error.message).not.toBe(detail)
-    expect(error.message).toBe('サーバーでエラーが発生しました。')
+    // 本文はバイト列で届くが、client.js の decodeBinaryBody が JSON に戻すので detail が読める
+    expect(error.message).toBe(detail)
   })
 
   it('[OCA-13] テンプレートの CSV を multipart で送り、行を camelCase の注文で返す', async () => {

@@ -245,13 +245,11 @@ test.describe('CSV一括注文', () => {
   })
 
   /*
-   * 保留（fixme）: E2E では BOM を確かめられない。
    * E2E の接続先 http://frontend:5173 は secure context ではないので MSW が Service Worker を使えず、
-   * ページ内の fallback mode で XHR を横取りする。そのインターセプタが responseType: 'blob' の応答から
-   * 先頭の BOM を落とす（同じページで fetch なら EF BB BF が残り、XHR の blob だと残らないことを確認済み）。
-   * 画面は受け取った Blob をそのまま保存しているので、BOM の保持は実 API の E2E で確かめる。
+   * ページ内の fallback mode で XHR を横取りする。そのインターセプタは responseType: 'blob' の応答から
+   * 先頭の BOM を落とすが、api 層は arraybuffer で受けるのでバイト列のまま届く（src/api/orderCsv.js）。
    */
-  test.fixme('[OC-10] テンプレートDL で BOM 付きのテンプレートがサーバのファイル名で保存される', async ({
+  test('[OC-10] テンプレートDL で BOM 付きのテンプレートがサーバのファイル名で保存される', async ({
     page,
   }) => {
     await page.goto(UPLOAD_PATH)

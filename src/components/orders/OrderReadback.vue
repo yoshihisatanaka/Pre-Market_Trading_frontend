@@ -86,10 +86,6 @@ defineProps({
             <dt>預り売買区分</dt>
             <dd data-testid="order-readback-deposit-category">{{ readback.depositCategory }}</dd>
           </div>
-          <div>
-            <dt>金銭受渡方法</dt>
-            <dd data-testid="order-readback-cash-delivery">{{ readback.cashDelivery }}</dd>
-          </div>
         </dl>
       </section>
 

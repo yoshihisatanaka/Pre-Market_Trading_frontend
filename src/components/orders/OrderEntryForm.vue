@@ -18,7 +18,6 @@ import BaseSegmentedControl from '@/components/ui/BaseSegmentedControl.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import FormField from '@/components/ui/FormField.vue'
 import {
-  CASH_DELIVERY_OPTIONS,
   DEPOSIT_CATEGORY_OPTIONS,
   FUND_NATURE_OPTIONS,
   ORDER_CHANNEL_OPTIONS,
@@ -307,6 +306,17 @@ function selectOrderType(value) {
           />
         </FormField>
 
+        <!-- 2026-09-30 版の画面モックで右列から左列（決済通貨区分の下）へ移った -->
+        <FormField label="注文種別" layout="inline" :error="errors.vwap">
+          <BaseSegmentedControl
+            v-model="form.vwap"
+            :options="vwapOptions"
+            class="order-entry-form__toggle"
+            aria-label="注文種別"
+            data-testid="order-entry-vwap"
+          />
+        </FormField>
+
         <!-- 任意。未選択から始まり、選ばなければ口座の特定口座区分で決まる -->
         <FormField
           v-if="showDepositCategory"
@@ -342,7 +352,51 @@ function selectOrderType(value) {
         </FormField>
       </div>
 
+      <!--
+        並びは 2026-09-30 版の画面モックのとおり（区分 4 つ → 受注日・受注時刻・受注者）。
+        金銭受渡方法は同じ版で外れた（当社固定。utils/orderEntryOptions.js の CASH_DELIVERY_DEFAULT）
+      -->
       <div class="order-entry-form__reception">
+        <FormField label="勧誘区分" layout="inline">
+          <BaseSegmentedControl
+            v-model="form.solicitation"
+            :options="SOLICITATION_OPTIONS"
+            class="order-entry-form__toggle"
+            aria-label="勧誘区分"
+            data-testid="order-entry-solicitation"
+          />
+        </FormField>
+
+        <FormField label="資金性格" layout="inline">
+          <BaseSegmentedControl
+            v-model="form.fundNature"
+            :options="FUND_NATURE_OPTIONS"
+            class="order-entry-form__toggle"
+            aria-label="資金性格"
+            data-testid="order-entry-fund-nature"
+          />
+        </FormField>
+
+        <FormField label="受注方法" layout="inline">
+          <BaseSegmentedControl
+            v-model="form.orderMethod"
+            :options="ORDER_METHOD_OPTIONS"
+            class="order-entry-form__toggle"
+            aria-label="受注方法"
+            data-testid="order-entry-order-method"
+          />
+        </FormField>
+
+        <FormField label="注文チャネル" layout="inline">
+          <BaseSegmentedControl
+            v-model="form.orderChannel"
+            :options="ORDER_CHANNEL_OPTIONS"
+            class="order-entry-form__toggle"
+            aria-label="注文チャネル"
+            data-testid="order-entry-order-channel"
+          />
+        </FormField>
+
         <FormField v-slot="{ field }" label="受注日" layout="inline" :error="errors.orderDate">
           <BaseInput
             v-bind="field"
@@ -382,66 +436,6 @@ function selectOrderType(value) {
             :maxlength="ORDER_PERSON_MAX_LENGTH"
             autocomplete="off"
             data-testid="order-entry-order-person"
-          />
-        </FormField>
-
-        <FormField label="勧誘区分" layout="inline">
-          <BaseSegmentedControl
-            v-model="form.solicitation"
-            :options="SOLICITATION_OPTIONS"
-            class="order-entry-form__toggle"
-            aria-label="勧誘区分"
-            data-testid="order-entry-solicitation"
-          />
-        </FormField>
-
-        <FormField label="受注方法" layout="inline">
-          <BaseSegmentedControl
-            v-model="form.orderMethod"
-            :options="ORDER_METHOD_OPTIONS"
-            class="order-entry-form__toggle"
-            aria-label="受注方法"
-            data-testid="order-entry-order-method"
-          />
-        </FormField>
-
-        <FormField label="資金性格" layout="inline">
-          <BaseSegmentedControl
-            v-model="form.fundNature"
-            :options="FUND_NATURE_OPTIONS"
-            class="order-entry-form__toggle"
-            aria-label="資金性格"
-            data-testid="order-entry-fund-nature"
-          />
-        </FormField>
-
-        <FormField label="注文チャネル" layout="inline">
-          <BaseSegmentedControl
-            v-model="form.orderChannel"
-            :options="ORDER_CHANNEL_OPTIONS"
-            class="order-entry-form__toggle"
-            aria-label="注文チャネル"
-            data-testid="order-entry-order-channel"
-          />
-        </FormField>
-
-        <FormField label="金銭受渡方法" layout="inline">
-          <BaseSegmentedControl
-            v-model="form.cashDelivery"
-            :options="CASH_DELIVERY_OPTIONS"
-            class="order-entry-form__toggle"
-            aria-label="金銭受渡方法"
-            data-testid="order-entry-cash-delivery"
-          />
-        </FormField>
-
-        <FormField label="注文種別" layout="inline" :error="errors.vwap">
-          <BaseSegmentedControl
-            v-model="form.vwap"
-            :options="vwapOptions"
-            class="order-entry-form__toggle"
-            aria-label="注文種別"
-            data-testid="order-entry-vwap"
           />
         </FormField>
       </div>

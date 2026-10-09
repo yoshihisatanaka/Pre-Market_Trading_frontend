@@ -100,7 +100,15 @@ function sideButton(page, name) {
   return page.getByTestId('order-entry-side').getByRole('button', { name, exact: true })
 }
 
-/** 部店・口座番号・ティッカー・売買・数量・受注者を入れる（ほかは既定値のまま） */
+/** 価格（指成区分）のボタン。既定は指値（画面モックの 2026-09-30 版の初期値） */
+function orderTypeButton(page, name) {
+  return page.getByTestId('order-entry-order-type').getByRole('button', { name, exact: true })
+}
+
+/**
+ * 部店・口座番号・ティッカー・売買・価格・数量・受注者を入れる（ほかは既定値のまま）。
+ * 価格は既定の指値ではなく成行を押す（指値単価を入れずに確認まで進めるため。指値を見る行は押し直す）
+ */
 async function fillOrder(
   page,
   {
@@ -115,6 +123,7 @@ async function fillOrder(
   await page.getByTestId('order-entry-account').fill(account)
   await page.getByTestId('order-entry-ticker').fill(ticker)
   if (side) await sideButton(page, side).click()
+  await orderTypeButton(page, '成行').click()
   if (quantity) await page.getByTestId('order-entry-quantity').fill(quantity)
   if (orderPerson) await page.getByTestId('order-entry-order-person').fill(orderPerson)
 }
@@ -168,6 +177,16 @@ test.describe('新規注文 表示', () => {
     await expect(
       page.getByTestId('order-entry-deposit-category').locator('[aria-pressed="true"]'),
     ).toHaveCount(0)
+    // 価格は指値（単価の欄が出ている）、決済通貨区分は外決で始まる（画面モックの 2026-09-30 版）
+    await expect(orderTypeButton(page, '指値')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('order-entry-limit-price')).toBeVisible()
+    await expect(
+      page
+        .getByTestId('order-entry-settlement-currency')
+        .getByRole('button', { name: '外決', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    // 金銭受渡方法は当社固定で欄が無い
+    await expect(page.getByTestId('order-entry-cash-delivery')).toHaveCount(0)
   })
 
   test('[NO-02] 受注不可日の取得が失敗するとエラーと再試行ボタンが出てフォームは出ない', async ({
@@ -365,6 +384,8 @@ test.describe('新規注文 入力の不備とサーバの判定', () => {
     await expect(alerts.filter({ hasText: 'ティッカーを入力してください。' })).toBeVisible()
     await expect(alerts.filter({ hasText: '売買区分を選択してください。' })).toBeVisible()
     await expect(alerts.filter({ hasText: '注文数量を入力してください。' })).toBeVisible()
+    // 価格の既定は指値なので、単価が空なら指値価格も不備になる
+    await expect(alerts.filter({ hasText: '指値価格を入力してください。' })).toBeVisible()
 
     await expectStillInput(page)
     await expect(page.getByTestId('order-entry-errors')).toHaveCount(0)
@@ -687,6 +708,8 @@ test.describe('新規注文 確定と次の注文', () => {
     // 1 件目と同じ銘柄・売買だと重複注文で止まる（NO-38）ので、2 件目は別の銘柄にする
     await page.getByTestId('order-entry-ticker').fill(ORCL.Ticker)
     await sideButton(page, '買い').click()
+    // 価格は既定の指値に戻っているので成行を押し直す
+    await orderTypeButton(page, '成行').click()
     await page.getByTestId('order-entry-quantity').fill('10')
     await page.getByTestId('order-entry-order-person').fill(ORDER_PERSON)
     await submitInput(page)
@@ -710,6 +733,7 @@ test.describe('新規注文 確定と次の注文', () => {
     await expect(page.getByTestId('order-entry-form')).toBeVisible()
     await page.getByTestId('order-entry-ticker').fill(AAPL.Ticker)
     await sideButton(page, '買い').click()
+    await orderTypeButton(page, '成行').click()
     await page.getByTestId('order-entry-quantity').fill('10')
     await page.getByTestId('order-entry-order-person').fill(ORDER_PERSON)
 

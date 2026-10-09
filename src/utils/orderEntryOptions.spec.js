@@ -15,7 +15,7 @@ import {
   TRANSACTION_TYPE_VALUES,
 } from './apiEnums'
 import {
-  CASH_DELIVERY_OPTIONS,
+  CASH_DELIVERY_DEFAULT,
   DEPOSIT_CATEGORY_OPTIONS,
   EXECUTION_SCOPE_OPTIONS,
   FUND_NATURE_OPTIONS,
@@ -49,7 +49,6 @@ const OPTION_ENUMS = [
   ['ORDER_METHOD', ORDER_METHOD_OPTIONS, ORDER_METHOD_VALUES],
   ['FUND_NATURE', FUND_NATURE_OPTIONS, FUND_NATURE_VALUES],
   ['ORDER_CHANNEL', ORDER_CHANNEL_OPTIONS, ORDER_CHANNEL_VALUES],
-  ['CASH_DELIVERY', CASH_DELIVERY_OPTIONS, CASH_DELIVERY_VALUES],
 ]
 
 /** ORDER_FORM_DEFAULTS のキー → その値を選ぶ選択肢（預り売買区分は未選択で始めるので含めない） */
@@ -62,7 +61,6 @@ const DEFAULT_OPTIONS = {
   orderMethod: ORDER_METHOD_OPTIONS,
   fundNature: FUND_NATURE_OPTIONS,
   orderChannel: ORDER_CHANNEL_OPTIONS,
-  cashDelivery: CASH_DELIVERY_OPTIONS,
   vwap: VWAP_OPTIONS,
 }
 
@@ -78,10 +76,13 @@ describe('orderEntryOptions', () => {
     }
   })
 
-  it('[NOP-02] 固定値（取引・証券受渡方法）が enum に含まれ、証券受渡方法は OrderRequest の既定値', () => {
+  it('[NOP-02] 固定値（取引・証券受渡方法・金銭受渡方法）が enum に含まれ、証券受渡方法は OrderRequest の既定値', () => {
     expect(TRANSACTION_TYPE_VALUES).toContain(TRANSACTION_TYPE_CONSIGNMENT)
     expect(SECURITIES_DELIVERY_VALUES).toContain(SECURITIES_DELIVERY_DEFAULT)
     expect(SECURITIES_DELIVERY_DEFAULT).toBe(ORDER_REQUEST.properties.証券受渡方法.default)
+    // 金銭受渡方法は当社固定（画面モックの 2026-09-30 版）
+    expect(CASH_DELIVERY_VALUES).toContain(CASH_DELIVERY_DEFAULT)
+    expect(CASH_DELIVERY_DEFAULT).toBe('000')
   })
 
   it('[NOP-08] 受注者の最大文字数が OrderRequest.受注者 の maxLength と一致する', () => {
@@ -95,6 +96,33 @@ describe('orderEntryOptions', () => {
     for (const [key, options] of Object.entries(DEFAULT_OPTIONS)) {
       expect(valuesOf(options), key).toContain(ORDER_FORM_DEFAULTS[key])
     }
+  })
+
+  it('[NOP-10] 既定値は画面モックの初期値（指値・外決・勧誘あり・電話他・余裕資金・営業店・通常）', () => {
+    const labels = {
+      orderType: optionLabel(ORDER_TYPE_OPTIONS, ORDER_FORM_DEFAULTS.orderType),
+      settlementCurrency: optionLabel(
+        SETTLEMENT_CURRENCY_OPTIONS,
+        ORDER_FORM_DEFAULTS.settlementCurrency,
+      ),
+      solicitation: optionLabel(SOLICITATION_OPTIONS, ORDER_FORM_DEFAULTS.solicitation),
+      orderMethod: optionLabel(ORDER_METHOD_OPTIONS, ORDER_FORM_DEFAULTS.orderMethod),
+      fundNature: optionLabel(FUND_NATURE_OPTIONS, ORDER_FORM_DEFAULTS.fundNature),
+      orderChannel: optionLabel(ORDER_CHANNEL_OPTIONS, ORDER_FORM_DEFAULTS.orderChannel),
+      vwap: optionLabel(VWAP_OPTIONS, ORDER_FORM_DEFAULTS.vwap),
+    }
+
+    expect(labels).toEqual({
+      orderType: '指値',
+      settlementCurrency: '外決',
+      solicitation: '勧誘あり',
+      orderMethod: '電話他',
+      fundNature: '余裕資金',
+      orderChannel: '営業店',
+      vwap: '通常',
+    })
+    // 金銭受渡方法は欄が無く、既定値にも持たない（送るときに CASH_DELIVERY_DEFAULT を入れる）
+    expect(ORDER_FORM_DEFAULTS).not.toHaveProperty('cashDelivery')
   })
 
   it('[NOP-04] 売買区分は買い = 3（buy）・売り = 1（sell）で、先頭が買い', () => {

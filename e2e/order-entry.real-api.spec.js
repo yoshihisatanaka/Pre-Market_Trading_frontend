@@ -147,15 +147,26 @@ async function skipIfBlocked(page) {
 }
 
 function sideButton(page, name) {
-  return page.getByTestId('order-entry-side').getByRole('button', { name, exact: true })
+  return toggleButton(page, 'order-entry-side', name)
 }
 
-/** 部店・口座番号・ティッカー・買い・数量 1 を入れる（ほかは既定値。成行・当日中・レギュラー） */
+/** 区分の切り替えボタン（売買・価格・決済通貨） */
+function toggleButton(page, testid, name) {
+  return page.getByTestId(testid).getByRole('button', { name, exact: true })
+}
+
+/**
+ * 部店・口座番号・ティッカー・買い・成行・円決・数量 1 を入れる（ほかは既定値。当日中・レギュラー）。
+ * 画面の既定は指値・外決（画面モックの 2026-09-30 版）なので、成行と円決は押して選ぶ
+ * （指値単価を要らなくし、外貨の余力に左右されないようにする）
+ */
 async function fillOrder(page, { ticker = stock.Ticker } = {}) {
   await page.getByTestId('order-entry-branch').fill(account.部店コード)
   await page.getByTestId('order-entry-account').fill(accountText(account))
   await page.getByTestId('order-entry-ticker').fill(ticker)
   await sideButton(page, '買い').click()
+  await toggleButton(page, 'order-entry-order-type', '成行').click()
+  await toggleButton(page, 'order-entry-settlement-currency', '円決').click()
   await page.getByTestId('order-entry-quantity').fill('1')
   // 受注者は /auth/me の受注者コードが既定で入る（#51）。未設定のときだけ試験用のコードで埋める
   const orderPerson = page.getByTestId('order-entry-order-person')

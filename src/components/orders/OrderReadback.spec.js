@@ -6,7 +6,7 @@ import {
   buildOrderReadback,
   createOrderForm,
 } from '@/utils/orderEntryForm'
-import { DEPOSIT_CATEGORY, SIDE } from '@/utils/orderEntryOptions'
+import { DEPOSIT_CATEGORY, ORDER_TYPE, SIDE } from '@/utils/orderEntryOptions'
 import OrderReadback from './OrderReadback.vue'
 
 /*
@@ -21,6 +21,8 @@ function form(overrides = {}) {
     ...createOrderForm({ now: NOW, orderPerson: 'test-user', branchCode: '123', accountNumber: '1230004' }),
     ticker: 'AAPL',
     side: SIDE.BUY,
+    // 既定は指値。概算を前日終値から出すため成行にしておく
+    orderType: ORDER_TYPE.MARKET,
     quantity: '10',
     expiryDate: '2026-09-29',
     ...overrides,
@@ -55,7 +57,6 @@ const FIELDS = {
   'order-readback-vwap': 'vwap',
   'order-readback-settlement-currency': 'settlementCurrency',
   'order-readback-deposit-category': 'depositCategory',
-  'order-readback-cash-delivery': 'cashDelivery',
   'order-readback-order-datetime': 'orderDateTime',
   'order-readback-order-person': 'orderPerson',
   'order-readback-solicitation': 'solicitationMethod',
@@ -72,6 +73,8 @@ describe('OrderReadback', () => {
       expect(text(wrapper, testid), testid).toBe(readback[key])
     }
     expect(wrapper.text()).toContain('注文区分／期間')
+    // 金銭受渡方法は当社固定で、読み上げに出さない（画面モックの 2026-09-30 版）
+    expect(wrapper.text()).not.toContain('金銭受渡方法')
     const symbol = wrapper.find('[data-testid="order-readback-symbol"]')
     expect(symbol.text()).toContain(readback.ticker)
     expect(symbol.find('small').text()).toBe(readback.symbolName)

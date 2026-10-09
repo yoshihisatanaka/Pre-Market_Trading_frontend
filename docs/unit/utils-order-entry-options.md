@@ -13,8 +13,8 @@
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
-| NOP-01 | — | 各 `*_OPTIONS`（売買・指成・市場区分・入力欄の注文区分・決済通貨・預り売買・勧誘・受注方法・資金性格・注文チャネル・金銭受渡）の value を `apiEnums.js` の対応する `*_VALUES` と突き合わせる | すべての value が enum に含まれる | 実装済 |
-| NOP-02 | — | 画面に欄の無い固定値（取引 = 委託・証券受渡方法 = 当社保管）を enum と `openapi.json` の OrderRequest と突き合わせる | `TRANSACTION_TYPE_VALUES` / `SECURITIES_DELIVERY_VALUES` に含まれ、証券受渡方法は OrderRequest の既定値（`'100'`）と一致する | 実装済 |
+| NOP-01 | — | 各 `*_OPTIONS`（売買・指成・市場区分・入力欄の注文区分・決済通貨・預り売買・勧誘・受注方法・資金性格・注文チャネル）の value を `apiEnums.js` の対応する `*_VALUES` と突き合わせる | すべての value が enum に含まれる | 実装済 |
+| NOP-02 | — | 画面に欄の無い固定値（取引 = 委託・証券受渡方法 = 当社保管・金銭受渡方法 = 当社）を enum と `openapi.json` の OrderRequest と突き合わせる | `TRANSACTION_TYPE_VALUES` / `SECURITIES_DELIVERY_VALUES` / `CASH_DELIVERY_VALUES` に含まれ、証券受渡方法は OrderRequest の既定値（`'100'`）と一致し、金銭受渡方法は `'000'`（画面モックの 2026-09-30 版で欄が外れ当社固定になった。OrderRequest に既定値は無い） | 実装済 |
 | NOP-03 | — | `ORDER_FORM_DEFAULTS` の各既定値を対応する選択肢と突き合わせる（注文区分は入力欄の `ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS`） | 預り売買区分だけは空文字（未選択で始める。画面モックの 2026-10-02 版）。ほかはどれも選択肢の value のどれかに一致し、注文区分の既定は選べる（`disabled` でない）選択肢 | 実装済 |
 | NOP-04 | — | 売買区分の選択肢を読む | 買い = `'3'`（tone `buy`）・売り = `'1'`（tone `sell`）で、先頭が買い | 実装済 |
 | NOP-05 | — | 指成区分の選択肢を読む | 成行 = `'MO'`・指値 = `'LO'` | 実装済 |
@@ -22,3 +22,4 @@
 | NOP-07 | — | `optionLabel()` を既知の値・未知の値・空文字・`undefined` で呼ぶ | 既知は表示名、それ以外は `'—'` | 実装済 |
 | NOP-08 | — | `ORDER_PERSON_MAX_LENGTH` を `openapi.json` の OrderRequest.受注者 と突き合わせる | `maxLength`（4）と一致する | 実装済 |
 | NOP-09 | — | 入力欄の注文区分 `ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS` を読む | 画面モックのとおり `02`（プレ＋レギュラー）/ `03`（レギュラー）が見出し「Ph.1（受付対象）」の下で選べ、`04`「プレ＋レギュラー＋アフター（Ph.2予定）」/ `06`「アフター（時間内限り）（Ph.2予定）」が見出し「Ph.2（将来対応）」の下で選べない（`disabled`。PH1 はアフター非対応。docs/api/requests.md #50 ②） | 実装済 |
+| NOP-10 | — | `ORDER_FORM_DEFAULTS` の既定値を表示名に直して読む | 価格「指値」・決済通貨「外決」・勧誘「勧誘あり」・受注方法「電話他」・資金性格「余裕資金」・注文チャネル「営業店」・注文種別「通常」（画面モックの 2026-09-30 版の初期値）。金銭受渡方法は既定値に持たない | 実装済 |

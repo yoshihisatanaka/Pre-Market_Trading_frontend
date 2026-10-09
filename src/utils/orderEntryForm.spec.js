@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CASH_DELIVERY_DEFAULT,
   DEPOSIT_CATEGORY,
   LIMIT_ONLY_EXECUTION_SCOPES,
   ORDER_FORM_DEFAULTS,
@@ -76,7 +77,7 @@ const SYMBOL = {
   previousClose: 227.16,
 }
 
-/** すべて埋まったフォーム（買い・成行・1,000 株・当日中） */
+/** すべて埋まったフォーム（買い・成行・1,000 株・当日中。決済通貨などほかの区分は既定値） */
 function validForm(overrides = {}) {
   return {
     ...createOrderForm({
@@ -87,6 +88,8 @@ function validForm(overrides = {}) {
     }),
     ticker: 'AAPL',
     side: SIDE.BUY,
+    // 既定は指値（画面モックの初期値）。指値単価を要らなくするため成行にしておく
+    orderType: ORDER_TYPE.MARKET,
     quantity: '1,000',
     expiryDate: '2026-09-29',
     ...overrides,
@@ -171,7 +174,8 @@ describe('orderEntryForm', () => {
       side: MESSAGES.sideRequired,
       quantity: MESSAGES.quantityRequired,
       orderType: '',
-      limitPrice: '',
+      // 既定が指値（画面モックの初期値）なので、指値価格も必須の文言になる
+      limitPrice: MESSAGES.limitPriceRequired,
       expiryDate: MESSAGES.expiryRequired,
       depositCategory: '',
       vwap: '',
@@ -293,6 +297,8 @@ describe('orderEntryForm', () => {
       expiryDate: '2026-09-29',
       securitiesDelivery: SECURITIES_DELIVERY_DEFAULT,
       transactionType: '100',
+      // 欄の無い金銭受渡方法は当社固定
+      cashDelivery: CASH_DELIVERY_DEFAULT,
       vwap: false,
       forced: false,
       duplicateConfirmed: false,
@@ -455,9 +461,8 @@ describe('orderEntryForm', () => {
       quantity: '1,000 株',
       marketExpiry: 'レギュラー ／ 当日中（9/29）',
       vwap: '通常',
-      settlementCurrency: '円決',
+      settlementCurrency: '外決',
       depositCategory: '特定',
-      cashDelivery: '当社',
       orderDateTime: '09/29 10:30',
       orderPerson: ORDER_PERSON,
       solicitationMethod: '勧誘あり ／ 電話他',

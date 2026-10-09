@@ -470,6 +470,12 @@ async function createTestOrder(page) {
   await page.getByTestId('order-entry-ticker').fill(stock.Ticker)
   await expect(page.getByTestId('order-entry-ticker-hint')).toHaveText(stockLabel(stock))
   await page.getByTestId('order-entry-side').getByRole('button', { name: '買い', exact: true }).click()
+  // 画面の既定は指値・外決（画面モックの 2026-09-30 版）。単価を要らなくし外貨の余力に左右されないよう成行・円決にする
+  await page.getByTestId('order-entry-order-type').getByRole('button', { name: '成行', exact: true }).click()
+  await page
+    .getByTestId('order-entry-settlement-currency')
+    .getByRole('button', { name: '円決', exact: true })
+    .click()
   await page.getByTestId('order-entry-quantity').fill('1')
   // 受注者は /auth/me の受注者コードが既定で入る（#51）。未設定のときだけ試験用のコードで埋める
   const orderPerson = page.getByTestId('order-entry-order-person')

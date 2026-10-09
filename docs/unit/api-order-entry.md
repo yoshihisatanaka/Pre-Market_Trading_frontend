@@ -11,15 +11,16 @@
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
 | NOA-01 | 既定モック | `validateOrder(注文)` | 本文が OrderRequest の日本語キーで送られ、口座番号は integer、有効期限・受注日は `'YYYYMMDD'`、受注時刻は `'HH:MM'` のまま、区分値はコードのまま | 実装済 |
-| NOA-02 | 成行・受注者が空・強制区分なし・VWAP なし | `validateOrder(注文)` | 本文の指値単価 `null`、受注者 `null`（空文字にしない）、強制区分 `0`、VWAP区分 `0`。受注者は必須なのでサーバ（既定モック）の 422 が `ApiError` で返る | 実装済 |
-| NOA-03 | 指値 200.5・強制区分あり・VWAP あり | `createOrder(注文)` | 指値単価 `200.5`、強制区分 `1`、VWAP区分 `1` | 実装済 |
-| NOA-04 | 既定モック・警告の出ない顧客と銘柄 | `validateOrder(注文)` | `{ valid: true, errors: [], warnings: [] }` | 実装済 |
+| NOA-02 | 成行・受注者が空・強制区分なし・重複確認なし・VWAP なし | `validateOrder(注文)` | 本文の指値単価 `null`、受注者 `null`（空文字にしない）、強制区分 `0`、重複確認区分 `0`、VWAP区分 `0`。受注者は必須なのでサーバ（既定モック）の 422 が `ApiError` で返る | 実装済 |
+| NOA-03 | 指値 200.5・強制区分あり・重複確認あり・VWAP あり | `createOrder(注文)` | 指値単価 `200.5`、強制区分 `1`、重複確認区分 `1`、VWAP区分 `1` | 実装済 |
+| NOA-04 | 既定モック・警告の出ない顧客と銘柄 | `validateOrder(注文)` | `{ valid: true, errors: [], warnings: [], duplicate: false }` | 実装済 |
 | NOA-05 | 取引不可の銘柄（BRK.B） | `validateOrder(注文)` | 例外にならず `valid: false` で、`errors` に「売り、買いともに禁止銘柄です。」 | 実装済 |
-| NOA-06 | 応答に `errors` / `warnings` が無い | `validateOrder` / `createOrder` | どちらも `[]` になる。`createOrder` の `message` と受付状況の 4 項目（`status` / `statusName` / `dreamStatus` / `dreamStatusName`）が無ければ `''` | 実装済 |
+| NOA-06 | 応答に `errors` / `warnings` が無い | `validateOrder` / `createOrder` | どちらも `[]` になる（`validateOrder` の `duplicate` は `false`）。`createOrder` の `message` と受付状況の 4 項目（`status` / `statusName` / `dreamStatus` / `dreamStatusName`）が無ければ `''` | 実装済 |
 | NOA-07 | `POST /orders/validate` が 500 | `validateOrder(注文)` | `ApiError`（status 500）で reject される | 実装済 |
 | NOA-08 | 既定モック | `createOrder(注文)` | `success: true`、`orderId` が採番された integer の文字列（`FIRST_ORDER_ID`）、`message` がサーバの文言。受付直後の状況は `処理状況` / `処理状況名` / `Dream登録状況` / `Dream登録状況名` が `status` / `statusName` / `dreamStatus` / `dreamStatusName` に入る（既定は `000` 未発注 ＋ `0` 未登録。docs/api/requests.md #52） | 実装済 |
 | NOA-09 | 取引不可の銘柄 | `createOrder(注文)` | 例外にならず `success: false`、`orderId: ''`、`errors` に理由 | 実装済 |
 | NOA-10 | `POST /orders` が 500 | `createOrder(注文)` | `ApiError`（status 500）で reject される | 実装済 |
 | NOA-11 | 受注者が `ORDER_PERSON_MAX_LENGTH` + 1 文字・既定モック | `createOrder(注文)` | サーバの 422（4 文字超）が `ApiError`（status 422）で reject される | 実装済 |
 | NOA-12 | VWAP 対象の銘柄・VWAP あり・既定モック | `createOrder(注文)` | `success: true` で、`dreamStatus` が `8`、`dreamStatusName` が「登録対象外」（VWAP は Dream 登録の対象外） | 実装済 |
-| NOA-13 | 預り売買区分が未選択（`depositCategory: ''`）・既定モック | `validateOrder(注文)` | 本文の `預り売買区分` が `null`（空文字にしない。省略時はサーバが口座の特定口座区分から決める。docs/api/requests.md #24 ④）で、`valid: true` | 実装済 |
+| NOA-13 | 既定モックで同じ注文を 1 件 `createOrder` 済み（重複注文になる） | 同じ注文を重複確認区分なしで `validateOrder` → 重複確認区分ありで `validateOrder` | 1 回目は `valid: false`・`duplicate: true` で、`errors` に重複注文の文言（注文ID: `FIRST_ORDER_ID`）。2 回目は `valid: true`・`duplicate: false`・`errors` が空で、`warnings` に「【重複確認済】…」 | 実装済 |
+| NOA-14 | 預り売買区分が未選択（`depositCategory: ''`）・既定モック | `validateOrder(注文)` | 本文の `預り売買区分` が `null`（空文字にしない。省略時はサーバが口座の特定口座区分から決める。docs/api/requests.md #24 ④）で、`valid: true` | 実装済 |

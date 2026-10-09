@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 新規注文の入力フォーム（モックリポジトリの order_input.html）。
- * 左列が注文の主項目、右列が受注情報で、その下に強制区分と送信ボタンが並ぶ。
+ * 左列が注文の主項目、右列が受注情報で、その下に強制区分・重複確認区分と送信ボタンが並ぶ。
  *
  * この部品は入力欄を並べて値を書き換えるだけで、状態は持たない。照会（口座番号・ティッカー）、
  * 検証、送信の可否は画面（views/OrderEntryView.vue）が決め、結果を props で受ける。
@@ -70,6 +70,11 @@ defineProps({
   },
   /** フロコン警告が出ているか（強制区分の横に「確認の上チェック」を出す） */
   warned: {
+    type: Boolean,
+    default: false,
+  },
+  /** 事前検証が重複注文で弾いたか（重複確認区分の横に「確認の上チェック」を出す） */
+  duplicated: {
     type: Boolean,
     default: false,
   },
@@ -442,13 +447,31 @@ function selectOrderType(value) {
       </div>
     </div>
 
-    <FormField v-slot="{ field }" label="強制区分" layout="inline" class="order-entry-form__forced">
-      <!-- BaseCheckbox は invalid を props に持たないので、field は id だけを渡す -->
-      <BaseCheckbox :id="field.id" v-model="form.forced" data-testid="order-entry-forced" />
-      <span v-if="warned" class="order-entry-form__forced-note" data-testid="order-entry-forced-note">
-        フロコン警告あり — 確認の上チェック
-      </span>
-    </FormField>
+    <div class="order-entry-form__flags">
+      <FormField v-slot="{ field }" label="強制区分" layout="inline" class="order-entry-form__forced">
+        <!-- BaseCheckbox は invalid を props に持たないので、field は id だけを渡す -->
+        <BaseCheckbox :id="field.id" v-model="form.forced" data-testid="order-entry-forced" />
+        <span v-if="warned" class="order-entry-form__flag-note" data-testid="order-entry-forced-note">
+          フロコン警告あり — 確認の上チェック
+        </span>
+      </FormField>
+
+      <!-- 画面モックには無い。実 API が同一口座・銘柄・売買の当日の重複を弾き、この区分での再送を求める（Phase 58） -->
+      <FormField v-slot="{ field }" label="重複確認区分" layout="inline">
+        <BaseCheckbox
+          :id="field.id"
+          v-model="form.duplicateConfirmed"
+          data-testid="order-entry-duplicate-confirmed"
+        />
+        <span
+          v-if="duplicated"
+          class="order-entry-form__flag-note"
+          data-testid="order-entry-duplicate-note"
+        >
+          重複注文あり — 確認の上チェック
+        </span>
+      </FormField>
+    </div>
 
     <div class="order-entry-form__actions">
       <BaseButton
@@ -581,7 +604,15 @@ function selectOrderType(value) {
   font-weight: 400;
 }
 
-.order-entry-form__forced-note {
+/* 強制区分と重複確認区分を 1 行に並べる（狭い幅では折り返す） */
+.order-entry-form__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-6);
+}
+
+/* 強制区分・重複確認区分の横の「確認の上チェック」 */
+.order-entry-form__flag-note {
   color: var(--color-warning);
   font-size: var(--font-size-xs);
 }

@@ -26,11 +26,11 @@
 | NOF-13 | 注文種別 = VWAP | VWAP 対象の銘柄・対象外の銘柄・銘柄なしで `validateOrderForm()` | 対象外のときだけ `vwap` に「この銘柄は現在、VWAP対象外です。通常注文で入力してください。」。銘柄なしのときは `vwap` は `''` で `ticker` が「ティッカーが見つかりません。…」 | 実装済 |
 | NOF-14 | 銘柄なし・照会に失敗 | `validateOrderForm(form, { symbolLookupFailed: true })` | `ticker` が「ティッカーを照会できませんでした。…」（「見つかりません」と言わない） | 実装済 |
 | NOF-15 | 成行・VWAP なし | `buildOrderInput()` | 銘柄コードは照会した銘柄の `symbolCode`（ティッカーではない）、取引 `'100'`・証券受渡方法 `SECURITIES_DELIVERY_DEFAULT`（当社保管 `'100'`）、数量は数値、`limitPrice` は `null`、`vwap` は false、受注日は `'YYYY-MM-DD'`、部店・口座番号・受注者は前後の空白を落とす | 実装済 |
-| NOF-16 | 指値 `'200.5'`・VWAP・強制区分あり | `buildOrderInput()` | `limitPrice` が数値 `200.5`、`vwap` と `forced` が true、`createdBy` が渡した値 | 実装済 |
+| NOF-16 | 指値 `'200.5'`・VWAP・強制区分あり・重複確認区分あり | `buildOrderInput()` | `limitPrice` が数値 `200.5`、`vwap`・`forced`・`duplicateConfirmed` が true、`createdBy` が渡した値 | 実装済 |
 | NOF-17 | 今日 = 2026-09-29（火）・休日なし | `buildExpiryOptions()` | 15 件（`EXPIRY_OPTION_COUNT`）で、先頭が「当日中（9/29）」、2 件目が「1営業日後（9/30）」、土日を含まず、最後が「14営業日後（10/19）」 | 実装済 |
 | NOF-18 | 今日 = 2026-09-29・`closedDates` に 9/30 | `buildExpiryOptions()` | 9/30 が並ばず、2 件目が「1営業日後（10/1）」 | 実装済 |
 | NOF-19 | 今日 = 2026-10-03（土） | `buildExpiryOptions()` | 最初の営業日 10/5 が「当日中（10/5）」になる | 実装済 |
-| NOF-20 | `now` = 2026-09-29 09:05・部店と口座番号を渡す | `createOrderForm()` | 受注日 `'09/29'`・受注時刻 `'09:05'`、部店・口座番号が引き継がれ、売買区分は未選択、区分の既定値は `ORDER_FORM_DEFAULTS` | 実装済 |
+| NOF-20 | `now` = 2026-09-29 09:05・部店と口座番号を渡す | `createOrderForm()` | 受注日 `'09/29'`・受注時刻 `'09:05'`、部店・口座番号が引き継がれ、売買区分は未選択、区分の既定値は `ORDER_FORM_DEFAULTS`、強制区分・重複確認区分は false | 実装済 |
 | NOF-21 | — | `estimateOrderAmount()` を 7 株 × 1.2345 / 1.2355 ドル、為替 150.25 で呼ぶ | 外貨は小数第 2 位で四捨五入（8.64 / 8.65）、円貨は外貨 × 為替の円未満四捨五入 | 実装済 |
 | NOF-22 | — | `estimateOrderAmount()` を為替なし・数量なし・単価 0 で呼ぶ | 為替なしは円貨だけ `null`、数量なし・単価 0 は両方 `null` | 実装済 |
 | NOF-23 | — | `formatLimitPrice()` を 200 / 1234.5 / `null` / `NaN` で呼ぶ | `'200.0000 ドル'` / `'1,234.5000 ドル'` / `'—'` / `'—'` | 実装済 |

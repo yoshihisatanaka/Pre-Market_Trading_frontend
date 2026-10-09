@@ -169,6 +169,22 @@ describe('OrderEntryForm', () => {
     expect(find(quiet, 'order-entry-forced-note').exists()).toBe(false)
   })
 
+  it('[NOC-14] 重複確認区分のチェックが duplicateConfirmed に入り、重複ありのときだけ注記が出る', async () => {
+    const { wrapper, form } = mountForm()
+    expect(find(wrapper, 'order-entry-duplicate-note').exists()).toBe(false)
+    expect(form.duplicateConfirmed).toBe(false)
+
+    await find(wrapper, 'order-entry-duplicate-confirmed').setValue(true)
+    expect(form.duplicateConfirmed).toBe(true)
+
+    const { wrapper: duplicated } = mountForm({ props: { duplicated: true } })
+    expect(find(duplicated, 'order-entry-duplicate-note').text()).toBe(
+      '重複注文あり — 確認の上チェック',
+    )
+    // フロコン警告の注記とは別に出る
+    expect(find(duplicated, 'order-entry-forced-note').exists()).toBe(false)
+  })
+
   it('[NOC-09] disabled / submitting では送信ボタンが押せない', () => {
     const { wrapper: normal } = mountForm()
     expect(find(normal, 'order-entry-submit').attributes('disabled')).toBeUndefined()
@@ -210,7 +226,7 @@ describe('OrderEntryForm', () => {
     )
   })
 
-  it('[NOC-14] 注文区分は Ph.1 の 2 つを選べ、Ph.2 の 2 つは見出しの下で選べない', () => {
+  it('[NOC-15] 注文区分は Ph.1 の 2 つを選べ、Ph.2 の 2 つは見出しの下で選べない', () => {
     const { wrapper } = mountForm()
     const select = find(wrapper, 'order-entry-execution-scope')
 
@@ -242,7 +258,7 @@ describe('OrderEntryForm', () => {
     expect(select.element.value).toBe('03')
   })
 
-  it('[NOC-15] 預り売買区分は未選択で始まり、押すと選ばれ、showDepositCategory が false なら欄ごと出ない', async () => {
+  it('[NOC-16] 預り売買区分は未選択で始まり、押すと選ばれ、showDepositCategory が false なら欄ごと出ない', async () => {
     const { wrapper, form } = mountForm()
     const buttons = find(wrapper, 'order-entry-deposit-category').findAll('button')
 
@@ -260,7 +276,7 @@ describe('OrderEntryForm', () => {
     expect(wrapper.text()).not.toContain('預り売買区分')
   })
 
-  it('[NOC-16] 左列は決済通貨区分 → 預り売買区分 → 期間指定の順で、期間指定が末尾', () => {
+  it('[NOC-17] 左列は決済通貨区分 → 預り売買区分 → 期間指定の順で、期間指定が末尾', () => {
     const { wrapper } = mountForm()
     const testids = wrapper
       .findAll('[data-testid^="order-entry-"]')

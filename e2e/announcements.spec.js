@@ -342,3 +342,34 @@ test.describe('お知らせ管理 運用状態', () => {
     await expect(page.getByTestId('announcements-notice')).toHaveText(NOTICE_UPDATE)
   })
 })
+
+// 全画面共通のお知らせ帯（ヘッダ直下）への追随。帯そのものの出し分けは docs/e2e/layout.md（LAY-24〜）が持つ。
+// 既定モックのバナーはお知らせの現在値から組み立てるので、保存後の取り直しで帯が変わる。
+test.describe('お知らせ管理 お知らせ帯への反映', () => {
+  const bannerOf = (page) => page.getByTestId('operation-banner')
+
+  test('[AN-19] 本文を変えて保存するとお知らせ帯がその本文に変わる', async ({ page }) => {
+    await openLoaded(page)
+    await expect(bannerOf(page).getByTestId('operation-banner-message')).toHaveText(
+      CURRENT_MESSAGE,
+    )
+
+    await page.getByTestId('announcements-message').fill(NEW_MESSAGE)
+    await page.getByTestId('announcements-save').click()
+
+    await expect(page.getByTestId('announcements-notice')).toHaveText(NOTICE_UPDATE)
+    await expect(bannerOf(page)).toHaveAttribute('data-kind', 'NOTICE')
+    await expect(bannerOf(page).getByTestId('operation-banner-message')).toHaveText(NEW_MESSAGE)
+  })
+
+  test('[AN-20] 表示を外して保存するとお知らせ帯が消える', async ({ page }) => {
+    await openLoaded(page)
+    await expect(bannerOf(page)).toBeVisible()
+
+    await page.getByTestId('announcements-enabled').uncheck()
+    await page.getByTestId('announcements-save').click()
+
+    await expect(page.getByTestId('announcements-notice')).toHaveText(NOTICE_HIDE)
+    await expect(bannerOf(page)).toHaveCount(0)
+  })
+})

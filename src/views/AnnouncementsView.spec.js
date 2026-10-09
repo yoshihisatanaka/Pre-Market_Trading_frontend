@@ -8,6 +8,7 @@ import { server } from '@/mocks/server'
 import { announcement, announcementHistories } from '@/mocks/fixtures/announcements'
 import { incidentBannerResponse } from '@/mocks/fixtures/banner'
 import { ANNOUNCEMENT_HISTORY_PAGE_SIZE, useAnnouncementsStore } from '@/stores/announcements'
+import { useBannerStore } from '@/stores/banner'
 import { formatMonthDayTime } from '@/utils/format'
 import AnnouncementsView from './AnnouncementsView.vue'
 
@@ -517,5 +518,22 @@ describe('AnnouncementsView', () => {
     await settle()
 
     expect(noticeText(wrapper)).toBe(UPDATED_MESSAGE)
+  })
+
+  it('[ANV-24] 保存に成功するとバナーを取り直し、帯と共用のストアが保存した本文になる', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    const bannerRequests = countRequests('get', BANNER_PATH)
+
+    await messageInput(wrapper).setValue(NEW_MESSAGE)
+    await submitForm(wrapper)
+    await settle()
+
+    expect(noticeText(wrapper)).toBe(UPDATED_MESSAGE)
+    expect(bannerRequests).toHaveLength(1)
+    // ヘッダ直下の帯（AppOperationBanner）が読むのと同じストア
+    const bannerStore = useBannerStore(wrapper.vm.$pinia)
+    expect(bannerStore.banner.kind).toBe('NOTICE')
+    expect(bannerStore.banner.message).toBe(NEW_MESSAGE)
   })
 })

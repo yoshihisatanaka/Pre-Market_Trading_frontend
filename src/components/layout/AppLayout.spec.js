@@ -4,6 +4,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { trackRouteLoading } from '@/composables/useRouteLoading'
+import { noticeBannerResponse } from '@/mocks/fixtures/banner'
+import { useBannerStore } from '@/stores/banner'
 import AppLayout from './AppLayout.vue'
 
 /*
@@ -135,5 +137,29 @@ describe('AppLayout', () => {
     await flushPromises()
 
     expect(sidebarLink(wrapper, '顧客検索').classes()).toContain('is-pending')
+  })
+
+  it('[ALY-08] 運用バナーをヘッダの後・本文の前に描く', async () => {
+    // 起動時の取得（main.js）は済んでいる前提で、ストアにお知らせを直接置く（通信は起こさない）
+    useBannerStore().banner = {
+      kind: noticeBannerResponse.種別,
+      severity: noticeBannerResponse.重要度,
+      message: noticeBannerResponse.メッセージ,
+      ordersSuspended: noticeBannerResponse.発注停止中,
+      suspendedTargets: noticeBannerResponse.停止中の対象,
+      suspendedTargetNames: noticeBannerResponse.停止中の対象名,
+      announcementVisible: noticeBannerResponse.お知らせ表示中,
+      announcementMessage: noticeBannerResponse.お知らせ本文,
+    }
+
+    const wrapper = await mountLayout()
+
+    const banner = wrapper.find('[data-testid="operation-banner"]').element
+    const header = wrapper.find('header').element
+    const main = wrapper.find('main').element
+    expect(header.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(banner.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(header.contains(banner)).toBe(false)
+    expect(main.contains(banner)).toBe(false)
   })
 })

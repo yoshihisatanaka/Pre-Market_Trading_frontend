@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { navItems, navSections } from '../src/components/layout/navigation'
+import { announcement } from '../src/mocks/fixtures/announcements'
+import { incidentBannerResponse, noneBannerResponse } from '../src/mocks/fixtures/banner'
 import { noOperationOperator, supervisorOperator } from '../src/mocks/fixtures/currentOperator'
 import { closedMarketStatusResponse } from '../src/mocks/fixtures/marketStatus'
 import { mockApi } from './helpers/mockApi'
@@ -495,5 +497,68 @@ test.describe('共通レイアウト', () => {
     await expect(page).toHaveURL(/\/$/)
     await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
     await expect(nav.locator('[aria-current="page"]')).toHaveCount(0)
+  })
+
+  /*
+   * ヘッダ直下の運用バナー（AppOperationBanner / GET /operations/banner）。
+   * 既定モックはお知らせの現在値（fixtures/announcements.js の announcement）から NOTICE を組み立てるので、
+   * どの画面でも帯が出る。ここでは / を開くだけで、画面の中身は見ない。
+   * 保存での追随はお知らせ管理（AN-19 / AN-20）、定期の取り直しと閉じた状態の判定は単体側が持つ。
+   */
+  const bannerOf = (page) => page.getByTestId('operation-banner')
+  const NOTICE_MESSAGE = announcement.本文
+
+  test('[LAY-24] 既定ではヘッダ直下にお知らせの帯が出て閉じるボタンがある', async ({ page }) => {
+    await page.goto('/')
+
+    const banner = bannerOf(page)
+    await expect(banner).toBeVisible()
+    await expect(banner).toHaveAttribute('data-kind', 'NOTICE')
+    await expect(banner.getByTestId('operation-banner-label')).toHaveText('お知らせ')
+    await expect(banner.getByTestId('operation-banner-message')).toHaveText(NOTICE_MESSAGE)
+    await expect(banner.getByRole('button', { name: 'お知らせを閉じる' })).toBeVisible()
+  })
+
+  test('[LAY-25] お知らせの帯を閉じると消え、再読み込みしても同じ本文は出ない', async ({
+    page,
+  }) => {
+    await page.goto('/')
+    await expect(bannerOf(page)).toBeVisible()
+
+    await bannerOf(page).getByRole('button', { name: 'お知らせを閉じる' }).click()
+    await expect(bannerOf(page)).toHaveCount(0)
+
+    await page.reload()
+
+    // 再読み込み後に画面が組み上がってから「無い」を見る（読み込み前の空振りで通らないように）
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(bannerOf(page)).toHaveCount(0)
+  })
+
+  test('[LAY-26] 発注停止中は閉じられない警告の帯に停止対象が出る', async ({ page }) => {
+    await mockApi(page, [{ path: '*/api/operations/banner', body: incidentBannerResponse }])
+    await page.goto('/')
+
+    const banner = bannerOf(page)
+    await expect(banner).toBeVisible()
+    await expect(banner).toHaveAttribute('data-kind', 'INCIDENT')
+    await expect(banner).toHaveAttribute('role', 'alert')
+    await expect(banner.getByTestId('operation-banner-label')).toHaveText('発注停止中')
+    await expect(banner.getByTestId('operation-banner-message')).toHaveText(
+      incidentBannerResponse.メッセージ,
+    )
+    await expect(banner.getByTestId('operation-banner-targets')).toHaveText(
+      `停止対象: ${incidentBannerResponse.停止中の対象名.join('、')}`,
+    )
+    await expect(banner.getByRole('button', { name: 'お知らせを閉じる' })).toHaveCount(0)
+  })
+
+  test('[LAY-27] お知らせも発注停止も無いときは帯を出さない', async ({ page }) => {
+    await mockApi(page, [{ path: '*/api/operations/banner', body: noneBannerResponse }])
+    await page.goto('/')
+
+    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'メインメニュー' })).toBeVisible()
+    await expect(bannerOf(page)).toHaveCount(0)
   })
 })

@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { dreamOrders, dreamStatusCodes } from '@/mocks/fixtures/dreamStatus'
 import { DREAM_STATUS_PAGE_SIZE, useDreamStatusStore } from './dreamStatus'
+import { useNavBadgesStore } from './navBadges'
 
 /*
  * 既定の MSW ハンドラ（実 API と同じ絞り込み・並び順）に当てる。
@@ -38,6 +40,21 @@ function countListRequests() {
   server.use(
     http.get(LIST_PATH, () => {
       counter.count += 1
+    }),
+  )
+  return counter
+}
+
+/**
+ * サイドメニューの件数（Dream登録エラー）の GET を数える（応答は既定ハンドラに任せる）。
+ * 一覧の読み直しと見分けるため、limit=1・dream_status=ERROR のものだけを数える
+ */
+function countBadgeRequests() {
+  const counter = { count: 0 }
+  server.use(
+    http.get(LIST_PATH, ({ request }) => {
+      const params = new URL(request.url).searchParams
+      if (params.get('limit') === '1' && params.get('dream_status') === 'ERROR') counter.count += 1
     }),
   )
   return counter
@@ -398,5 +415,34 @@ describe('stores/dreamStatus', () => {
     store.clearChangeError()
 
     expect(store.changeError).toBeNull()
+  })
+
+  it('[DSS-25] 成功するとサイドメニューの Dream登録エラーの件数を取り直す', async () => {
+    const errorsBefore = dreamOrders.filter((row) => ['9', 'C9'].includes(row.Dream状況)).length
+    const store = useDreamStatusStore()
+    await store.load()
+    const order = registrationErrorIn(store)
+    const badgeRequests = countBadgeRequests()
+
+    await store.changeStatus({ order, status: '0' })
+    // 件数の取り直しは await されないので、応答の反映を待つ
+    await flushPromises()
+
+    expect(badgeRequests.count).toBe(1)
+    expect(useNavBadgesStore().counts.dreamErrors).toBe(errorsBefore - 1)
+  })
+
+  it('[DSS-26] 409 で弾かれたら件数は取り直さない', async () => {
+    const store = useDreamStatusStore()
+    await store.load()
+    const order = { ...registrationErrorIn(store), updatedAt: '2000-01-01T00:00:00' }
+    const badgeRequests = countBadgeRequests()
+
+    const result = await store.changeStatus({ order, status: '0' })
+    await flushPromises()
+
+    expect(result).toBeNull()
+    expect(badgeRequests.count).toBe(0)
+    expect(useNavBadgesStore().counts.dreamErrors).toBeNull()
   })
 })

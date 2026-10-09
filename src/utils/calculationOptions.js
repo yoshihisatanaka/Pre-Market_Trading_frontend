@@ -15,16 +15,6 @@ export const CALCULATION_DEPOSIT_OPTIONS = [
   { value: SPECIFIC_DEPOSIT.GROWTH_QUOTA, label: '成長投資枠' },
 ]
 
-/**
- * 現地手数料区分。CalculationRequest に対応する項目が無い（モックだけにある）ので、値は画面の中だけの名前。
- * 仮計算をつなぐときに、送らないか項目を足してもらうかを決める（docs/api/requests.md #47 で依頼中）
- */
-export const LOCAL_FEE_CATEGORY_OPTIONS = [
-  { value: 'normal', label: '通常' },
-  { value: 'negotiated', label: 'ネゴレート' },
-  { value: 'net', label: 'NET' },
-]
-
 /** 手数料パターン（A〜Z の 1 文字）。未選択は顧客属性（手数料優遇マスタ）を適用する */
 export const FEE_PATTERN_OPTIONS = Array.from({ length: 26 }, (_, index) => {
   const letter = String.fromCharCode('A'.charCodeAt(0) + index)

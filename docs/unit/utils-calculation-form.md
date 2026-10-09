@@ -12,7 +12,7 @@
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
-| TCF-01 | `now` = 2026-10-06 | `createCalculationForm({ now })` | 売買区分は買い（`SIDE.BUY`）、預り区分は特定（`SPECIFIC_DEPOSIT.SPECIFIC`）、国内約定日は `'20261006'`、現地手数料区分は `LOCAL_FEE_CATEGORY_OPTIONS` の先頭（通常）、消費税不要は false、ほかはすべて `''` | 実装済 |
+| TCF-01 | `now` = 2026-10-06 | `createCalculationForm({ now })` | 売買区分は買い（`SIDE.BUY`）、預り区分は特定（`SPECIFIC_DEPOSIT.SPECIFIC`）、国内約定日は `'20261006'`、消費税不要は false、ほかはすべて `''`。現地手数料区分の項目は持たない（2026-10-09 に削除） | 実装済 |
 | TCF-02 | 外株預りから引き継ぐ（銘柄・売り・成長投資枠） / 引き継ぐ値が空文字 | `createCalculationForm({ symbol, side, specificDeposit })` | 引き継いだ値が入る。空文字のときは既定（買い・特定）のまま | 実装済 |
 | TCF-03 | 必須と任意をすべて正しく埋めたフォーム | `validateCalculationForm()` | 全項目が `''` で、`hasCalculationFormErrors()` が false | 実装済 |
 | TCF-04 | `createCalculationForm()` の直後 | `validateCalculationForm()` | 銘柄（「銘柄コード／ティッカーを入力してください。」）・数量・単価（「単価を入力してください。」）だけに文言が入り、任意項目と国内約定日（今日）は `''`。`hasCalculationFormErrors()` が true | 実装済 |
@@ -23,7 +23,7 @@
 | TCF-09 | — | 手数料Fromを `'100.5'`、ベイシスポイントを `'1234'` にして `validateCalculationForm()` | 「手数料Fromは整数7桁以内で入力してください。」（小数を受けない欄は小数の桁を言わない）、「ベイシスポイントは整数3桁、小数2桁以内で入力してください。」 | 実装済 |
 | TCF-10 | — | 手数料 From/To を `'5,000'`/`'100'`・`'100'`/`'100'`・`'5000'`/`''`・`''`/`'100'` にして `validateCalculationForm()` | 最初だけ `feeFrom` に「手数料のFromはTo以下で入力してください。」が付き、`feeTo` は `''`。ほかは両方 `''`（片方だけなら比べない） | 実装済 |
 | TCF-11 | — | 国内約定日を `''` / `'20261006'` / `'2026106'` / `'2026/10/06'` にして `validateCalculationForm()` | 前の 2 つは `''`、後の 2 つは「国内約定日はYYYYMMDD形式で入力してください。」 | 実装済 |
-| TCF-12 | 必須だけを埋め任意は空・手数料パターン未選択 | `buildCalculationInput(form, { accountNumber })` | 口座番号は渡した値、銘柄は前後の空白を落として大文字、数量・単価は数値、任意の数値と `feePattern` は `null`、消費税不要はフォームの値。国内約定日・現地手数料区分は含まない | 実装済 |
+| TCF-12 | 必須だけを埋め任意は空・手数料パターン未選択 | `buildCalculationInput(form, { accountNumber })` | 口座番号は渡した値、銘柄は前後の空白を落として大文字、数量・単価は数値、任意の数値と `feePattern` は `null`、消費税不要はフォームの値。国内約定日は含まない | 実装済 |
 | TCF-13 | 全角数字・全角小数点・カンマ入りの値と手数料パターン A・From/To あり | `buildCalculationInput()` | 全角・カンマを正規化した数値になり、`feePattern` は `'A'`、From/To は `feeMin` / `feeMax` に入る | 実装済 |
 | TCF-14 | 買い・特定・状態「未実行」 | `buildPendingSummary()` | 見出し「買付概算 ／ 未実行」、合計見出し「概算必要金額」、合計 `'—'`、行は 外貨約定代金・現地費用合計・取引所税・適用為替・円換算精算金額・国内手数料・消費税 の 7 行で値はすべて `'—'`、概算損益の枠は無し、注記の 4 つの率は `'—'` | 実装済 |
 | TCF-15 | 売り・特定・状態「計算中」 | `buildPendingSummary()` | 見出し「売却概算 ／ 計算中」、合計見出し「概算受取金額」、概算損益の枠が値 `'—'`・tone `''` で出る | 実装済 |

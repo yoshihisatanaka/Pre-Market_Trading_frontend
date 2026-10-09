@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { clickSideMenuLink } from './helpers/sideMenu'
 import { codeEntries } from '../src/mocks/fixtures/codes'
 import { canceledCustomers, customers } from '../src/mocks/fixtures/customers'
+import { CORPORATE_TYPE, NISA_CONTRACT } from '../src/utils/apiEnums'
 import { CUSTOMER_FIELDS } from '../src/utils/customerFields'
 import { formatJpyUnit, formatUsdUnit } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
@@ -13,6 +14,7 @@ import { mockApi } from './helpers/mockApi'
 // クエリを実際に処理する既定ハンドラで検証する。
 // 追加・編集（CU-16〜22）も既定ハンドラに当てる。登録・更新した行はページ内でだけ保持され、
 // テストごとに新しいページなので持ち越さない。削除の導線は無い（CU-11）。
+// 法人のときの NISA の 3 項目の無効化（CU-23 / 24）は、追加・編集のダイアログを開いて見る。
 
 const PATH = '/masters/customers'
 
@@ -577,5 +579,66 @@ test.describe('顧客マスタ一覧', () => {
     await expect(dialog).toBeVisible()
     await expect(page.getByTestId('customers-notice')).toHaveCount(0)
     await expect(cellOf(rowOf(page, firstRow), '顧客名')).not.toContainText('（改）')
+  })
+
+  /*
+   * 法人のときの NISA の 3 項目（customerFields.js の corporateValue を持つ項目）。
+   * 項目は表から引き、固定値もそこから導く（NISA契約 未契約 '0' / 買付可能額 '0'）。
+   */
+  const NISA_FIELDS = CUSTOMER_FIELDS.filter((field) => field.corporateValue !== undefined)
+  const nisaField = (key) => NISA_FIELDS.find((field) => field.key === key)
+
+  /** NISA の 3 項目が、無効か有効かと、固定値（corporateValue）に揃っていることを見る */
+  async function expectNisaFields(dialog, prefix, { disabled }) {
+    for (const field of NISA_FIELDS) {
+      const input = dialog.getByTestId(`${prefix}-${field.testid}`)
+      await (disabled ? expect(input).toBeDisabled() : expect(input).toBeEnabled())
+      await expect(input).toHaveValue(field.corporateValue)
+    }
+  }
+
+  test('[CU-23] 法人を選ぶと NISA の 3 項目が無効になり値が揃い、個人に戻すと有効に戻る', async ({
+    page,
+  }) => {
+    expect(NISA_FIELDS.map((field) => field.key)).toEqual([
+      'nisaContract',
+      'growthQuota',
+      'growthQuotaNext',
+    ])
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    const dialog = await openAdd(page)
+    const prefix = 'customers-add'
+    const corporateType = dialog.getByTestId(`${prefix}-corporate-type`)
+    await expect(corporateType).toHaveValue(CORPORATE_TYPE.INDIVIDUAL)
+
+    // 個人のうちに固定値と違う値を入れておく（揃うことを見るため）
+    await dialog
+      .getByTestId(`${prefix}-${nisaField('nisaContract').testid}`)
+      .selectOption(NISA_CONTRACT.CONTRACTED)
+    await dialog.getByTestId(`${prefix}-${nisaField('growthQuota').testid}`).fill('1000')
+    await dialog.getByTestId(`${prefix}-${nisaField('growthQuotaNext').testid}`).fill('2000')
+
+    await corporateType.selectOption(CORPORATE_TYPE.CORPORATE)
+    await expectNisaFields(dialog, prefix, { disabled: true })
+
+    await corporateType.selectOption(CORPORATE_TYPE.INDIVIDUAL)
+    await expectNisaFields(dialog, prefix, { disabled: false })
+  })
+
+  test('[CU-24] 法人の顧客を編集で開くと NISA の 3 項目が最初から無効', async ({ page }) => {
+    const corporate = firstPage.find((customer) => customer.法人区分 === CORPORATE_TYPE.CORPORATE)
+    expect(corporate).toBeDefined()
+
+    await page.goto(PATH)
+    await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
+
+    const dialog = await openEdit(page, corporate)
+    await expect(dialog.getByTestId('customers-edit-corporate-type')).toHaveValue(
+      CORPORATE_TYPE.CORPORATE,
+    )
+    await expectNisaFields(dialog, 'customers-edit', { disabled: true })
   })
 })

@@ -168,8 +168,21 @@ async function expectHistoryRowsMatch(page, histories) {
     await expect(cells.nth(0), `${i + 1} 行目の 操作日時`).toHaveText(operatedAt[i])
     await expect(cells.nth(1), `${i + 1} 行目の 操作区分`).toHaveText(raw['操作区分名'] ?? '')
     await expect(cells.nth(2), `${i + 1} 行目の 本文`).toHaveText(messageOfHistory(raw) || '—')
-    await expect(cells.nth(3), `${i + 1} 行目の 操作者`).toHaveText(raw['操作者'] || '—')
+    await expect(cells.nth(3), `${i + 1} 行目の 操作者`).toHaveText(operatorCellOf(raw))
   }
+}
+
+/**
+ * 操作者列の期待値。操作者（コード。空なら —）の下に 操作者名（氏名。#48 で 2026-10-08 に入った。無ければ出ない）。
+ * コードと氏名は別の要素なので、間の空白の有無は問わない（e2e/incidents.real-api.spec.js の historyCellsOf と同じ形）
+ */
+function operatorCellOf(raw) {
+  const parts = [raw['操作者'] || '—', raw['操作者名']].filter(Boolean).map(escapeRegExp)
+  return new RegExp(`^${parts.join('\\s*')}$`)
+}
+
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 /** 履歴の「次のページ」を押して 2 ページ目が出るまで待つ（total は押す前の件数） */

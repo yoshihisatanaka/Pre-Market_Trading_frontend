@@ -77,6 +77,8 @@ const toHistory = (raw) => ({
   operation: raw.操作区分,
   operationLabel: raw.操作区分名,
   operator: raw.操作者,
+  // 操作者の氏名（docs/api/requests.md #48）。無ければ空文字
+  operatorName: raw.操作者名 ?? '',
   // フィクスチャは仕様どおり object で持つ
   message: raw.変更後データ?.本文 ?? '',
   operatedAt: raw.操作日時,
@@ -273,6 +275,30 @@ describe('api/announcements', () => {
     const { items } = await fetchAnnouncementHistory()
 
     expect(items.map((item) => item.message)).toEqual(['文字列で来た本文', 'object で来た本文'])
+  })
+
+  it('[ANA-17] 履歴の操作者名を operatorName で読み、無い行・null の行は空文字になる', async () => {
+    const base = announcementHistories[0]
+    // フィクスチャの先頭行は氏名を持つ（無いと「氏名あり」の行が成り立たない）
+    expect(base.操作者名).toBeTruthy()
+    const withoutName = { ...base, ID: 2 }
+    delete withoutName.操作者名
+    respondWith('get', HISTORY_PATH, {
+      total: 3,
+      limit: 50,
+      offset: 0,
+      histories: [
+        { ...base, ID: 1 },
+        withoutName,
+        { ...base, ID: 3, 操作者名: null },
+      ],
+    })
+
+    const { items } = await fetchAnnouncementHistory()
+
+    expect(items.map((item) => item.operatorName)).toEqual([base.操作者名, '', ''])
+    // コードは氏名の有無に関わらずそのまま
+    expect(items.map((item) => item.operator)).toEqual([base.操作者, base.操作者, base.操作者])
   })
 
   it('[ANA-14] histories と total を持たない応答は空の一覧になる', async () => {

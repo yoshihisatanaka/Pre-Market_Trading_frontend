@@ -32,10 +32,13 @@ import { apiClient } from './client'
  *   operation: string,
  *   operationLabel: string,
  *   operator: string,
+ *   operatorName: string,
  *   message: string,
  *   operatedAt: string,
  * }} AnnouncementHistory
- *   operation は SHOW / HIDE / UPDATE。operationLabel はサーバが添える表示名で、画面はこちらを出す
+ *   operation は SHOW / HIDE / UPDATE。operationLabel はサーバが添える表示名で、画面はこちらを出す。
+ *   operatorName は操作者の氏名（`操作者名`。docs/api/requests.md #48 で 2026-10-08 に入った）。
+ *   マスタに無い操作者はサーバが「システム」を入れる。項目が無ければ空文字
  */
 
 /**
@@ -126,6 +129,7 @@ function toAnnouncementHistory(raw) {
     operation: raw['操作区分'] ?? '',
     operationLabel: raw['操作区分名'] ?? '',
     operator: raw['操作者'] ?? '',
+    operatorName: raw['操作者名'] ?? '',
     message: historyMessage(raw['変更後データ']),
     operatedAt: raw['操作日時'] ?? '',
   }

@@ -3,7 +3,12 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { TRANSITIONS, dreamOrders, dreamStatusCodes } from '@/mocks/fixtures/dreamStatus'
 import { ApiError } from './client'
-import { changeDreamStatus, fetchDreamOrders, fetchDreamStatusCodes } from './dreamStatus'
+import {
+  changeDreamStatus,
+  fetchDreamErrorCount,
+  fetchDreamOrders,
+  fetchDreamStatusCodes,
+} from './dreamStatus'
 
 /*
  * API 層のテスト。ここだけが「バックエンドの形」を知ってよい層なので、
@@ -385,5 +390,27 @@ describe('api/dreamStatus', () => {
     // モックの detail は取得時と最新の更新日時を含む。それが message に運ばれていること
     expect(error.message).toContain(stale)
     expect(error.message).toContain(changeable.更新日時)
+  })
+
+  it('[DSA-22] エラーの件数は limit=1・dream_status=ERROR で引き、total を返す', async () => {
+    // 応答の total は前提として置く値（返り値がこれをそのまま運ぶことを見る）
+    const total = 4
+    record({ total, limit: 1, offset: 0, orders: [] })
+
+    const count = await fetchDreamErrorCount()
+
+    expect(count).toBe(total)
+    expect(lastRequest.url.pathname).toBe('/api/orders/dream-status')
+    expect(Object.fromEntries(lastRequest.params)).toEqual({
+      limit: '1',
+      offset: '0',
+      dream_status: 'ERROR',
+    })
+  })
+
+  it('[DSA-23] エラーの件数は total が無い応答なら 0', async () => {
+    record({ orders: [] })
+
+    await expect(fetchDreamErrorCount()).resolves.toBe(0)
   })
 })

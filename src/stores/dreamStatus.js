@@ -4,6 +4,7 @@ import { changeDreamStatus, fetchDreamOrders, fetchDreamStatusCodes } from '@/ap
 import { useAsync } from '@/composables/useAsync'
 import { useCrudList } from '@/composables/useCrudList'
 import { DEFAULT_PAGE_SIZE } from '@/utils/pagination'
+import { useNavBadgesStore } from './navBadges'
 
 /**
  * 一覧 1 ページあたりの表示件数（既定は utils/pagination.js の DEFAULT_PAGE_SIZE）。
@@ -42,6 +43,8 @@ export const useDreamStatusStore = defineStore('dreamStatus', () => {
     fetchPage: fetchDreamOrders,
   })
 
+  const navBadges = useNavBadgesStore()
+
   const {
     data: statusCodes,
     loading: statusCodesLoading,
@@ -68,6 +71,8 @@ export const useDreamStatusStore = defineStore('dreamStatus', () => {
    * 行を応答で差し替えずに読み直すのは、変更後の行が検索条件（Dream登録状況 など）から
    * 外れうるため。useCrudList の update と同じく、onSuccess（ダイアログを閉じる）を読み直しより先に呼ぶ。
    * 失敗したときは読み直さない（409 でも同じ。ダイアログが持つ行の合札は読み直しても新しくならない）。
+   * 成功したらサイドメニューの件数（Dream登録エラー）も取り直す。画面を移らないので AppSidebar は取り直さない。
+   * 件数の取り直しは await しない（一覧の読み直しを件数の取得に引きずらせない）。
    *
    * @param {{
    *   order: import('@/api/dreamStatus').DreamOrder,
@@ -91,6 +96,7 @@ export const useDreamStatusStore = defineStore('dreamStatus', () => {
 
     onSuccess?.(result)
 
+    navBadges.load()
     await list.reload()
     return result
   }

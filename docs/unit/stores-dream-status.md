@@ -15,6 +15,7 @@ MSW の既定ハンドラ（`src/mocks/handlers/dreamStatus.js`）に当てて�
 `changeStatus` は行の `updatedAt` を合札として送り、成功したら `onSuccess` を呼んでから
 **いまの条件とページ位置のまま**一覧を読み直す（変更後の行が検索条件から外れうるため、行の差し替えはしない）。
 失敗（400 / 409 など）は `changeError` に入れて null を返し、読み直さない。
+成功したときはサイドメニューの件数（`useNavBadgesStore().load()`。[stores-nav-badges.md](stores-nav-badges.md)）も取り直す（DSS-25 / 26）。
 STS変更のハンドラは行を書き換えるが、`resetMockState()`（`vitest.setup.js` の afterEach）でフィクスチャに戻る。
 
 期待値はフィクスチャ（`src/mocks/fixtures/dreamStatus.js`）と `DREAM_STATUS_PAGE_SIZE` から導く。
@@ -46,3 +47,5 @@ STS変更のハンドラは行を書き換えるが、`resetMockState()`（`vite
 | DSS-22 | 既定モック。取得時と違う `updatedAt` の行（409） | `onSuccess` 付きで `changeStatus()` | null を返し、`changeError` に status 409 のエラー（サーバの理由）が入る。`onSuccess` は呼ばれず、一覧は読み直さない | 実装済 |
 | DSS-23 | PUT の応答を遅らせる | `changeStatus()` | 送信中は `changing` が true で一覧の `loading` は立たない。終わると `changing` は false | 実装済 |
 | DSS-24 | DSS-22 の状態（`changeError` あり） | `clearChangeError()` | `changeError` が null に戻る | 実装済 |
+| DSS-25 | 既定モック。読み込み済みの登録失敗の行 | その行を `'0'` へ `changeStatus()` | サイドメニューの件数を取り直す（`dream_status=ERROR`・`limit=1` の GET が出る）。`useNavBadgesStore().counts.dreamErrors` がフィクスチャのエラー行（登録失敗・取消失敗）の件数より 1 少なくなる | 実装済 |
+| DSS-26 | 既定モック。取得時と違う `updatedAt` の行（409） | `changeStatus()` | 件数は取り直さない（`dream_status=ERROR`・`limit=1` の GET が出ない） | 実装済 |

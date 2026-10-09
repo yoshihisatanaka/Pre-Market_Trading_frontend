@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { navItems, navSections } from '../src/components/layout/navigation'
 import { noOperationOperator, supervisorOperator } from '../src/mocks/fixtures/currentOperator'
+import { dreamOrders } from '../src/mocks/fixtures/dreamStatus'
 import { closedMarketStatusResponse } from '../src/mocks/fixtures/marketStatus'
+import { orderInquiryRows } from '../src/mocks/fixtures/orderInquiry'
 import { mockApi } from './helpers/mockApi'
 import { sectionToggle } from './helpers/sideMenu'
 
@@ -495,5 +497,94 @@ test.describe('共通レイアウト', () => {
     await expect(page).toHaveURL(/\/$/)
     await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
     await expect(nav.locator('[aria-current="page"]')).toHaveCount(0)
+  })
+
+  /*
+   * サイドメニューの件数（navigation.js の badge）。出どころは
+   *   注文エラー      … GET /orders?status=101,103 の total（src/mocks/handlers/orders.js が処理状況で絞る）
+   *   Dream登録エラー … GET /orders/dream-status?dream_status=ERROR の total（handlers/dreamStatus.js が 9 / C9 で絞る）
+   * mockApi() は path で当てるので、*\/api/orders を差し替えると注文照会の一覧も同じ応答になる。
+   * 件数だけを見たいので、注文照会以外の画面（顧客検索）を開く。STS変更での取り直しは DS-23 が見る。
+   */
+  const BADGE_PAGE = '/customers/search'
+  const ORDER_ERROR_COUNT = orderInquiryRows.filter((row) =>
+    ['101', '103'].includes(row.処理状況),
+  ).length
+  const DREAM_ERROR_COUNT = dreamOrders.filter(
+    (row) => row.Dream状況 === '9' || row.Dream状況 === 'C9',
+  ).length
+  const badgeItems = navItems.filter((item) => item.badge)
+  const badgeOf = (page, key) => page.getByTestId(`sidebar-badge-${key}`)
+
+  /** 件数の 2 本を同じ応答に差し替える */
+  function mockBadgeApis(override) {
+    return ['*/api/orders', '*/api/orders/dream-status'].map((path) => ({ path, ...override }))
+  }
+
+  /** 顧客検索を開き、件数の付く 2 項目が描かれるまで待つ（読み込み前の空振りで「出ない」が通らないように） */
+  async function openBadgePage(page) {
+    await page.goto(BADGE_PAGE)
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    for (const item of badgeItems) {
+      await expect(nav.getByRole('link', { name: item.label, exact: true })).toBeVisible()
+    }
+    return nav
+  }
+
+  test('[LAY-24] 注文照会と Dream登録状況にエラーの件数が出る', async ({ page }) => {
+    // 件数の付く項目が 2 つあり、既定モックに両方のエラーが在ることを先に確かめる
+    expect(badgeItems.map((item) => [item.label, item.badge.key])).toEqual([
+      ['注文照会', 'orderErrors'],
+      ['Dream登録状況', 'dreamErrors'],
+    ])
+    expect(ORDER_ERROR_COUNT).toBeGreaterThan(0)
+    expect(DREAM_ERROR_COUNT).toBeGreaterThan(0)
+    const expected = { orderErrors: ORDER_ERROR_COUNT, dreamErrors: DREAM_ERROR_COUNT }
+
+    const nav = await openBadgePage(page)
+
+    for (const item of badgeItems) {
+      const count = expected[item.badge.key]
+      // リンク名はラベルのまま（exact で当たる）で、件数は数字だけ・読み上げは説明文で添える
+      const link = nav.getByRole('link', { name: item.label, exact: true })
+      await expect(link.getByTestId(`sidebar-badge-${item.badge.key}`)).toHaveText(String(count))
+      await expect(link).toHaveAccessibleDescription(`${item.badge.label} ${count} 件`)
+    }
+    // ほかの項目には件数が出ない
+    await expect(nav.locator('[data-testid^="sidebar-badge-"]')).toHaveCount(badgeItems.length)
+  })
+
+  test('[LAY-25] 件数が 0 のときは何も出さない', async ({ page }) => {
+    await mockApi(
+      page,
+      mockBadgeApis({ body: { total: 0, limit: 1, offset: 0, orders: [], items: [] } }),
+    )
+    const nav = await openBadgePage(page)
+
+    for (const item of badgeItems) {
+      await expect(badgeOf(page, item.badge.key)).toHaveCount(0)
+      await expect(nav.getByRole('link', { name: item.label, exact: true })).not.toHaveAttribute(
+        'aria-describedby',
+        /.+/,
+      )
+    }
+  })
+
+  test('[LAY-26] 件数の取得に失敗しても何も出さず画面は使える', async ({ page }) => {
+    await mockApi(
+      page,
+      mockBadgeApis({ status: 500, body: { detail: 'サーバーでエラーが発生しました。' } }),
+    )
+    const nav = await openBadgePage(page)
+
+    for (const item of badgeItems) {
+      await expect(badgeOf(page, item.badge.key)).toHaveCount(0)
+    }
+    await expect(page.getByText('サーバーでエラーが発生しました。')).toHaveCount(0)
+
+    await nav.getByRole('link', { name: TARGET_LABEL, exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`${TARGET_PATH}$`))
+    await expect(page.getByRole('heading', { name: TARGET_LABEL, exact: true })).toBeVisible()
   })
 })

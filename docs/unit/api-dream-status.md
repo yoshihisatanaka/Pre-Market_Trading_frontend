@@ -42,3 +42,5 @@
 | DSA-19 | PUT を記録する | 受注番号・理由を空文字 / 空白だけ / 省略して `changeDreamStatus()` | 本文の `受注番号` / `理由` がどれも null（キー自体は載る） | 実装済 |
 | DSA-20 | 既定モック。登録失敗の行を `'0'` へ | 行の更新日時を付けて `changeDreamStatus()` | `order` が camelCase のアプリ内モデル（`status` が `'0'`・`statusName` が「未登録」・`canChangeStatus` が false・`updatedAt` が送った値と違う）で、`message` がサーバの処理結果 | 実装済 |
 | DSA-21 | 既定モック。取得時と違う更新日時 | `changeDreamStatus()` | status 409 の例外になり、detail が message に入る | 実装済 |
+| DSA-22 | 一覧が `total` 付きの応答を返す（記録する） | `fetchDreamErrorCount()` | `GET /orders/dream-status` に `limit=1` / `offset=0` / `dream_status=ERROR`（画面を Dream登録状況「エラー」で絞ったときと同じ擬似コード）だけが載り、応答の `total` を数値で返す | 実装済 |
+| DSA-23 | 一覧の応答に `total` が無い | `fetchDreamErrorCount()` | 0 を返す（例外にならない） | 実装済 |

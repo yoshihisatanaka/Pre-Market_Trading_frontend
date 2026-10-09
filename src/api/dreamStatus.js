@@ -115,6 +115,21 @@ export async function fetchDreamOrders({
 }
 
 /**
+ * Dream登録状況が「エラー」（登録失敗・取消失敗）の注文の件数（サイドメニューの Dream登録状況に添える件数）。
+ *
+ * 画面の Dream登録状況 を「エラー」で絞ったときの件数と同じになるよう、同じ擬似コード `ERROR` で
+ * 1 件だけ引いて `total` を返す。
+ *
+ * @returns {Promise<number>}
+ */
+export async function fetchDreamErrorCount() {
+  const { data } = await apiClient.get('/orders/dream-status', {
+    params: { limit: 1, offset: 0, dream_status: 'ERROR' },
+  })
+  return data?.total ?? 0
+}
+
+/**
  * Dream状況のコード一覧（検索のプルダウン用）を取得する。
  *
  * 並びはサーバの返したまま（登録フェーズ → 取消フェーズ → 擬似コード ERROR）。

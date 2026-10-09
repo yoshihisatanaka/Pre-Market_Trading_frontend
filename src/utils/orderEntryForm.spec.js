@@ -295,6 +295,7 @@ describe('orderEntryForm', () => {
       transactionType: '100',
       vwap: false,
       forced: false,
+      duplicateConfirmed: false,
       orderDate: '2026-09-29',
       orderTime: '10:30',
       orderPerson: ORDER_PERSON,
@@ -303,18 +304,20 @@ describe('orderEntryForm', () => {
     expect(input.symbolCode).not.toBe(form.ticker)
   })
 
-  it('[NOF-16] 指値・VWAP・強制区分はそのまま型を変えて載る', () => {
+  it('[NOF-16] 指値・VWAP・強制区分・重複確認区分はそのまま型を変えて載る', () => {
     const form = validForm({
       orderType: ORDER_TYPE.LIMIT,
       limitPrice: '200.5',
       vwap: VWAP.VWAP,
       forced: true,
+      duplicateConfirmed: true,
     })
     const input = buildOrderInput(form, { symbol: SYMBOL, today: TODAY, createdBy: 'creator' })
 
     expect(input.limitPrice).toBe(200.5)
     expect(input.vwap).toBe(true)
     expect(input.forced).toBe(true)
+    expect(input.duplicateConfirmed).toBe(true)
     expect(input.createdBy).toBe('creator')
   })
 
@@ -363,6 +366,7 @@ describe('orderEntryForm', () => {
       quantity: '',
       expiryDate: '',
       forced: false,
+      duplicateConfirmed: false,
     })
   })
 

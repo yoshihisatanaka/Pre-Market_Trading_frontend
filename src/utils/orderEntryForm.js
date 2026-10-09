@@ -140,6 +140,8 @@ export function createOrderForm({
     orderTime: `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
     orderPerson,
     forced: false,
+    // 同じ口座・銘柄・売買の注文が当日すでにあることを確かめた（事前検証が重複で弾いたときに付けて送り直す）
+    duplicateConfirmed: false,
     ...ORDER_FORM_DEFAULTS,
     // 引き継いだ預り区分は既定より優先する
     ...(depositCategory ? { depositCategory } : {}),
@@ -364,6 +366,7 @@ export function buildOrderInput(form, { symbol, today, createdBy }) {
     orderTime: form.orderTime,
     orderPerson: form.orderPerson.trim(),
     forced: form.forced,
+    duplicateConfirmed: form.duplicateConfirmed,
     createdBy,
   }
 }

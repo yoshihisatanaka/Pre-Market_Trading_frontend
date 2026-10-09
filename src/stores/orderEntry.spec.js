@@ -309,6 +309,7 @@ describe('useOrderEntryStore', () => {
       valid: true,
       errors: [],
       warnings: [],
+      duplicate: false,
     })
     expect(store.validateError).toBeNull()
 

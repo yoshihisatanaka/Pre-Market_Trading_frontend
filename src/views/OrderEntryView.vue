@@ -35,6 +35,8 @@ import { parseOrderEntryQuery } from '@/utils/orderEntryQuery'
  *   入力の不備   … 画面で弾く。項目の直下（FormField の error）
  *   サーバの errors … 「入力エラー」の帯。確認へ進まない
  *   サーバの warnings … 「フロコン警告」の帯。強制区分を付けて送り直せば確認へ進む
+ * 重複注文（同一口座・銘柄・売買の当日の注文）はサーバの errors で返る。重複確認区分を付けて送り直すと
+ * warnings（「【重複確認済】…」）に下がる。どちらで弾かれたかは、フォームのチェックの横の注記で示す。
  * 通信・サーバ障害は別の帯に 1 行で出す（入力はそのまま残す）。
  *
  * 顧客詳細（タブの「注文入力」・「新規注文」・預りの「買い」「売り」）からは、部店・口座番号・銘柄・
@@ -149,6 +151,8 @@ const fieldErrors = ref({})
 /** 事前検証の errors / warnings（入力画面の帯） */
 const serverErrors = ref([])
 const serverWarnings = ref([])
+/** 事前検証が重複注文で弾いたか（重複確認区分の横に注記を出す） */
+const serverDuplicate = ref(false)
 
 /**
  * 確認へ進んだ時点の注文。確認・完了の表示と、確定で送る本文はここから取る
@@ -307,11 +311,13 @@ async function submitInput() {
   if (!validation) {
     serverErrors.value = []
     serverWarnings.value = []
+    serverDuplicate.value = false
     return
   }
 
   serverErrors.value = validation.errors
   serverWarnings.value = validation.warnings
+  serverDuplicate.value = validation.duplicate
   if (validation.errors.length > 0) return
   // 警告は、強制区分を付けて送り直したときだけ通す
   if (validation.warnings.length > 0 && !form.value.forced) return
@@ -395,6 +401,7 @@ function startNewOrderSameCustomer() {
   fieldErrors.value = {}
   serverErrors.value = []
   serverWarnings.value = []
+  serverDuplicate.value = false
   pending.value = null
   rejection.value = null
   result.value = null
@@ -488,6 +495,7 @@ operatorStore.ensureLoaded().then(() => {
           :customer-hint="customerHint"
           :symbol-hint="symbolHint"
           :warned="serverWarnings.length > 0"
+          :duplicated="serverDuplicate"
           :disabled="blocked"
           :submitting="preparing || validating"
           @submit="submitInput"

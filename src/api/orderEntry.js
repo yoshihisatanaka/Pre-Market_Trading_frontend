@@ -7,6 +7,9 @@ import { apiClient } from './client'
  * 仕様にある。送信の約束は 2026-10-06 の回答で決まった（docs/api/requests.md #24）。
  *   - 検証は常に 200 の valid:false / errors。登録は再検証で引っかかると 400（ErrorResponse）
  *   - 強制区分 は 0 / 1。強制付きで検証し直しても warnings は残ったまま valid:true になる
+ *   - 重複確認区分 は 0 / 1（Phase 58）。同一口座・同一銘柄・同一売買区分の未取消の注文が当日あると、
+ *     0 では errors（「…重複確認区分=1 で再送してください」）、1 では warnings（「【重複確認済】…」）に
+ *     格下げされ valid:true になる（2026-10-09 実測。取消済の注文は重複に数えない）
  *   - 作成者 はサーバが認証情報の操作者で上書きする（本文の値は無視）。受注者 は本文必須で 1〜4 文字
  *   - 預り売買区分 は 0=特定・1=一般（「一般」を 1 で送る）
  *   - 証券受渡方法 の既定は 100（当社保管）
@@ -16,7 +19,8 @@ import { apiClient } from './client'
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり。
  *   - プロパティ名が日本語（部店 / 口座番号 / 銘柄コード …）。応答は英語の snake_case
  *     （登録の応答の受付状況 4 項目だけは日本語）
- *   - 口座番号・強制区分・VWAP区分 は integer。アプリ内は口座番号が文字列、2 つのフラグが boolean
+ *   - 口座番号・強制区分・重複確認区分・VWAP区分 は integer。アプリ内は口座番号が文字列、3 つのフラグが boolean
+ *   - 重複で弾かれたかは errors の文言でしか判らない。ここで duplicate（boolean）にして外へ出す
  *   - 有効期限・受注日 は 'YYYYMMDD' の文字列。アプリ内は 'YYYY-MM-DD'
  *   - 指値単価 は成行のとき null（CSV 仕様は「省略か 0」。null は nullable の宣言どおり）
  */
@@ -49,6 +53,7 @@ import { apiClient } from './client'
  *   orderTime: string,
  *   orderPerson: string,
  *   forced: boolean,
+ *   duplicateConfirmed: boolean,
  *   createdBy: string,
  * }} OrderInput
  *   expiryDate / orderDate は 'YYYY-MM-DD'、orderTime は 'HH:MM'
@@ -63,20 +68,28 @@ import { apiClient } from './client'
  * errors と warnings は扱いが違う。
  *   errors   … 発注できない理由。画面は確認へ進まない
  *   warnings … 発注はできるが確認が要ること（モックのフロコン警告）。強制区分を付ければ進める
+ *   duplicate … errors に「重複確認区分=1 で再送」の重複注文が含まれる。重複確認区分を付ければ warnings に下がる
  * どちらも例外にはしない。通信・サーバ障害だけが throw される。
  *
  * @param {OrderInput} order
- * @returns {Promise<{ valid: boolean, errors: string[], warnings: string[] }>}
+ * @returns {Promise<{ valid: boolean, errors: string[], warnings: string[], duplicate: boolean }>}
  */
 export async function validateOrder(order) {
   const { data } = await apiClient.post('/orders/validate', toOrderRequest(order))
+  // errors / warnings は default_factory 付きだが、実 API 以外（プロキシのエラー等）に備える
+  const errors = toMessages(data?.errors)
 
   return {
     valid: data?.valid === true,
-    // errors / warnings は default_factory 付きだが、実 API 以外（プロキシのエラー等）に備える
-    errors: toMessages(data?.errors),
+    errors,
     warnings: toMessages(data?.warnings),
+    duplicate: errors.some(isDuplicateError),
   }
+}
+
+/** 重複注文のエラーか（再送の指示に項目名 `重複確認区分` が入る。実 API の文言・2026-10-09 実測） */
+function isDuplicateError(message) {
+  return typeof message === 'string' && message.includes('重複確認区分')
 }
 
 /**
@@ -152,6 +165,7 @@ function toOrderRequest(order) {
     // サーバの 422 で落とす（空文字の社員コードを作らない）
     受注者: order.orderPerson || null,
     強制区分: order.forced ? 1 : 0,
+    重複確認区分: order.duplicateConfirmed ? 1 : 0,
     発注範囲: order.executionScope,
     作成者: order.createdBy,
     VWAP区分: order.vwap ? 1 : 0,

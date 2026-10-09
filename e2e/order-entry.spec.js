@@ -54,6 +54,8 @@ const CAUTION = customerOf(1230001)
 const SUSPENDED = customerOf(1230005)
 
 const AAPL = symbolOf('AAPL')
+/** 2 件目の注文に使う、警告の出ない別の銘柄（同じ口座・銘柄・売買を続けると重複注文になる） */
+const ORCL = symbolOf('ORCL')
 const TSLA = symbolOf('TSLA')
 const BRKB = symbolOf('BRK.B')
 
@@ -65,6 +67,7 @@ test.beforeAll(() => {
   expect(SUSPENDED.取引停止区分_全取引).toBe(1)
   expect(TSLA.VWAP対象区分).toBe('0')
   expect(BRKB.規制情報).toBe('1')
+  expect(ORCL.規制情報).not.toBe('1')
 })
 
 /** 'YYYYMMDD' の integer（端末のローカル日付。画面の「今日」と同じ時計で数える） */
@@ -633,7 +636,8 @@ test.describe('新規注文 確定と次の注文', () => {
     // 受注者は受注者コードの初期値に戻る（MSW の既定の操作者は未設定なので空）
     await expect(page.getByTestId('order-entry-order-person')).toHaveValue('')
 
-    await page.getByTestId('order-entry-ticker').fill(AAPL.Ticker)
+    // 1 件目と同じ銘柄・売買だと重複注文で止まる（NO-38）ので、2 件目は別の銘柄にする
+    await page.getByTestId('order-entry-ticker').fill(ORCL.Ticker)
     await sideButton(page, '買い').click()
     await page.getByTestId('order-entry-quantity').fill('10')
     await page.getByTestId('order-entry-order-person').fill(ORDER_PERSON)
@@ -641,6 +645,57 @@ test.describe('新規注文 確定と次の注文', () => {
     await expect(page.getByTestId('order-entry-confirm')).toBeVisible()
     await confirmOrder(page)
 
+    await expect(page.getByTestId('order-entry-order-id')).toHaveText(
+      `注文ID #${FIRST_ORDER_ID + 1}`,
+    )
+  })
+
+  test('[NO-38] 同じ口座・銘柄・売買の 2 件目は重複注文で止まり、重複確認区分を付けると確認へ進める', async ({
+    page,
+  }) => {
+    await openForm(page)
+    await goToConfirm(page)
+    await confirmOrder(page)
+    await expect(page.getByTestId('order-entry-order-id')).toHaveText(`注文ID #${FIRST_ORDER_ID}`)
+
+    await page.getByTestId('order-entry-new-same-customer').click()
+    await expect(page.getByTestId('order-entry-form')).toBeVisible()
+    await page.getByTestId('order-entry-ticker').fill(AAPL.Ticker)
+    await sideButton(page, '買い').click()
+    await page.getByTestId('order-entry-quantity').fill('10')
+    await page.getByTestId('order-entry-order-person').fill(ORDER_PERSON)
+
+    /*
+     * 送った本文の 重複確認区分 は単体テスト（NOV-32）が見る。E2E の MSW はページ内で通信を横取りするので
+     * リクエストが Playwright に見えない。モックは 重複確認区分 1 のときだけ警告に下げるので、画面の変化で足りる
+     */
+    // 1 回目: 重複は入力エラーで、重複確認区分の横に注記が出る。確認へは進まない
+    await submitInput(page)
+    await expect(page.getByTestId('order-entry-errors')).toContainText(
+      orderMessages.duplicate(FIRST_ORDER_ID),
+    )
+    await expect(page.getByTestId('order-entry-duplicate-note')).toHaveText(
+      '重複注文あり — 確認の上チェック',
+    )
+    await expect(page.getByTestId('order-entry-confirm')).toHaveCount(0)
+
+    // 2 回目: 重複確認区分を付けて送り直すと警告に下がり、強制区分を付ければ確認へ進む
+    await page.getByTestId('order-entry-duplicate-confirmed').check()
+    await submitInput(page)
+    await expect(page.getByTestId('order-entry-errors')).toHaveCount(0)
+    await expect(page.getByTestId('order-entry-duplicate-note')).toHaveCount(0)
+    await expect(page.getByTestId('order-entry-warnings')).toContainText(
+      orderMessages.duplicateConfirmed(FIRST_ORDER_ID),
+    )
+    await page.getByTestId('order-entry-forced').check()
+    await submitInput(page)
+    await expect(page.getByTestId('order-entry-confirm')).toBeVisible()
+    await expect(page.getByTestId('order-entry-confirmed-warnings')).toContainText(
+      orderMessages.duplicateConfirmed(FIRST_ORDER_ID),
+    )
+
+    // 確定も同じ本文（重複確認区分 1）で送るので、モックの再検証を通って受け付けられる
+    await confirmOrder(page)
     await expect(page.getByTestId('order-entry-order-id')).toHaveText(
       `注文ID #${FIRST_ORDER_ID + 1}`,
     )

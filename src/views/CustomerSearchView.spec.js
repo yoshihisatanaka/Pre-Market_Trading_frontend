@@ -94,7 +94,15 @@ const cellsFor = (wrapper, accountNumber) =>
     .find((row) => row.findAll('td')[2].text() === String(accountNumber))
     .findAll('td')
 
-const COLUMN = { age: 4, rank: 5, cashJpy: 7, cashUsd: 8, growthQuota: 9, restriction: 10 }
+const COLUMN = {
+  specificAccount: 4,
+  age: 5,
+  rank: 6,
+  cashJpy: 8,
+  cashUsd: 9,
+  growthQuota: 10,
+  restriction: 11,
+}
 
 // シナリオ: docs/unit/views-customer-search-view.md
 describe('CustomerSearchView', () => {
@@ -119,7 +127,7 @@ describe('CustomerSearchView', () => {
     )
   })
 
-  it('[CSW-03] 列は 11 列で、米国株評価額と評価損益の列は無い', async () => {
+  it('[CSW-03] 列は 12 列で、米国株評価額と評価損益の列は無い', async () => {
     const { wrapper } = await mountView()
     await settle()
 
@@ -128,6 +136,7 @@ describe('CustomerSearchView', () => {
       '扱者',
       '口座番号',
       '顧客名',
+      '特定口座',
       '年齢',
       'コンプラランク',
       '投資方針',
@@ -358,5 +367,30 @@ describe('CustomerSearchView', () => {
     expect(router.currentRoute.value.query.offset).toBe(String(PAGE_SIZE))
     expect(rows(wrapper)).toHaveLength(secondPage.length)
     expect(rows(wrapper)[0].findAll('td')[2].text()).toBe(String(secondPage[0].口座番号))
+  })
+
+  it('[CSW-17] 特定口座はサーバの区分名をそのまま出し、名前が無ければ —', async () => {
+    // 4 区分（未登録 / 源泉あり / 源泉なし / 非特定）が 1 ページ目に揃っている
+    const names = new Set(firstPage.map((row) => row.特定口座区分名))
+    expect(names.size).toBe(4)
+    const unnamed = { ...head, 特定口座区分: null, 特定口座区分名: null }
+    server.use(
+      http.get(LIST_PATH, () =>
+        HttpResponse.json({
+          total: firstPage.length,
+          limit: PAGE_SIZE,
+          offset: 0,
+          customers: [unnamed, ...firstPage.slice(1)],
+        }),
+      ),
+    )
+
+    const { wrapper } = await mountView()
+    await settle()
+
+    for (const row of firstPage.slice(1)) {
+      expect(cellsFor(wrapper, row.口座番号)[COLUMN.specificAccount].text()).toBe(row.特定口座区分名)
+    }
+    expect(cellsFor(wrapper, head.口座番号)[COLUMN.specificAccount].text()).toBe('—')
   })
 })

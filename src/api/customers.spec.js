@@ -251,6 +251,7 @@ describe('api/customers', () => {
       investmentPolicyName: customerItem.投資方針名,
       complianceRankName: customerItem.コンプラランク名,
       accountTypeName: customerItem.口座区分名,
+      specificAccountTypeName: customerItem.特定口座区分名,
       corporateTypeName: customerItem.法人区分名,
     })
     expect(typeof items[0].accountNumber).toBe('string')
@@ -320,6 +321,7 @@ describe('api/customers', () => {
           投資方針名: null,
           コンプラランク名: null,
           口座区分名: null,
+          特定口座区分名: null,
           法人区分名: null,
         },
       ]),
@@ -336,6 +338,7 @@ describe('api/customers', () => {
       investmentPolicyName: '',
       complianceRankName: '',
       accountTypeName: '',
+      specificAccountTypeName: '',
       corporateTypeName: '',
     })
   })

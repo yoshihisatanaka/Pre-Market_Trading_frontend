@@ -241,8 +241,11 @@ function toAccountItem({ id, branch, handler, seq, profile, canceled = false }) 
   const accidentAccount = profile.accident ? '1' : '0'
   const corporateType = profile.corporate ? '1' : '0'
   const nisaContract = profile.nisaContract ?? '1'
-  // 法人は特定口座を持たない（非特定）。個人は源泉あり
-  const specificAccountType = profile.corporate ? '3' : '1'
+  /*
+   * 法人は特定口座を持たない（非特定）。個人は顧客検索の特定口座列で 4 区分が見えるよう、
+   * 連番で 源泉あり → 源泉なし → 未登録 → 非特定 と回す（画面モックも 4 区分を散らしている）
+   */
+  const specificAccountType = profile.corporate ? '3' : ['1', '2', '0', '3'][(seq - 1) % 4]
   // 書類は VWAP だけ未受入の顧客がいる（2 人に 1 人）。ほかは受入済
   const vwapDocument = seq % 2 === 0 ? '0' : '1'
 

@@ -157,4 +157,17 @@ describe('CustomerInfoBar', () => {
     expect(classes).not.toContain('is-profit')
     expect(classes).not.toContain('is-loss')
   })
+
+  it('[CIB-10] 特定口座はサーバの区分名をそのまま出し、空は —', () => {
+    const NAME = '源泉あり'
+    const named = mountBar({ specificAccountTypeName: NAME })
+    const blank = mountBar({ specificAccountTypeName: '' })
+
+    expect(textOf(named, 'customer-info-specific-account')).toBe(NAME)
+    expect(textOf(blank, 'customer-info-specific-account')).toBe('—')
+
+    // 年齢の右隣に並ぶ（画面モックの並び）
+    const labels = named.findAll('.customer-info-bar__metrics dt').map((dt) => dt.text())
+    expect(labels.indexOf('特定口座')).toBe(labels.indexOf('年齢') + 1)
+  })
 })

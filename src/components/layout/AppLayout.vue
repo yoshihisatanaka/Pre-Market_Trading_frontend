@@ -42,7 +42,6 @@ const { isLoading, pendingPath } = useRouteLoading()
 </template>
 
 <style scoped>
-/* overflow: hidden は畳んだサイドバー（負の margin-left ではみ出す）のクリップも兼ねる */
 .app-layout {
   display: flex;
   height: 100vh;

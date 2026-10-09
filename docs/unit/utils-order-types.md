@@ -17,3 +17,4 @@
 | ORT-05 | — | `orderStatusLabel('999')` / `''` / `null` | 知らないコードはそのまま `'999'`、空値は「—」 | 実装済 |
 | ORT-06 | — | `orderPriceLabel('MO', 410)` / `('LO', 410)` / `('', 410)` | 「成行」/ `指値 ` + `formatUsdUnit(410)`（「指値 410.00 ドル」）/「—」 | 実装済 |
 | ORT-07 | — | `ORDER_TYPE_OPTIONS` を読む | 成行（`MO`）→ 指値（`LO`）の順に 2 つ | 実装済 |
+| ORT-08 | — | `AMEND_MARKET_SCOPE_OPTIONS` を読む | 値は `EXECUTION_SCOPE_VALUES` と同じ 4 つが同じ順に並び、`disabled` でないのは `02` / `03` だけ。`disabled` の選択肢は note「（Ph.2予定）」を持つ | 実装済 |

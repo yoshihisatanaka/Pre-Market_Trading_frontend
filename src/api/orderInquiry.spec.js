@@ -268,7 +268,9 @@ describe('api/orderInquiry', () => {
       customerName: raw.顧客名,
       statusName: raw.処理状況名,
       symbol: raw.Ticker,
+      symbolName: raw.銘柄名,
       side: sides[raw.売買区分],
+      depositCategory: raw.預り売買区分,
       quantity: raw.数量,
       orderType: raw.指成区分,
       limitPrice: raw.指値単価,
@@ -276,6 +278,7 @@ describe('api/orderInquiry', () => {
       vwap: raw.VWAP区分 === 1,
       status: raw.処理状況,
       filledQuantity: raw.出来数量,
+      expiryDate: raw.受注日,
       orderedAt: `${raw.受注日}T${raw.受注時刻}`,
       amendable: true,
       cancelable: true,
@@ -325,6 +328,24 @@ describe('api/orderInquiry', () => {
     const legacy = await fetchOrderDetail('36')
     expect(legacy.customerName).toBe('')
     expect(legacy.statusName).toBe('')
+  })
+
+  it('[OIA-38] 有効期限は区切りの有無を問わず YYYY-MM-DD になり、日付でなければ空文字', async () => {
+    const results = []
+    for (const value of ['20261001', '2026-10-01', null, '1001']) {
+      respondDetail({ order: row({ 有効期限: value }), executions: [] })
+      results.push((await fetchOrderDetail('36')).expiryDate)
+    }
+
+    expect(results).toEqual(['2026-10-01', '2026-10-01', '', ''])
+  })
+
+  it('[OIA-39] 銘柄名・預り売買区分が無い応答では空文字になる', async () => {
+    respondDetail({ order: row({ 銘柄名: null, 預り売買区分: null }), executions: [] })
+    const detail = await fetchOrderDetail('36')
+
+    expect(detail.symbolName).toBe('')
+    expect(detail.depositCategory).toBe('')
   })
 
   it('[OIA-18] 指値単価は数値の文字列でも数値になり、null は null のまま', async () => {

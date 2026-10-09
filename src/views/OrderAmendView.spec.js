@@ -7,12 +7,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { orderInquiryRows } from '@/mocks/fixtures/orderInquiry'
 import { formatMonthDayTime, formatQuantity } from '@/utils/format'
-import {
-  MARKET_SCOPE_OPTIONS,
-  marketScopeLabel,
-  orderPriceLabel,
-  orderStatusLabel,
-} from '@/utils/orderTypes'
+import { orderPriceLabel, orderStatusLabel } from '@/utils/orderTypes'
 import OrderAmendView from './OrderAmendView.vue'
 
 /*
@@ -70,10 +65,13 @@ async function settle() {
 
 const find = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`)
 const exists = (wrapper, testid) => find(wrapper, testid).exists()
+const text = (wrapper, testid) => find(wrapper, testid).text()
 const quantityInput = (wrapper) => find(wrapper, 'order-amend-quantity')
 const limitPriceInput = (wrapper) => find(wrapper, 'order-amend-limit-price')
 const orderTypeButton = (wrapper, value) =>
   find(wrapper, 'order-amend-order-type').find(`[data-value="${value}"]`)
+const marketScopeButton = (wrapper, value) =>
+  find(wrapper, 'order-amend-market-scope').find(`[data-value="${value}"]`)
 const submit = async (wrapper) => {
   await find(wrapper, 'order-amend-form').trigger('submit')
   await settle()
@@ -100,11 +98,10 @@ const fieldError = (wrapper, input) =>
 const fieldHint = (wrapper, input) =>
   describedBy(wrapper, input).find((el) => el.attributes('role') !== 'alert')?.text() ?? ''
 
-const summaryPairs = (wrapper) => {
-  const summary = find(wrapper, 'order-amend-summary')
-  const values = summary.findAll('dd').map((dd) => dd.text())
-  return summary.findAll('dt').map((dt, index) => [dt.text(), values[index]])
-}
+const summaryLabels = (wrapper) =>
+  find(wrapper, 'order-amend-summary')
+    .findAll('dt')
+    .map((dt) => dt.text())
 
 /** 訂正の POST を記録し、成功の応答を返す。記録は本文の配列 */
 function recordAmend(extra = {}) {
@@ -197,49 +194,47 @@ describe('OrderAmendView', () => {
     expect(exists(wrapper, 'order-amend-form')).toBe(true)
   })
 
-  it('[OAV-05] 訂正対象注文と状況が表示用の文言で出る', async () => {
+  it('[OAV-05] 訂正対象注文がモックの 4 枠に表示用の文言で出て、状況はバッジに出る', async () => {
     const raw = PARTIAL
     const { wrapper } = await mountView(raw.ID)
     await settle()
 
-    expect(find(wrapper, 'order-amend-description').text()).toContain(`注文ID #${raw.ID}`)
-    expect(summaryPairs(wrapper)).toEqual([
-      ['注文ID', `#${raw.ID}`],
-      ['顧客', `${raw.顧客名} 部店 ${raw.部店} ／ 口座 ${raw.口座番号}`],
-      ['銘柄', raw.Ticker],
-      ['売買', SIDE_LABELS[raw.売買区分]],
-      [
-        '原注文',
-        `${formatQuantity(raw.数量)}株 ／ ${orderPriceLabel(raw.指成区分, raw.指値単価)}`,
-      ],
-      ['市場区分', marketScopeLabel(raw.発注範囲)],
-      ['出来数量', `${formatQuantity(raw.出来数量)}株`],
-      ['受注日時', formatMonthDayTime(`${raw.受注日}T${raw.受注時刻}`)],
-    ])
-    expect(find(wrapper, 'order-amend-customer').text()).toBe(
-      `${raw.顧客名} 部店 ${raw.部店} ／ 口座 ${raw.口座番号}`,
+    expect(summaryLabels(wrapper)).toEqual(['顧客', '銘柄', '売買・預り', '原注文'])
+    expect(text(wrapper, 'order-amend-customer')).toBe(raw.顧客名)
+    expect(text(wrapper, 'order-amend-account')).toBe(`部店 ${raw.部店} ／ 口座 ${raw.口座番号}`)
+    expect(text(wrapper, 'order-amend-symbol')).toBe(raw.Ticker)
+    expect(text(wrapper, 'order-amend-symbol-name')).toBe(raw.銘柄名)
+    expect(text(wrapper, 'order-amend-side')).toBe(SIDE_LABELS[raw.売買区分])
+    // 預り売買区分 '0' は「特定」
+    expect(raw.預り売買区分).toBe('0')
+    expect(text(wrapper, 'order-amend-deposit')).toBe('特定')
+    expect(text(wrapper, 'order-amend-original')).toBe(
+      `${formatQuantity(raw.数量)}株 ／ ${orderPriceLabel(raw.指成区分, raw.指値単価)}`,
     )
-    expect(find(wrapper, 'order-amend-original').text()).toBe('3,000株 ／ 成行')
+    expect(text(wrapper, 'order-amend-original')).toBe('3,000株 ／ 成行')
+    expect(text(wrapper, 'order-amend-ordered-at')).toBe(
+      `受注 ${formatMonthDayTime(`${raw.受注日}T${raw.受注時刻}`)}`,
+    )
     // 状況はサーバの 処理状況名
-    expect(find(wrapper, 'order-amend-status').text()).toBe(raw.処理状況名)
-    expect(find(wrapper, 'order-amend-status').text()).toBe('一部出来')
+    expect(text(wrapper, 'order-amend-status')).toBe(raw.処理状況名)
+    expect(text(wrapper, 'order-amend-status')).toBe('一部出来')
   })
 
-  it('[OAV-25] 顧客名・処理状況名の無い応答（古いサーバ）では、顧客は部店・口座だけ、状況はコードの名前', async () => {
+  it('[OAV-25] 顧客名・処理状況名・銘柄名・預り売買区分の無い応答では、顧客は「—」、状況はコードの名前で、銘柄名と預りは出ない', async () => {
     const raw = PARTIAL
-    const legacy = Object.fromEntries(
-      Object.entries(raw).filter(([key]) => !['顧客名', '処理状況名'].includes(key)),
-    )
+    const MISSING = ['顧客名', '処理状況名', '銘柄名', '預り売買区分']
+    const legacy = Object.fromEntries(Object.entries(raw).filter(([key]) => !MISSING.includes(key)))
     server.use(
       http.get(DETAIL, () => HttpResponse.json({ order: legacy, executions: [], events: [] })),
     )
     const { wrapper } = await mountView(raw.ID)
     await settle()
 
-    expect(find(wrapper, 'order-amend-customer').text()).toBe(
-      `部店 ${raw.部店} ／ 口座 ${raw.口座番号}`,
-    )
-    expect(find(wrapper, 'order-amend-status').text()).toBe(orderStatusLabel(raw.処理状況))
+    expect(text(wrapper, 'order-amend-customer')).toBe('—')
+    expect(text(wrapper, 'order-amend-account')).toBe(`部店 ${raw.部店} ／ 口座 ${raw.口座番号}`)
+    expect(text(wrapper, 'order-amend-status')).toBe(orderStatusLabel(raw.処理状況))
+    expect(exists(wrapper, 'order-amend-symbol-name')).toBe(false)
+    expect(exists(wrapper, 'order-amend-deposit')).toBe(false)
   })
 
   it('[OAV-06] 入力欄は注文の現在値で埋まる', async () => {
@@ -248,11 +243,77 @@ describe('OrderAmendView', () => {
     await settle()
 
     expect(quantityInput(wrapper).element.value).toBe(String(raw.数量))
-    expect(find(wrapper, 'order-amend-market-scope').element.value).toBe(raw.発注範囲)
+    expect(marketScopeButton(wrapper, raw.発注範囲).attributes('aria-pressed')).toBe('true')
     expect(orderTypeButton(wrapper, 'LO').attributes('aria-pressed')).toBe('true')
     expect(orderTypeButton(wrapper, 'MO').attributes('aria-pressed')).toBe('false')
     expect(limitPriceInput(wrapper).element.value).toBe(String(raw.指値単価))
     expect(find(wrapper, 'order-amend-reason').element.value).toBe('')
+  })
+
+  it('[OAV-26] 数量は 3 桁ごとのカンマで埋まり、打つと数字以外を落として整形し直す', async () => {
+    const seen = recordAmend()
+    const { wrapper } = await mountView(PARTIAL.ID)
+    await settle()
+
+    expect(quantityInput(wrapper).element.value).toBe(formatQuantity(PARTIAL.数量))
+    expect(quantityInput(wrapper).element.value).toBe('3,000')
+
+    await quantityInput(wrapper).setValue('4a5000')
+    expect(quantityInput(wrapper).element.value).toBe('45,000')
+    await submit(wrapper)
+
+    expect(seen).toEqual([{ 数量: 45000 }])
+  })
+
+  it('[OAV-27] 市場区分はモックの 4 ボタンで、アフターを含む 2 つは「Ph.2予定」で押せない', async () => {
+    const { wrapper } = await mountView(PENDING.ID)
+    await settle()
+
+    const buttons = find(wrapper, 'order-amend-market-scope').findAll('button')
+    expect(buttons.map((button) => button.attributes('data-value'))).toEqual([
+      '02',
+      '03',
+      '04',
+      '06',
+    ])
+    expect(buttons.map((button) => button.element.disabled)).toEqual([false, false, true, true])
+    expect(buttons[2].text()).toBe('プレ＋レギュラー＋アフター（Ph.2予定）')
+    expect(buttons[3].text()).toBe('アフター（時間内限り）（Ph.2予定）')
+
+    // Ph.2 の区分で出した注文（#35 は 04）は、押せないボタンが選ばれた状態で開く
+    const partial = await mountView(PARTIAL.ID)
+    await settle()
+    const selected = marketScopeButton(partial.wrapper, PARTIAL.発注範囲)
+    expect(PARTIAL.発注範囲).toBe('04')
+    expect(selected.attributes('aria-pressed')).toBe('true')
+    expect(selected.element.disabled).toBe(true)
+  })
+
+  it('[OAV-28] 執行条件はいまの有効期限を押せない選択欄で見せる', async () => {
+    const pending = await mountView(PENDING.ID)
+    await settle()
+    const expiry = find(pending.wrapper, 'order-amend-expiry')
+    // 受注日と同じ日なら「当日中」
+    expect(PENDING.有効期限).toBe(PENDING.受注日.replaceAll('-', ''))
+    expect(expiry.element.value).toBe('当日中（9/28）')
+    expect(expiry.element.disabled).toBe(true)
+    expect(fieldHint(pending.wrapper, expiry)).toBe('訂正では変更できません')
+
+    // 受注日より先の日なら日付だけ（#34 は 2026-10-01）
+    const working = await mountView(WORKING.ID)
+    await settle()
+    expect(WORKING.有効期限).toBe('20261001')
+    expect(find(working.wrapper, 'order-amend-expiry').element.value).toBe('10/1 まで')
+
+    // 有効期限の無い応答では「—」
+    server.use(
+      http.get(DETAIL, () =>
+        HttpResponse.json({ order: { ...PENDING, 有効期限: null }, executions: [], events: [] }),
+      ),
+    )
+    const missing = await mountView(PENDING.ID)
+    await settle()
+    expect(find(missing.wrapper, 'order-amend-expiry').element.value).toBe('—')
   })
 
   it('[OAV-07] 出来のある注文だけ数量欄に総数量のヒントが出る', async () => {
@@ -279,15 +340,15 @@ describe('OrderAmendView', () => {
     expect(exists(wrapper, 'order-amend-submit')).toBe(false)
   })
 
-  it('[OAV-09] 数量の空・整数でない・0 は項目のエラーになり送らない', async () => {
+  it('[OAV-09] 数量の空・数字の無い入力・0 は項目のエラーになり送らない', async () => {
     const seen = recordAmend()
     const { wrapper } = await mountView(PENDING.ID)
     await settle()
 
+    // 数字以外は打った時点で落ちるので、'abc' は空と同じになる
     const cases = [
       ['', '注文数量を入力してください。'],
-      ['abc', '注文数量を整数で入力してください。'],
-      ['1.5', '注文数量を整数で入力してください。'],
+      ['abc', '注文数量を入力してください。'],
       ['0', '注文数量は1以上で入力してください。'],
     ]
     for (const [value, message] of cases) {
@@ -370,6 +431,17 @@ describe('OrderAmendView', () => {
     expect(seen).toEqual([{ 指成区分: 'MO' }])
   })
 
+  it('[OAV-29] 指値 → 成行 → 指値と切り替えると指値価格は空に戻る', async () => {
+    const { wrapper } = await mountView(PENDING.ID)
+    await settle()
+    expect(limitPriceInput(wrapper).element.value).toBe(String(PENDING.指値単価))
+
+    await orderTypeButton(wrapper, 'MO').trigger('click')
+    await orderTypeButton(wrapper, 'LO').trigger('click')
+
+    expect(limitPriceInput(wrapper).element.value).toBe('')
+  })
+
   it('[OAV-15] 成行から指値へ変えると指成区分と単価を送る', async () => {
     const seen = recordAmend()
     const { wrapper } = await mountView(WORKING.ID)
@@ -388,14 +460,15 @@ describe('OrderAmendView', () => {
     const seen = recordAmend()
     const { wrapper } = await mountView(PENDING.ID)
     await settle()
-    const scope = MARKET_SCOPE_OPTIONS.find((option) => option.value !== PENDING.発注範囲).value
+    // #36 はプレ＋レギュラー（02）。押せるもう一方のレギュラー（03）へ変える
+    expect(PENDING.発注範囲).toBe('02')
     const REASON = 'お客様申出'
 
-    await find(wrapper, 'order-amend-market-scope').setValue(scope)
+    await marketScopeButton(wrapper, '03').trigger('click')
     await find(wrapper, 'order-amend-reason').setValue(REASON)
     await submit(wrapper)
 
-    expect(seen).toEqual([{ 発注範囲: scope, 理由: REASON }])
+    expect(seen).toEqual([{ 発注範囲: '03', 理由: REASON }])
   })
 
   it('[OAV-17] 未発注の訂正はその場で訂正した完了表示になる', async () => {
@@ -510,7 +583,8 @@ describe('OrderAmendView', () => {
     await router.push(`/orders/${WORKING.ID}/amend`)
     await settle()
 
-    expect(find(wrapper, 'order-amend-description').text()).toContain(`注文ID #${WORKING.ID}`)
+    expect(text(wrapper, 'order-amend-customer')).toBe(WORKING.顧客名)
+    expect(text(wrapper, 'order-amend-symbol')).toBe(WORKING.Ticker)
     expect(quantityInput(wrapper).element.value).toBe(String(WORKING.数量))
     expect(orderTypeButton(wrapper, WORKING.指成区分).attributes('aria-pressed')).toBe('true')
   })

@@ -32,7 +32,7 @@ MSW も一覧の行をそのまま（`注文ルートコード` を足して）�
 | OIA-12 | 処理状況が `'000'` / `'003'` / `'010'` / `'131'` / `'133'` / `'101'` / `'103'` / `'141'` / `'011'` / `'034'` / `'040'` の行 | `fetchOrderInquiry()` | `cancelable` は `'141'` までの 8 つで true・後の 3 つで false、`amendable` は `'000'` / `'003'` / `'010'` だけ true | 実装済 |
 | OIA-13 | 処理状況が `'010'` / `'101'` / `'034'` / `'002'` の行 | `fetchOrderInquiry()` | `statusTone` が `'partial'` / `'error'` / `'canceled'` / `''` になる | 実装済 |
 | OIA-14 | 既定モック | `fetchOrderInquiry({ executionStatus: '' })` / 引数なし | `status` クエリを載せない（選択肢に無い値を落とすのは画面の役目。OIV-11） | 実装済 |
-| OIA-15 | 既定モック（#35 は一部出来） | `fetchOrderDetail('35')` | `GET /orders/35` を読み、`id` / 部店 / 口座番号（文字列）/ `customerName`（顧客名）/ 銘柄 / `side` / 数量 / 指成区分 / 指値単価 / 発注範囲 / `vwap` / `status`（処理状況コード）/ `statusName`（処理状況名）/ `orderedAt` がフィクスチャの行から変換され、`filledQuantity` はその行の出来数量、`amendable` / `cancelable` は true になる | 実装済 |
+| OIA-15 | 既定モック（#35 は一部出来） | `fetchOrderDetail('35')` | `GET /orders/35` を読み、`id` / 部店 / 口座番号（文字列）/ `customerName`（顧客名）/ 銘柄 / `symbolName`（銘柄名）/ `side` / `depositCategory`（預り売買区分）/ 数量 / 指成区分 / 指値単価 / 発注範囲 / `vwap` / `status`（処理状況コード）/ `statusName`（処理状況名）/ `expiryDate`（有効期限を `YYYY-MM-DD` に）/ `orderedAt` がフィクスチャの行から変換され、`filledQuantity` はその行の出来数量、`amendable` / `cancelable` は true になる | 実装済 |
 | OIA-16 | `Ticker` が `'BRK.B'`・`銘柄コード` が `'BRKB'` の行 / `Ticker` が空の行 | `fetchOrderDetail(id)` | `symbol` は `Ticker` を優先し、空なら `銘柄コード` になる | 実装済 |
 | OIA-17 | `order` に派生項目（出来数量 など）が無い（古いサーバ）。`executions` が 2 件（約定数量 30 と `'20'`）/ 空配列 / 項目なし | `fetchOrderDetail(id)` | `filledQuantity` がそれぞれ 50 / 0 / 0 になる | 実装済 |
 | OIA-18 | `指値単価` が `'410.0000'`（数値の文字列）/ `410` / `null` | `fetchOrderDetail(id)` | `limitPrice` がそれぞれ 410 / 410 / `null` になる | 実装済 |
@@ -55,3 +55,5 @@ MSW も一覧の行をそのまま（`注文ルートコード` を足して）�
 | OIA-35 | `スライス適用理由` だけが `['理由A', null, '', '理由B']` の行 / `スライス参照価格` だけが `'337.5000'` の行 / `スライス適用理由` が `[]` だけの行 | `fetchOrderInquiry()` | 1 行目は `reasons` が `['理由A', '理由B']` でほかは `null`、2 行目は `referencePrice` が 337.5・`reasons` が `[]`、3 行目は `slicePlan` が `null`（4 項目のどれも無い行は null） | 実装済 |
 | OIA-36 | 一覧が `total` 付きの応答を返す（記録する） | `fetchOrderErrorCount()` | `GET /orders` に `limit=1` / `offset=0` / `status=101,103`（注文照会を出来状況「注文エラー」で絞ったときと同じ値）だけが載り、応答の `total` を数値で返す | 実装済 |
 | OIA-37 | 一覧の応答に `total` が無い | `fetchOrderErrorCount()` | 0 を返す（例外にならない） | 実装済 |
+| OIA-38 | 詳細の `有効期限` が `'20261001'` / `'2026-10-01'` / `null` / `'1001'` | `fetchOrderDetail(id)` | `expiryDate` がそれぞれ `'2026-10-01'` / `'2026-10-01'` / `''` / `''`（返る形は仕様に無いので区切りの有無を問わず、8 桁の日付にならなければ空） | 実装済 |
+| OIA-39 | 詳細の `銘柄名` と `預り売買区分` が `null` | `fetchOrderDetail(id)` | `symbolName` / `depositCategory` がどちらも `''` | 実装済 |

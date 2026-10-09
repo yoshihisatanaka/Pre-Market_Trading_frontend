@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { EXECUTION_SCOPE_VALUES } from '@/utils/apiEnums'
 import { formatUsdUnit } from '@/utils/format'
 import {
+  AMEND_MARKET_SCOPE_OPTIONS,
   MARKET_SCOPE_OPTIONS,
   ORDER_TYPE_OPTIONS,
   marketScopeLabel,
@@ -54,5 +55,17 @@ describe('utils/orderTypes', () => {
       { value: 'MO', label: '成行' },
       { value: 'LO', label: '指値' },
     ])
+  })
+
+  it('[ORT-08] 訂正画面の市場区分は enum の 4 値で、押せるのは 02 / 03 だけ', () => {
+    expect(AMEND_MARKET_SCOPE_OPTIONS.map((option) => option.value)).toEqual([
+      ...EXECUTION_SCOPE_VALUES,
+    ])
+    expect(
+      AMEND_MARKET_SCOPE_OPTIONS.filter((option) => !option.disabled).map((option) => option.value),
+    ).toEqual(['02', '03'])
+    for (const option of AMEND_MARKET_SCOPE_OPTIONS.filter((item) => item.disabled)) {
+      expect(option.note).toBe('（Ph.2予定）')
+    }
   })
 })

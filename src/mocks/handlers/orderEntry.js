@@ -18,8 +18,11 @@ import { requestValidationError } from './_shared'
  *
  * 実 API はマスタ・残高・余力まで見るが、モックは画面の分岐を一通り出せるだけの規則に絞る。
  *   errors   … 口座が無い / 銘柄が無い / 取引不可の銘柄（規制情報 1）/ 買い × 成長投資枠 /
- *              VWAP 対象外の銘柄に VWAP
- *   warnings … 全取引停止の顧客 / コンプラランク A・B・Y・Z / 概算 5,000 万円超（大口取引）
+ *              VWAP 対象外の銘柄に VWAP / 重複注文（重複確認区分 0 のとき）
+ *   warnings … 全取引停止の顧客 / コンプラランク A・B・Y・Z / 概算 5,000 万円超（大口取引）/
+ *              重複注文（重複確認区分 1 のとき）
+ * 重複注文は「このモックで受け付けた注文と同じ部店・口座番号・銘柄コード・売買区分」（実 API は当日・未取消の注文）。
+ * 受け付けた注文は resetOrderEntryState で消える（テストごとに戻る）。
  * 顧客と銘柄はフィクスチャの初期値で引く（マスタ画面で登録した行は対象外。画面をまたぐ再現は要らない）。
  *
  * 業務エラーは 200 で返す（valid:false / success:false）。実 API は登録の再検証の不合格を 400 で返す
@@ -31,11 +34,17 @@ import { requestValidationError } from './_shared'
 const ORDER_PERSON_MAX_LENGTH = 4
 
 let nextOrderId = FIRST_ORDER_ID
+/** 受け付けた注文（重複の判定に使う）。{ orderId, key } */
+let acceptedOrders = []
 
-/** モックの可変状態（採番）を初期値に戻す */
+/** モックの可変状態（採番・受け付けた注文）を初期値に戻す */
 export function resetOrderEntryState() {
   nextOrderId = FIRST_ORDER_ID
+  acceptedOrders = []
 }
+
+/** 重複の判定に使う組（部店・口座番号・銘柄コード・売買区分） */
+const duplicateKeyOf = (body) => [body.部店, body.口座番号, body.銘柄コード, body.売買区分].join('|')
 
 /**
  * OrderRequest の required（openapi.json）。証券受渡方法・預り売買区分 は既定値を持ち、
@@ -106,6 +115,14 @@ function checkOrder(body) {
   const amount = Math.round(body.数量 * unitPrice * FLOCON_FX_RATE)
   if (amount > LARGE_TRADE_THRESHOLD_JPY) warnings.push(orderMessages.largeTrade(amount))
 
+  // 重複注文。重複確認区分 1 なら警告に下がる（実 API と同じ）
+  const duplicate = acceptedOrders.find((order) => order.key === duplicateKeyOf(body))
+  if (duplicate && body.重複確認区分 === 1) {
+    warnings.unshift(orderMessages.duplicateConfirmed(duplicate.orderId))
+  } else if (duplicate) {
+    errors.push(orderMessages.duplicate(duplicate.orderId))
+  }
+
   return { errors, warnings }
 }
 
@@ -150,6 +167,7 @@ export const orderEntryHandlers = [
 
     const orderId = nextOrderId
     nextOrderId += 1
+    acceptedOrders.push({ orderId, key: duplicateKeyOf(body) })
     return HttpResponse.json({
       success: true,
       order_id: orderId,

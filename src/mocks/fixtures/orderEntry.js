@@ -34,6 +34,11 @@ export const orderMessages = {
     `顧客のコンプライアンスランクが「${rank}」です。注文内容を確認してください。`,
   largeTrade: (amount) =>
     `約定金額（約${amount.toLocaleString('en-US')}円）が5,000万円を超過しています。大口取引として確認が必要です。`,
+  // 重複注文。文言は実 API の原文（2026-10-09 実測）。重複確認区分 0 は errors、1 は warnings に下がる
+  duplicate: (orderId) =>
+    `同一口座・同一銘柄・同一売買区分の注文が本日既に受け付けられています（注文ID: ${orderId}）。内容を確認のうえ、重複確認区分=1 で再送してください`,
+  duplicateConfirmed: (orderId) =>
+    `【重複確認済】同一口座・同一銘柄・同一売買区分の注文が本日既に受け付けられています（注文ID: ${orderId}）`,
 }
 
 /**

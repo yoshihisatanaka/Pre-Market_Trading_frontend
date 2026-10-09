@@ -17,7 +17,12 @@ import { codeEntries } from '@/mocks/fixtures/codes'
 import { useCodesStore } from '@/stores/codes'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { EXPIRY_OPTION_COUNT } from '@/utils/orderEntryForm'
-import { DEPOSIT_CATEGORY, ORDER_PERSON_MAX_LENGTH, SIDE } from '@/utils/orderEntryOptions'
+import {
+  DEPOSIT_CATEGORY,
+  ORDER_PERSON_MAX_LENGTH,
+  ORDER_TYPE,
+  SIDE,
+} from '@/utils/orderEntryOptions'
 import OrderEntryView from './OrderEntryView.vue'
 
 // シナリオ: docs/unit/views-order-entry-view.md（タイトル先頭の [NOV-xx] が対応 ID）
@@ -118,7 +123,10 @@ async function formReady(wrapper) {
   await until(() => byTestId(wrapper, 'order-entry-form').exists())
 }
 
-/** 注文を一通り入れる（売買を省くと未選択のまま） */
+/**
+ * 注文を一通り入れる（売買を省くと未選択のまま）。価格は既定の指値ではなく成行を押す
+ * （指値単価を入れずに送信まで進めるため。指値を見る行は押し直す）
+ */
 async function fillOrder(
   wrapper,
   { customer = plainCustomer, ticker = 'AAPL', side = '3', orderPerson = ORDER_PERSON } = {},
@@ -127,6 +135,7 @@ async function fillOrder(
   await byTestId(wrapper, 'order-entry-account').setValue(String(customer.口座番号))
   await byTestId(wrapper, 'order-entry-ticker').setValue(ticker)
   if (side) await byTestId(wrapper, 'order-entry-side').find(`[data-value="${side}"]`).trigger('click')
+  await byTestId(wrapper, 'order-entry-order-type').find(`[data-value="${ORDER_TYPE.MARKET}"]`).trigger('click')
   await byTestId(wrapper, 'order-entry-quantity').setValue('10')
   await byTestId(wrapper, 'order-entry-order-person').setValue(orderPerson)
 }

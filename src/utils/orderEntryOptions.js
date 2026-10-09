@@ -123,12 +123,12 @@ export const ORDER_CHANNEL_OPTIONS = [
   { value: 'CC', label: 'コール' },
 ]
 
-/** 金銭受渡方法（CashDeliveryEnum） */
-export const CASH_DELIVERY_OPTIONS = [
-  { value: '000', label: '当社' },
-  { value: '100', label: '他機関' },
-  { value: '200', label: '国外' },
-]
+/**
+ * 金銭受渡方法（CashDeliveryEnum）。画面に欄は無く、当社（000）で固定する
+ * （画面モックの 2026-09-30 版で入力欄と確認画面の行が外れ、保存値は当社固定になった）。
+ * OrderRequest では必須で既定値が無いので、省かずに送る。
+ */
+export const CASH_DELIVERY_DEFAULT = '000'
 
 /**
  * 注文種別 → VWAP区分（integer。enum の宣言が無い。csv-spec は 0: 非対象 / 1: 対象）。
@@ -158,17 +158,19 @@ export const SECURITIES_DELIVERY_DEFAULT = '100'
 /** 受注者の最大文字数（OrderRequest.受注者 は必須・1〜4 文字。docs/api/requests.md #24 ③） */
 export const ORDER_PERSON_MAX_LENGTH = 4
 
-/** 入力画面の既定値（モックの初期表示）。空文字は未選択 */
+/**
+ * 入力画面の既定値（モックの初期表示）。空文字は未選択。
+ * 画面モックの 2026-09-30 版で「指値・外決・勧誘あり・余裕資金・委託」に揃った（価格と決済通貨が変わった）。
+ */
 export const ORDER_FORM_DEFAULTS = Object.freeze({
   executionScope: '03',
-  orderType: ORDER_TYPE.MARKET,
-  settlementCurrency: '0',
+  orderType: ORDER_TYPE.LIMIT,
+  settlementCurrency: '1',
   depositCategory: '',
   solicitation: SOLICITATION.SOLICITED,
   orderMethod: '3',
   fundNature: '1',
   orderChannel: 'EGY',
-  cashDelivery: '000',
   vwap: VWAP.NORMAL,
 })
 

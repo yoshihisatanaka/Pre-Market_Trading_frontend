@@ -38,6 +38,10 @@ function mountForm({ props = {}, slots } = {}) {
 const find = (wrapper, testid) => wrapper.find(`[data-testid="${testid}"]`)
 const segment = (wrapper, testid, value) => wrapper.find(`[data-testid="${testid}"] [data-value="${value}"]`)
 
+/** 入力欄の testid を画面の上から順に（左列 → 右列） */
+const inputOrder = (wrapper) =>
+  wrapper.findAll('[data-testid^="order-entry-"]').map((node) => node.attributes('data-testid'))
+
 // シナリオ: docs/unit/components-orders-order-entry-form.md
 describe('OrderEntryForm', () => {
   it('[NOC-13] 受注者の欄は最大文字数までしか打てず、入力が orderPerson に入る', async () => {
@@ -65,19 +69,21 @@ describe('OrderEntryForm', () => {
     expect(root.classes()).not.toContain('is-buy')
   })
 
-  it('[NOC-02] 指値で価格欄が出て、成行に戻すと値が消える', async () => {
+  it('[NOC-02] 既定の指値で価格欄が出ていて、成行に戻すと値が消える', async () => {
     const { wrapper, form } = mountForm()
-    expect(find(wrapper, 'order-entry-limit-price').exists()).toBe(false)
-
-    await segment(wrapper, 'order-entry-order-type', ORDER_TYPE.LIMIT).trigger('click')
-    await find(wrapper, 'order-entry-limit-price').setValue('200.5')
     expect(form.orderType).toBe(ORDER_TYPE.LIMIT)
+
+    await find(wrapper, 'order-entry-limit-price').setValue('200.5')
     expect(form.limitPrice).toBe('200.5')
 
     await segment(wrapper, 'order-entry-order-type', ORDER_TYPE.MARKET).trigger('click')
     expect(find(wrapper, 'order-entry-limit-price').exists()).toBe(false)
     expect(form.orderType).toBe(ORDER_TYPE.MARKET)
     expect(form.limitPrice).toBe('')
+
+    // 指値に戻すと価格欄は空で出直す（成行のときの古い値を残さない）
+    await segment(wrapper, 'order-entry-order-type', ORDER_TYPE.LIMIT).trigger('click')
+    expect(find(wrapper, 'order-entry-limit-price').element.value).toBe('')
   })
 
   it('[NOC-03] 注文数量はカンマ区切りになり、数字以外は表示に残らない', async () => {
@@ -276,16 +282,43 @@ describe('OrderEntryForm', () => {
     expect(wrapper.text()).not.toContain('預り売買区分')
   })
 
-  it('[NOC-17] 左列は決済通貨区分 → 預り売買区分 → 期間指定の順で、期間指定が末尾', () => {
+  it('[NOC-17] 左列は決済通貨区分 → 注文種別 → 預り売買区分 → 期間指定の順で、期間指定が末尾', () => {
     const { wrapper } = mountForm()
-    const testids = wrapper
-      .findAll('[data-testid^="order-entry-"]')
-      .map((node) => node.attributes('data-testid'))
+    const testids = inputOrder(wrapper)
     const at = (testid) => testids.indexOf(testid)
 
     expect(at('order-entry-order-type')).toBeLessThan(at('order-entry-settlement-currency'))
-    expect(at('order-entry-settlement-currency')).toBeLessThan(at('order-entry-deposit-category'))
+    expect(at('order-entry-settlement-currency')).toBeLessThan(at('order-entry-vwap'))
+    expect(at('order-entry-vwap')).toBeLessThan(at('order-entry-deposit-category'))
     expect(at('order-entry-deposit-category')).toBeLessThan(at('order-entry-expiry'))
-    expect(at('order-entry-expiry')).toBeLessThan(at('order-entry-order-date'))
+    expect(at('order-entry-expiry')).toBeLessThan(at('order-entry-solicitation'))
+  })
+
+  it('[NOC-18] 右列は勧誘区分 → 資金性格 → 受注方法 → 注文チャネル → 受注日 → 受注時刻 → 受注者の順で、金銭受渡方法は無い', () => {
+    const { wrapper } = mountForm()
+    const testids = inputOrder(wrapper)
+    const reception = [
+      'order-entry-solicitation',
+      'order-entry-fund-nature',
+      'order-entry-order-method',
+      'order-entry-order-channel',
+      'order-entry-order-date',
+      'order-entry-order-time',
+      'order-entry-order-person',
+    ]
+
+    expect(testids.filter((testid) => reception.includes(testid))).toEqual(reception)
+    expect(testids).not.toContain('order-entry-cash-delivery')
+    expect(wrapper.text()).not.toContain('金銭受渡方法')
+  })
+
+  it('[NOC-19] 決済通貨区分は「外決」が押された状態で始まる', () => {
+    const { wrapper } = mountForm()
+    const pressed = find(wrapper, 'order-entry-settlement-currency')
+      .findAll('button')
+      .filter((button) => button.attributes('aria-pressed') === 'true')
+      .map((button) => button.text())
+
+    expect(pressed).toEqual(['外決'])
   })
 })

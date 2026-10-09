@@ -1,6 +1,6 @@
 import { formatJpyUnit, formatQuantity, formatUsdUnit } from './format'
 import {
-  CASH_DELIVERY_OPTIONS,
+  CASH_DELIVERY_DEFAULT,
   DEPOSIT_CATEGORY,
   DEPOSIT_CATEGORY_OPTIONS,
   EXECUTION_SCOPE_OPTIONS,
@@ -333,7 +333,7 @@ export function hasOrderFormErrors(errors) {
  * 送る注文（src/api/orderEntry.js の OrderInput）を組み立てる。
  * validateOrderForm を通ったフォームにだけ使う（数量・日付は変換できる前提）。
  *
- * 画面に欄の無い 取引（委託）と 証券受渡方法（当社保管）はここで固定値を入れる。
+ * 画面に欄の無い 取引（委託）・証券受渡方法（当社保管）・金銭受渡方法（当社）はここで固定値を入れる。
  *
  * @param {ReturnType<typeof createOrderForm>} form
  * @param {{ symbol: { symbolCode: string }, today: Date, createdBy: string }} context
@@ -360,7 +360,7 @@ export function buildOrderInput(form, { symbol, today, createdBy }) {
     orderMethod: form.orderMethod,
     fundNature: form.fundNature,
     orderChannel: form.orderChannel,
-    cashDelivery: form.cashDelivery,
+    cashDelivery: CASH_DELIVERY_DEFAULT,
     vwap: form.vwap === VWAP.VWAP,
     orderDate: resolveOrderDate(form.orderDate, today).date,
     orderTime: form.orderTime,
@@ -453,6 +453,7 @@ export function formatLimitPrice(value) {
  * 注文区分／期間の期間は選択肢の表示名（「当日中（9/29）」）で出す。モックは MM/DD だけを出すが、
  * 入力画面で選んだ文言と同じもので読み上げたほうが突き合わせやすい。
  * 預り売買区分は選んだときだけ出す（未選択なら ''。画面は行ごと出さない。モックと同じ）。
+ * 金銭受渡方法は出さない（当社固定。画面モックの 2026-09-30 版で行が外れた）。
  *
  * @param {ReturnType<typeof createOrderForm>} form
  * @param {{ customer: object|null, symbol: object|null, expiryOptions: { value: string, label: string }[] }} context
@@ -482,7 +483,6 @@ export function buildOrderReadback(form, { customer, symbol, expiryOptions }) {
     depositCategory: form.depositCategory
       ? optionLabel(DEPOSIT_CATEGORY_OPTIONS, form.depositCategory)
       : '',
-    cashDelivery: optionLabel(CASH_DELIVERY_OPTIONS, form.cashDelivery),
     orderDateTime: `${form.orderDate} ${form.orderTime}`,
     orderPerson: form.orderPerson || '—',
     solicitationMethod: `${optionLabel(SOLICITATION_OPTIONS, form.solicitation)} ／ ${optionLabel(ORDER_METHOD_OPTIONS, form.orderMethod)}`,

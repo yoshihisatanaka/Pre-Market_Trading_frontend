@@ -23,3 +23,4 @@
 | NOC-11 | expiryOptions 2 件 | マウントする | 期間指定の選択肢がその 2 件の表示名で並ぶ | 実装済 |
 | NOC-12 | `customer` スロットに内容 | マウントする | フォーム内にスロットの内容が描かれる | 実装済 |
 | NOC-13 | — | 受注者に `'T001'` を入れる | 欄の `maxlength` が `ORDER_PERSON_MAX_LENGTH`（4）で、値が `orderPerson` に入る | 実装済 |
+| NOC-14 | `duplicated` が false / true | 重複確認区分にチェックする・マウントする | チェックが `duplicateConfirmed` に入る。`duplicated` が true のときだけ「重複注文あり — 確認の上チェック」が出て、フロコン警告の注記は出ない | 実装済 |

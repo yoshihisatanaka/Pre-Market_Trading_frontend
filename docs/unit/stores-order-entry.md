@@ -24,7 +24,7 @@ MSW の既定ハンドラ（顧客・銘柄・受注不可日・海外休場日�
 | NOS-10 | 先の照会の応答を握る | ティッカー A → B の順に照会し、B を先に、A を後に解決させる | `symbolLookup` は B の結果のまま | 実装済 |
 | NOS-11 | 照会の応答を握る | 照会中に `clearCustomer()` / `clearSymbol()` を呼んでから解決させる | `customerLookup` / `symbolLookup` は null のまま（走っていた結果を捨てる） | 実装済 |
 | NOS-12 | 顧客の取得が 500 | `lookupCustomer()` | 戻り値は null で `customerError` に理由が入る | 実装済 |
-| NOS-13 | 既定モック / `POST /orders/validate` が 500 | `validate(注文)` | 成功時は `{ valid, errors, warnings }` を返し、500 のときは null を返して `validateError` に理由が入る | 実装済 |
+| NOS-13 | 既定モック / `POST /orders/validate` が 500 | `validate(注文)` | 成功時は `{ valid, errors, warnings, duplicate }` を返し、500 のときは null を返して `validateError` に理由が入る | 実装済 |
 | NOS-14 | 既定モック / `POST /orders` が 500 | `submit(注文)` | 成功時は `success: true` と注文 ID を返し、500 のときは null を返して `submitError` に理由が入る | 実装済 |
 | NOS-15 | 既定モック / 為替が 404 | `loadFxRate()` | 成功時は `fxRate` がフィクスチャの為替レート、404 のときは `fxRate` が null で `fxError` も null（`src/api/fxRates.js` は 404 を「レートがまだ無い」として null で返す） | 実装済 |
 | NOS-16 | 読み込み・照会・為替・エラーが残っている | `reset()` | 照会結果・照会のエラー・事前検証と登録のエラー・為替が消え、`context` は残る | 実装済 |

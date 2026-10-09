@@ -376,6 +376,59 @@ describe('OrderEntryView', () => {
     )
   })
 
+  it('[NOV-32] 重複注文は入力エラーと注記で止まり、重複確認区分を付けて送り直すと警告に下がる', async () => {
+    // 実 API と同じ返し方: 重複確認区分 0 は errors、1 は warnings（valid: true）
+    const bodies = []
+    server.use(
+      http.post(VALIDATE_PATH, async ({ request }) => {
+        const body = await request.clone().json()
+        bodies.push(body)
+        return body.重複確認区分 === 1
+          ? HttpResponse.json({
+              valid: true,
+              errors: [],
+              warnings: [orderMessages.duplicateConfirmed(FIRST_ORDER_ID)],
+              details: null,
+            })
+          : HttpResponse.json({
+              valid: false,
+              errors: [orderMessages.duplicate(FIRST_ORDER_ID)],
+              warnings: [],
+              details: null,
+            })
+      }),
+    )
+    const { wrapper } = await mountView()
+    await formReady(wrapper)
+    await fillOrder(wrapper)
+    await submit(wrapper)
+
+    await until(() => byTestId(wrapper, 'order-entry-errors').exists())
+    expect(bodies[0].重複確認区分).toBe(0)
+    expect(byTestId(wrapper, 'order-entry-errors').text()).toContain(
+      orderMessages.duplicate(FIRST_ORDER_ID),
+    )
+    expect(byTestId(wrapper, 'order-entry-duplicate-note').text()).toBe(
+      '重複注文あり — 確認の上チェック',
+    )
+    expect(byTestId(wrapper, 'order-entry-confirm').exists()).toBe(false)
+
+    await byTestId(wrapper, 'order-entry-duplicate-confirmed').setValue(true)
+    await submit(wrapper)
+    await until(() => byTestId(wrapper, 'order-entry-warnings').exists())
+    expect(bodies[1].重複確認区分).toBe(1)
+    expect(byTestId(wrapper, 'order-entry-errors').exists()).toBe(false)
+    expect(byTestId(wrapper, 'order-entry-duplicate-note').exists()).toBe(false)
+    expect(byTestId(wrapper, 'order-entry-warnings').text()).toContain(
+      orderMessages.duplicateConfirmed(FIRST_ORDER_ID),
+    )
+    // 警告に下がったあとは、ほかの警告と同じく強制区分で進む（NOV-12 / 13）
+    expect(byTestId(wrapper, 'order-entry-confirm').exists()).toBe(false)
+    await byTestId(wrapper, 'order-entry-forced').setValue(true)
+    await submit(wrapper)
+    await until(() => byTestId(wrapper, 'order-entry-confirm').exists())
+  })
+
   it('[NOV-14] 確認画面の読み上げと概算、最終確認まで確定できない', async () => {
     const { wrapper } = await mountView()
     await formReady(wrapper)

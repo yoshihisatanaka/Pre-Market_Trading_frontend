@@ -57,6 +57,7 @@ function order(overrides = {}) {
     // 受注者は 1〜4 文字（MSW も 4 文字を超えると 422 を返す）
     orderPerson: ORDER_PERSON,
     forced: false,
+    duplicateConfirmed: false,
     createdBy: 'test-user',
     ...overrides,
   }
@@ -105,6 +106,7 @@ describe('api/orderEntry', () => {
       受注時刻: '10:30',
       受注者: ORDER_PERSON,
       強制区分: 0,
+      重複確認区分: 0,
       発注範囲: '03',
       作成者: 'test-user',
       VWAP区分: 0,
@@ -119,6 +121,7 @@ describe('api/orderEntry', () => {
     expect(bodies[0].指値単価).toBeNull()
     expect(bodies[0].受注者).toBeNull()
     expect(bodies[0].強制区分).toBe(0)
+    expect(bodies[0].重複確認区分).toBe(0)
     expect(bodies[0].VWAP区分).toBe(0)
     expect(error).toBeInstanceOf(ApiError)
     expect(error.status).toBe(422)
@@ -132,13 +135,22 @@ describe('api/orderEntry', () => {
     expect(error.status).toBe(422)
   })
 
-  it('[NOA-03] 指値単価は数値、強制区分・VWAP区分は 1', async () => {
+  it('[NOA-03] 指値単価は数値、強制区分・重複確認区分・VWAP区分は 1', async () => {
     const bodies = recordBodies(CREATE_PATH)
-    await createOrder(order({ orderType: 'LO', limitPrice: 200.5, forced: true, vwap: true }))
+    await createOrder(
+      order({
+        orderType: 'LO',
+        limitPrice: 200.5,
+        forced: true,
+        duplicateConfirmed: true,
+        vwap: true,
+      }),
+    )
 
     expect(bodies[0].指成区分).toBe('LO')
     expect(bodies[0].指値単価).toBe(200.5)
     expect(bodies[0].強制区分).toBe(1)
+    expect(bodies[0].重複確認区分).toBe(1)
     expect(bodies[0].VWAP区分).toBe(1)
   })
 
@@ -147,7 +159,21 @@ describe('api/orderEntry', () => {
       valid: true,
       errors: [],
       warnings: [],
+      duplicate: false,
     })
+  })
+
+  it('[NOA-13] 重複注文は duplicate: true の不合格で、重複確認区分を付けると警告に下がる', async () => {
+    const first = await createOrder(order())
+    expect(first.orderId).toBe(String(FIRST_ORDER_ID))
+
+    const rejected = await validateOrder(order())
+    expect(rejected).toMatchObject({ valid: false, duplicate: true })
+    expect(rejected.errors).toContain(orderMessages.duplicate(FIRST_ORDER_ID))
+
+    const confirmed = await validateOrder(order({ duplicateConfirmed: true }))
+    expect(confirmed).toMatchObject({ valid: true, duplicate: false, errors: [] })
+    expect(confirmed.warnings).toContain(orderMessages.duplicateConfirmed(FIRST_ORDER_ID))
   })
 
   it('[NOA-05] 200 の不合格は例外にせず errors を返す', async () => {
@@ -167,6 +193,7 @@ describe('api/orderEntry', () => {
       valid: false,
       errors: [],
       warnings: [],
+      duplicate: false,
     })
     await expect(createOrder(order())).resolves.toEqual({
       success: false,

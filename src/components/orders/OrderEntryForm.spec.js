@@ -164,6 +164,22 @@ describe('OrderEntryForm', () => {
     expect(find(quiet, 'order-entry-forced-note').exists()).toBe(false)
   })
 
+  it('[NOC-14] 重複確認区分のチェックが duplicateConfirmed に入り、重複ありのときだけ注記が出る', async () => {
+    const { wrapper, form } = mountForm()
+    expect(find(wrapper, 'order-entry-duplicate-note').exists()).toBe(false)
+    expect(form.duplicateConfirmed).toBe(false)
+
+    await find(wrapper, 'order-entry-duplicate-confirmed').setValue(true)
+    expect(form.duplicateConfirmed).toBe(true)
+
+    const { wrapper: duplicated } = mountForm({ props: { duplicated: true } })
+    expect(find(duplicated, 'order-entry-duplicate-note').text()).toBe(
+      '重複注文あり — 確認の上チェック',
+    )
+    // フロコン警告の注記とは別に出る
+    expect(find(duplicated, 'order-entry-forced-note').exists()).toBe(false)
+  })
+
   it('[NOC-09] disabled / submitting では送信ボタンが押せない', () => {
     const { wrapper: normal } = mountForm()
     expect(find(normal, 'order-entry-submit').attributes('disabled')).toBeUndefined()

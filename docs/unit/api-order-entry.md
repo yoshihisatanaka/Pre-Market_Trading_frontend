@@ -23,3 +23,4 @@
 | NOA-11 | 受注者が `ORDER_PERSON_MAX_LENGTH` + 1 文字・既定モック | `createOrder(注文)` | サーバの 422（4 文字超）が `ApiError`（status 422）で reject される | 実装済 |
 | NOA-12 | VWAP 対象の銘柄・VWAP あり・既定モック | `createOrder(注文)` | `success: true` で、`dreamStatus` が `8`、`dreamStatusName` が「登録対象外」（VWAP は Dream 登録の対象外） | 実装済 |
 | NOA-13 | 既定モックで同じ注文を 1 件 `createOrder` 済み（重複注文になる） | 同じ注文を重複確認区分なしで `validateOrder` → 重複確認区分ありで `validateOrder` | 1 回目は `valid: false`・`duplicate: true` で、`errors` に重複注文の文言（注文ID: `FIRST_ORDER_ID`）。2 回目は `valid: true`・`duplicate: false`・`errors` が空で、`warnings` に「【重複確認済】…」 | 実装済 |
+| NOA-14 | 預り売買区分が未選択（`depositCategory: ''`）・既定モック | `validateOrder(注文)` | 本文の `預り売買区分` が `null`（空文字にしない。省略時はサーバが口座の特定口座区分から決める。docs/api/requests.md #24 ④）で、`valid: true` | 実装済 |

@@ -11,7 +11,7 @@ import { apiClient } from './client'
  *     0 では errors（「…重複確認区分=1 で再送してください」）、1 では warnings（「【重複確認済】…」）に
  *     格下げされ valid:true になる（2026-10-09 実測。取消済の注文は重複に数えない）
  *   - 作成者 はサーバが認証情報の操作者で上書きする（本文の値は無視）。受注者 は本文必須で 1〜4 文字
- *   - 預り売買区分 は 0=特定・1=一般（「一般」を 1 で送る）
+ *   - 預り売買区分 は 0=特定・1=一般（「一般」を 1 で送る）。省略すると口座の特定口座区分から決まる
  *   - 証券受渡方法 の既定は 100（当社保管）
  * 200 の不合格は例外にせず、4xx / 5xx は ApiError として
  * 呼び出し側（stores/orderEntry.js の useAsync）の error に入れる。
@@ -151,7 +151,8 @@ function toOrderRequest(order) {
     指値単価: order.limitPrice,
     決済通貨区分: order.settlementCurrency,
     証券受渡方法: order.securitiesDelivery,
-    預り売買区分: order.depositCategory,
+    // 未選択（空文字）は null（nullable。サーバが口座の特定口座区分から決める）
+    預り売買区分: order.depositCategory || null,
     取引: order.transactionType,
     勧誘区分: order.solicitation,
     受注方法: order.orderMethod,

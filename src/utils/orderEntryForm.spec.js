@@ -246,10 +246,10 @@ describe('orderEntryForm', () => {
     expect(defaultOrderPerson(undefined)).toBe('')
   })
 
-  it('[NOF-33] 指値のみの市場区分（プレ＋レギュラー）では成行を弾き、指値は通す', () => {
+  it('[NOF-33] 指値のみの注文区分（プレ＋レギュラー）では成行を弾き、指値は通す', () => {
     const orderTypeError = (executionScope, orderType) =>
       validate(validForm({ executionScope, orderType, limitPrice: '200' })).orderType
-    const message = '市場区分「プレ＋レギュラー」は指値のみです。指値で入力してください。'
+    const message = '注文区分「プレ＋レギュラー」は指値のみです。指値で入力してください。'
 
     expect(LIMIT_ONLY_EXECUTION_SCOPES).toEqual(['02'])
     expect(orderTypeError('02', ORDER_TYPE.MARKET)).toBe(message)
@@ -370,9 +370,9 @@ describe('orderEntryForm', () => {
     })
   })
 
-  it('[NOF-28] createOrderForm は預りから銘柄・売買・預り区分を引き継ぎ、預り区分は既定より優先する', () => {
-    // 既定と違う値でないと「優先される」ことを確かめられない
-    expect(DEPOSIT_CATEGORY.GENERAL).not.toBe(ORDER_FORM_DEFAULTS.depositCategory)
+  it('[NOF-28] createOrderForm は預りから銘柄・売買・預り区分を引き継ぎ、預り区分は既定（未選択）より優先する', () => {
+    // 既定は未選択（空文字）。引き継いだ値で埋まることを確かめる
+    expect(ORDER_FORM_DEFAULTS.depositCategory).toBe('')
 
     const form = createOrderForm({
       now: new Date(2026, 8, 29, 9, 5),
@@ -389,10 +389,10 @@ describe('orderEntryForm', () => {
     })
   })
 
-  it('[NOF-29] 引き継ぐ預り区分が空なら既定のまま', () => {
+  it('[NOF-29] 引き継ぐ預り区分が空なら既定（未選択）のまま', () => {
     const form = createOrderForm({ now: new Date(2026, 8, 29, 9, 5), depositCategory: '' })
 
-    expect(form.depositCategory).toBe(ORDER_FORM_DEFAULTS.depositCategory)
+    expect(form.depositCategory).toBe('')
   })
 
   it('[NOF-32] createOrderForm は引き継いだ数量を入力欄と同じ 3 桁区切りにする', () => {
@@ -436,7 +436,8 @@ describe('orderEntryForm', () => {
   })
 
   it('[NOF-24] 買い・成行の読み上げ', () => {
-    const readback = buildOrderReadback(validForm(), {
+    const form = validForm({ depositCategory: DEPOSIT_CATEGORY.SPECIFIC })
+    const readback = buildOrderReadback(form, {
       customer: { customerName: '山田 太郎' },
       symbol: SYMBOL,
       expiryOptions: buildExpiryOptions({ today: TODAY }),
@@ -477,6 +478,22 @@ describe('orderEntryForm', () => {
     expect(readback.side).toBe('売（委託）')
     expect(readback.price).toBe('指値 200.0000 ドル')
     expect(readback.customerName).toBe('—')
+  })
+
+  it('[NOF-35] 預り売買区分が未選択なら読み上げは空文字、送る値も空文字のまま', () => {
+    const form = validForm()
+    expect(form.depositCategory).toBe('')
+
+    const readback = buildOrderReadback(form, {
+      customer: null,
+      symbol: SYMBOL,
+      expiryOptions: buildExpiryOptions({ today: TODAY }),
+    })
+    const input = buildOrderInput(form, { symbol: SYMBOL, today: TODAY, createdBy: 'creator' })
+
+    expect(readback.depositCategory).toBe('')
+    expect(input.depositCategory).toBe('')
+    expect(validate(form).depositCategory).toBe('')
   })
 
   it('[NOF-26] 成行の概算は前日終値 × 数量と為替から出す', () => {

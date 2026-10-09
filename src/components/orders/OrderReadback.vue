@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 注文内容の読み上げ（確認画面と完了画面で共用。モックの _order_readback.html）。
- * 上から「顧客と銘柄 → 注文内容（売買・価格・数量・市場／期限）→ 注文条件・受注情報 → 概算金額」の順で、
+ * 上から「顧客と銘柄 → 注文内容（売買・価格・数量・注文区分／期間）→ 注文条件・受注情報 → 概算金額」の順で、
  * 発注前に取り違えやすいものほど上に大きく出す。
  *
  * この部品は文字列を並べるだけで、組み立ては src/utils/orderEntryForm.js の
@@ -61,7 +61,7 @@ defineProps({
           <strong data-testid="order-readback-quantity">{{ readback.quantity }}</strong>
         </div>
         <div class="order-readback__key-item">
-          <span>市場／期限</span>
+          <span>注文区分／期間</span>
           <strong data-testid="order-readback-market-expiry">{{ readback.marketExpiry }}</strong>
         </div>
       </div>
@@ -81,7 +81,8 @@ defineProps({
               {{ readback.settlementCurrency }}
             </dd>
           </div>
-          <div>
+          <!-- 未選択（口座の特定口座区分で決まる）なら行ごと出さない -->
+          <div v-if="readback.depositCategory">
             <dt>預り売買区分</dt>
             <dd data-testid="order-readback-deposit-category">{{ readback.depositCategory }}</dd>
           </div>

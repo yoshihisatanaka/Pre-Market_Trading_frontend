@@ -548,11 +548,10 @@ test.describe('顧客詳細 外株預り', () => {
       'aria-pressed',
       'true',
     )
-    // 新規注文の既定（src/utils/orderEntryOptions.js の ORDER_FORM_DEFAULTS）は「特定」
-    await expect(toggleButton(page, 'order-entry-deposit-category', '特定')).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    // 新規注文の既定（src/utils/orderEntryOptions.js の ORDER_FORM_DEFAULTS）は未選択
+    await expect(
+      page.getByTestId('order-entry-deposit-category').locator('[aria-pressed="true"]'),
+    ).toHaveCount(0)
   })
 
   test('[CDT-21] 「＋ 新規注文」は部店と口座番号だけを引き継ぐ', async ({ page }) => {

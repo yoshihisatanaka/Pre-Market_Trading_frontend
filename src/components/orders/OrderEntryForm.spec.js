@@ -3,7 +3,12 @@ import { h, reactive } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { buildExpiryOptions, createOrderForm } from '@/utils/orderEntryForm'
-import { ORDER_PERSON_MAX_LENGTH, ORDER_TYPE, SIDE } from '@/utils/orderEntryOptions'
+import {
+  DEPOSIT_CATEGORY,
+  ORDER_PERSON_MAX_LENGTH,
+  ORDER_TYPE,
+  SIDE,
+} from '@/utils/orderEntryOptions'
 import OrderEntryForm from './OrderEntryForm.vue'
 
 /*
@@ -219,5 +224,68 @@ describe('OrderEntryForm', () => {
     expect(find(wrapper, 'order-entry-form').find('[data-testid="slot-customer"]').text()).toBe(
       '顧客バー',
     )
+  })
+
+  it('[NOC-15] 注文区分は Ph.1 の 2 つを選べ、Ph.2 の 2 つは見出しの下で選べない', () => {
+    const { wrapper } = mountForm()
+    const select = find(wrapper, 'order-entry-execution-scope')
+
+    expect(wrapper.text()).toContain('注文区分')
+    expect(wrapper.text()).not.toContain('市場区分')
+    const groups = select.findAll('optgroup').map((group) => ({
+      label: group.attributes('label'),
+      options: group.findAll('option').map((option) => ({
+        text: option.text(),
+        disabled: option.attributes('disabled') !== undefined,
+      })),
+    }))
+    expect(groups).toEqual([
+      {
+        label: 'Ph.1（受付対象）',
+        options: [
+          { text: 'プレ＋レギュラー', disabled: false },
+          { text: 'レギュラー', disabled: false },
+        ],
+      },
+      {
+        label: 'Ph.2（将来対応）',
+        options: [
+          { text: 'プレ＋レギュラー＋アフター（Ph.2予定）', disabled: true },
+          { text: 'アフター（時間内限り）（Ph.2予定）', disabled: true },
+        ],
+      },
+    ])
+    expect(select.element.value).toBe('03')
+  })
+
+  it('[NOC-16] 預り売買区分は未選択で始まり、押すと選ばれ、showDepositCategory が false なら欄ごと出ない', async () => {
+    const { wrapper, form } = mountForm()
+    const buttons = find(wrapper, 'order-entry-deposit-category').findAll('button')
+
+    expect(buttons.map((button) => button.text())).toEqual(['特定', '一般', '成長投資枠'])
+    expect(buttons.map((button) => button.attributes('aria-pressed'))).toEqual([
+      'false',
+      'false',
+      'false',
+    ])
+    await segment(wrapper, 'order-entry-deposit-category', DEPOSIT_CATEGORY.GENERAL).trigger('click')
+    expect(form.depositCategory).toBe(DEPOSIT_CATEGORY.GENERAL)
+
+    await wrapper.setProps({ showDepositCategory: false })
+    expect(find(wrapper, 'order-entry-deposit-category').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('預り売買区分')
+  })
+
+  it('[NOC-17] 左列は決済通貨区分 → 預り売買区分 → 期間指定の順で、期間指定が末尾', () => {
+    const { wrapper } = mountForm()
+    const testids = wrapper
+      .findAll('[data-testid^="order-entry-"]')
+      .map((node) => node.attributes('data-testid'))
+    const at = (testid) => testids.indexOf(testid)
+
+    expect(at('order-entry-order-type')).toBeLessThan(at('order-entry-settlement-currency'))
+    expect(at('order-entry-settlement-currency')).toBeLessThan(at('order-entry-deposit-category'))
+    expect(at('order-entry-deposit-category')).toBeLessThan(at('order-entry-expiry'))
+    expect(at('order-entry-expiry')).toBeLessThan(at('order-entry-order-date'))
   })
 })

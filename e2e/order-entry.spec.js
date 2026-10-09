@@ -52,6 +52,8 @@ const PLAIN = customerOf(1230004)
 const CAUTION = customerOf(1230001)
 /** 全取引停止（警告あり） */
 const SUSPENDED = customerOf(1230005)
+/** 法人（預り売買区分の欄を出さない） */
+const CORPORATE = customerOf(1230009)
 
 const AAPL = symbolOf('AAPL')
 const TSLA = symbolOf('TSLA')
@@ -63,6 +65,7 @@ test.beforeAll(() => {
   expect(PLAIN.取引停止区分_全取引).toBe(0)
   expect(CAUTION.コンプラランク).toBe('A')
   expect(SUSPENDED.取引停止区分_全取引).toBe(1)
+  expect(CORPORATE.法人区分).toBe('1')
   expect(TSLA.VWAP対象区分).toBe('0')
   expect(BRKB.規制情報).toBe('1')
 })
@@ -158,6 +161,10 @@ test.describe('新規注文 表示', () => {
       page.getByTestId('order-entry-execution-scope').locator('option:checked'),
     ).toHaveText('レギュラー')
     await expect(selectedExpiry(page)).toHaveText(/^当日中（\d{1,2}\/\d{1,2}）$/)
+    // 預り売買区分は未選択から始まる
+    await expect(
+      page.getByTestId('order-entry-deposit-category').locator('[aria-pressed="true"]'),
+    ).toHaveCount(0)
   })
 
   test('[NO-02] 受注不可日の取得が失敗するとエラーと再試行ボタンが出てフォームは出ない', async ({
@@ -383,13 +390,22 @@ test.describe('新規注文 入力の不備とサーバの判定', () => {
     )
   })
 
-  test('[NO-37] 市場区分はプレ＋レギュラーとレギュラーだけで、プレ＋レギュラーの成行は価格の下に理由が出て止まる', async ({
+  test('[NO-37] 注文区分はプレ＋レギュラーとレギュラーだけが選べ、プレ＋レギュラーの成行は価格の下に理由が出て止まる', async ({
     page,
   }) => {
     await openForm(page)
 
     const scope = page.getByTestId('order-entry-execution-scope')
-    await expect(scope.locator('option')).toHaveText(['プレ＋レギュラー', 'レギュラー'])
+    await expect(scope.locator('option')).toHaveText([
+      'プレ＋レギュラー',
+      'レギュラー',
+      'プレ＋レギュラー＋アフター（Ph.2予定）',
+      'アフター（時間内限り）（Ph.2予定）',
+    ])
+    await expect(scope.locator('option:disabled')).toHaveText([
+      'プレ＋レギュラー＋アフター（Ph.2予定）',
+      'アフター（時間内限り）（Ph.2予定）',
+    ])
 
     await fillOrder(page)
     await scope.selectOption({ label: 'プレ＋レギュラー' })
@@ -397,7 +413,7 @@ test.describe('新規注文 入力の不備とサーバの判定', () => {
 
     await expect(
       page.getByTestId('order-entry-form').getByRole('alert').filter({
-        hasText: '市場区分「プレ＋レギュラー」は指値のみです。指値で入力してください。',
+        hasText: '注文区分「プレ＋レギュラー」は指値のみです。指値で入力してください。',
       }),
     ).toBeVisible()
     await expectStillInput(page)
@@ -409,6 +425,38 @@ test.describe('新規注文 入力の不備とサーバの判定', () => {
     await submitInput(page)
     await expect(page.getByTestId('order-entry-confirm')).toBeVisible()
     await expect(page.getByTestId('order-readback-market-expiry')).toContainText('プレ＋レギュラー')
+  })
+
+  test('[NO-38] 預り売買区分は選ばずに確認へ進め、選んだときだけ読み上げに出る', async ({ page }) => {
+    await openForm(page)
+    await goToConfirm(page)
+
+    await expect(page.getByTestId('order-readback-settlement-currency')).toBeVisible()
+    await expect(page.getByTestId('order-readback-deposit-category')).toHaveCount(0)
+
+    await page.getByTestId('order-entry-back').click()
+    await page
+      .getByTestId('order-entry-deposit-category')
+      .getByRole('button', { name: '一般', exact: true })
+      .click()
+    await submitInput(page)
+    await expect(page.getByTestId('order-entry-confirm')).toBeVisible()
+    await expect(page.getByTestId('order-readback-deposit-category')).toHaveText('一般')
+  })
+
+  test('[NO-39] 法人の口座では預り売買区分の欄を出さない', async ({ page }) => {
+    await openForm(page)
+    const deposit = page.getByTestId('order-entry-deposit-category')
+    await expect(deposit).toBeVisible()
+
+    await page.getByTestId('order-entry-branch').fill(BRANCH)
+    await page.getByTestId('order-entry-account').fill(String(CORPORATE.口座番号))
+    await expect(page.getByTestId('order-entry-account-hint')).toHaveText(CORPORATE.顧客名)
+    await expect(deposit).toHaveCount(0)
+
+    await page.getByTestId('order-entry-account').fill(String(PLAIN.口座番号))
+    await expect(page.getByTestId('order-entry-account-hint')).toHaveText(PLAIN.顧客名)
+    await expect(deposit).toBeVisible()
   })
 
   test('[NO-33] 受注者が空のまま送信すると受注者の下に理由が出て止まる', async ({ page }) => {

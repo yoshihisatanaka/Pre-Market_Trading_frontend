@@ -34,14 +34,15 @@
 | NOF-21 | — | `estimateOrderAmount()` を 7 株 × 1.2345 / 1.2355 ドル、為替 150.25 で呼ぶ | 外貨は小数第 2 位で四捨五入（8.64 / 8.65）、円貨は外貨 × 為替の円未満四捨五入 | 実装済 |
 | NOF-22 | — | `estimateOrderAmount()` を為替なし・数量なし・単価 0 で呼ぶ | 為替なしは円貨だけ `null`、数量なし・単価 0 は両方 `null` | 実装済 |
 | NOF-23 | — | `formatLimitPrice()` を 200 / 1234.5 / `null` / `NaN` で呼ぶ | `'200.0000 ドル'` / `'1,234.5000 ドル'` / `'—'` / `'—'` | 実装済 |
-| NOF-24 | 買い・成行・特定・当日中 | `buildOrderReadback()` | tone `buy`、「買注文」「買（委託）」「成行」、数量「1,000 株」、市場／期限「レギュラー ／ 当日中（9/29）」、顧客名・部店／口座番号・銘柄名（英字）、受注日時・勧誘／受注方法・資金性格／チャネルが表示名で並ぶ | 実装済 |
+| NOF-24 | 買い・成行・特定・当日中 | `buildOrderReadback()` | tone `buy`、「買注文」「買（委託）」「成行」、数量「1,000 株」、注文区分／期間「レギュラー ／ 当日中（9/29）」、預り売買区分「特定」、顧客名・部店／口座番号・銘柄名（英字）、受注日時・勧誘／受注方法・資金性格／チャネルが表示名で並ぶ | 実装済 |
 | NOF-25 | 売り・指値 200 | `buildOrderReadback()` | tone `sell`、「売注文」、価格「指値 200.0000 ドル」。顧客なしは顧客名 `'—'` | 実装済 |
 | NOF-26 | 成行・前日終値あり・為替あり | `buildEstimateReadback()` | 前日終値 × 数量の外貨・円貨が単位付きで出て、注記が「参考価格（前日終値） × 数量 ／ USD/JPY 150.25」 | 実装済 |
 | NOF-27 | 指値・為替を読み込み中 | `buildEstimateReadback({ fxLoading: true })` | 外貨は指値 × 数量で出るが、円貨と注記の為替は `'…'`。注記の単価の出所は「指値価格」 | 実装済 |
-| NOF-28 | 顧客詳細の預りの「売り」から引き継ぐ（ティッカー・`SIDE.SELL`・預り区分 = 一般） | `createOrderForm({ ticker, side, depositCategory })` | `ticker` / `side` が引き継がれ、`depositCategory` は `ORDER_FORM_DEFAULTS` の既定（特定）より引き継いだ値が優先される。ほかの区分は既定のまま | 実装済 |
-| NOF-29 | 引き継ぐ預り区分が空文字 | `createOrderForm({ depositCategory: '' })` | `depositCategory` は `ORDER_FORM_DEFAULTS` の既定のまま（空で上書きしない） | 実装済 |
+| NOF-28 | 顧客詳細の預りの「売り」から引き継ぐ（ティッカー・`SIDE.SELL`・預り区分 = 一般） | `createOrderForm({ ticker, side, depositCategory })` | `ticker` / `side` が引き継がれ、`depositCategory` は `ORDER_FORM_DEFAULTS` の既定（未選択の空文字）より引き継いだ値が優先される。ほかの区分は既定のまま | 実装済 |
+| NOF-29 | 引き継ぐ預り区分が空文字 | `createOrderForm({ depositCategory: '' })` | `depositCategory` は既定の未選択（`''`）のまま | 実装済 |
 | NOF-30 | ほかは埋まったフォーム | 受注者を 4 文字・前後に空白付きの 4 文字・`ORDER_PERSON_MAX_LENGTH` + 1 文字・空白だけ にして `validateOrderForm()` | 4 文字は前後の空白があっても `''`、5 文字は「受注者は4文字以内で入力してください。」、空白だけは「受注者を入力してください。」 | 実装済 |
 | NOF-31 | — | `defaultOrderPerson()`（受注者コード → 受注者の初期値）を 4 文字・前後に空白付きの 4 文字・5 文字・`null`・`undefined` で呼ぶ | 4 文字は前後の空白を落としてそのまま、5 文字以上と `null` / `undefined` は `''`（開いた直後から検証で止まる値を初期値にしない） | 実装済 |
 | NOF-32 | 預りの「売り」から売却可能株数 `'1500'` を引き継ぐ / 引き継がない | `createOrderForm({ quantity: '1500' })` / `createOrderForm()` | 前者の `quantity` は入力欄と同じ 3 桁区切りの `'1,500'`、後者は `''` | 実装済 |
-| NOF-33 | ほかは埋まったフォーム | 市場区分 `02` × 成行 / `02` × 指値 / `03` × 成行 で `validateOrderForm()` | `LIMIT_ONLY_EXECUTION_SCOPES` は `['02']`。`02` × 成行だけ `orderType` に「市場区分「プレ＋レギュラー」は指値のみです。指値で入力してください。」が入り、ほかは `''`（docs/api/requests.md #50 ④） | 実装済 |
+| NOF-33 | ほかは埋まったフォーム | 注文区分 `02` × 成行 / `02` × 指値 / `03` × 成行 で `validateOrderForm()` | `LIMIT_ONLY_EXECUTION_SCOPES` は `['02']`。`02` × 成行だけ `orderType` に「注文区分「プレ＋レギュラー」は指値のみです。指値で入力してください。」が入り、ほかは `''`（docs/api/requests.md #50 ④） | 実装済 |
 | NOF-34 | — | `buildReceptionStatus()` を Dream 未登録（`0`）/ 登録対象外（`8`）/ 処理状況名なしの `8` / Dream の状況なし / どれも無し で呼ぶ | 「Dream登録待ち」/「未発注（Dream 登録対象外）」/「Dream 登録対象外」/「未発注」/ `''`（docs/api/requests.md #52） | 実装済 |
+| NOF-35 | ほかは埋まったフォーム・預り売買区分は未選択（既定） | `buildOrderReadback()` / `buildOrderInput()` / `validateOrderForm()` | 読み上げの `depositCategory` は `''`（画面は行ごと出さない）、送る値も `''`（api 層が null にする）、預り売買区分の不備は無い（任意項目） | 実装済 |

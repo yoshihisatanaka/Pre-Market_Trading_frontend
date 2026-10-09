@@ -42,6 +42,7 @@ const OPTION_ENUMS = [
   ['SIDE', SIDE_OPTIONS, SIDE_VALUES],
   ['ORDER_TYPE', ORDER_TYPE_OPTIONS, ORDER_TYPE_VALUES],
   ['EXECUTION_SCOPE', EXECUTION_SCOPE_OPTIONS, EXECUTION_SCOPE_VALUES],
+  ['ORDER_ENTRY_EXECUTION_SCOPE', ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS, EXECUTION_SCOPE_VALUES],
   ['SETTLEMENT_CURRENCY', SETTLEMENT_CURRENCY_OPTIONS, SETTLEMENT_CURRENCY_VALUES],
   ['DEPOSIT_CATEGORY', DEPOSIT_CATEGORY_OPTIONS, DEPOSIT_CATEGORY_VALUES],
   ['SOLICITATION', SOLICITATION_OPTIONS, SOLICITATION_VALUES],
@@ -51,13 +52,12 @@ const OPTION_ENUMS = [
   ['CASH_DELIVERY', CASH_DELIVERY_OPTIONS, CASH_DELIVERY_VALUES],
 ]
 
-/** ORDER_FORM_DEFAULTS のキー → その値を選ぶ選択肢 */
+/** ORDER_FORM_DEFAULTS のキー → その値を選ぶ選択肢（預り売買区分は未選択で始めるので含めない） */
 const DEFAULT_OPTIONS = {
-  // 既定の市場区分は入力欄に出す（フェーズ 1 で選べる）値でなければならない
-  executionScope: ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS,
+  // 既定の注文区分は入力欄に出す（フェーズ 1 で選べる）値でなければならない
+  executionScope: ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS.filter((option) => !option.disabled),
   orderType: ORDER_TYPE_OPTIONS,
   settlementCurrency: SETTLEMENT_CURRENCY_OPTIONS,
-  depositCategory: DEPOSIT_CATEGORY_OPTIONS,
   solicitation: SOLICITATION_OPTIONS,
   orderMethod: ORDER_METHOD_OPTIONS,
   fundNature: FUND_NATURE_OPTIONS,
@@ -88,8 +88,10 @@ describe('orderEntryOptions', () => {
     expect(ORDER_PERSON_MAX_LENGTH).toBe(ORDER_REQUEST.properties.受注者.maxLength)
   })
 
-  it('[NOP-03] 入力画面の既定値がどれも選択肢に含まれる', () => {
-    expect(Object.keys(ORDER_FORM_DEFAULTS).sort()).toEqual(Object.keys(DEFAULT_OPTIONS).sort())
+  it('[NOP-03] 入力画面の既定値がどれも選択肢に含まれる（預り売買区分だけは未選択）', () => {
+    const { depositCategory, ...defaults } = ORDER_FORM_DEFAULTS
+    expect(depositCategory).toBe('')
+    expect(Object.keys(defaults).sort()).toEqual(Object.keys(DEFAULT_OPTIONS).sort())
     for (const [key, options] of Object.entries(DEFAULT_OPTIONS)) {
       expect(valuesOf(options), key).toContain(ORDER_FORM_DEFAULTS[key])
     }
@@ -112,10 +114,22 @@ describe('orderEntryOptions', () => {
     expect([...valuesOf(EXECUTION_SCOPE_OPTIONS)].sort()).toEqual([...EXECUTION_SCOPE_VALUES].sort())
   })
 
-  it('[NOP-09] 入力欄の市場区分はフェーズ 1 で受け付ける 02 / 03 だけで、表示名は同じ', () => {
+  it('[NOP-09] 入力欄の注文区分は 02 / 03 を Ph.1 で選べ、04 / 06 を Ph.2 として選べなくする', () => {
     expect(ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS).toEqual([
-      { value: '02', label: 'プレ＋レギュラー' },
-      { value: '03', label: 'レギュラー' },
+      { value: '02', label: 'プレ＋レギュラー', group: 'Ph.1（受付対象）' },
+      { value: '03', label: 'レギュラー', group: 'Ph.1（受付対象）' },
+      {
+        value: '04',
+        label: 'プレ＋レギュラー＋アフター（Ph.2予定）',
+        group: 'Ph.2（将来対応）',
+        disabled: true,
+      },
+      {
+        value: '06',
+        label: 'アフター（時間内限り）（Ph.2予定）',
+        group: 'Ph.2（将来対応）',
+        disabled: true,
+      },
     ])
   })
 

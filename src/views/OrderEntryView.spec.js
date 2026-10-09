@@ -17,12 +17,7 @@ import { codeEntries } from '@/mocks/fixtures/codes'
 import { useCodesStore } from '@/stores/codes'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { EXPIRY_OPTION_COUNT } from '@/utils/orderEntryForm'
-import {
-  DEPOSIT_CATEGORY,
-  ORDER_FORM_DEFAULTS,
-  ORDER_PERSON_MAX_LENGTH,
-  SIDE,
-} from '@/utils/orderEntryOptions'
+import { DEPOSIT_CATEGORY, ORDER_PERSON_MAX_LENGTH, SIDE } from '@/utils/orderEntryOptions'
 import OrderEntryView from './OrderEntryView.vue'
 
 // シナリオ: docs/unit/views-order-entry-view.md（タイトル先頭の [NOV-xx] が対応 ID）
@@ -39,6 +34,8 @@ const SERVER_ERROR = 'サーバーでエラーが発生しました。'
 // 既定の顧客（警告なし）と警告の出る顧客。フィクスチャから引く
 const plainCustomer = customers.find((row) => row.口座番号 === 1230004)
 const cautionCustomer = customers.find((row) => row.口座番号 === 1230001)
+// 法人（預り売買区分を指定できない）
+const corporateCustomer = customers.find((row) => row.口座番号 === 1230009)
 const aapl = symbols.find((row) => row.Ticker === 'AAPL')
 
 /*
@@ -479,26 +476,74 @@ describe('OrderEntryView', () => {
     expect(byTestId(wrapper, 'order-entry-complete-message').text()).toContain(orderMessages.created)
   })
 
-  it('[NOV-31] 市場区分はフェーズ 1 の 2 つだけで、プレ＋レギュラーの成行は事前検証を呼ばずに止める', async () => {
+  it('[NOV-31] 注文区分で選べるのはフェーズ 1 の 2 つだけで、プレ＋レギュラーの成行は事前検証を呼ばずに止める', async () => {
     const bodies = recordBodies('post', VALIDATE_PATH)
     const { wrapper } = await mountView()
     await formReady(wrapper)
 
     const scope = byTestId(wrapper, 'order-entry-execution-scope')
-    expect(scope.findAll('option').map((option) => option.text())).toEqual([
-      'プレ＋レギュラー',
-      'レギュラー',
-    ])
+    const selectable = scope.findAll('option').filter((option) => !option.element.disabled)
+    expect(selectable.map((option) => option.element.value)).toEqual(['02', '03'])
+    expect(
+      scope
+        .findAll('option')
+        .filter((option) => option.element.disabled)
+        .map((option) => option.element.value),
+    ).toEqual(['04', '06'])
 
     await fillOrder(wrapper)
     await scope.setValue('02')
     await submit(wrapper)
 
     await until(() =>
-      wrapper.text().includes('市場区分「プレ＋レギュラー」は指値のみです。指値で入力してください。'),
+      wrapper.text().includes('注文区分「プレ＋レギュラー」は指値のみです。指値で入力してください。'),
     )
     expect(bodies).toHaveLength(0)
     expect(byTestId(wrapper, 'order-entry-confirm').exists()).toBe(false)
+  })
+
+  it('[NOV-32] 預り売買区分を選ばなければ null で送り、確認画面に行を出さない', async () => {
+    const bodies = recordBodies('post', VALIDATE_PATH)
+    const { wrapper } = await mountView()
+    await formReady(wrapper)
+    await toConfirm(wrapper)
+
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0].預り売買区分).toBeNull()
+    expect(byTestId(wrapper, 'order-readback-deposit-category').exists()).toBe(false)
+    expect(byTestId(wrapper, 'order-entry-confirm').text()).not.toContain('預り売買区分')
+  })
+
+  it('[NOV-33] 法人の口座では預り売買区分の欄を消し、選んであった値も送らない', async () => {
+    expect(corporateCustomer.法人区分).toBe('1')
+    const bodies = recordBodies('post', VALIDATE_PATH)
+    const { wrapper } = await mountView()
+    await formReady(wrapper)
+    await fillOrder(wrapper)
+    await byTestId(wrapper, 'order-entry-deposit-category')
+      .find(`[data-value="${DEPOSIT_CATEGORY.GENERAL}"]`)
+      .trigger('click')
+    const account = byTestId(wrapper, 'order-entry-account')
+    const depositShown = () => byTestId(wrapper, 'order-entry-deposit-category').exists()
+
+    // 法人と判ったら欄が消え、個人に戻すと未選択で戻る
+    await account.setValue(String(corporateCustomer.口座番号))
+    await until(() => !depositShown())
+    await account.setValue(String(plainCustomer.口座番号))
+    await until(depositShown)
+    expect(selectedValue(wrapper, 'order-entry-deposit-category')).toBeUndefined()
+
+    // 選び直してから法人へ打ち直し、照会の待ちを明けさせずに送っても送らない
+    await byTestId(wrapper, 'order-entry-deposit-category')
+      .find(`[data-value="${DEPOSIT_CATEGORY.GENERAL}"]`)
+      .trigger('click')
+    await account.setValue(String(corporateCustomer.口座番号))
+    await submit(wrapper)
+    await until(() => bodies.length === 1)
+
+    expect(bodies[0].口座番号).toBe(corporateCustomer.口座番号)
+    expect(bodies[0].預り売買区分).toBeNull()
+    expect(depositShown()).toBe(false)
   })
 
   it('[NOV-18] 同じ顧客で新規注文は部店・口座番号と顧客バーを残す', async () => {
@@ -615,9 +660,8 @@ describe('OrderEntryView', () => {
 
     expect(byTestId(wrapper, 'order-entry-account').element.value).toBe('')
     expect(selectedValue(wrapper, 'order-entry-side')).toBeUndefined()
-    expect(selectedValue(wrapper, 'order-entry-deposit-category')).toBe(
-      ORDER_FORM_DEFAULTS.depositCategory,
-    )
+    // 預り区分の既定は未選択
+    expect(selectedValue(wrapper, 'order-entry-deposit-category')).toBeUndefined()
     expect(byTestId(wrapper, 'order-entry-customer-bar').exists()).toBe(false)
   })
 

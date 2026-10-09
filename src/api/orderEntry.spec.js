@@ -124,6 +124,14 @@ describe('api/orderEntry', () => {
     expect(error.status).toBe(422)
   })
 
+  it('[NOA-13] 預り売買区分が未選択なら null で送る', async () => {
+    const bodies = recordBodies(VALIDATE_PATH)
+    const result = await validateOrder(order({ depositCategory: '' }))
+
+    expect(bodies[0].預り売買区分).toBeNull()
+    expect(result.valid).toBe(true)
+  })
+
   it('[NOA-11] 受注者が最大文字数を超えるとサーバの 422 で ApiError', async () => {
     const tooLong = 'X'.repeat(ORDER_PERSON_MAX_LENGTH + 1)
 

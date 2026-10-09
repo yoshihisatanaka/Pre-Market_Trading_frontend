@@ -22,3 +22,4 @@
 | NOA-10 | `POST /orders` が 500 | `createOrder(注文)` | `ApiError`（status 500）で reject される | 実装済 |
 | NOA-11 | 受注者が `ORDER_PERSON_MAX_LENGTH` + 1 文字・既定モック | `createOrder(注文)` | サーバの 422（4 文字超）が `ApiError`（status 422）で reject される | 実装済 |
 | NOA-12 | VWAP 対象の銘柄・VWAP あり・既定モック | `createOrder(注文)` | `success: true` で、`dreamStatus` が `8`、`dreamStatusName` が「登録対象外」（VWAP は Dream 登録の対象外） | 実装済 |
+| NOA-13 | 預り売買区分が未選択（`depositCategory: ''`）・既定モック | `validateOrder(注文)` | 本文の `預り売買区分` が `null`（空文字にしない。省略時はサーバが口座の特定口座区分から決める。docs/api/requests.md #24 ④）で、`valid: true` | 実装済 |

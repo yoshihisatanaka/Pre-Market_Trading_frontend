@@ -6,7 +6,7 @@ import {
   buildOrderReadback,
   createOrderForm,
 } from '@/utils/orderEntryForm'
-import { SIDE } from '@/utils/orderEntryOptions'
+import { DEPOSIT_CATEGORY, SIDE } from '@/utils/orderEntryOptions'
 import OrderReadback from './OrderReadback.vue'
 
 /*
@@ -65,12 +65,13 @@ const FIELDS = {
 // シナリオ: docs/unit/components-orders-order-readback.md
 describe('OrderReadback', () => {
   it('[NRB-01] 読み上げの文字列をそれぞれの欄に出す', () => {
-    const readback = readbackOf(form())
+    const readback = readbackOf(form({ depositCategory: DEPOSIT_CATEGORY.SPECIFIC }))
     const wrapper = mountReadback(readback)
 
     for (const [testid, key] of Object.entries(FIELDS)) {
       expect(text(wrapper, testid), testid).toBe(readback[key])
     }
+    expect(wrapper.text()).toContain('注文区分／期間')
     const symbol = wrapper.find('[data-testid="order-readback-symbol"]')
     expect(symbol.text()).toContain(readback.ticker)
     expect(symbol.find('small').text()).toBe(readback.symbolName)
@@ -104,5 +105,15 @@ describe('OrderReadback', () => {
     const note = text(wrapper, 'order-readback-estimate-note')
     expect(note).toContain(estimate.note)
     expect(note).toContain('手数料・税金等を含みません。')
+  })
+
+  it('[NRB-05] 預り売買区分が未選択なら行ごと出さない', () => {
+    const readback = readbackOf(form())
+    expect(readback.depositCategory).toBe('')
+    const wrapper = mountReadback(readback)
+
+    expect(wrapper.find('[data-testid="order-readback-deposit-category"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('預り売買区分')
+    expect(text(wrapper, 'order-readback-settlement-currency')).toBe(readback.settlementCurrency)
   })
 })

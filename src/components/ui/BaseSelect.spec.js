@@ -55,4 +55,34 @@ describe('BaseSelect', () => {
 
     expect(wrapper.find('select').attributes('data-variant')).toBe('underline')
   })
+
+  it('[BSL-07] group が同じで隣り合う選択肢を optgroup にまとめる', () => {
+    const grouped = [
+      { value: '1', label: 'A1', group: 'A 群' },
+      { value: '2', label: 'A2', group: 'A 群' },
+      { value: '3', label: 'B1', group: 'B 群' },
+      { value: '4', label: 'B2', group: 'B 群' },
+      { value: '5', label: 'その他' },
+    ]
+    const wrapper = mount(BaseSelect, { props: { options: grouped } })
+
+    const groups = wrapper.findAll('optgroup')
+    expect(groups.map((group) => group.attributes('label'))).toEqual(['A 群', 'B 群'])
+    expect(groups.map((group) => group.findAll('option').map((o) => o.text()))).toEqual([
+      ['A1', 'A2'],
+      ['B1', 'B2'],
+    ])
+    expect(wrapper.findAll('select > option').map((o) => o.text())).toEqual(['その他'])
+  })
+
+  it('[BSL-08] disabled の選択肢だけを選べなくする', () => {
+    const withDisabled = [...options.slice(0, 2), { ...options[2], disabled: true }]
+    const wrapper = mount(BaseSelect, { props: { options: withDisabled } })
+
+    expect(wrapper.findAll('option').map((o) => o.attributes('disabled') !== undefined)).toEqual([
+      false,
+      false,
+      true,
+    ])
+  })
 })

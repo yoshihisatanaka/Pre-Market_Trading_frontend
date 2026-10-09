@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import { toFileDownload } from './fileDownload'
 
 /*
  * CSV一括注文（`/orders/csv-spec` ほか）。
@@ -21,7 +22,7 @@ import { apiClient } from './client'
  *   - 一括受付の `OrderRequest` は `作成者` が必須だが、事前検証の行には入っていない。ここで足して送る
  *     （サーバは受け取った値を操作者コードで上書きする。値に意味は無いが、無いと 422 になる）
  *   - テンプレートは UTF-8 の BOM 付き。text で読むとブラウザが BOM を落とし、Excel で開くと文字化けする。
- *     Blob のまま受け取って、そのまま保存させる
+ *     バイト列（ArrayBuffer）のまま受け取って Blob にし、そのまま保存させる
  */
 
 /**
@@ -110,24 +111,16 @@ function toOrderCsvColumn(raw) {
 /**
  * CSV の入力用テンプレート（ヘッダー 22 列＋サンプル 3 行）を取得する。
  *
- * 失敗時の本文も Blob で来るので、ErrorResponse の detail は読めない
- * （画面には client.js が status から決める既定の文言が出る）。
+ * 本文は Blob（`responseType: 'blob'`）ではなく ArrayBuffer で受ける。理由は client.js の decodeBinaryBody
+ * （失敗時の ErrorResponse の detail を同期で読める）と、MSW の XHR インターセプタが blob の本文を
+ * 一度テキストに復号して BOM を落とすため（arraybuffer はバイト列のまま渡る）。
  *
- * @returns {Promise<{ blob: Blob, filename: string }>}
+ * @returns {Promise<import('./fileDownload').FileDownload>}
  *   filename はサーバが Content-Disposition で付けた名前（読めなければ bulk_orders_template.csv）
  */
 export async function fetchOrderCsvTemplate() {
-  const response = await apiClient.get('/orders/csv-template', { responseType: 'blob' })
-  return {
-    blob: response.data,
-    filename: filenameFrom(response.headers?.['content-disposition']),
-  }
-}
-
-/** `attachment; filename="bulk_orders_template.csv"` からファイル名を取り出す（引用符は有っても無くてもよい） */
-function filenameFrom(disposition) {
-  const match = /filename="?([^";]+)"?/i.exec(disposition ?? '')
-  return match ? match[1].trim() : TEMPLATE_FILENAME
+  const response = await apiClient.get('/orders/csv-template', { responseType: 'arraybuffer' })
+  return toFileDownload(response, TEMPLATE_FILENAME)
 }
 
 /**

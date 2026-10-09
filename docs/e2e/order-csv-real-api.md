@@ -20,8 +20,8 @@ CSV に書く口座と銘柄は実 DB の顧客マスタ・銘柄マスタの先
 
 この画面の噛み合わせで壊れやすいのは次の 4 つ。
 
-- **テンプレートの中身。** `OC-10` が保留なのは、MSW の fallback が XHR の blob から BOM を落とすため。
-  BOM と `Content-Disposition` のファイル名は実 API でしか確かめられない（この文書の `OCR-01`）
+- **テンプレートの中身。** BOM とファイル名は MSW 版（`OC-10`）でも見るが、そちらの本文はフィクスチャ。
+  実 API が BOM 付きで返すことと `Content-Disposition` のファイル名は、この文書の `OCR-01` で確かめる
 - **multipart の送り方。** `validate-csv` は `file` を multipart で受ける。`Content-Type` の境界をブラウザに付け直させている
 - **事前検証の行の形。** `rows[].data` は CSV の列名そのもの（日本語キー）で、`customer_name` と `details.stock_name` は
   サーバが口座・銘柄から引く。api 層（`src/api/orderCsv.js`）の変換がずれると口座番号・顧客名・銘柄名の列が「—」になる

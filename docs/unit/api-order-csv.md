@@ -10,7 +10,7 @@
 
 - 列の仕様: 列の並び（index 昇順）・例の型（string / integer / number → 文字列）・`condition` の null → 空文字・
   `required` は `true` のときだけ必須（OCA-01〜08）
-- テンプレート: Blob のまま受け取り（BOM を落とさない）、ファイル名は Content-Disposition から取る（OCA-09〜12）
+- テンプレート: バイト列のまま Blob にし（BOM を落とさない）、ファイル名は Content-Disposition から取る（OCA-09〜12）
 - 事前検証: multipart で `file` を送り、日本語キー 22 列の行を camelCase の注文にする。
   `valid` / 売買区分 / 件数 / 行番号の欠けや知らない値は、正常や片方の向きに倒さない（OCA-13〜17）
 - 一括受付: 事前検証の注文を日本語キーに戻し、`作成者` を足して送る（OCA-18〜21）
@@ -21,9 +21,9 @@
 multipart は jsdom の FormData が MSW(node) を通らないので、テストの間だけ Node の FormData と File に差し替える
 （`src/api/stalledOrders.spec.js` と同じ）。期待値は `src/mocks/fixtures/orderCsv.js` から導く。
 
-OCA-09 は保留。MSW(node) の XHR インターセプタは `responseType: 'blob'` の本文を一度テキストに復号してから
-Blob を作り直すので、BOM が単体テストの環境で落ちる（製品コードの挙動と切り分けられない）。BOM が残ることは
-E2E（実ブラウザの MSW）か実 API で確かめる。
+テンプレートは `responseType: 'arraybuffer'` で受けて Blob にする（`src/api/fileDownload.js` の `toFileDownload`）。
+MSW の XHR インターセプタは `blob` の本文を一度テキストに復号して BOM を落とすが、`arraybuffer` はバイト列のまま渡すので、
+OCA-09 は単体テストで BOM まで確かめられる。失敗時の本文もバイト列で届き、`client.js` が JSON に戻すので detail が読める（OCA-12）。
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
@@ -35,10 +35,10 @@ E2E（実ブラウザの MSW）か実 API で確かめる。
 | OCA-06 | `required` が `false` / 欠落 / `'true'`（文字列）/ `1` の列 | `fetchOrderCsvSpec()` を呼ぶ | どれも `required` が `false` になる（必須に倒さない） | 実装済 |
 | OCA-07 | 応答に `columns` が無い（`{}`） | `fetchOrderCsvSpec()` を呼ぶ | 例外にならず空配列が返る | 実装済 |
 | OCA-08 | API が 500（`detail` 付き）を返す | `fetchOrderCsvSpec()` を呼ぶ | その `detail` を message に持つ `ApiError` が投げられる | 実装済 |
-| OCA-09 | 既定モック | `fetchOrderCsvTemplate()` を呼ぶ | `filename` が `ORDER_CSV_TEMPLATE_FILENAME`、`blob` の中身がテンプレート本文とバイト単位で同じ（先頭 3 バイトは BOM の EF BB BF） | 保留 |
+| OCA-09 | 既定モック | `fetchOrderCsvTemplate()` を呼ぶ | `filename` が `ORDER_CSV_TEMPLATE_FILENAME`、`blob` の中身がテンプレート本文とバイト単位で同じ（先頭 3 バイトは BOM の EF BB BF） | 実装済 |
 | OCA-10 | Content-Disposition が無い応答 | `fetchOrderCsvTemplate()` を呼ぶ | `filename` が `bulk_orders_template.csv` になる | 実装済 |
 | OCA-11 | Content-Disposition が `filename=orders.csv`（引用符なし） | `fetchOrderCsvTemplate()` を呼ぶ | `filename` が `orders.csv` になる | 実装済 |
-| OCA-12 | テンプレートが 500（`detail` 付き） | `fetchOrderCsvTemplate()` を呼ぶ | status 500 の `ApiError` が投げられる。本文が Blob なので detail は読めず、message は status 既定の文言になる（今の仕様を固定する） | 実装済 |
+| OCA-12 | テンプレートが 500（`detail` 付き） | `fetchOrderCsvTemplate()` を呼ぶ | status 500 で、その `detail` を message に持つ `ApiError` が投げられる | 実装済 |
 | OCA-13 | 既定モック・テンプレート本文の CSV | `validateOrderCsv(file)` を呼ぶ | multipart でファイル名付きの `file` が届く。件数・`allValid` がフィクスチャどおりで、`rowNumber` は 2 から。各行の `order` は元の日本語キーを camelCase にしたもの（`side` は `buy` / `sell`、`vwap` は真偽値、成行の `limitPrice` は null）。`customerName` / `stockName` はフィクスチャのヘルパが返す値 | 実装済 |
 | OCA-14 | NG と警告が混ざる応答（`orderCsvValidateWithErrorsResponse`） | `validateOrderCsv(file)` を呼ぶ | `errors` / `warnings` はそのまま返る。`details` が null の行は `stockName`、`customer_name` が null の行は `customerName` が空文字 | 実装済 |
 | OCA-15 | `valid` が無い行・`売買区分` が知らないコードの行・件数が整数でない・`row_number` が無い行 | `validateOrderCsv(file)` を呼ぶ | それぞれ `valid` が false、`side` が空文字、件数が 0、`rowNumber` が null（正常や片方の向きに倒さない） | 実装済 |

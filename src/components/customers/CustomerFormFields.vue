@@ -10,6 +10,9 @@
  * 唯一の add / edit 差は `editing`（lockedOnEdit の項目 = 口座番号を読み取り専用にする）。
  * disabled ではなく readonly にする理由は SymbolFormFields の symbolCodeLocked と同じ。
  *
+ * 法人区分が法人のときは NISA の 3 項目（corporateValue を持つ項目）を disabled にし、固定値に揃える。
+ * こちらが readonly でないのは、select に readonly が効かないため（3 項目のうち NISA契約 が select）。
+ *
  * 出す data-testid（testidPrefix が 'customers-add' なら customers-add-account-number など）:
  *   {prefix}-{項目の testid}（testid の一覧は src/utils/customerFields.js）
  *   / {prefix}-group-{グループの並び順 1〜}
@@ -20,8 +23,13 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
+import { watchEffect } from 'vue'
 import { useCodesStore } from '@/stores/codes'
-import { CUSTOMER_FIELD_GROUPS } from '@/utils/customerFields'
+import {
+  CUSTOMER_FIELD_GROUPS,
+  corporateFixedValues,
+  isLockedByCorporateType,
+} from '@/utils/customerFields'
 
 defineProps({
   /** data-testid の接頭辞。'customers-add' / 'customers-edit' のように操作まで含めて渡す */
@@ -43,6 +51,15 @@ defineProps({
 
 /** フォームの値（キーは項目の key）。形は src/utils/customerFields.js の emptyCustomerForm() が正 */
 const form = defineModel({ type: Object, required: true })
+
+/*
+ * 法人の間は NISA の 3 項目を固定値（NISA契約 未契約・買付可能額 0）に揃える。
+ * 個人から法人へ切り替えたときだけでなく、法人の顧客を編集で開いたとき（フォームの差し替え）にも
+ * 揃えたいので、切り替えの watch ではなく watchEffect にする（入力欄は無効なので、揃えた後は動かない）。
+ */
+watchEffect(() => {
+  Object.assign(form.value, corporateFixedValues(form.value))
+})
 
 /*
  * コードマスタは main.js が起動時に読み込む。computed ではなく関数で引くのは、
@@ -90,6 +107,7 @@ function inputmodeOf(field) {
           v-model="form[field.key]"
           :options="optionsOf(field)"
           :placeholder="field.initial === undefined ? '-- 選択してください --' : ''"
+          :disabled="isLockedByCorporateType(field, form)"
           :data-testid="`${testidPrefix}-${field.testid}`"
         />
         <BaseInput
@@ -98,6 +116,7 @@ function inputmodeOf(field) {
           v-model="form[field.key]"
           :inputmode="inputmodeOf(field)"
           :readonly="editing && field.lockedOnEdit"
+          :disabled="isLockedByCorporateType(field, form)"
           :data-testid="`${testidPrefix}-${field.testid}`"
         />
       </FormField>

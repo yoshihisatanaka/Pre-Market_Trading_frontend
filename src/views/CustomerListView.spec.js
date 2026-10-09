@@ -9,6 +9,7 @@ import { codeEntries } from '@/mocks/fixtures/codes'
 import { canceledCustomers, customers, reactivationWarning } from '@/mocks/fixtures/customers'
 import { useCodesStore } from '@/stores/codes'
 import { CUSTOMERS_PAGE_SIZE } from '@/stores/customers'
+import { CORPORATE_TYPE, NISA_CONTRACT } from '@/utils/apiEnums'
 import { CUSTOMER_FIELDS, emptyCustomerForm } from '@/utils/customerFields'
 import CustomerListView from './CustomerListView.vue'
 
@@ -184,6 +185,30 @@ const NEW_CUSTOMER = {
 }
 
 const NEW_NAME = '更新 太郎'
+
+/*
+ * 法人のとき固定する NISA の 3 項目（項目表で corporateValue を宣言したもの）。
+ * 値は customerFields.js の宣言から取る（CFF-11 が 3 項目・'0' であることを見ている）
+ */
+const CORPORATE_LOCKED = CUSTOMER_FIELDS.filter((field) => field.corporateValue !== undefined)
+/** 法人で入れたい（が固定される）NISA の値。固定値と違う値にしておく */
+const NISA_IN_USE = {
+  nisaContract: NISA_CONTRACT.CONTRACTED,
+  growthQuota: '1200000',
+  growthQuotaNext: '2400000',
+}
+/** 実 API の口座番号順で最初の法人顧客（編集で開く） */
+const corporateCustomer = sorted.find((row) => row.法人区分 === CORPORATE_TYPE.CORPORATE)
+
+/** 3 項目の入力欄の disabled と値 */
+const lockedState = (input, wrapper) =>
+  CORPORATE_LOCKED.map((field) => ({
+    key: field.key,
+    disabled: input(wrapper, field.key).element.disabled,
+    value: input(wrapper, field.key).element.value,
+  }))
+const expectedLocked = (disabled) =>
+  CORPORATE_LOCKED.map((field) => ({ key: field.key, disabled, value: field.corporateValue }))
 
 describe('CustomerListView', () => {
   it('[CLV-01] 応答を待つ間はローディングだけを出す', async () => {
@@ -748,6 +773,90 @@ describe('CustomerListView', () => {
 
     expect(exists(wrapper, 'customers-add-form')).toBe(false)
     expect(wrapper.find('[data-testid="customers-notice"]').text()).toContain(REWRITTEN_NAME)
+    expect(countText(wrapper)).toContain(String(TOTAL + 1))
+  })
+
+  it('[CLV-33] 新規追加で法人を選ぶと NISA の 3 項目が無効になり、値が 0 に揃う', async () => {
+    expect(CORPORATE_LOCKED.map((field) => field.key)).toEqual(Object.keys(NISA_IN_USE))
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+    await openAddModal(wrapper)
+
+    // 個人のあいだは入力できる。固定値と違う値を入れておく
+    await fill(addInput, wrapper, NISA_IN_USE)
+    for (const field of CORPORATE_LOCKED) {
+      expect(addInput(wrapper, field.key).element.disabled, field.key).toBe(false)
+    }
+
+    await addInput(wrapper, 'corporateType').setValue(CORPORATE_TYPE.CORPORATE)
+    await flushPromises()
+
+    expect(lockedState(addInput, wrapper)).toEqual(expectedLocked(true))
+  })
+
+  it('[CLV-34] 法人から個人に戻すと NISA の 3 項目は入力できる状態に戻る（値は 0 のまま）', async () => {
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+    await openAddModal(wrapper)
+    await fill(addInput, wrapper, NISA_IN_USE)
+    await addInput(wrapper, 'corporateType').setValue(CORPORATE_TYPE.CORPORATE)
+    await flushPromises()
+
+    await addInput(wrapper, 'corporateType').setValue(CORPORATE_TYPE.INDIVIDUAL)
+    await flushPromises()
+
+    expect(lockedState(addInput, wrapper)).toEqual(expectedLocked(false))
+    // 入力できる（値を入れ直せる）
+    await addInput(wrapper, 'growthQuota').setValue(NISA_IN_USE.growthQuota)
+    expect(addInput(wrapper, 'growthQuota').element.value).toBe(NISA_IN_USE.growthQuota)
+  })
+
+  it('[CLV-35] 法人の顧客を編集で開くと NISA の 3 項目が無効で値は 0', async () => {
+    // フィクスチャに法人の顧客がいないと、このシナリオは意味を失う
+    expect(corporateCustomer).toBeDefined()
+    // 1 ページ目に出るとは限らないので、個人／法人の条件で絞った一覧から開く
+    const { wrapper } = await mountView({
+      withCodes: true,
+      query: { corporate_type: CORPORATE_TYPE.CORPORATE },
+    })
+    await settle()
+
+    await openEditModal(wrapper, String(corporateCustomer.ID))
+    await flushPromises()
+
+    expect(exists(wrapper, 'customers-edit-form')).toBe(true)
+    expect(editInput(wrapper, 'accountNumber').element.value).toBe(
+      String(corporateCustomer.口座番号),
+    )
+    expect(editInput(wrapper, 'corporateType').element.value).toBe(CORPORATE_TYPE.CORPORATE)
+    expect(lockedState(editInput, wrapper)).toEqual(expectedLocked(true))
+  })
+
+  it('[CLV-36] 法人で登録すると NISA契約 0・買付可能額 0 が送られる', async () => {
+    const bodies = []
+    server.use(
+      http.post('*/api/masters/customers', async ({ request }) => {
+        bodies.push(await request.clone().json())
+        // 応答は既定ハンドラに任せる（何も返さないと次のハンドラへ落ちる）
+      }),
+    )
+    const { wrapper } = await mountView({ withCodes: true })
+    await settle()
+    await openAddModal(wrapper)
+
+    await fill(addInput, wrapper, { ...NEW_CUSTOMER, ...NISA_IN_USE })
+    await addInput(wrapper, 'corporateType').setValue(CORPORATE_TYPE.CORPORATE)
+    await flushPromises()
+    await submit(wrapper, 'add')
+
+    expect(exists(wrapper, 'customers-add-form')).toBe(false)
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).toMatchObject({
+      法人区分: CORPORATE_TYPE.CORPORATE,
+      NISA契約: fieldOf('nisaContract').corporateValue,
+      NISA買付可能額_当年: Number(fieldOf('growthQuota').corporateValue),
+      NISA買付可能額_翌年: Number(fieldOf('growthQuotaNext').corporateValue),
+    })
     expect(countText(wrapper)).toContain(String(TOTAL + 1))
   })
 })

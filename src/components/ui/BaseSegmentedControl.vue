@@ -3,8 +3,11 @@
  * 排他選択をボタン列で行う部品（注文入力画面の売買区分・価格区分・預り売買区分など）。
  * <select> より押しやすく、選択中の値が常に見えるのが利点。
  *
- * options は `{ value, label, tone? }` の配列。tone に 'buy' / 'sell' を指定すると、
+ * options は `{ value, label, tone?, disabled?, note? }` の配列。tone に 'buy' / 'sell' を指定すると、
  * 選択中の色が売買方向の色になる（未指定なら primary）。
+ * disabled を付けた選択肢は見えるが押せない（訂正画面の市場区分の「Ph.2予定」）。
+ * note はラベルの下の 2 行目に小さく添える文言（ラベルとの間に空白を挟まず、読み上げは
+ * 「ラベル（添え書き）」の 1 語になる）。
  * 選択状態は aria-pressed と data-selected の両方で外から観察できる。
  */
 defineProps({
@@ -28,23 +31,27 @@ const model = defineModel({ type: [String, Number], default: '' })
       v-for="option in options"
       :key="option.value"
       type="button"
-      :class="['segmented__item', { 'is-selected': option.value === model }]"
+      :class="[
+        'segmented__item',
+        { 'is-selected': option.value === model, 'has-note': Boolean(option.note) },
+      ]"
       :aria-pressed="option.value === model"
-      :disabled="disabled"
+      :disabled="disabled || option.disabled"
       :data-value="option.value"
       :data-tone="option.tone"
       :data-selected="option.value === model"
       @click="model = option.value"
     >
-      {{ option.label }}
+      {{ option.label }}<span v-if="option.note" class="segmented__note">{{ option.note }}</span>
     </button>
   </div>
 </template>
 
 <style scoped>
+/* 2 行のボタン（note 付き）が混じっても、並びの高さを揃えて境界の線をつなげる */
 .segmented {
   display: inline-flex;
-  align-items: center;
+  align-items: stretch;
 }
 
 .segmented__item {
@@ -52,7 +59,7 @@ const model = defineModel({ type: [String, Number], default: '' })
   align-items: center;
   justify-content: center;
   min-width: 70px;
-  height: 30px;
+  min-height: 30px;
   padding: 0 var(--space-4);
   border: 1.5px solid var(--color-border);
   background-color: transparent;
@@ -92,6 +99,17 @@ const model = defineModel({ type: [String, Number], default: '' })
 .segmented__item:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.segmented__item.has-note {
+  flex-direction: column;
+  padding-block: var(--space-1);
+  line-height: 1.3;
+}
+
+.segmented__note {
+  font-size: var(--font-size-xs);
+  font-weight: 400;
 }
 
 .segmented__item.is-selected {

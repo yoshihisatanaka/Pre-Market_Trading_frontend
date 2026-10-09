@@ -94,13 +94,17 @@ import { ApiError, apiClient } from './client'
  *
  * @typedef {{
  *   id: string, branchCode: string, accountNumber: string, customerName: string, symbol: string,
- *   side: 'buy'|'sell'|'', quantity: number|null, orderType: string, limitPrice: number|null,
+ *   symbolName: string, side: 'buy'|'sell'|'', depositCategory: string,
+ *   quantity: number|null, orderType: string, limitPrice: number|null,
  *   marketScope: string, vwap: boolean, status: string, statusName: string,
- *   filledQuantity: number,
+ *   filledQuantity: number, expiryDate: string,
  *   orderedAt: string, amendable: boolean, cancelable: boolean,
  * }} OrderDetail
  *   symbol は Ticker（無ければ銘柄コード）。status は処理状況コード、statusName はサーバの
  *   処理状況名（無い応答では ''。画面が src/utils/orderTypes.js で引く）。
+ *   depositCategory は 預り売買区分 のコード（'0' 特定 / '1' 一般 / '6' 成長投資枠。無ければ ''）。
+ *   expiryDate は 有効期限 を 'YYYY-MM-DD' にしたもの。8 桁の日付でなければ ''
+ *   （送るときの形は 'YYYYMMDD' だが、返る形は仕様に無いので区切りの有無を問わずに読む）。
  *   filledQuantity はサーバの 出来数量（無い応答では約定の合計。約定が無ければ 0）。
  *   有効残数量 は運ばない。注文エラー（101 / 103）は取消できるのに 0 で返り、取消画面の
  *   「取消対象（未約定残）」には使えない（画面は 数量 − 出来数量 で出す）。
@@ -388,7 +392,9 @@ function toOrderDetail(raw, executions) {
     accountNumber: raw?.口座番号 == null ? '' : String(raw.口座番号),
     customerName: raw?.顧客名 ?? '',
     symbol: raw?.Ticker || raw?.銘柄コード || '',
+    symbolName: raw?.銘柄名 ?? '',
     side: SIDES[raw?.売買区分] ?? '',
+    depositCategory: raw?.預り売買区分 ?? '',
     quantity: toDecimalOrNull(raw?.数量),
     orderType: raw?.指成区分 ?? '',
     limitPrice: toDecimalOrNull(raw?.指値単価),
@@ -399,6 +405,7 @@ function toOrderDetail(raw, executions) {
     // 訂正・取消の画面が出す「処理状況」とは別の語なので使わない
     statusName: raw?.処理状況名 ?? '',
     filledQuantity,
+    expiryDate: toIsoDate(raw?.有効期限),
     orderedAt: toOrderedAt(raw?.受注日, raw?.受注時刻),
     amendable: AMENDABLE.has(status),
     cancelable: CANCELABLE.has(status),
@@ -464,6 +471,13 @@ function toOrderedAt(date, time) {
   if (d.length !== 8 || t.length < 4) return ''
   const seconds = t.length >= 6 ? t.slice(4, 6) : '00'
   return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${t.slice(0, 2)}:${t.slice(2, 4)}:${seconds}`
+}
+
+/** 'YYYYMMDD' / 'YYYY-MM-DD' → 'YYYY-MM-DD'。8 桁の日付にならなければ空文字 */
+function toIsoDate(value) {
+  const d = String(value ?? '').replace(/\D/g, '')
+  if (d.length !== 8) return ''
+  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
 }
 
 function toNumberOrNull(value) {

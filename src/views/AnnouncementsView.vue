@@ -35,6 +35,7 @@ const {
 /*
  * 現在の運用状態は GET /operations/banner の 発注停止中 から出す（お知らせ API には無い）。
  * 取得に失敗しても「—」になるだけで、お知らせの編集は止めない。
+ * ストアはヘッダ直下の帯（AppOperationBanner）と共用なので、保存後に取り直すと帯も変わる。
  */
 const bannerStore = useBannerStore()
 const { banner } = storeToRefs(bannerStore)
@@ -122,6 +123,9 @@ async function submitSave() {
 
   // 成功文言はサーバが返す（表示・非表示・本文変更・変更なしで変わる）。自前で組み立てない
   noticeMessage.value = result.message
+
+  // ヘッダ直下の帯（AppOperationBanner）に保存した内容を、定期の取り直しを待たずに出す
+  bannerStore.load()
 }
 
 function reload() {

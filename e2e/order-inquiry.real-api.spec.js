@@ -1,6 +1,13 @@
 import { expect, test } from '@playwright/test'
 import { formatQuantity } from '../src/utils/format'
-import { listHelpers, skipUnlessRealApi } from './helpers/realApi.js'
+import {
+  API_LIMIT_MAX,
+  apiContext,
+  listHelpers,
+  logExchange,
+  skipUnlessRealApi,
+  USER_CODE,
+} from './helpers/realApi.js'
 
 /*
  * 注文照会と、そこから入る注文訂正・注文取消を「実 API に当てて」確かめる E2E。
@@ -13,14 +20,22 @@ import { listHelpers, skipUnlessRealApi } from './helpers/realApi.js'
  * （テストから API を直接引くと X-User-Code が画面と違い、部店の限定で見える注文が変わるため）。
  * 0 件・値が空ならその行はスキップする。
  *
- * 既定では丸ごとスキップする。実 API に当てるときだけ次の 2 つをそろえて実行する。
+ * 既定では丸ごとスキップする。実 API に当てるときだけ次をそろえて実行する。
  *   1. 環境変数 VITE_ENABLE_MSW を false にして frontend を作り直す
  *   2. バックエンドの api を起動しておく
+ *   3. バックエンドのバッチ（premarket-scheduler）を止めておく（OIR-02 / OIR-12 のため。終わったら戻す）
  *   docker compose run --rm -e E2E_REAL_API=1 e2e npx playwright test order-inquiry.real-api
  *
- * このファイルは実 DB に書き込まない（GET だけ）。訂正・取消の画面は開いて初期値を見るだけで、
- * 「訂正を登録」「取消を確定」は押さない（書き込みの行 OIR-02 / OIR-12 は文書の理由で保留）。
+ * OIR-01・03〜11 は実 DB に書き込まない（GET だけ。訂正・取消の画面は開いて初期値を見るだけ）。
+ * OIR-02 / OIR-12 だけは試験注文を新規注文の画面から 1 件ずつ作り（POST /orders）、
+ * OIR-02 は画面で取り消し、OIR-12 は画面で訂正したあと API で取り消す。
+ * 1 回の実行につき取消済（034）の試験注文が 2 件残る（2026-10-09 にこの運用が認められた）。
+ * 件数を開いた時点と比べる行（OIR-07 / OIR-08）と書き込みの行が並列に走ると件数が揺れるので、
+ * このファイルは 1 つの worker で宣言順に流し、書き込みの 2 行は最後に置く。
  */
+
+// 1 つの worker で宣言順に流す（理由は冒頭）。serial と違い、1 本落ちても残りは流れる
+test.describe.configure({ mode: 'default' })
 
 const PATH = '/orders/inquiry'
 // 実 API のパス（openapi.json）。dev サーバの /api プロキシ越しに届く
@@ -250,6 +265,294 @@ function toNumber(value) {
   if (value === null || value === undefined || value === '') return null
   const number = Number(value)
   return Number.isFinite(number) ? number : null
+}
+
+/*
+ * ---- 書き込みの行（OIR-02 / OIR-12）の下ごしらえ ----
+ *
+ * 試験注文は新規注文の画面（/orders/new）から作る。API を直接叩かないのは 2 つの理由から。
+ *   - 画面の操作者（.env の VITE_USER_CODE）で作れば、注文照会に必ず見える（部店の限定がそろう）
+ *   - OrderRequest の区分値・有効期限（当日中の日付は休場日・受注不可日で決まる）を画面が組み立ててくれる
+ * 口座・銘柄の選び方は e2e/order-entry.real-api.spec.js（NR-01 / NR-06）と同じ。
+ * 入力から確定までの操作も NR-06 の写し（helpers/realApi.js は並行作業と衝突するので触らない。共通化の候補）。
+ */
+const ENTRY_PATH = '/orders/new'
+const CUSTOMERS_API_PATH = '/api/masters/customers'
+const SYMBOLS_API_PATH = '/api/masters/symbols'
+const VALIDATE_API_PATH = '/api/orders/validate'
+// 一覧の応答の配列キー（src/api/customers.js の fetchCustomers / src/api/symbols.js の fetchSymbols）
+const CUSTOMERS_LIST_KEY = 'customers'
+const SYMBOLS_LIST_KEY = 'stocks'
+// src/utils/symbolTypes.js の取引可否（規制情報）の「禁止」。e2e/order-entry.real-api.spec.js と同じ扱い
+const REGULATION_PROHIBITED = '1'
+
+/** 書き込みの行が使う、画面の操作者（GET /auth/me の生の応答）。口座の選定と後始末の X-User-Code に使う */
+let operator = null
+/** 顧客マスタ・銘柄マスタの先頭 1 ページ（beforeAll で読む） */
+let customers = []
+let stocks = []
+/** 試験注文の口座と銘柄（テストの中で操作者の部店に合わせて選ぶ） */
+let account = null
+let stock = null
+/** 作って、まだ後始末を確かめていない試験注文の ID（afterAll / finally の取りこぼし防止） */
+const createdOrderIds = new Set()
+
+/** 実 API の一覧の先頭 1 ページ（上限件数）を読む */
+async function firstPage(api, path, listKey) {
+  const res = await api.get(path, { params: { limit: API_LIMIT_MAX, offset: 0 } })
+  expect(res.ok(), `実 API から ${path} を取得できない。api コンテナが動いているか確認する`).toBe(
+    true,
+  )
+  const body = await res.json()
+  expect(Array.isArray(body[listKey]), `${path} の応答に配列 ${listKey} が無い`).toBe(true)
+  return body[listKey]
+}
+
+/** 注文に使える口座（NR と同じ条件）。部店・口座番号・顧客名がそろい、全取引停止でない */
+function isUsableAccount(row) {
+  return (
+    Number.isInteger(row.口座番号) &&
+    Boolean(row.部店コード) &&
+    Boolean(row.顧客名) &&
+    row.取引停止区分_全取引 !== 1 &&
+    row.取消区分 !== 1
+  )
+}
+
+/**
+ * 試験注文（買い）を出せる口座。事前検証はエクイティ／リスク商品の買付停止も弾く（2026-10-09 実測）。
+ * 区分は 0: 通常 / 1: 停止（openapi.json の CustomerItem）
+ */
+const BUY_STOP_FLAGS = [
+  '取引停止区分_エクイティ商品取引_売買',
+  '取引停止区分_エクイティ商品取引_買',
+  '取引停止区分_リスク商品取引_売買',
+  '取引停止区分_リスク商品取引_買',
+]
+const canBuy = (row) => BUY_STOP_FLAGS.every((key) => row[key] !== 1)
+
+/** 注文に使える銘柄（NR と同じ条件）。Ticker と銘柄コードがあり、売買禁止でない */
+function isUsableStock(row) {
+  return (
+    Boolean(row.Ticker) &&
+    Boolean(row.銘柄コード) &&
+    row.規制情報 !== REGULATION_PROHIBITED &&
+    row.取消区分 !== 1
+  )
+}
+
+/** ティッカーの横に出る名前（views/OrderEntryView.vue の symbolHint と同じ優先順） */
+const stockLabel = (row) => row.銘柄名_英字 || row.銘柄名
+
+const pathnameOf = (urlText) => new URL(urlText).pathname
+
+/** 指定のパスへの POST の応答を待つ */
+function waitForPost(page, pathname) {
+  return page.waitForResponse(
+    (res) => res.request().method() === 'POST' && pathnameOf(res.url()) === pathname,
+  )
+}
+
+/**
+ * 注文照会を開いて、画面が受け取った GET /auth/me（操作者）を読む。
+ * 発注権限が無ければ書き込みの前提が成り立たないのでスキップする。
+ * 口座は操作者の部店のもの（全部店の参照権限があれば先頭の有効な口座）を選ぶ。
+ */
+async function prepareOperatorAndAccount(page, playwright) {
+  const me = waitForApi(page, AUTH_ME_PATH)
+  await openList(page)
+  const res = await me
+  expect(res.ok(), `${AUTH_ME_PATH} が ${res.status()} を返した`).toBe(true)
+  operator = await res.json()
+  test.skip(!operator?.権限?.order, '操作者に発注権限が無い（VITE_USER_CODE の社員コードを見直す）')
+
+  const branchAll = Boolean(operator?.権限?.branch_all)
+  const operatorBranch = String(operator?.部店コード ?? '')
+  const accounts = customers
+    .filter(isUsableAccount)
+    .filter(canBuy)
+    .filter((row) => branchAll || String(row.部店コード) === operatorBranch)
+  const usableStocks = stocks.filter(isUsableStock)
+  test.skip(accounts.length === 0, `操作者の部店（${operatorBranch}）に注文に使える口座が無い（顧客マスタの先頭 1 ページ）`)
+  test.skip(usableStocks.length === 0, '実 API に注文に使える銘柄が無い（銘柄マスタの先頭 1 ページ）')
+
+  /*
+   * 事前検証は「同一口座・同一銘柄・同一売買区分の注文が本日既にある」と valid:false で弾き、
+   * 重複確認区分=1 での再送を求める（2026-10-09 実測）。画面には再送の操作が無いので、
+   * 取消済でない注文の無い口座と銘柄の組を選ぶ
+   */
+  const pair = await findPairWithoutOrders(playwright, accounts, usableStocks)
+  test.skip(!pair, `注文の無い口座と銘柄の組が見つからない（先頭 ${PAIR_SEARCH_ACCOUNTS} 口座を見た）`)
+  ;({ account, stock } = pair)
+}
+
+/** 注文の無い組を探すときに見る口座の数（先頭から） */
+const PAIR_SEARCH_ACCOUNTS = 5
+
+/**
+ * 口座は業務の制限（確認書類・コンプライアンスランク等）で弾かれやすく、マスタの項目だけでは見分けきれない。
+ * NR と同じ先頭の口座を優先し、銘柄の方を変えて重複を避ける。口座ごとに注文を 1 回で読み、
+ * まだ注文の無い銘柄を選ぶ（銘柄ごとに引くと、実行を重ねて使用済みの銘柄が増えるほど遅くなる）
+ */
+async function findPairWithoutOrders(playwright, accounts, usableStocks) {
+  const api = await apiContext(playwright, { userCode: operator?.操作者コード || USER_CODE })
+  try {
+    for (const candidateAccount of accounts.slice(0, PAIR_SEARCH_ACCOUNTS)) {
+      const res = await api.get(API_PATH, {
+        params: { account_no: candidateAccount.口座番号, limit: API_LIMIT_MAX, offset: 0 },
+      })
+      expect(res.ok(), `GET /orders（組の下見）が ${res.status()}`).toBe(true)
+      // 取消済（034）は重複に数えない（034 になった A0002 の後に同じ口座で A0002 を受け付けた。2026-10-09 実測）
+      const used = new Set(
+        ((await res.json()).orders ?? [])
+          .filter((order) => statusOf(order) !== '034')
+          .map((order) => order.銘柄コード),
+      )
+      const candidateStock = usableStocks.find((row) => !used.has(row.銘柄コード))
+      if (candidateStock) return { account: candidateAccount, stock: candidateStock }
+    }
+    return null
+  } finally {
+    await api.dispose()
+  }
+}
+
+/** 「送信」を押し、事前検証の応答が返るまで待つ */
+async function submitAndWaitValidate(page) {
+  const response = waitForPost(page, VALIDATE_API_PATH)
+  await page.getByTestId('order-entry-submit').click()
+  return response
+}
+
+/**
+ * 送信して、確認画面へ進むか理由の帯が出るまで進める。フロコン警告が出たら強制区分を付けて送り直す
+ * （e2e/order-entry.real-api.spec.js の submitUntilSettled と同じ）。確認画面へ進めたら true
+ */
+async function submitUntilConfirm(page) {
+  const confirm = page.getByTestId('order-entry-confirm')
+  const errors = page.getByTestId('order-entry-errors')
+  const validateError = page.getByTestId('order-entry-validate-error')
+  const warnings = page.getByTestId('order-entry-warnings')
+
+  await logExchange('OIR validate', await submitAndWaitValidate(page))
+  await expect(confirm.or(errors).or(validateError).or(warnings).first()).toBeVisible()
+
+  if ((await warnings.count()) > 0 && (await errors.count()) === 0 && (await confirm.count()) === 0) {
+    await page.getByTestId('order-entry-forced').check()
+    await submitAndWaitValidate(page)
+    await expect(confirm.or(errors).or(validateError).first()).toBeVisible()
+  }
+  return (await confirm.count()) > 0
+}
+
+/**
+ * 新規注文の画面から試験注文を 1 件作り、注文 ID を返す（買い・数量 1・成行・当日中）。
+ * 業務エラー（余力・規制・発注停止）で作れなければスキップする。
+ */
+async function createTestOrder(page) {
+  const query = new URLSearchParams({
+    branch_code: account.部店コード,
+    account_number: String(account.口座番号),
+  })
+  const operatorLoaded = page
+    .waitForResponse((res) => pathnameOf(res.url()) === AUTH_ME_PATH, { timeout: 10_000 })
+    .catch(() => null)
+  await page.goto(`${ENTRY_PATH}?${query}`)
+  await expect(page.getByTestId('order-entry-form')).toBeVisible()
+  await operatorLoaded
+  test.skip(
+    (await page.getByTestId('order-entry-suspended').count()) > 0,
+    '実 API が全体の発注停止中で試験注文を作れない',
+  )
+
+  await page.getByTestId('order-entry-branch').fill(account.部店コード)
+  await page.getByTestId('order-entry-account').fill(String(account.口座番号))
+  await page.getByTestId('order-entry-ticker').fill(stock.Ticker)
+  await expect(page.getByTestId('order-entry-ticker-hint')).toHaveText(stockLabel(stock))
+  await page.getByTestId('order-entry-side').getByRole('button', { name: '買い', exact: true }).click()
+  await page.getByTestId('order-entry-quantity').fill('1')
+  // 受注者は /auth/me の受注者コードが既定で入る（#51）。未設定のときだけ試験用のコードで埋める
+  const orderPerson = page.getByTestId('order-entry-order-person')
+  if ((await orderPerson.inputValue()) === '') await orderPerson.fill(USER_CODE)
+
+  test.skip(
+    !(await submitUntilConfirm(page)),
+    '事前検証で確認画面へ進めなかった（実データの残高・余力・規制）。試験注文を作れない',
+  )
+
+  await page.getByTestId('order-entry-final-check').check()
+  const created = waitForPost(page, API_PATH)
+  await page.getByTestId('order-entry-confirm-submit').click()
+  const res = await created
+  const body = JSON.parse(await logExchange('OIR create', res))
+  // 応答を読んだらすぐ控える（以降の期待が落ちても後始末が取り消す）
+  if (Number.isInteger(body.order_id)) createdOrderIds.add(String(body.order_id))
+  expect(res.ok(), `POST /orders が ${res.status()}`).toBe(true)
+  test.skip(body.success !== true, `試験注文の登録が success:false: ${JSON.stringify(body.errors)}`)
+  expect(Number.isInteger(body.order_id), 'success:true なのに order_id が integer でない').toBe(true)
+  await expect(page.getByTestId('order-entry-complete')).toBeVisible()
+  return String(body.order_id)
+}
+
+/** 試験注文の口座・銘柄で絞った GET /orders の応答を待つ */
+function waitForAccountList(page) {
+  return waitForApi(
+    page,
+    API_PATH,
+    (url) =>
+      url.searchParams.get('account_no') === String(account.口座番号) &&
+      url.searchParams.get('symbol') === stock.銘柄コード,
+  )
+}
+
+/**
+ * 表の、注文ID 列が #<id> の行。行の textContent はセルの間に区切りが無く、注文ID の直後に
+ * 部店の数字が続く（'#1964100'）ので、行の文字列ではなく `#<id>` だけを持つ要素で絞る
+ */
+function rowOf(page, id) {
+  return rowsOf(page).filter({ has: page.getByText(`#${id}`, { exact: true }) })
+}
+
+/**
+ * 注文照会を試験注文の口座・銘柄で絞って開き、その注文の行を返す。
+ * 条件なしだと 1 ページ目に出る保証が無い（並び順は openapi.json に書かれていない）ので絞る
+ */
+async function openRowOf(page, id) {
+  const query = new URLSearchParams({
+    account_number: String(account.口座番号),
+    symbol: stock.銘柄コード,
+  })
+  const response = waitForAccountList(page)
+  await openList(page, `?${query}`)
+  expect((await response).ok()).toBe(true)
+  const row = rowOf(page, id)
+  await expect(row, `試験注文 #${id} が注文照会に出ない（部店の限定・並び順を疑う）`).toHaveCount(1)
+  return row
+}
+
+/**
+ * 作った試験注文を後始末する。まだ取消できる処理状況のものだけ POST /orders/{id}/cancel で取り消す
+ * （画面で取り消し済みなら何もしない）。X-User-Code は画面の操作者にそろえる
+ */
+async function cleanupOrders(playwright) {
+  if (createdOrderIds.size === 0) return
+  const api = await apiContext(playwright, { userCode: operator?.操作者コード || USER_CODE })
+  try {
+    for (const id of [...createdOrderIds]) {
+      const detail = await api.get(`${API_PATH}/${id}`)
+      expect(detail.ok(), `試験注文 #${id} を GET できない（${detail.status()}）`).toBe(true)
+      const status = statusOf((await detail.json())?.order)
+      if (CANCELABLE.has(status)) {
+        const res = await api.post(`${API_PATH}/${id}/cancel`, { data: {} })
+        const text = await logExchange(`OIR cleanup ${id}`, res)
+        expect(res.ok(), `試験注文 #${id} を取り消せない: ${res.status()} ${text}`).toBe(true)
+        expect(JSON.parse(text).success, `試験注文 #${id} の取消が success:false: ${text}`).toBe(true)
+      }
+      createdOrderIds.delete(id)
+    }
+  } finally {
+    await api.dispose()
+  }
 }
 
 test.describe('注文照会・注文訂正・注文取消（実 API 接続）', () => {
@@ -521,5 +824,137 @@ test.describe('注文照会・注文訂正・注文取消（実 API 接続）', 
     // 確定は押さない。「戻る」で注文照会へ戻る
     await page.getByTestId('order-cancel-back').click()
     await expect(page).toHaveURL(new RegExp(`${PATH}$`))
+  })
+
+  /*
+   * 書き込みの行。試験注文を作って訂正・取消まで流す。バッチ（premarket-scheduler）を止めた状態が前提
+   * （動いていると作った直後に IB 発注・Dream 登録へ進み、即時取消（000 → 034）にならない）。
+   */
+  test.describe('試験注文の取消・訂正（書き込み）', () => {
+    test.beforeAll(async ({ playwright }) => {
+      // マスタの読み出しだけなので試験用の X-User-Code でよい（NR と同じ）
+      const api = await apiContext(playwright)
+      try {
+        customers = await firstPage(api, CUSTOMERS_API_PATH, CUSTOMERS_LIST_KEY)
+        stocks = await firstPage(api, SYMBOLS_API_PATH, SYMBOLS_LIST_KEY)
+      } finally {
+        await api.dispose()
+      }
+    })
+
+    test.afterAll(async ({ playwright }) => {
+      // テストが途中で落ちても、作った試験注文を未発注のまま残さない
+      await cleanupOrders(playwright)
+    })
+
+    test('[OIR-02] 試験注文を一覧の「取消」→「取消を確定」で取り消すと、一覧で取消済になりボタンが消える', async ({
+      page,
+      playwright,
+    }) => {
+      // 注文の作成（新規注文の画面）・一覧・取消の 3 画面を往復するので既定の 30 秒では足りない
+      test.setTimeout(90_000)
+      await prepareOperatorAndAccount(page, playwright)
+      const id = await createTestOrder(page)
+
+      try {
+        const row = await openRowOf(page, id)
+        const detail = waitForDetail(page, id)
+        await row.getByTestId('order-inquiry-cancel').click()
+        await expect(page).toHaveURL(new RegExp(`/orders/${id}/cancel$`), { timeout: 15_000 })
+        expect((await detail).ok()).toBe(true)
+
+        const canceled = waitForPost(page, `${API_PATH}/${id}/cancel`)
+        await page.getByTestId('order-cancel-submit').click()
+        const res = await canceled
+        const body = JSON.parse(await logExchange('OIR-02 cancel', res))
+
+        expect(res.status(), `POST /orders/${id}/cancel が ${res.status()}`).toBe(200)
+        expect(body.success, `取消が success:false: ${JSON.stringify(body)}`).toBe(true)
+        // 本文は空（理由・取消者は送らない。src/api/orderInquiry.js の cancelOrder）
+        expect(JSON.parse(res.request().postData() ?? '{}')).toEqual({})
+
+        // 完了表示の文言はサーバが決める（空なら画面の既定文言）
+        await expect(page.getByTestId('order-cancel-complete')).toBeVisible()
+        await expect(page.getByTestId('order-cancel-complete-message')).toHaveText(
+          body.message || '取消を受け付けました。',
+        )
+
+        // 「注文照会へ戻る」で、絞った一覧へ戻って読み直される
+        const reloaded = waitForAccountList(page)
+        await page.getByTestId('order-cancel-back-to-list').click()
+        const listRes = await reloaded
+        expect(listRes.ok()).toBe(true)
+        await settleList(page)
+
+        const group = groupsOf((await listRes.json()).orders).find((item) => item.id === id)
+        expect(group, `戻った一覧の応答に #${id} が無い`).toBeTruthy()
+        // バッチを止めていれば未発注（000）の取消は即時に取消済（034）になる
+        expect(statusOf(group.latest), `#${id} が取消済（034）になっていない`).toBe('034')
+        const canceledRow = rowOf(page, id)
+        await expect(cellOf(canceledRow, '出来状況')).toHaveText(
+          group.latest.表示状況名 ?? group.latest.処理状況名 ?? STATUS_NAMES['034'],
+        )
+        await expect(canceledRow.getByTestId('order-inquiry-amend')).toHaveCount(0)
+        await expect(canceledRow.getByTestId('order-inquiry-cancel')).toHaveCount(0)
+      } finally {
+        // 画面での取消が途中で落ちても残さない（取消済なら何もしない）
+        await cleanupOrders(playwright)
+      }
+    })
+
+    test('[OIR-12] 試験注文を「訂正」で数量 +1 して登録すると IN_PLACE で受け付けられ、一覧の数量が変わる', async ({
+      page,
+      playwright,
+    }) => {
+      // 注文の作成・一覧・訂正の 3 画面を往復するので既定の 30 秒では足りない
+      test.setTimeout(90_000)
+      await prepareOperatorAndAccount(page, playwright)
+      const id = await createTestOrder(page)
+
+      try {
+        const row = await openRowOf(page, id)
+        const detail = waitForDetail(page, id)
+        await row.getByTestId('order-inquiry-amend').click()
+        await expect(page).toHaveURL(new RegExp(`/orders/${id}/amend$`), { timeout: 15_000 })
+        const detailRes = await detail
+        expect(detailRes.ok()).toBe(true)
+        const quantity = toNumber((await detailRes.json())?.order?.数量)
+        expect(quantity, `GET /orders/${id} の 数量 が数値でない`).not.toBeNull()
+        const nextQuantity = quantity + 1
+
+        await expect(page.getByTestId('order-amend-quantity')).toHaveValue(String(quantity))
+        await page.getByTestId('order-amend-quantity').fill(String(nextQuantity))
+        const amended = waitForPost(page, `${API_PATH}/${id}/amend`)
+        await page.getByTestId('order-amend-submit').click()
+        const res = await amended
+        const body = JSON.parse(await logExchange('OIR-12 amend', res))
+        // 訂正注文が別 ID で採番されたら、それも後始末の対象にする
+        if (Number.isInteger(body.amendment_order_id)) {
+          createdOrderIds.add(String(body.amendment_order_id))
+        }
+
+        expect(res.status(), `POST /orders/${id}/amend が ${res.status()}`).toBe(200)
+        expect(body.success, `訂正が success:false: ${JSON.stringify(body)}`).toBe(true)
+        // 未発注・Dream 未登録の注文はその場で訂正される
+        expect(body.mode, `訂正の mode が IN_PLACE でない: ${JSON.stringify(body)}`).toBe('IN_PLACE')
+        // 部分更新なので、変えた 数量 だけを送る（src/api/orderInquiry.js の amendOrder）
+        expect(JSON.parse(res.request().postData() ?? '{}')).toEqual({ 数量: nextQuantity })
+
+        await expect(page.getByTestId('order-amend-complete')).toBeVisible()
+        await expect(page.getByTestId('order-amend-complete-message')).toHaveText(
+          body.message || '訂正を受け付けました。',
+        )
+        await expect(page.getByTestId('order-amend-complete-detail')).toContainText(`#${id}`)
+
+        const reloaded = waitForAccountList(page)
+        await page.getByTestId('order-amend-back-to-list').click()
+        expect((await reloaded).ok()).toBe(true)
+        await settleList(page)
+        await expect(cellOf(rowOf(page, id), '数量')).toHaveText(formatQuantity(nextQuantity))
+      } finally {
+        // 訂正の成否にかかわらず、必ず取り消して後始末する（1 回の実行で残すのは取消済だけ）
+        await cleanupOrders(playwright)
+      }
+    })
   })
 })

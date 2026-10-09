@@ -66,6 +66,14 @@ async function firstPage(api, path, listKey, params = {}) {
   return body[listKey]
 }
 
+/** その口座で取消済（034）でない注文のある銘柄コード（GET /orders の先頭 1 ページ） */
+async function activeSymbolsOf(api, accountNumber) {
+  const orders = await firstPage(api, '/api/orders', 'orders', { account_no: accountNumber })
+  return new Set(
+    orders.filter((order) => String(order.処理状況 ?? '') !== '034').map((order) => order.銘柄コード),
+  )
+}
+
 /** 注文に使える口座。部店・口座番号・顧客名がそろい、全取引停止でない */
 function isUsableAccount(row) {
   return (
@@ -215,10 +223,15 @@ test.describe('新規注文（実 API 接続）', () => {
     const api = await apiContext(playwright)
     const customers = await firstPage(api, CUSTOMERS_API_PATH, CUSTOMERS_LIST_KEY)
     const stocks = await firstPage(api, SYMBOLS_API_PATH, SYMBOLS_LIST_KEY)
-    await api.dispose()
 
     account = customers.find(isUsableAccount) ?? null
-    stock = stocks.find(isUsableStock) ?? null
+    /*
+     * 事前検証は同一口座・同一銘柄・同一売買区分の未取消の注文が本日あると valid:false で弾く（2026-10-09 実測。
+     * 画面に重複確認区分=1 で送り直す操作は無い）。その口座で取消済（034）でない注文のある銘柄は避ける
+     */
+    const active = account ? await activeSymbolsOf(api, account.口座番号) : new Set()
+    await api.dispose()
+    stock = stocks.filter(isUsableStock).find((row) => !active.has(row.銘柄コード)) ?? null
   })
 
   test.afterAll(async ({ playwright }) => {

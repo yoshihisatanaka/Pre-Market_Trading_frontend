@@ -119,7 +119,7 @@ test.describe('共通レイアウト', () => {
 
     await toggleButton(page).click()
 
-    // 見えなくなるのは visibility: hidden のおかげ。負の margin だけでは矩形が残る
+    // 幅 0 に縮み、畳み終わると visibility: hidden になる
     await expect(sidebar).toBeHidden()
     await expect(toggleButton(page)).toHaveAttribute('aria-expanded', 'false')
     await expect.poll(() => contentLeft(page)).toBe(0)

@@ -8,7 +8,7 @@
 - 権限の出どころ: [stores-current-operator.md](stores-current-operator.md)
 - E2E 側のシナリオ: [docs/e2e/layout.md](../e2e/layout.md)
 
-開閉は押し出し式（閉じると画面外へ出て本文が全幅になる）で、状態は `AppLayout` が持ち
+開閉は押し出し式（閉じると幅 0 まで縮みながら消え、本文が全幅になる）で、状態は `AppLayout` が持ち
 `open` prop で降りてくる。既定は `true`（展開）なので、props を渡さないマウントは従来どおり展開状態。
 畳んだときは中のリンクを操作対象から外す（`inert`）。
 

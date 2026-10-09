@@ -4,7 +4,7 @@
  * 項目は navigation.js が正。ここに直接リンクを書き足さないこと。
  *
  * 開閉状態は自分では持たず、所有者（AppLayout）から open で受け取る。
- * 押し出し式なので、閉じると板ごと画面外へ出て本文が全幅になる。
+ * 押し出し式なので、閉じると板が幅 0 まで縮みながら消え、本文が全幅になる。
  *
  * 権限の要る区分（requiredPermission）は、その権限を持つ利用者にだけ出す。
  * /auth/me を読み終えるまでは持っていない扱いにする（出てから消えるちらつきを防ぐ）。
@@ -181,32 +181,48 @@ const badgeLabelId = (item) => `sidebar-badge-${item.badge.key}-label`
 
 <style scoped>
 .sidebar {
-  /* 1 箇所で持ち、prefers-reduced-motion で 0 に潰す（BaseSpinner と同じ作法） */
+  /*
+   * 1 箇所で持ち、prefers-reduced-motion で 0 に潰す（BaseSpinner と同じ作法）。
+   * 板の開閉は画面モック（base.html の .sidebar）と同じく、幅 0.18s・フェード 0.15s
+   */
   --sidebar-transition-duration: 0.2s;
+  --sidebar-width-duration: 0.18s;
+  --sidebar-fade-duration: 0.15s;
 
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   width: var(--layout-sidebar-width);
-  overflow-y: auto;
+  overflow: hidden auto;
   background-color: var(--color-sidebar-bg);
   transition:
-    margin-left var(--sidebar-transition-duration) ease,
+    width var(--sidebar-width-duration) ease,
+    opacity var(--sidebar-fade-duration) ease,
     visibility 0s linear 0s;
 }
 
 /*
- * 幅を 0 に縮めるとラベルが折り返して「潰れる」動きになるので、幅は保ったまま
- * 板ごと左へ出す（はみ出しは .app-layout の overflow: hidden がクリップする）。
- * visibility は畳み終わってから掛ける。矩形が残ったままだと「見えている」と判定され、
- * 閉じたことを検証できない。
+ * 幅を 0 に縮めながらフェードさせ、本文がその分だけ広がる（画面モックと同じ動き）。
+ * 中身は .sidebar__logo / .sidebar__nav が幅を固定しているので、縮む途中でラベルが
+ * 折り返して潰れることはなく、右端から切り取られていく。
+ * visibility は畳み終わってから掛ける。読み上げとフォーカスから確実に外すため
+ * （操作は inert でも止めている）。
  */
 .sidebar.is-collapsed {
-  margin-left: calc(var(--layout-sidebar-width) * -1);
+  width: 0;
+  opacity: 0;
   visibility: hidden;
   transition:
-    margin-left var(--sidebar-transition-duration) ease,
-    visibility 0s linear var(--sidebar-transition-duration);
+    width var(--sidebar-width-duration) ease,
+    opacity var(--sidebar-fade-duration) ease,
+    visibility 0s linear var(--sidebar-width-duration);
+}
+
+/* 板の幅が縮んでも中身は元の幅のまま（折り返させない） */
+.sidebar__logo,
+.sidebar__nav {
+  flex-shrink: 0;
+  width: var(--layout-sidebar-width);
 }
 
 .sidebar__logo {
@@ -363,6 +379,8 @@ const badgeLabelId = (item) => `sidebar-badge-${item.badge.key}-label`
 @media (prefers-reduced-motion: reduce) {
   .sidebar {
     --sidebar-transition-duration: 0s;
+    --sidebar-width-duration: 0s;
+    --sidebar-fade-duration: 0s;
   }
 }
 </style>

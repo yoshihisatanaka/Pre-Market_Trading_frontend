@@ -6,7 +6,7 @@
 - 使う側: [components-layout-app-layout.md](components-layout-app-layout.md)
 - E2E 側のシナリオ: [docs/e2e/layout.md](../e2e/layout.md)
 
-サイドメニューは**押し出し式**（閉じると画面外へ出て本文が全幅になる）。
+サイドメニューは**押し出し式**（閉じると幅 0 まで縮みながら消え、本文が全幅になる）。
 この composable は開閉状態だけを持ち、見た目は持たない。
 
 初期値の決め方が仕様の要。**保存値 > 画面幅による既定**で、

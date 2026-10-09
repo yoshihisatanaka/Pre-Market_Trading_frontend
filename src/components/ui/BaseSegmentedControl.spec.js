@@ -60,4 +60,27 @@ describe('BaseSegmentedControl', () => {
 
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
   })
+
+  it('[BSC-07] disabled を付けた選択肢だけが無効になり、押しても値は変わらない', async () => {
+    const wrapper = mount(BaseSegmentedControl, {
+      props: { options: [options[0], { ...options[1], disabled: true }], modelValue: '特定' },
+    })
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons.map((b) => b.element.disabled)).toEqual([false, true])
+
+    await buttons[1].trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+
+  it('[BSC-08] note はラベルの後ろに添え書きとして出る', () => {
+    const wrapper = mount(BaseSegmentedControl, {
+      props: { options: [options[0], { ...options[1], note: '（Ph.2予定）' }] },
+    })
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons[0].find('.segmented__note').exists()).toBe(false)
+    expect(buttons[1].find('.segmented__note').text()).toBe('（Ph.2予定）')
+    expect(buttons[1].text()).toBe('一般（Ph.2予定）')
+  })
 })

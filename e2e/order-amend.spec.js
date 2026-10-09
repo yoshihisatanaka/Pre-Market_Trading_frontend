@@ -60,10 +60,10 @@ async function expectNotSubmitted(page) {
   await expect(page.getByTestId('order-amend-form')).toBeVisible()
 }
 
-/** 対象注文の読み込みを待つ（入力欄が現在値で埋まるまで） */
+/** 対象注文の読み込みを待つ（入力欄が現在値で埋まるまで。数量は 3 桁ごとのカンマ付き） */
 async function openAmend(page, row) {
   await page.goto(amendPath(row.ID))
-  await expect(page.getByTestId('order-amend-quantity')).toHaveValue(String(row.数量))
+  await expect(page.getByTestId('order-amend-quantity')).toHaveValue(formatQuantity(row.数量))
 }
 
 test.describe('注文訂正', () => {
@@ -74,28 +74,49 @@ test.describe('注文訂正', () => {
     await expect(page).toHaveURL(new RegExp(`${amendPath(PENDING.ID)}$`))
     await expect(page.getByRole('heading', { name: '外株注文訂正', exact: true })).toBeVisible()
     await expect(page.getByTestId('order-amend-status')).toHaveText(statusNameOf(PENDING))
-    await expect(page.getByTestId('order-amend-customer')).toHaveText(
-      `${PENDING.顧客名} 部店 ${PENDING.部店} ／ 口座 ${PENDING.口座番号}`,
-    )
-    await expect(page.getByTestId('order-amend-summary').getByRole('definition')).toHaveText([
-      `#${PENDING.ID}`,
-      `${PENDING.顧客名} 部店 ${PENDING.部店} ／ 口座 ${PENDING.口座番号}`,
-      PENDING.銘柄コード,
-      SIDE_LABELS[PENDING.売買区分],
-      originalLabel(PENDING),
-      MARKET_SCOPE_LABELS[PENDING.発注範囲],
-      `${formatQuantity(PENDING.出来数量)}株`,
-      new RegExp(PENDING.受注時刻.slice(0, 5)),
+
+    // 訂正対象注文はモックの 4 枠（顧客 / 銘柄 / 売買・預り / 原注文）
+    await expect(page.getByTestId('order-amend-summary').getByRole('term')).toHaveText([
+      '顧客',
+      '銘柄',
+      '売買・預り',
+      '原注文',
     ])
+    await expect(page.getByTestId('order-amend-customer')).toHaveText(PENDING.顧客名)
+    await expect(page.getByTestId('order-amend-account')).toHaveText(
+      `部店 ${PENDING.部店} ／ 口座 ${PENDING.口座番号}`,
+    )
+    await expect(page.getByTestId('order-amend-symbol')).toHaveText(PENDING.Ticker)
+    await expect(page.getByTestId('order-amend-symbol-name')).toHaveText(PENDING.銘柄名)
+    await expect(page.getByTestId('order-amend-side')).toHaveText(SIDE_LABELS[PENDING.売買区分])
+    await expect(page.getByTestId('order-amend-deposit')).toHaveText('特定')
+    await expect(page.getByTestId('order-amend-original')).toHaveText(originalLabel(PENDING))
+    await expect(page.getByTestId('order-amend-ordered-at')).toContainText(
+      PENDING.受注時刻.slice(0, 5),
+    )
 
     await expect(page.getByTestId('order-amend-quantity')).toHaveValue(String(PENDING.数量))
     await expect(page.getByTestId('order-amend-limit-price')).toHaveValue(
       String(PENDING.指値単価),
     )
-    await expect(page.getByTestId('order-amend-market-scope')).toHaveValue(PENDING.発注範囲)
     await expect(
       page.getByTestId('order-amend-order-type').getByRole('button', { name: '指値' }),
     ).toHaveAttribute('aria-pressed', 'true')
+
+    // 市場区分は 4 ボタンで、アフターを含む 2 つは「Ph.2予定」で押せない
+    const marketScope = page.getByTestId('order-amend-market-scope')
+    await expect(
+      marketScope.getByRole('button', { name: MARKET_SCOPE_LABELS[PENDING.発注範囲], exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    await expect(marketScope.getByRole('button')).toHaveCount(4)
+    const phase2 = marketScope.getByRole('button', { name: /Ph\.2予定/ })
+    await expect(phase2).toHaveCount(2)
+    await expect(phase2.first()).toBeDisabled()
+    await expect(phase2.last()).toBeDisabled()
+
+    // 執行条件は変えられず、いまの有効期限（受注日と同じ 9/28）を出す
+    await expect(page.getByTestId('order-amend-expiry')).toHaveValue('当日中（9/28）')
+    await expect(page.getByTestId('order-amend-expiry')).toBeDisabled()
   })
 
   test('[OAM-02] URL を直接開いても表示でき、一部出来は出来分を含む総数量を求める', async ({
@@ -104,10 +125,9 @@ test.describe('注文訂正', () => {
     await openAmend(page, PARTIAL)
 
     await expect(page.getByTestId('order-amend-status')).toHaveText(statusNameOf(PARTIAL))
-    const summary = page.getByTestId('order-amend-summary')
-    await expect(summary).toContainText(PARTIAL.銘柄コード)
+    await expect(page.getByTestId('order-amend-symbol')).toHaveText(PARTIAL.Ticker)
     await expect(page.getByTestId('order-amend-original')).toHaveText(originalLabel(PARTIAL))
-    await expect(summary).toContainText(`${formatQuantity(PARTIAL.出来数量)}株`)
+    await expect(page.getByTestId('order-amend-quantity')).toHaveValue('3,000')
     await expect(
       page.getByText(`出来数量 ${formatQuantity(PARTIAL.出来数量)}株を含む総数量`),
     ).toBeVisible()
@@ -176,14 +196,12 @@ test.describe('注文訂正', () => {
     await expectNotSubmitted(page)
   })
 
-  test('[OAM-08] 数量が整数でないと止める', async ({ page }) => {
+  test('[OAM-08] 数量は打つそばから数字以外を落とし、3 桁ごとにカンマを入れる', async ({ page }) => {
     await openAmend(page, PENDING)
 
-    await page.getByTestId('order-amend-quantity').fill('1.5')
-    await page.getByTestId('order-amend-submit').click()
+    await page.getByTestId('order-amend-quantity').fill('12a345')
 
-    await expect(fieldError(page, '注文数量を整数で入力してください。')).toBeVisible()
-    await expectNotSubmitted(page)
+    await expect(page.getByTestId('order-amend-quantity')).toHaveValue('12,345')
   })
 
   test('[OAM-09] 数量が 1 未満だと止める', async ({ page }) => {

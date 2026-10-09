@@ -29,6 +29,8 @@
  *   処理状況 … '000' 未発注 / '003' 注文中 / '010' 一部出来 / '011' 全部出来 / '034' 取消済 /
  *              '101' 発注失敗（Dream）/ '103' IB発注失敗
  *   発注範囲 … '02' / '03' / '04' / '06'（ExecutionScopeEnum。2026-10-02 に '01' / '05' が外れた）
+ *   預り売買区分 … '0' 特定 / '1' 一般 / '6' 成長投資枠（DepositCategoryEnum）
+ *   有効期限 … 既定は受注日と同じ（当日中）。#34 だけ 3 営業日後の 2026-10-01
  *
  * 約定代金_JPY は 約定代金 × 適用為替レート（150）を円未満で四捨五入した概算。
  * 並びはサーバの既定（注文 ID の降順）に合わせてある。
@@ -89,7 +91,9 @@ function order({
   scope = '02',
   vwap = 0,
   forced = 0,
+  deposit = '0',
   date = '2026-09-28',
+  expiry = date,
   time,
   status,
   displayStatus,
@@ -109,6 +113,7 @@ function order({
     銘柄名: name,
     売買区分: side,
     売買区分名: side === '1' ? '売' : '買',
+    預り売買区分: deposit,
     数量: quantity,
     指成区分: orderType,
     指値単価: limitPrice,
@@ -120,6 +125,8 @@ function order({
     注文ルート名: vwap === 1 ? 'VWAP' : 'IB',
     受注日: date,
     受注時刻: time,
+    // 送るときの形（OrderRequest.有効期限 の 'YYYYMMDD'）で返す想定。返る形は仕様に無い
+    有効期限: expiry.replaceAll('-', ''),
     処理状況: status,
     処理状況名: STATUS_NAMES[status],
     表示状況名: displayStatus,
@@ -323,6 +330,8 @@ export const orderInquiryRows = [
     orderType: 'MO',
     scope: '02',
     vwap: 1,
+    deposit: '1',
+    expiry: '2026-10-01',
     time: '08:55:00',
     status: '003',
     displayStatus: '注文中',

@@ -29,6 +29,21 @@ export const MARKET_SCOPE_OPTIONS = [
 ]
 
 /*
+ * 訂正画面の市場区分のボタン（BaseSegmentedControl の options）。並び・表示名は画面モック
+ * （order_amend.html）のとおり。フェーズ 1 で受け付けるのは 02 / 03 だけで、アフターを含む 04 / 06 は
+ * 「Ph.2予定」を添えて**見せるが押せない**（業務回答 2026-10-08。docs/api/requests.md #50 ②。
+ * 新規注文の注文区分と同じ扱い）。フェーズ 2 でアフターに対応したら disabled と note を外す。
+ */
+const PHASE2_NOTE = '（Ph.2予定）'
+
+export const AMEND_MARKET_SCOPE_OPTIONS = [
+  { value: '02', label: 'プレ＋レギュラー' },
+  { value: '03', label: 'レギュラー' },
+  { value: '04', label: 'プレ＋レギュラー＋アフター', note: PHASE2_NOTE, disabled: true },
+  { value: '06', label: 'アフター（時間内限り）', note: PHASE2_NOTE, disabled: true },
+]
+
+/*
  * 処理状況の名前。コードマスタの並び（000 から順に、失敗・訂正系が後ろ）のまま写してある。
  * object で書くと '000' のようなキーの並びは保たれる（整数に見えるキーではないため）。
  */

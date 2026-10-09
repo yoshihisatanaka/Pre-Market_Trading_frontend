@@ -12,3 +12,5 @@
 | BSC-04 | `tone` に `buy` / `sell` を持つ options | マウントする | 各ボタンの `data-tone` がその値になる | 実装済 |
 | BSC-05 | `disabled` を渡す | マウントする | すべてのボタンが `disabled` になる | 実装済 |
 | BSC-06 | `disabled` を渡す | ボタンを押す | `update:modelValue` は発火しない | 実装済 |
+| BSC-07 | 2 番目の option にだけ `disabled: true` | マウントしてそのボタンを押す | 2 番目だけが `disabled` になり、押しても `update:modelValue` は発火しない | 実装済 |
+| BSC-08 | 2 番目の option にだけ `note` | マウントする | 2 番目のボタンだけ、ラベルの後ろに note の文言が添え書き（`.segmented__note`）で出る | 実装済 |

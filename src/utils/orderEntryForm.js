@@ -64,7 +64,7 @@ const MESSAGES = {
   limitPricePositive: '指値価格は0より大きい数値を入力してください。',
   limitPriceScale: '指値には、「小数点第４位以内」で入力してください。',
   // 02（プレ＋レギュラー）は指値のみ（docs/api/requests.md #50 ④）。モックの原文に無いので画面の文言
-  marketNotAllowed: (scopeLabel) => `市場区分「${scopeLabel}」は指値のみです。指値で入力してください。`,
+  marketNotAllowed: (scopeLabel) => `注文区分「${scopeLabel}」は指値のみです。指値で入力してください。`,
   expiryRequired: '期間指定を選択してください。',
   growthOnBuy: '買付時に「成長投資枠」を選択することはできません。',
   vwapNotTarget: 'この銘柄は現在、VWAP対象外です。通常注文で入力してください。',
@@ -447,8 +447,9 @@ export function formatLimitPrice(value) {
  * 確認・完了の読み上げ（components/orders/OrderReadback.vue）に出す文字列を組む。
  * 並びと区切り（「／」）はモックの _order_readback.html のとおり。
  *
- * 市場／期限の期限は選択肢の表示名（「当日中（9/29）」）で出す。モックは MMDD の生値を出していたが、
+ * 注文区分／期間の期間は選択肢の表示名（「当日中（9/29）」）で出す。モックは MM/DD だけを出すが、
  * 入力画面で選んだ文言と同じもので読み上げたほうが突き合わせやすい。
+ * 預り売買区分は選んだときだけ出す（未選択なら ''。画面は行ごと出さない。モックと同じ）。
  *
  * @param {ReturnType<typeof createOrderForm>} form
  * @param {{ customer: object|null, symbol: object|null, expiryOptions: { value: string, label: string }[] }} context
@@ -475,7 +476,9 @@ export function buildOrderReadback(form, { customer, symbol, expiryOptions }) {
     marketExpiry: `${optionLabel(EXECUTION_SCOPE_OPTIONS, form.executionScope)} ／ ${expiry?.label ?? '—'}`,
     vwap: optionLabel(VWAP_OPTIONS, form.vwap),
     settlementCurrency: optionLabel(SETTLEMENT_CURRENCY_OPTIONS, form.settlementCurrency),
-    depositCategory: optionLabel(DEPOSIT_CATEGORY_OPTIONS, form.depositCategory),
+    depositCategory: form.depositCategory
+      ? optionLabel(DEPOSIT_CATEGORY_OPTIONS, form.depositCategory)
+      : '',
     cashDelivery: optionLabel(CASH_DELIVERY_OPTIONS, form.cashDelivery),
     orderDateTime: `${form.orderDate} ${form.orderTime}`,
     orderPerson: form.orderPerson || '—',

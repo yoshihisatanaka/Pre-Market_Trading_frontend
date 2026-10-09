@@ -12,6 +12,7 @@ import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useOrderEntryStore } from '@/stores/orderEntry'
+import { CORPORATE_TYPE } from '@/utils/apiEnums'
 import { OPERATOR_CODE } from '@/utils/operator'
 import {
   buildEstimateReadback,
@@ -185,6 +186,22 @@ const currentSymbolLookup = computed(() =>
 
 const customer = computed(() => currentCustomerLookup.value?.customer ?? null)
 const symbol = computed(() => currentSymbolLookup.value?.symbol ?? null)
+
+/*
+ * 法人の口座は預り売買区分を指定できない（モックは欄を出さず、指定があればサーバでも弾く）。
+ * 欄を隠すときに選んであった値も消す（見えない値を送らない。読み上げにも出ない）。
+ * 口座を引き当てるまでは個人として欄を出しておく（モックの「顧客が無ければ出す」と同じ）。
+ * sync にするのは、送信直前の照会（settleLookups）で法人と判った直後の検証に間に合わせるため。
+ */
+const isCorporate = computed(() => customer.value?.corporateType === CORPORATE_TYPE.CORPORATE)
+
+watch(
+  isCorporate,
+  (corporate) => {
+    if (corporate) form.value.depositCategory = ''
+  },
+  { flush: 'sync' },
+)
 
 /** 顧客詳細の子ルートとして描いている（顧客カードは親が出す） */
 const inCustomerDetail = computed(() => route.name === 'customer-order-entry')
@@ -487,6 +504,7 @@ operatorStore.ensureLoaded().then(() => {
           :expiry-options="expiryOptions"
           :customer-hint="customerHint"
           :symbol-hint="symbolHint"
+          :show-deposit-category="!isCorporate"
           :warned="serverWarnings.length > 0"
           :disabled="blocked"
           :submitting="preparing || validating"

@@ -32,7 +32,8 @@ export const ORDER_TYPE_OPTIONS = [
 ]
 
 /**
- * 市場区分 → 発注範囲（ExecutionScopeEnum）。enum の 4 値すべての表示名（確認画面の読み上げ用）。
+ * 注文区分 → 発注範囲（ExecutionScopeEnum）。enum の 4 値すべての表示名（確認画面の読み上げ用）。
+ * 新規注文の画面モックは 2026-09-30 版で「市場区分」を「注文区分」に改めた（注文照会などの一覧は「市場区分」のまま）。
  * 並びは画面モックのとおり（始まる時間帯の順）で、**コードの順とは違う**（04 が 03 より前に来る）。
  * 「＋」は全角（モックの表記）。入力欄に出すのは ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS。
  */
@@ -44,20 +45,29 @@ export const EXECUTION_SCOPE_OPTIONS = [
   { value: '06', label: 'アフター' },
 ]
 
+const PHASE1_GROUP = 'Ph.1（受付対象）'
+const PHASE2_GROUP = 'Ph.2（将来対応）'
+
 /**
- * フェーズ 1 で受け付ける市場区分。アフターを含む 04 / 06 は PH1 では受け付けない（業務回答 2026-10-08。
- * サーバの事前検証も弾く）。どれを出すかはフロント判断に任されたので、**選べない値は出さない**
- * （docs/api/requests.md #50 ②）。フェーズ 2 でアフターに対応したらここに足す。
+ * 新規注文の入力欄の注文区分。並び・見出し・表示名は画面モック（order_input.html）のとおり。
+ * フェーズ 1 で受け付けるのは 02 / 03 だけで、アフターを含む 04 / 06 は「Ph.2（将来対応）」の見出しの下に
+ * **見せるが選べない**（業務回答 2026-10-08。サーバの事前検証も弾く。docs/api/requests.md #50 ②）。
+ * フェーズ 2 でアフターに対応したら、disabled を外して見出しを移す。
  */
-const PHASE1_EXECUTION_SCOPES = ['02', '03']
-
-/** 新規注文の入力欄に出す市場区分（並びは EXECUTION_SCOPE_OPTIONS のまま） */
-export const ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS = EXECUTION_SCOPE_OPTIONS.filter((option) =>
-  PHASE1_EXECUTION_SCOPES.includes(option.value),
-)
+export const ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS = [
+  { value: '02', label: 'プレ＋レギュラー', group: PHASE1_GROUP },
+  { value: '03', label: 'レギュラー', group: PHASE1_GROUP },
+  {
+    value: '04',
+    label: 'プレ＋レギュラー＋アフター（Ph.2予定）',
+    group: PHASE2_GROUP,
+    disabled: true,
+  },
+  { value: '06', label: 'アフター（時間内限り）（Ph.2予定）', group: PHASE2_GROUP, disabled: true },
+]
 
 /**
- * 指値しか受け付けない市場区分。02（プレ＋レギュラー）の成行はサーバの事前検証でも弾かれるので、
+ * 指値しか受け付けない注文区分。02（プレ＋レギュラー）の成行はサーバの事前検証でも弾かれるので、
  * 画面で先に止める（docs/api/requests.md #50 ④。業務合意は照会中）
  */
 export const LIMIT_ONLY_EXECUTION_SCOPES = ['02']
@@ -74,6 +84,9 @@ export const SETTLEMENT_CURRENCY_OPTIONS = [
  * 「一般」は csv-spec の「1: 非特定」。**0 / 1 の向きは csv-spec に従う**（0 特定 / 1 非特定）。
  * 残高マスタの 特定預り区分（SPECIFIC_DEPOSIT）は逆向き（0 非特定 / 1 特定）で、同じ意味の
  * 区分なのか別物なのかをバックエンドに問い合わせている（docs/api/requests.md #24）。
+ *
+ * 選ばなくてもよい（未選択なら送らず、サーバが口座の特定口座区分から決める。#24 ④の回答）。
+ * 新規入力は未選択から始め、法人の口座では欄ごと出さない（画面モックの 2026-10-02 版）。
  */
 export const DEPOSIT_CATEGORY = Object.freeze({ SPECIFIC: '0', GENERAL: '1', GROWTH: '6' })
 
@@ -145,12 +158,12 @@ export const SECURITIES_DELIVERY_DEFAULT = '100'
 /** 受注者の最大文字数（OrderRequest.受注者 は必須・1〜4 文字。docs/api/requests.md #24 ③） */
 export const ORDER_PERSON_MAX_LENGTH = 4
 
-/** 入力画面の既定値（モックの初期表示） */
+/** 入力画面の既定値（モックの初期表示）。空文字は未選択 */
 export const ORDER_FORM_DEFAULTS = Object.freeze({
   executionScope: '03',
   orderType: ORDER_TYPE.MARKET,
   settlementCurrency: '0',
-  depositCategory: DEPOSIT_CATEGORY.SPECIFIC,
+  depositCategory: '',
   solicitation: SOLICITATION.SOLICITED,
   orderMethod: '3',
   fundNature: '1',

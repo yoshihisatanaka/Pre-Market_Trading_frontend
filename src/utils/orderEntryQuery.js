@@ -86,7 +86,7 @@ function isPositiveInteger(value) {
  * 預りの 1 明細から「買い」「売り」の引き継ぎを組み立てる。
  *
  * 成長投資枠の明細の「買い」は預り区分を引き継がない（買付に成長投資枠は選べない。
- * utils/orderEntryForm.js の growthOnBuy）。特定で始め、変えるかは入力する人が決める。
+ * utils/orderEntryForm.js の growthOnBuy）。未選択で始め、選ぶかは入力する人が決める。
  * 「売り」だけは売却可能株数を数量として引き継ぐ（「買い」は数量を空のまま）。
  *
  * @param {{ branchCode: string, accountNumber: string }} customer

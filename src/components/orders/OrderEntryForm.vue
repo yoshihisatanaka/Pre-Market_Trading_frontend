@@ -63,6 +63,11 @@ defineProps({
     type: Object,
     default: () => ({ text: '', tone: '' }),
   },
+  /** 預り売買区分の欄を出すか（法人の口座では出さない。モックと同じ） */
+  showDepositCategory: {
+    type: Boolean,
+    default: true,
+  },
   /** フロコン警告が出ているか（強制区分の横に「確認の上チェック」を出す） */
   warned: {
     type: Boolean,
@@ -224,7 +229,8 @@ function selectOrderType(value) {
           />
         </FormField>
 
-        <FormField v-slot="{ field }" label="市場区分" layout="inline" required>
+        <!-- PH1 で受け付けない区分は「Ph.2（将来対応）」の見出しの下に選べない形で並ぶ -->
+        <FormField v-slot="{ field }" label="注文区分" layout="inline" required>
           <BaseSelect
             v-bind="field"
             v-model="form.executionScope"
@@ -255,7 +261,7 @@ function selectOrderType(value) {
           <span class="order-entry-form__unit">株</span>
         </FormField>
 
-        <!-- 成行を選べない市場区分（02）の不備も価格の欄に出す -->
+        <!-- 成行を選べない注文区分（02）の不備も価格の欄に出す -->
         <FormField
           label="価格"
           layout="inline"
@@ -286,6 +292,33 @@ function selectOrderType(value) {
           </template>
         </FormField>
 
+        <FormField label="決済通貨区分" layout="inline" required>
+          <BaseSegmentedControl
+            v-model="form.settlementCurrency"
+            :options="SETTLEMENT_CURRENCY_OPTIONS"
+            class="order-entry-form__toggle"
+            aria-label="決済通貨区分"
+            data-testid="order-entry-settlement-currency"
+          />
+        </FormField>
+
+        <!-- 任意。未選択から始まり、選ばなければ口座の特定口座区分で決まる -->
+        <FormField
+          v-if="showDepositCategory"
+          label="預り売買区分"
+          layout="inline"
+          :error="errors.depositCategory"
+        >
+          <BaseSegmentedControl
+            v-model="form.depositCategory"
+            :options="DEPOSIT_CATEGORY_OPTIONS"
+            class="order-entry-form__toggle"
+            aria-label="預り売買区分"
+            data-testid="order-entry-deposit-category"
+          />
+        </FormField>
+
+        <!-- 並びはモックのとおり左列の末尾（2026-09-30 版で預り売買区分の下へ移った） -->
         <FormField
           v-slot="{ field }"
           label="期間指定"
@@ -300,26 +333,6 @@ function selectOrderType(value) {
             variant="underline"
             class="order-entry-form__expiry"
             data-testid="order-entry-expiry"
-          />
-        </FormField>
-
-        <FormField label="決済通貨区分" layout="inline" required>
-          <BaseSegmentedControl
-            v-model="form.settlementCurrency"
-            :options="SETTLEMENT_CURRENCY_OPTIONS"
-            class="order-entry-form__toggle"
-            aria-label="決済通貨区分"
-            data-testid="order-entry-settlement-currency"
-          />
-        </FormField>
-
-        <FormField label="預り売買区分" layout="inline" :error="errors.depositCategory">
-          <BaseSegmentedControl
-            v-model="form.depositCategory"
-            :options="DEPOSIT_CATEGORY_OPTIONS"
-            class="order-entry-form__toggle"
-            aria-label="預り売買区分"
-            data-testid="order-entry-deposit-category"
           />
         </FormField>
       </div>
@@ -533,7 +546,7 @@ function selectOrderType(value) {
 }
 
 .order-entry-form__expiry {
-  width: 210px;
+  width: 220px;
 }
 
 .order-entry-form__unit {

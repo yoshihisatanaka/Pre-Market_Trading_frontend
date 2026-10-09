@@ -1,10 +1,15 @@
 <script setup>
 /**
- * 選択入力。options は `{ value, label }` の配列で渡す。
+ * 選択入力。options は `{ value, label, disabled?, group? }` の配列で渡す。
  * placeholder を渡すと、空値の選択肢が先頭に入る（モックの「-- 全部店 --」相当）。
  * variant / invalid の意味は BaseInput と同じ。
+ *
+ * disabled を付けた選択肢は見えるが選べない。group を付けた選択肢は、group が同じで隣り合うものを
+ * 1 つの <optgroup>（見出しが group の文言）にまとめる（新規注文の注文区分の「Ph.1（受付対象）」など）。
  */
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   options: {
     type: Array,
     required: true,
@@ -26,6 +31,16 @@ defineProps({
 
 const model = defineModel({ type: [String, Number], default: '' })
 
+/** 隣り合う同じ group の選択肢を 1 つの塊にまとめる（group の無い選択肢は label の無い塊） */
+const sections = computed(() =>
+  props.options.reduce((result, option) => {
+    const group = option.group ?? ''
+    const last = result.at(-1)
+    if (last && last.label === group) last.options.push(option)
+    else result.push({ label: group, options: [option] })
+    return result
+  }, []),
+)
 </script>
 
 <template>
@@ -36,9 +51,28 @@ const model = defineModel({ type: [String, Number], default: '' })
     :data-variant="variant"
   >
     <option v-if="placeholder" value="">{{ placeholder }}</option>
-    <option v-for="option in options" :key="option.value" :value="option.value">
-      {{ option.label }}
-    </option>
+    <template v-for="section in sections" :key="`${section.label}:${section.options[0].value}`">
+      <optgroup v-if="section.label" :label="section.label">
+        <option
+          v-for="option in section.options"
+          :key="option.value"
+          :value="option.value"
+          :disabled="option.disabled"
+        >
+          {{ option.label }}
+        </option>
+      </optgroup>
+      <template v-else>
+        <option
+          v-for="option in section.options"
+          :key="option.value"
+          :value="option.value"
+          :disabled="option.disabled"
+        >
+          {{ option.label }}
+        </option>
+      </template>
+    </template>
   </select>
 </template>
 

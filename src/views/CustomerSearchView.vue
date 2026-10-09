@@ -45,6 +45,8 @@ const columns = [
   { key: 'handler', label: '扱者' },
   { key: 'accountNumber', label: '口座番号', numeric: true },
   { key: 'customerName', label: '顧客名' },
+  // 区分名はサーバが付けて返す（API の 特定口座区分名）。モックの「源徴あり」「一般」とは言い回しが違う
+  { key: 'specificAccount', label: '特定口座' },
   { key: 'age', label: '年齢' },
   { key: 'complianceRank', label: 'コンプラランク' },
   { key: 'investmentPolicy', label: '投資方針' },
@@ -183,6 +185,8 @@ function openDetail(row) {
             </span>
           </div>
         </template>
+
+        <template #cell-specificAccount="{ row }">{{ row.specificAccountTypeName || '—' }}</template>
 
         <template #cell-age="{ row }">{{ ageLabel(row) }}</template>
 

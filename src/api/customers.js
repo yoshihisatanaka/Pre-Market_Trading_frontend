@@ -93,6 +93,7 @@ const CUSTOMER_FIELDS = [
  *   investmentPolicyName: string,
  *   complianceRankName: string,
  *   accountTypeName: string,
+ *   specificAccountTypeName: string,
  *   accidentAccount: boolean,
  *   corporateTypeName: string,
  *   cashJpy: number|null,
@@ -334,6 +335,8 @@ function toCustomer(raw) {
     investmentPolicyName: raw?.投資方針名 ?? '',
     complianceRankName: raw?.コンプラランク名 ?? '',
     accountTypeName: raw?.口座区分名 ?? '',
+    // 顧客検索の特定口座列と顧客カードに出す（源泉あり / 源泉なし / 未登録 / 非特定）
+    specificAccountTypeName: raw?.特定口座区分名 ?? '',
     // 事故処理口座区分は文字列の '0' / '1'（取引停止区分と型が違う）。AccidentAccountTypeEnum
     accidentAccount: raw?.事故処理口座区分 === ACCIDENT_ACCOUNT_TYPE.ACCIDENT,
     corporateTypeName: raw?.法人区分名 ?? '',

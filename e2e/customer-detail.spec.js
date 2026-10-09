@@ -282,6 +282,9 @@ test.describe('顧客詳細 顧客カードとタブ', () => {
     await expect(page.getByTestId('customer-info-kana')).toHaveText(YAMADA.顧客名カナ)
     await expect(page.getByTestId('customer-info-age')).toHaveText(`${YAMADA.年齢}歳`)
     await expect(page.getByTestId('customer-info-elderly')).toHaveCount(0)
+    await expect(page.getByTestId('customer-info-specific-account')).toHaveText(
+      YAMADA.特定口座区分名,
+    )
     await expect(page.getByTestId('customer-info-restriction')).toHaveText('制限なし')
     await expect(page.getByTestId('customer-info-policy')).toHaveText(YAMADA.投資方針名)
     await expect(page.getByTestId('customer-info-compliance')).toContainText(YAMADA.コンプラランク)

@@ -1,7 +1,8 @@
 <script setup>
 /**
  * 顧客詳細の顧客カード（画面モック customer_summary.html / customer_order_inquiry.html の
- * customer-info-bar）。上段に部店・口座番号・顧客名と属性 4 項目、下段に資産状況 5 項目を出す。
+ * customer-info-bar）。上段に部店・口座番号・顧客名と属性 5 項目、下段に資産状況 5 項目を出す。
+ * 特定口座の区分名はサーバが付けて返す（API の 特定口座区分名）。
  *
  * 注意の表示はモックと同じ 3 つ: 85 歳以上（高齢者）/ 全取引停止 / コンプラランク A・B・Y・Z（要注意）。
  * 判定の規則は utils/customerCautions.js（新規注文の顧客バーと同じ）。
@@ -11,8 +12,9 @@
  *
  * 出す data-testid:
  *   customer-info-bar / customer-info-branch / customer-info-account / customer-info-name /
- *   customer-info-kana / customer-info-age / customer-info-elderly / customer-info-restriction /
- *   customer-info-policy / customer-info-compliance / customer-info-compliance-caution /
+ *   customer-info-kana / customer-info-age / customer-info-elderly / customer-info-specific-account /
+ *   customer-info-restriction / customer-info-policy / customer-info-compliance /
+ *   customer-info-compliance-caution /
  *   customer-info-cash-jpy / customer-info-cash-usd / customer-info-growth-quota /
  *   customer-info-valuation / customer-info-profit-loss
  */
@@ -91,6 +93,12 @@ const profitLossClass = computed(() => {
             >
               高齢者
             </span>
+          </dd>
+        </div>
+        <div class="customer-info-bar__item">
+          <dt>特定口座</dt>
+          <dd data-testid="customer-info-specific-account">
+            {{ customer.specificAccountTypeName || '—' }}
           </dd>
         </div>
         <div class="customer-info-bar__item">
@@ -229,7 +237,7 @@ const profitLossClass = computed(() => {
 
 .customer-info-bar__metrics {
   flex: 1;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: center;
 }
 

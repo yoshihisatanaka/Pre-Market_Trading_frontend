@@ -29,3 +29,4 @@ props を受け取って描画するだけの部品で、自分では状態を�
 | ALY-05 | `/` でマウント済 / `/customers/search` のチャンクが未解決 | `/customers/search` へ遷移する | 読み込み中のバー（`route-loading`）が出て「画面を読み込んでいます」が読め、本文（`main`）が `aria-busy="true"` になる | 実装済 |
 | ALY-06 | ALY-05 の状態 | チャンクを解決する | バーが消え、本文の `aria-busy` が外れる | 実装済 |
 | ALY-07 | `/` でマウント済 / `/customers/search` のチャンクが未解決 | `/customers/search` へ遷移する | サイドメニューの「顧客検索」が読み込み中の見た目（`is-pending`）になる | 実装済 |
+| ALY-08 | バナーストアにお知らせ（`NOTICE`）が入っている | マウントする | 運用バナー（`operation-banner`）がヘッダ（`header`）の後・本文（`main`）の前に描かれ、どちらの中にも入らない | 実装済 |

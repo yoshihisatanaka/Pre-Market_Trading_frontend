@@ -9,9 +9,12 @@
  * 画面遷移の確定待ち（遅延 import のチャンク取得。router/index.js の trackRouteLoading）は
  * ヘッダ上端の細いバーで示す。画面はまだ mount されていないので、各画面の 4 状態の
  * ローディングはこの間は出せない。押した項目の読み込み中表示は pending-path で AppSidebar に配る。
+ *
+ * お知らせ・発注停止の帯（AppOperationBanner）はヘッダと本文の間に置き、本文と一緒にスクロールさせない。
  */
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
+import AppOperationBanner from './AppOperationBanner.vue'
 import { useRouteLoading } from '@/composables/useRouteLoading'
 import { useSidebarToggle } from '@/composables/useSidebarToggle'
 
@@ -30,6 +33,7 @@ const { isLoading, pendingPath } = useRouteLoading()
       </div>
 
       <AppHeader :sidebar-open="isOpen" @toggle-sidebar="toggle" />
+      <AppOperationBanner />
       <main class="app-layout__content" :aria-busy="isLoading ? 'true' : undefined">
         <slot />
       </main>

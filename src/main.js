@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 
 import App from './App.vue'
 import router from './router'
+import { useBannerStore } from './stores/banner'
 import { useCodesStore } from './stores/codes'
 import { useCurrentOperatorStore } from './stores/currentOperator'
 import { useMarketStatusStore } from './stores/marketStatus'
@@ -76,6 +77,13 @@ enableMocking()
      * オーバーレイの判定には足さない。失敗しても権限なしに倒れるだけで、他の画面は使える。
      */
     useCurrentOperatorStore(pinia).ensureLoaded()
+
+    /*
+     * ヘッダ直下の運用バナー（お知らせ・発注停止）も起動時に読み込む。
+     * 以後の取り直しは composables/useOperationBanner が 60 秒ごとに行う。
+     * オーバーレイの判定には足さない。取れなければ帯が出ないだけで、業務は続けられる。
+     */
+    useBannerStore(pinia).load()
 
     app.mount('#app')
   })

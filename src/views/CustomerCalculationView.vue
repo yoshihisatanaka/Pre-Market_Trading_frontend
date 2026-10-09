@@ -20,11 +20,7 @@ import {
   hasCalculationFormErrors,
   validateCalculationForm,
 } from '@/utils/calculationForm'
-import {
-  CALCULATION_DEPOSIT_OPTIONS,
-  FEE_PATTERN_OPTIONS,
-  LOCAL_FEE_CATEGORY_OPTIONS,
-} from '@/utils/calculationOptions'
+import { CALCULATION_DEPOSIT_OPTIONS, FEE_PATTERN_OPTIONS } from '@/utils/calculationOptions'
 import { parseCalculationQuery } from '@/utils/calculationQuery'
 import { SIDE_OPTIONS } from '@/utils/orderEntryOptions'
 
@@ -46,8 +42,8 @@ import { SIDE_OPTIONS } from '@/utils/orderEntryOptions'
  * （utils/calculationQuery.js）。タブと外株預りの見出しの「仮計算」から入ったときは買いで始まる（モックと同じ）。
  *
  * モックとの差:
- *   - 国内約定日・現地手数料区分は CalculationRequest に対応する項目が無いので送らない（docs/api/requests.md #47 で依頼中）。
- *     国内約定日の形式だけは画面で見る
+ *   - 国内約定日は送らない（docs/api/requests.md #47。業務確認の回答待ち）。形式だけは画面で見る
+ *   - 現地手数料区分（通常 / ネゴレート / NET）は置かない（2026-10-09 に削除。モックリポジトリも 18ed9d1 で削除済み）
  *   - 結果の行はモックの並びに応答の値を当てる。応答に無い円換算の内訳（約定金額・現地費用・スプレッド）の 3 行は
  *     「円換算精算金額」と「適用為替」に、NISA の上乗せ額の行は「NISA使用予定額」に置き換えた
  *   - 為替・単価・数量・手数料条件に既定値を入れない（モックは顧客属性のモック設定と時価で埋めていた）。
@@ -260,20 +256,6 @@ store.reset()
               inputmode="decimal"
               autocomplete="off"
               data-testid="customer-calc-local-fee-2"
-            />
-          </FormField>
-
-          <FormField
-            v-slot="{ field }"
-            label="現地手数料区分"
-            hint="ネゴレート・NETは自動計算なし"
-            class="customer-calc__wide"
-          >
-            <BaseSelect
-              v-bind="field"
-              v-model="form.localFeeCategory"
-              :options="LOCAL_FEE_CATEGORY_OPTIONS"
-              data-testid="customer-calc-local-fee-category"
             />
           </FormField>
 

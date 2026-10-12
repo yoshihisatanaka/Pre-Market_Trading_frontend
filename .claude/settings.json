@@ -244,7 +244,19 @@
       "Read(//c/Users/0036/worktrees/Pre-Market_Trading_frontend-test-real-api-confirm-1008/e2e/**)",
       "Bash(bash scripts/worktree.sh add docs/progress-1008-1430)",
       "Bash(cp docs/progress.md /c/Users/0036/worktrees/Pre-Market_Trading_frontend-docs-progress-1008-1430/docs/progress.md)",
-      "Bash(bash scripts/worktree.sh remove docs/progress-1008-1430 --delete-branch)"
+      "Bash(bash scripts/worktree.sh remove docs/progress-1008-1430 --delete-branch)",
+      "Bash(ls -t ~/.claude/projects/ | head; ls -t ~/.claude/projects/*/ 2>/dev/null | grep -i 26e001 | head)",
+      "Read(//c/Users/0036/.claude/projects/**)",
+      "Read(//c/Users/0036/worktrees/Pre-Market_Trading_frontend-docs-backend-answers-1007/docs/api/**)",
+      "Read(//c/Users/0036/worktrees/Pre-Market_Trading_frontend-docs-backend-answers-1007/**)",
+      "Read(//c/Users/0036/worktrees/Pre-Market_Trading_frontend-docs-backend-answers-1007/src/mocks/handlers/**)",
+      "Read(//c/Users/0036/worktrees/Pre-Market_Trading_frontend-docs-backend-answers-1007/src/api/**)",
+      "Bash(W=/c/Users/0036/worktrees/Pre-Market_Trading_frontend-test-customers-reactivate-verify; sed -n '59p;70p;275p' $W/docs/api/requests.md | cut -c1-900; sed -n '108,140p' $W/docs/e2e/customers-real-api.md; sed -n '625,660p' $W/e2e/customers.real-api.spec.js)",
+      "Read(//c/Users/0036/worktrees/Pre-Market_Trading_frontend-test-customers-reactivate-verify/docs/api/**)",
+      "Bash(W=/c/Users/0036/worktrees/Pre-Market_Trading_frontend-test-customers-reactivate-verify; sed -i 's/#55 の `CUR-12` は `test.fixme` のままで未実/#55 は 2026-10-08 に `fixme` を外し `CUR-12\\\\/13` が実 API で通った。それ以前は `CUR-12` は `test.fixme` のままで未実/' $W/docs/api/requests.md; git -C $W diff --stat; docker compose -f $W/docker-compose.yml run --rm frontend sh -c \"npx eslint e2e/customers.real-api.spec.js && npm run check:scenarios\" 2>&1 | grep -v \"npm notice\" | tail -8)",
+      "Read(//c/Users/0036/worktrees/Pre-Market_Trading_frontend-test-customers-reactivate-verify/e2e/**)",
+      "Read(//c/Users/0036/worktrees/Pre-Market_Trading_frontend-test-customers-reactivate-verify/docs/e2e/**)",
+      "Read(//c/Users/0036/worktrees/Pre-Market_Trading_frontend-test-customers-reactivate-verify/docs/**)"
     ],
     "deny": [
       "Read(**/.env)",
@@ -310,7 +322,9 @@
       "C:\\Users\\0036\\worktrees\\Pre-Market_Trading_frontend-test-real-api-confirm-1007\\docs\\e2e",
       "C:\\Users\\0036\\AppData\\Local\\Temp\\claude\\c--Users-0036-dev-Pre-Market-Trading-frontend\\33eacda9-9873-4cde-9362-19bb319194cf\\scratchpad",
       "C:\\Users\\0036\\worktrees\\Pre-Market_Trading_frontend-test-real-api-confirm-1008\\e2e\\helpers",
-      "C:\\Users\\0036\\worktrees\\Pre-Market_Trading_frontend-test-real-api-confirm-1008\\e2e"
+      "C:\\Users\\0036\\worktrees\\Pre-Market_Trading_frontend-test-real-api-confirm-1008\\e2e",
+      "C:\\Users\\0036\\worktrees\\Pre-Market_Trading_frontend-docs-backend-answers-1007\\docs\\api",
+      "C:\\Users\\0036\\worktrees\\Pre-Market_Trading_frontend-test-customers-reactivate-verify\\docs\\api"
     ]
   },
   "hooks": {

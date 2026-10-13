@@ -1,12 +1,15 @@
 import { http, HttpResponse } from 'msw'
 import {
   BULK_ORDER_FIRST_ID,
+  ORDER_CSV_CASH_SHORT_QUANTITY,
+  ORDER_CSV_REMOVED_COLUMN_NAMES,
   ORDER_CSV_TEMPLATE_FILENAME,
+  orderCsvCashShortForcedWarning,
+  orderCsvCashShortMessage,
   orderCsvColumnNames,
   orderCsvColumns,
   orderCsvCustomerNameOf,
   orderCsvDetailsOf,
-  orderCsvRequiredHeaderNames,
   orderCsvSpecResponse,
   orderCsvTemplateText,
 } from '../fixtures/orderCsv'
@@ -23,9 +26,10 @@ import { detailError, requestValidationError } from './_shared'
  * 要る分だけで、本物の検証（余力・期限・銘柄の取引規制など）はバックエンドの責務。
  * CSV は素朴に `,` で割るだけにしてある（クォート付きの値は扱わない）。
  *
- * 「強制区分」の列は実 API に無い契約提案（docs/api/requests.md #58）。ヘッダーに無くても通し、
- * 値は VWAP区分 と同じく 0 / 1 の数値に寄せて rows[].data に返す。強制で警告に格下げする検証は
- * バックエンドの責務なので、モックは値を写すだけ。
+ * 「強制区分」の列は 2026-10-13 の方針変更で廃止され、ヘッダーにあると 400（docs/api/requests.md #58）。
+ * 強制はプレビュー画面で行ごとに指定し、一括受付の各注文の `強制区分` で送る。強制で救えるエラーは
+ * 「買いで数量が ORDER_CSV_CASH_SHORT_QUANTITY 以上なら買付余力不足」というモックだけの仮の規則で作り、
+ * エラー行には実 API と同じく forceable / errors_if_forced / forced_overrides を付ける。
  */
 export const orderCsvHandlers = [
   http.get('*/api/orders/csv-spec', () => HttpResponse.json(orderCsvSpecResponse)),
@@ -43,7 +47,7 @@ export const orderCsvHandlers = [
 
   /*
    *   422 … file が無い（FastAPI の UploadFile 必須の検証）
-   *   400 … ヘッダーの列が足りない（空ファイルも全列不足になる）
+   *   400 … ヘッダーの列が足りない（空ファイルも全列不足になる）/ 廃止された 強制区分 の列がある
    *   200 … 行ごとの不備は rows[].errors に積む。データ行が 0 件でも 200（all_valid は false）
    */
   http.post('*/api/orders/validate-csv', async ({ request }) => {
@@ -59,11 +63,19 @@ export const orderCsvHandlers = [
     const [headerLine = '', ...lines] = text.split(/\r?\n/)
 
     const header = headerLine.split(',').map((cell) => cell.trim())
-    const missing = orderCsvRequiredHeaderNames.filter((name) => !header.includes(name))
+    const missing = orderCsvColumnNames.filter((name) => !header.includes(name))
     if (missing.length > 0) {
       // 文言は実 API のまま（不足項目は Python の list の表記）
-      const names = missing.map((name) => `'${name}'`).join(', ')
-      return detailError(400, `CSVヘッダーに不足があります: 不足項目=[${names}]`)
+      return detailError(400, `CSVヘッダーに不足があります: 不足項目=${toPythonList(missing)}`)
+    }
+    const removed = ORDER_CSV_REMOVED_COLUMN_NAMES.filter((name) => header.includes(name))
+    if (removed.length > 0) {
+      return detailError(
+        400,
+        `CSVに廃止された列が含まれています: ${toPythonList(removed)}。` +
+          '強制区分は CSV では指定できません。検証結果のエラーを確認のうえ、' +
+          '画面で行ごとに強制区分を指定して発注してください',
+      )
     }
 
     // 行番号はヘッダーを 1 行目として数える。空行は数えるが読まない
@@ -84,8 +96,9 @@ export const orderCsvHandlers = [
 
   /*
    *   422 … 作成者が無い（OrderRequest の必須。事前検証の行には入っていないので、フロントが足し忘れると出る）
-   *   400 … orders が空
-   *   200 … 送った並びで連番の注文 ID を返す（状態は持たない）
+   *   400 … orders が空 / 買付余力不足（モックの仮の規則）の注文を 強制区分=0 で送った
+   *   200 … 送った並びで連番の注文 ID を返す（状態は持たない）。強制で通した注文の格下げは
+   *         warnings に「N行目: …」（N は送った orders の 1 始まりの位置）で返す
    */
   http.post('*/api/orders/bulk-create', async ({ request }) => {
     const body = await request.json().catch(() => null)
@@ -101,12 +114,28 @@ export const orderCsvHandlers = [
       )
     }
 
+    // 実 API は全件を検証し直し、1 件でも残れば全件ロールバック（文言は実 API のまま）
+    const rejected = orders.flatMap((order, index) =>
+      isCashShort(order) && order.強制区分 !== 1
+        ? [`${index + 1}行目: ${orderCsvCashShortMessage(order.数量)}`]
+        : [],
+    )
+    if (rejected.length > 0) {
+      return detailError(
+        400,
+        `注文検証エラーが存在するため一括登録を中止しました: ${rejected.join(' / ')}`,
+      )
+    }
+
     return HttpResponse.json({
       success: true,
       total_orders: orders.length,
       order_ids: orders.map((_, index) => BULK_ORDER_FIRST_ID + index),
       message: `${orders.length}件の注文を一括受付しました`,
       errors: [],
+      warnings: orders.flatMap((order, index) =>
+        isCashShort(order) ? [`${index + 1}行目: ${orderCsvCashShortForcedWarning(order.数量)}`] : [],
+      ),
     })
   }),
 ]
@@ -130,6 +159,16 @@ function toInteger(value) {
   return /^-?\d+$/.test(value) ? Number(value) : null
 }
 
+/** 列名の並びを Python の list の表記にする（実 API の 400 の文言に合わせる） */
+function toPythonList(names) {
+  return `[${names.map((name) => `'${name}'`).join(', ')}]`
+}
+
+/** 買付余力が不足する注文か（モックだけの仮の規則。data / OrderRequest のどちらの形でも引ける） */
+function isCashShort(order) {
+  return order?.売買区分 === '3' && order?.数量 >= ORDER_CSV_CASH_SHORT_QUANTITY
+}
+
 /**
  * 1 行を検証する（CsvOrderRowResult）。
  *
@@ -150,7 +189,6 @@ function validateRow(cells, rowNumber) {
     指値単価: Number.isFinite(limitPrice) ? limitPrice : null,
     金銭受渡方法: ['0', '00'].includes(cells.金銭受渡方法) ? '000' : cells.金銭受渡方法,
     VWAP区分: cells.VWAP区分 === '1' ? 1 : 0,
-    強制区分: cells.強制区分 === '1' ? 1 : 0,
   }
 
   const conversionErrors = [
@@ -165,12 +203,17 @@ function validateRow(cells, rowNumber) {
       data,
       errors: conversionErrors,
       warnings: [],
+      // 検証まで進まないので、強制での検証もされない
+      forceable: null,
+      errors_if_forced: [],
+      forced_overrides: [],
       details: null,
       customer_name: orderCsvCustomerNameOf(data),
     }
   }
 
-  const errors = columnErrors(cells, data)
+  // 強制でも残るエラー（形式・区分・銘柄の不在）
+  const errorsIfForced = columnErrors(cells, data)
   const warnings =
     data.数量 >= LARGE_QUANTITY
       ? ['数量が10,000株以上です。スライス発注の対象になる場合があります']
@@ -178,15 +221,26 @@ function validateRow(cells, rowNumber) {
   const details = orderCsvDetailsOf(data)
   if (data.銘柄コード && details.stock_name === null) {
     // 文言は実 API のまま（2026-09-25 に残高マスタの事前検証で実測したもの）
-    errors.push(`指定された銘柄コードが存在しません: ${data.銘柄コード}`)
+    errorsIfForced.push(`指定された銘柄コードが存在しません: ${data.銘柄コード}`)
   }
+  // 強制なら警告に格下げされるエラー
+  const cashShort = isCashShort(data)
+  const errors = [...(cashShort ? [orderCsvCashShortMessage(data.数量)] : []), ...errorsIfForced]
+  const valid = errors.length === 0
 
   return {
     row_number: rowNumber,
-    valid: errors.length === 0,
+    valid,
     data,
     errors,
     warnings,
+    // 実 API はエラー行だけを強制区分=1 で検証し直す。正常行は null と空
+    forceable: valid ? null : errorsIfForced.length === 0,
+    errors_if_forced: valid ? [] : errorsIfForced,
+    forced_overrides:
+      !valid && cashShort
+        ? [{ チェック: '買付余力', 内容: orderCsvCashShortForcedWarning(data.数量) }]
+        : [],
     details,
     customer_name: orderCsvCustomerNameOf(data),
   }

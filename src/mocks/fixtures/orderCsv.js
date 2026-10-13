@@ -10,8 +10,9 @@ import { symbols } from './symbols'
  * allowed_values は同じくバックエンドのコードマスタ（app/config/codes.json）から引いたもの。
  * 実 API は区分の列にだけ allowed_values を付け、それ以外は null を返す。
  *
- * 23 列目の「強制区分」は実 API に無い**契約提案**（docs/api/requests.md #58）。画面モックの CSV の
- * 任意列（1 で強制）に合わせて先に置いた。ヘッダーに無くても受け付ける（既存の 22 列の CSV を通すため）。
+ * 「強制区分」の列は持たない。#58 で一度 23 列目（任意）に入ったが、2026-10-13 の方針変更で廃止され、
+ * ヘッダーに含まれる CSV は 400 になった。強制は事前検証の結果を見てプレビュー画面で行ごとに指定し、
+ * 一括受付の各注文の `強制区分` で送る（docs/api/requests.md #58）。
  *
  * 画面モック（docs/mock/orders-csv-upload/）の表は英語名の 17 列だが、実 API の列に合わせた
  * （2026-09-29 にユーザ確認済み）。
@@ -298,24 +299,7 @@ export const orderCsvColumns = [
       ['06', 'アフター'],
     ]),
   },
-  {
-    index: 23,
-    name: '強制区分',
-    required: false,
-    type: 'integer',
-    description:
-      '強制区分コード（0: 通常, 1: 強制）。フロコン警告を確認して強制する場合は1。空欄は0',
-    example: 0,
-    condition: null,
-    allowed_values: allowed([
-      ['0', '通常'],
-      ['1', '強制'],
-    ]),
-  },
 ]
-
-/** ヘッダーに無くてもよい列（契約提案の列。既存の 22 列の CSV もそのまま通す） */
-const OPTIONAL_HEADER_NAMES = ['強制区分']
 
 /** `GET /orders/csv-spec` の応答そのもの */
 export const orderCsvSpecResponse = {
@@ -328,10 +312,8 @@ export const orderCsvColumnNames = [...orderCsvColumns]
   .sort((a, b) => a.index - b.index)
   .map((column) => column.name)
 
-/** ヘッダー行に無いと事前検証が 400 になる列名（index の順） */
-export const orderCsvRequiredHeaderNames = orderCsvColumnNames.filter(
-  (name) => !OPTIONAL_HEADER_NAMES.includes(name),
-)
+/** ヘッダーに含まれていると事前検証が 400 になる廃止列（2026-10-13 の方針変更） */
+export const ORDER_CSV_REMOVED_COLUMN_NAMES = ['強制区分']
 
 const [firstCustomer, secondCustomer] = customers
 const [firstSymbol, secondSymbol] = symbols
@@ -365,7 +347,6 @@ const sampleOrder = {
   受注者: '999',
   VWAP区分: 0,
   発注範囲: '03',
-  強制区分: 0,
 }
 
 export const orderCsvSampleOrders = [
@@ -399,7 +380,7 @@ function toCsvLine(order) {
 
 /**
  * `GET /orders/csv-template` の本文。実 API と同じく UTF-8 の BOM 付き・CRLF 区切りで、
- * ヘッダー 23 列（強制区分を含む）＋サンプル 3 行。
+ * ヘッダー 22 列＋サンプル 3 行。
  */
 export const orderCsvTemplateText =
   BOM + [orderCsvColumnNames.join(','), ...orderCsvSampleOrders.map(toCsvLine)].join('\r\n') + '\r\n'
@@ -428,6 +409,32 @@ export function orderCsvCustomerNameOf(order) {
   return customer?.顧客名 ?? null
 }
 
+/*
+ * 強制で救えるエラー（2026-10-13 の方針変更。事前検証はエラー行を強制区分=1 で検証し直し、
+ * forceable / errors_if_forced / forced_overrides を返す）。
+ *
+ * モックでは「買いで数量がこの値以上なら買付余力が不足する」という仮の規則で作る
+ * （実 API は口座の余力と概算額で決まる。文言の形は app/services/cash_service.py のまま）。
+ */
+export const ORDER_CSV_CASH_SHORT_QUANTITY = 50000
+
+/** 買付余力不足のエラー文言（強制区分=0 のとき） */
+export function orderCsvCashShortMessage(quantity) {
+  const cost = (quantity * 150).toLocaleString('en-US', { minimumFractionDigits: 2 })
+  return (
+    `買付余力が不足しています (必要概算額: ${cost} USD, 口座余力: 1,000,000.00 USD, ` +
+    '拘束額: 0.00 USD, 有効余力: 1,000,000.00 USD)'
+  )
+}
+
+/** 強制区分=1 で受け付けたときに警告へ格下げされた文言（実 API の接頭辞のまま） */
+export function orderCsvCashShortForcedWarning(quantity) {
+  return `【警告】強制発注（買付余力超過）: ${orderCsvCashShortMessage(quantity)}`
+}
+
+/** エラーが無い行の救済情報（実 API は正常行の forceable を null、残り 2 つを空で返す） */
+const NOT_FORCE_CHECKED = { forceable: null, errors_if_forced: [], forced_overrides: [] }
+
 /** `POST /orders/validate-csv` の応答の見本（テンプレートをそのまま取り込んだとき。全行 OK） */
 export const orderCsvValidateResponse = {
   total_count: orderCsvSampleOrders.length,
@@ -441,6 +448,7 @@ export const orderCsvValidateResponse = {
     data: order,
     errors: [],
     warnings: [],
+    ...NOT_FORCE_CHECKED,
     details: orderCsvDetailsOf(order),
     customer_name: orderCsvCustomerNameOf(order),
   })),
@@ -449,8 +457,9 @@ export const orderCsvValidateResponse = {
 /**
  * 同じく、NG と警告が混ざるときの見本。
  *   2 行目 … 正常。警告だけが付く
- *   3 行目 … 指値なのに指値単価が無い（検証まで走るので details がある）
- *   4 行目 … 口座番号が数値にならない（値の変換で止まるので details は null・warnings は空。顧客名も引けない）
+ *   3 行目 … 指値なのに指値単価が無い（検証まで走るので details がある）。強制でも残るので forceable は false
+ *   4 行目 … 口座番号が数値にならない（値の変換で止まるので details は null・warnings は空。顧客名も引けない）。
+ *            検証まで進まないので強制での検証もされず、forceable は null
  */
 export const orderCsvValidateWithErrorsResponse = {
   total_count: 3,
@@ -465,6 +474,7 @@ export const orderCsvValidateWithErrorsResponse = {
       data: { ...sampleOrder, 数量: 12000 },
       errors: [],
       warnings: ['数量が10,000株以上です。スライス発注の対象になる場合があります'],
+      ...NOT_FORCE_CHECKED,
       details: orderCsvDetailsOf(sampleOrder),
       customer_name: orderCsvCustomerNameOf(sampleOrder),
     },
@@ -474,6 +484,9 @@ export const orderCsvValidateWithErrorsResponse = {
       data: { ...sampleOrder, 指値単価: null },
       errors: ['指成区分がLO（指値）の場合、指値単価は必須です'],
       warnings: [],
+      forceable: false,
+      errors_if_forced: ['指成区分がLO（指値）の場合、指値単価は必須です'],
+      forced_overrides: [],
       details: orderCsvDetailsOf(sampleOrder),
       customer_name: orderCsvCustomerNameOf(sampleOrder),
     },
@@ -483,8 +496,74 @@ export const orderCsvValidateWithErrorsResponse = {
       data: { ...sampleOrder, 口座番号: 0 },
       errors: ['口座番号は整数で入力してください'],
       warnings: [],
+      ...NOT_FORCE_CHECKED,
       details: null,
       customer_name: null,
+    },
+  ],
+}
+
+const cashShortOrder = { ...sampleOrder, 数量: ORDER_CSV_CASH_SHORT_QUANTITY }
+
+/**
+ * 強制で救える行が混ざるときの見本。
+ *   2 行目 … 正常
+ *   3 行目 … 買付余力不足。強制区分=1 なら受け付けられる（forceable が true・格下げ 1 件）
+ *   4 行目 … 3 行目と同じだが、強制でも残るエラー（指値単価の欠落）がある（forceable が false）
+ */
+export const orderCsvValidateForceableResponse = {
+  total_count: 3,
+  valid_count: 1,
+  invalid_count: 2,
+  all_valid: false,
+  has_error: true,
+  rows: [
+    {
+      row_number: 2,
+      valid: true,
+      data: sampleOrder,
+      errors: [],
+      warnings: [],
+      ...NOT_FORCE_CHECKED,
+      details: orderCsvDetailsOf(sampleOrder),
+      customer_name: orderCsvCustomerNameOf(sampleOrder),
+    },
+    {
+      row_number: 3,
+      valid: false,
+      data: cashShortOrder,
+      errors: [orderCsvCashShortMessage(ORDER_CSV_CASH_SHORT_QUANTITY)],
+      warnings: [],
+      forceable: true,
+      errors_if_forced: [],
+      forced_overrides: [
+        {
+          チェック: '買付余力',
+          内容: orderCsvCashShortForcedWarning(ORDER_CSV_CASH_SHORT_QUANTITY),
+        },
+      ],
+      details: orderCsvDetailsOf(cashShortOrder),
+      customer_name: orderCsvCustomerNameOf(cashShortOrder),
+    },
+    {
+      row_number: 4,
+      valid: false,
+      data: { ...cashShortOrder, 指値単価: null },
+      errors: [
+        orderCsvCashShortMessage(ORDER_CSV_CASH_SHORT_QUANTITY),
+        '指成区分がLO（指値）の場合、指値単価は必須です',
+      ],
+      warnings: [],
+      forceable: false,
+      errors_if_forced: ['指成区分がLO（指値）の場合、指値単価は必須です'],
+      forced_overrides: [
+        {
+          チェック: '買付余力',
+          内容: orderCsvCashShortForcedWarning(ORDER_CSV_CASH_SHORT_QUANTITY),
+        },
+      ],
+      details: orderCsvDetailsOf(cashShortOrder),
+      customer_name: orderCsvCustomerNameOf(cashShortOrder),
     },
   ],
 }
@@ -499,4 +578,5 @@ export const bulkOrderCreateResponse = {
   order_ids: orderCsvSampleOrders.map((_, index) => BULK_ORDER_FIRST_ID + index),
   message: `${orderCsvSampleOrders.length}件の注文を一括受付しました`,
   errors: [],
+  warnings: [],
 }

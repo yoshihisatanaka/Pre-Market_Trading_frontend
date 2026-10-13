@@ -32,6 +32,8 @@ export const supervisorOperator = {
   登録済: true,
   権限: { order: true, master: true, operation: true, branch_all: true, depositary: true },
   認可強制: false,
+  // CSRF_ENFORCE の状態（バックエンド Phase 72。2026-10-13 の取り込みで必須に入った）。フロントは読まない
+  CSRF強制: false,
 }
 
 /**
@@ -48,6 +50,8 @@ export const salesOperator = {
   登録済: true,
   権限: { order: true, master: false, operation: false, branch_all: true, depositary: false },
   認可強制: false,
+  // CSRF_ENFORCE の状態（バックエンド Phase 72。2026-10-13 の取り込みで必須に入った）。フロントは読まない
+  CSRF強制: false,
 }
 
 /**
@@ -64,6 +68,8 @@ export const noOperationOperator = {
   登録済: true,
   権限: { order: false, master: false, operation: false, branch_all: false, depositary: false },
   認可強制: false,
+  // CSRF_ENFORCE の状態（バックエンド Phase 72。2026-10-13 の取り込みで必須に入った）。フロントは読まない
+  CSRF強制: false,
 }
 
 /** 管理者（権限マスタは閲覧のみ。ほかの権限は全部ある） */
@@ -77,6 +83,8 @@ export const viewerOperator = {
   登録済: true,
   権限: { order: true, master: true, operation: true, branch_all: true, depositary: true },
   認可強制: false,
+  // CSRF_ENFORCE の状態（バックエンド Phase 72。2026-10-13 の取り込みで必須に入った）。フロントは読まない
+  CSRF強制: false,
 }
 
 /** .env の VITE_USER_CODE で選べる操作者（並びはロール ID の逆順。上ほど権限が強い） */

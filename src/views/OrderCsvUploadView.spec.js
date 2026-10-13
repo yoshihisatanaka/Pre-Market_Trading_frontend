@@ -7,10 +7,10 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import {
+  ORDER_CSV_REMOVED_COLUMN_NAMES,
   ORDER_CSV_TEMPLATE_FILENAME,
   orderCsvColumnNames,
   orderCsvColumns,
-  orderCsvRequiredHeaderNames,
   orderCsvSampleOrders,
   orderCsvTemplateText,
   orderCsvValidateResponse,
@@ -70,10 +70,23 @@ const INVALID_CSV = [
 /** ヘッダーの列が足りない CSV（先頭 2 列だけ）と、そのとき handler が返す detail */
 const SHORT_HEADER = orderCsvColumnNames.slice(0, 2)
 const SHORT_HEADER_CSV = `${SHORT_HEADER.join(',')}\r\n`
-const SHORT_HEADER_DETAIL = `CSVヘッダーに不足があります: 不足項目=[${orderCsvRequiredHeaderNames
+const SHORT_HEADER_DETAIL = `CSVヘッダーに不足があります: 不足項目=[${orderCsvColumnNames
   .filter((name) => !SHORT_HEADER.includes(name))
   .map((name) => `'${name}'`)
   .join(', ')}]`
+
+/** 廃止された 強制区分 の列を 22 列のあとに足した CSV と、そのとき handler が返す detail の書き出し */
+const REMOVED_HEADER = [...orderCsvColumnNames, ...ORDER_CSV_REMOVED_COLUMN_NAMES]
+const REMOVED_COLUMN_CSV = [
+  REMOVED_HEADER.join(','),
+  REMOVED_HEADER.map((name) => {
+    const value = orderCsvSampleOrders[0][name]
+    return value == null ? '' : String(value)
+  }).join(','),
+].join('\r\n')
+const REMOVED_COLUMN_DETAIL_HEAD = `CSVに廃止された列が含まれています: [${ORDER_CSV_REMOVED_COLUMN_NAMES.map(
+  (name) => `'${name}'`,
+).join(', ')}]`
 
 /** jsdom の Blob を文字列で読む（readAsText は BOM を落とすので、比べる側も復号して揃える） */
 const readBlob = (blob) =>
@@ -415,5 +428,19 @@ describe('OrderCsvUploadView', () => {
 
     expect(exists(wrapper, 'order-csv-template-error')).toBe(false)
     expect(exists(wrapper, 'order-csv-validate-error')).toBe(false)
+  })
+
+  it('[OCU-21] 廃止された強制区分の列がある CSV は取込み画面に留まり、理由を出す', async () => {
+    const { wrapper, router, store } = await mountView()
+    await flushPromises()
+
+    await dropAndConfirm(wrapper, csvFile(REMOVED_COLUMN_CSV))
+    await vi.waitFor(() => expect(exists(wrapper, 'order-csv-validate-error')).toBe(true))
+
+    expect(byTestid(wrapper, 'order-csv-validate-error').text()).toContain(
+      REMOVED_COLUMN_DETAIL_HEAD,
+    )
+    expect(router.currentRoute.value.name).toBe('order-csv-upload')
+    expect(store.validation).toBeNull()
   })
 })

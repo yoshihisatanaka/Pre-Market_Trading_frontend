@@ -19,6 +19,12 @@
 `store.validateFile(Node の File)` を呼び、そのあとマウントする（multipart のため FormData は Node の実装に差し替える）。
 期待値は `src/mocks/fixtures/orderCsv.js` と `src/utils/orderCodeLabels.js` / `src/utils/format.js` から導く。
 
+強制（2026-10-13 の方針変更。`docs/api/requests.md` #58）: CSV に強制区分の列は無く、「強制」列で NG の行ごとに指定する。
+救える NG の行（`forceable`）にはチェック（`order-csv-preview-force`、aria-label「N行目を強制する」）、
+救えない NG の行には「不可」（`order-csv-preview-not-forceable`）、正常の行には「—」を出す（OCP-15〜20）。
+救える行は `orderCsvValidateForceableResponse`（3 行目が救える・4 行目が救えない）か、
+MSW の仮規則（買い・数量 >= `ORDER_CSV_CASH_SHORT_QUANTITY` で買付余力不足）に当てた CSV で作る。
+
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
 | OCP-01 | 検証結果が無い | マウントする | 空状態（`order-csv-preview-empty`）だけが出て、表・件数・受付ボタンは出ない | 実装済 |
@@ -35,4 +41,9 @@
 | OCP-12 | 全行 OK の検証結果・受付の応答を握ったまま | 受付ボタンを押す | 応答を待つ間は受付ボタンが押せない | 実装済 |
 | OCP-13 | ストアに前回の `submitError` が残っている | マウントする | `order-csv-preview-submit-error` は出ない | 実装済 |
 | OCP-14 | 全行 OK の検証結果 | 「← 再取込み」と「← CSVを再取込みする」をそれぞれ押す | どちらでも `order-csv-upload` へ移る | 実装済 |
-| OCP-15 | 全行 OK の検証結果で、2 行目だけ `強制区分` が 1（契約提案の列。`docs/api/requests.md` #58） | マウントする | 「強制」列の 2 行目にだけ `order-csv-preview-forced`（文言「強制」）が出て、ほかの行は「—」。ラベルはボタンではない | 実装済 |
+| OCP-15 | 強制で救える行が混ざる検証結果（`orderCsvValidateForceableResponse`） | マウントする | 「強制」列は、救える NG の行にだけ未チェックの `order-csv-preview-force`（aria-label「N行目を強制する」・ラベル「強制」）、救えない NG の行に「不可」（`order-csv-preview-not-forceable`）、正常の行に「—」が出る | 実装済 |
+| OCP-16 | OCP-15 の状態 | 救える行のチェックを付ける | ストアでその行が強制になり、その行の状態が「強制」、行のクラスが `is-forced`（`is-invalid` ではない）になる。救えない行は「NG」・`is-invalid` のまま | 実装済 |
+| OCP-17 | OCP-16 の状態（救えない NG の行が残る） | — | エラーの帯（`order-csv-preview-has-error`）が出たままで、強制の帯（`order-csv-preview-forced-notice`）は出ない。受付ボタンは「エラーを修正してください」で押せない | 実装済 |
+| OCP-18 | 既定モック・正常の行と買付余力不足の行の CSV を検証済み | 買付余力不足の行のチェックを付ける | エラーの帯が消え、強制の帯に「1件を強制で受付します。」が出る。受付ボタンが「N件を受付する（うち強制1件）」（N は取込み件数）で押せる | 実装済 |
+| OCP-19 | OCP-18 の状態 | 受付ボタンを押す | `order-csv-complete` へ移り、ストアの `completion.warnings` に強制した行の CSV 行番号が入る | 実装済 |
+| OCP-20 | OCP-18 の状態 | チェックを外す | 行が `is-invalid`・状態「NG」に戻り、エラーの帯が出て、受付ボタンは「エラーを修正してください」で押せない | 実装済 |

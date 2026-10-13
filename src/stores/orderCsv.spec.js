@@ -6,13 +6,15 @@ import { server } from '@/mocks/server'
 import { supervisorOperator } from '@/mocks/fixtures/currentOperator'
 import {
   BULK_ORDER_FIRST_ID,
+  ORDER_CSV_CASH_SHORT_QUANTITY,
   ORDER_CSV_TEMPLATE_FILENAME,
   bulkOrderCreateResponse,
+  orderCsvCashShortForcedWarning,
   orderCsvColumnNames,
   orderCsvColumns,
-  orderCsvRequiredHeaderNames,
   orderCsvSampleOrders,
   orderCsvTemplateText,
+  orderCsvValidateForceableResponse,
   orderCsvValidateResponse,
   orderCsvValidateWithErrorsResponse,
 } from '@/mocks/fixtures/orderCsv'
@@ -51,10 +53,31 @@ const templateFile = () => csvFile(orderCsvTemplateText)
 /** ヘッダーの列が足りない CSV（先頭 2 列だけ）と、そのとき handler が返す detail */
 const SHORT_HEADER = orderCsvColumnNames.slice(0, 2)
 const shortHeaderFile = () => csvFile(`${SHORT_HEADER.join(',')}\r\n`)
-const SHORT_HEADER_DETAIL = `CSVヘッダーに不足があります: 不足項目=[${orderCsvRequiredHeaderNames
+const SHORT_HEADER_DETAIL = `CSVヘッダーに不足があります: 不足項目=[${orderCsvColumnNames
   .filter((name) => !SHORT_HEADER.includes(name))
   .map((name) => `'${name}'`)
   .join(', ')}]`
+
+/** 注文の行（生の形）から CSV の本文を組む（null は空欄） */
+const csvOf = (orders) =>
+  [
+    orderCsvColumnNames.join(','),
+    ...orders.map((order) =>
+      orderCsvColumnNames.map((name) => (order[name] == null ? '' : String(order[name]))).join(','),
+    ),
+  ].join('\r\n') + '\r\n'
+
+/** 買付余力不足になる注文（MSW の仮規則。買いで数量が ORDER_CSV_CASH_SHORT_QUANTITY 以上） */
+const cashShortOrder = { ...orderCsvSampleOrders[0], 数量: ORDER_CSV_CASH_SHORT_QUANTITY }
+
+/** 正常の行と、強制で救える行（買付余力不足）だけの CSV。既定の MSW が実際に検証する */
+const forceableFile = () => csvFile(csvOf([orderCsvSampleOrders[0], cashShortOrder]))
+
+/** 強制で救える行・救えない行が混ざる事前検証の応答にする */
+const useForceableResponse = () =>
+  server.use(http.post(VALIDATE_PATH, () => HttpResponse.json(orderCsvValidateForceableResponse)))
+
+const invalidCountOf = (store) => store.validation.rows.filter((row) => !row.valid).length
 
 /**
  * 応答を握るハンドラ。release() を呼ぶまで応答せず、そのあと既定のハンドラに回す。
@@ -290,7 +313,13 @@ describe('stores/orderCsv', () => {
     const accepted = await store.submitOrders()
 
     expect(accepted).toBe(true)
-    expect(Object.keys(store.completion).sort()).toEqual(['message', 'rows', 'totalOrders'])
+    expect(Object.keys(store.completion).sort()).toEqual([
+      'message',
+      'rows',
+      'totalOrders',
+      'warnings',
+    ])
+    expect(store.completion.warnings).toEqual([])
     expect(store.completion.totalOrders).toBe(bulkOrderCreateResponse.total_orders)
     expect(store.completion.message).toBe(bulkOrderCreateResponse.message)
     expect(store.completion.rows).toEqual(
@@ -376,5 +405,160 @@ describe('stores/orderCsv', () => {
     store.clearCompletion()
 
     expect(store.completion).toBeNull()
+  })
+
+  it('[OCS-22] 救える行が混ざる検証結果では、強制の指定が無く受付できない', async () => {
+    useForceableResponse()
+    const store = useOrderCsvStore()
+
+    await store.validateFile(templateFile())
+
+    expect(store.validation.rows.every((row) => store.isForced(row) === false)).toBe(true)
+    expect(store.forcedCount).toBe(0)
+    expect(store.unresolvedCount).toBe(invalidCountOf(store))
+    expect(store.canSubmit).toBe(false)
+  })
+
+  it('[OCS-23] 救える行に強制を指定すると数に入るが、救えない行が残れば受付できない', async () => {
+    useForceableResponse()
+    const store = useOrderCsvStore()
+    await store.validateFile(templateFile())
+    const forceable = store.validation.rows.find((row) => row.forceable)
+    // 前提: 救えない NG の行も残っている
+    expect(store.validation.rows.some((row) => !row.valid && !row.forceable)).toBe(true)
+
+    store.setForced(forceable, true)
+
+    expect(store.isForced(forceable)).toBe(true)
+    expect(store.forcedCount).toBe(1)
+    expect(store.unresolvedCount).toBe(invalidCountOf(store) - 1)
+    expect(store.canSubmit).toBe(false)
+  })
+
+  it('[OCS-24] 救えない NG の行と正常の行には強制を指定できない', async () => {
+    useForceableResponse()
+    const store = useOrderCsvStore()
+    await store.validateFile(templateFile())
+    const notForceable = store.validation.rows.find((row) => !row.valid && !row.forceable)
+    const valid = store.validation.rows.find((row) => row.valid)
+
+    store.setForced(notForceable, true)
+    store.setForced(valid, true)
+
+    expect(store.isForced(notForceable)).toBe(false)
+    expect(store.isForced(valid)).toBe(false)
+    expect(store.forcedCount).toBe(0)
+    expect(store.unresolvedCount).toBe(invalidCountOf(store))
+  })
+
+  it('[OCS-25] 強制を外すと指定の前に戻る', async () => {
+    useForceableResponse()
+    const store = useOrderCsvStore()
+    await store.validateFile(templateFile())
+    const forceable = store.validation.rows.find((row) => row.forceable)
+    store.setForced(forceable, true)
+
+    store.setForced(forceable, false)
+
+    expect(store.isForced(forceable)).toBe(false)
+    expect(store.forcedCount).toBe(0)
+    expect(store.unresolvedCount).toBe(invalidCountOf(store))
+  })
+
+  it('[OCS-26] NG の行をすべて強制で救うと受付できる', async () => {
+    const store = useOrderCsvStore()
+    await store.validateFile(forceableFile())
+    const forceable = store.validation.rows.find((row) => row.forceable)
+    // 前提: NG はこの 1 行だけ
+    expect(invalidCountOf(store)).toBe(1)
+
+    store.setForced(forceable, true)
+
+    expect(store.unresolvedCount).toBe(0)
+    expect(store.forcedCount).toBe(1)
+    expect(store.canSubmit).toBe(true)
+  })
+
+  it('[OCS-27] 強制の行だけ強制区分 1 で送り、警告を CSV の行番号で completion に置く', async () => {
+    const bodies = recordBulk()
+    const store = useOrderCsvStore()
+    await store.validateFile(forceableFile())
+    const validatedRows = store.validation.rows
+    const forcedIndex = validatedRows.findIndex((row) => row.forceable)
+    store.setForced(validatedRows[forcedIndex], true)
+
+    const accepted = await store.submitOrders()
+
+    expect(accepted).toBe(true)
+    expect(bodies[0].orders.map((order) => order.強制区分)).toEqual(
+      validatedRows.map((_, index) => (index === forcedIndex ? 1 : 0)),
+    )
+    expect(store.completion.rows.map((row) => row.order.forced)).toEqual(
+      validatedRows.map((_, index) => index === forcedIndex),
+    )
+    expect(store.completion.warnings).toEqual([
+      {
+        rowNumber: validatedRows[forcedIndex].rowNumber,
+        message: orderCsvCashShortForcedWarning(cashShortOrder.数量),
+      },
+    ])
+  })
+
+  it('[OCS-28] 検証し直すと前のファイルの強制を持ち越さない', async () => {
+    useForceableResponse()
+    const store = useOrderCsvStore()
+    await store.validateFile(templateFile())
+    store.setForced(
+      store.validation.rows.find((row) => row.forceable),
+      true,
+    )
+    expect(store.forcedCount).toBe(1)
+
+    await store.validateFile(templateFile())
+
+    expect(store.validation.rows.every((row) => store.isForced(row) === false)).toBe(true)
+    expect(store.forcedCount).toBe(0)
+  })
+
+  it('[OCS-29] 受け付けたら強制の指定が空になる', async () => {
+    const store = useOrderCsvStore()
+    await store.validateFile(forceableFile())
+    store.setForced(
+      store.validation.rows.find((row) => row.forceable),
+      true,
+    )
+    expect(store.forcedRowNumbers.size).toBe(1)
+
+    await expect(store.submitOrders()).resolves.toBe(true)
+
+    expect(store.forcedRowNumbers.size).toBe(0)
+  })
+
+  it('[OCS-30] 行に引けない警告は rowNumber が null になる', async () => {
+    const NO_ROW = '大口取引の確認が必要です'
+    const BODY = '送った件数を超える位置の警告'
+    const beyond = `${orderCsvSampleOrders.length + 1}行目: ${BODY}`
+    server.use(
+      http.post(BULK_PATH, () =>
+        HttpResponse.json({ ...bulkOrderCreateResponse, warnings: [NO_ROW, beyond] }),
+      ),
+    )
+    const store = useOrderCsvStore()
+    await store.validateFile(templateFile())
+
+    await expect(store.submitOrders()).resolves.toBe(true)
+
+    expect(store.completion.warnings).toEqual([
+      { rowNumber: null, message: NO_ROW },
+      { rowNumber: null, message: BODY },
+    ])
+  })
+
+  it('[OCS-31] 作った直後は強制の指定が無い', () => {
+    const store = useOrderCsvStore()
+
+    expect(store.forcedCount).toBe(0)
+    expect(store.unresolvedCount).toBe(0)
+    expect(store.forcedRowNumbers.size).toBe(0)
   })
 })

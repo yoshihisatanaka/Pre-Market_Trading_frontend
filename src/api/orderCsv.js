@@ -10,9 +10,9 @@ import { toFileDownload } from './fileDownload'
  * `POST /orders/bulk-create` がある。取込み画面の「CSVフォーマット」表は `GET /orders/csv-spec` で埋める。
  * 列の定義（全 22 列の列名・必須・説明・例）はバックエンドが持っていて、画面は写しを持たない。
  *
- * 「強制区分」（行ごとに 1 で強制）は画面モックの CSV にあって実 API に無い**契約提案**
- * （docs/api/requests.md #58）。事前検証の行に来れば読み、一括受付でその行の `強制区分` として送り返す。
- * 来なければ通常（0）として送るので、実 API がいまのままでも挙動は変わらない。
+ * 強制区分は CSV に書かない（2026-10-13 の方針変更。列があると事前検証が 400。docs/api/requests.md #58）。
+ * 事前検証はエラー行を強制区分=1 で検証し直し、強制なら受け付けられるか（forceable）・強制でも残るエラー・
+ * 強制で警告に下がる項目を返す。画面はそれを見せて行ごとに強制を指定し、一括受付の各注文の `強制区分` で送る。
  *
  * バックエンドの形を知ってよいのはこの層だけ。吸収している差は次のとおり:
  *   - snake_case（total_columns / row_number / all_valid / order_ids …）
@@ -50,7 +50,8 @@ import { toFileDownload } from './fileDownload'
  * }} CsvOrder
  *   区分はコードのまま持つ（orderType は 'LO' / 'MO'、marketScope は '02' / '03' / '04' / '06' …）。
  *   送り返すときに崩さないため、side・vwap・forced のほかは値を加工しない。
- *   forced は行の `強制区分` が 1 のときだけ true（契約提案。実 API が返さないうちは常に false）。
+ *   forced は事前検証の応答からは常に false で作る（CSV に強制区分の列は無い）。画面で強制を指定した行だけ
+ *   呼び出し側が true にして一括受付へ渡す。
  *   accountNumber / quantity はサーバが数値に直したもの（直せなかった行は 0 が来る）。
  *   expiryDate / orderDate は 'YYYYMMDD'、orderTime は 'HHMMSS' か 'HH:MM'（CSV に書かれたまま）。
  */
@@ -60,9 +61,12 @@ import { toFileDownload } from './fileDownload'
  *
  * @typedef {{
  *   rowNumber: number|null, valid: boolean, errors: string[], warnings: string[],
+ *   forceable: boolean, errorsIfForced: string[], forcedOverrides: { check: string, content: string }[],
  *   customerName: string, stockName: string, order: CsvOrder,
  * }} CsvOrderRow
  *   rowNumber は CSV の行番号（ヘッダーが 1 行目なので、データは 2 から）。
+ *   forceable は NG の行が強制区分=1 なら受け付けられるときだけ true（正常の行・強制での検証まで進まなかった行は false）。
+ *   errorsIfForced は強制でも残るエラー、forcedOverrides は強制で警告に下がる項目（check は分類名、content は本来の文言）。
  *   customerName / stockName はサーバが口座・銘柄から引いた名前（引けなければ空）。
  *   stockName は details（検証の詳細）の中にあり、値の変換に失敗した行は検証が走らないので空になる。
  *   customerName は行の `customer_name`（2026-09-30 の取り込みで仕様に入った。docs/api/requests.md #27）。
@@ -163,6 +167,13 @@ function toCsvOrderRow(raw) {
     valid: raw?.valid === true,
     errors: raw?.errors ?? [],
     warnings: raw?.warnings ?? [],
+    // true のときだけ。null（正常の行・強制での検証まで進まなかった行）を救えると読むと、受付で 400 になる
+    forceable: raw?.valid !== true && raw?.forceable === true,
+    errorsIfForced: raw?.errors_if_forced ?? [],
+    forcedOverrides: (raw?.forced_overrides ?? []).map((item) => ({
+      check: item?.チェック ?? '',
+      content: item?.内容 ?? '',
+    })),
     customerName: raw?.customer_name ?? '',
     stockName: raw?.details?.stock_name ?? '',
     order: toCsvOrder(raw?.data),
@@ -196,8 +207,8 @@ function toCsvOrder(raw) {
     receiver: raw?.受注者 ?? '',
     vwap: raw?.VWAP区分 === 1,
     marketScope: raw?.発注範囲 ?? '',
-    // 1 のときだけ強制。欠けた値や知らない値を強制に倒すと、警告を確かめないまま発注が通る
-    forced: raw?.強制区分 === 1,
+    // CSV では強制を指定できない。強制は画面で行ごとに決める
+    forced: false,
   }
 }
 
@@ -207,10 +218,16 @@ function toCsvOrder(raw) {
  * サーバは全行を検証し直し、1 行でも不備があれば 1 件も登録しない（400）。
  * その文言の「N行目」は送った orders の 1 始まりの位置で、CSV の行番号ではない。
  *
- * @param {CsvOrder[]} orders 事前検証の行の order を CSV の並びのまま
+ * @param {CsvOrder[]} orders 事前検証の行の order を CSV の並びのまま（強制する行は forced を true にして渡す）
  * @param {{ createdBy?: string }} [options] createdBy は操作者コード（`作成者`。サーバが上書きする）
- * @returns {Promise<{ totalOrders: number, orderIds: string[], message: string }>}
- *   orderIds は採番された注文 ID で、送った orders と同じ並び
+ * @returns {Promise<{
+ *   totalOrders: number, orderIds: string[], message: string,
+ *   warnings: { index: number|null, message: string }[],
+ * }>}
+ *   orderIds は採番された注文 ID で、送った orders と同じ並び。
+ *   warnings は登録時の警告（強制で格下げした内容・大口取引など）。実 API の文言は「N行目: …」で、
+ *   N は送った orders の 1 始まりの位置（CSV の行番号ではない）。ここで 0 始まりの index と本文に分ける
+ *   （形が違えば index は null で、文言はそのまま）
  */
 export async function bulkCreateOrders(orders, { createdBy = '' } = {}) {
   const { data } = await apiClient.post('/orders/bulk-create', {
@@ -220,7 +237,16 @@ export async function bulkCreateOrders(orders, { createdBy = '' } = {}) {
     totalOrders: toCount(data?.total_orders),
     orderIds: (data?.order_ids ?? []).map(String),
     message: data?.message ?? '',
+    warnings: (data?.warnings ?? []).map(toBulkWarning),
   }
+}
+
+/** 「N行目: …」→ { index: N - 1, message: … } */
+function toBulkWarning(text) {
+  const match = /^(\d+)行目: ([\s\S]*)$/.exec(text)
+  return match
+    ? { index: Number(match[1]) - 1, message: match[2] }
+    : { index: null, message: String(text) }
 }
 
 /**

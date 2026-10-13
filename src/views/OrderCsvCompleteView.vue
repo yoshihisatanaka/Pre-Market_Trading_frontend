@@ -82,6 +82,25 @@ function toDreamStatus() {
         CSV注文を受け付けました。次回の定点RPA処理でDreamへ登録します。
       </BaseAlert>
 
+      <!-- 登録時の警告（強制で格下げした内容・大口取引など）。行番号は CSV の行 -->
+      <BaseAlert
+        v-if="completion.warnings?.length > 0"
+        variant="warning"
+        data-testid="order-csv-complete-warnings"
+      >
+        <strong>受付時の警告があります。</strong>
+        <ul class="order-csv-complete__warnings">
+          <li
+            v-for="(warning, index) in completion.warnings"
+            :key="index"
+            data-testid="order-csv-complete-warning"
+          >
+            <template v-if="warning.rowNumber != null">{{ warning.rowNumber }}行目：</template>
+            {{ warning.message }}
+          </li>
+        </ul>
+      </BaseAlert>
+
       <BaseCard title="受付結果一覧" flush>
         <DataTable
           flat
@@ -161,6 +180,11 @@ function toDreamStatus() {
   .order-csv-complete__stats {
     grid-template-columns: 1fr;
   }
+}
+
+.order-csv-complete__warnings {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
 }
 
 .order-csv-complete__stat-label {

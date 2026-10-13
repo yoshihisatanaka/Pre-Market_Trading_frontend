@@ -2,7 +2,11 @@ import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import {
   BULK_ORDER_FIRST_ID,
+  ORDER_CSV_CASH_SHORT_QUANTITY,
+  ORDER_CSV_REMOVED_COLUMN_NAMES,
   ORDER_CSV_TEMPLATE_FILENAME,
+  orderCsvCashShortForcedWarning,
+  orderCsvCashShortMessage,
   orderCsvColumnNames,
   orderCsvColumns,
   orderCsvCustomerNameOf,
@@ -77,6 +81,40 @@ function completeRowsOf(page) {
   return page.getByTestId('order-csv-complete-table').getByTestId('data-table-row')
 }
 
+/*
+ * 強制で救える行（モックの仮規則: 買いで数量が ORDER_CSV_CASH_SHORT_QUANTITY 以上なら買付余力不足）。
+ * テンプレートの 2 行目（買い）の数量だけを上げる。CSV の行番号はヘッダーを 1 行目として数える。
+ */
+const CASH_SHORT_INDEX = 1
+const CASH_SHORT_ROW_NUMBER = CASH_SHORT_INDEX + 2
+const CASH_SHORT_ERROR = orderCsvCashShortMessage(ORDER_CSV_CASH_SHORT_QUANTITY)
+const CASH_SHORT_FORCED_WARNING = orderCsvCashShortForcedWarning(ORDER_CSV_CASH_SHORT_QUANTITY)
+
+/** テンプレートの 3 行のうち 2 行目だけ買付余力不足にした CSV */
+function cashShortCsv() {
+  return csvOf(
+    orderCsvSampleOrders.map((order, index) =>
+      index === CASH_SHORT_INDEX ? { ...order, 数量: ORDER_CSV_CASH_SHORT_QUANTITY } : order,
+    ),
+  )
+}
+
+/** 行の「強制」チェックボックス（accessible name は「N行目を強制する」。N は CSV の行番号） */
+function forceCheckboxOf(page, rowNumber) {
+  return page
+    .getByTestId('order-csv-preview-table')
+    .getByRole('checkbox', { name: `${rowNumber}行目を強制する`, exact: true })
+}
+
+/** プレビューの表で「強制」列が何列目か（列の並びは画面側が決めるので見出しから引く） */
+async function forcedCellIndexOf(page) {
+  const headers = await page
+    .getByTestId('order-csv-preview-table')
+    .getByRole('columnheader')
+    .allTextContents()
+  return headers.map((text) => text.trim()).indexOf('強制')
+}
+
 // 条件付きで必須になる列（既定モックでは「指値単価」の 1 列だけ）。件数や位置はフィクスチャから導く
 const optionalColumn = orderCsvColumns.find((column) => !column.required && column.condition)
 const optionalIndex = orderCsvColumns.indexOf(optionalColumn)
@@ -100,7 +138,8 @@ function headingOf(page, title) {
 // シナリオ: docs/e2e/order-csv.md（タイトル先頭の [OC-nn] が対応 ID）
 // 取込み → プレビュー → 受付完了の 1 本の業務フローを守る。取込み画面の CSVフォーマット
 // （GET /orders/csv-spec）の 4 状態、テンプレートDL、事前検証の OK / NG / 警告の出し分けと失敗、
-// 一括受付とその失敗、URL を直接開いたときの空状態、画面間の遷移、受付後の「戻る」での二重受付の防止。
+// 一括受付とその失敗、URL を直接開いたときの空状態、画面間の遷移、受付後の「戻る」での二重受付の防止、
+// 廃止された強制区分の列の拒否と、プレビューで NG 行ごとに強制を指定して受付する流れ（受付完了の警告まで）。
 test.describe('CSV一括注文', () => {
   test('[OC-01] サイドメニューから開くと取込みカードとフォーマットカードが表示される', async ({
     page,
@@ -179,9 +218,13 @@ test.describe('CSV一括注文', () => {
     await expect(cells.nth(1)).toContainText(optionalColumn.condition)
     await expect(cells.nth(3)).toContainText('任意')
 
-    // 必須欄（4 列目）が「必須」になる行は、必須でない列（指値単価・強制区分）を除いた残り全部
+    // 必須欄（4 列目）が「必須」になる行は、必須でない列（指値単価）を除いた残り全部
     const requiredCells = rows.locator('td:nth-child(4)', { hasText: '必須' })
     await expect(requiredCells).toHaveCount(orderCsvColumns.filter((c) => c.required).length)
+    // 廃止された列（強制区分）は表に出ない
+    for (const removed of ORDER_CSV_REMOVED_COLUMN_NAMES) {
+      await expect(rows.filter({ hasText: removed })).toHaveCount(0)
+    }
   })
 
   test('[OC-06] 応答が返るまで CSVフォーマットに読み込み中の表示が出る', async ({ page }) => {
@@ -505,38 +548,127 @@ test.describe('CSV一括注文', () => {
     await expect(page.getByTestId('order-csv-preview-table')).toHaveCount(0)
   })
 
-  test('[OC-25] 強制区分を 1 にした行にだけ「強制」のラベルが出て、そのまま受付できる', async ({
+  test('[OC-27] 廃止された強制区分の列を含む CSV は取込み画面に留まり理由が出る', async ({
     page,
   }) => {
-    const orders = orderCsvSampleOrders.map((order, index) => ({
-      ...order,
-      強制区分: index === 1 ? 1 : 0,
-    }))
-    await goToPreview(page, csvOf(orders))
+    const [removedColumn] = ORDER_CSV_REMOVED_COLUMN_NAMES
+    const header = [...orderCsvColumnNames, removedColumn]
+    const orders = orderCsvSampleOrders.map((order) => ({ ...order, [removedColumn]: 0 }))
+    await page.goto(UPLOAD_PATH)
+    await chooseCsv(page, csvOf(orders, header))
+    await page.getByTestId('order-csv-confirm').click()
 
-    const rows = previewRowsOf(page)
-    await expect(rows).toHaveCount(orders.length)
-    await expect(rows.nth(1).getByTestId('order-csv-preview-forced')).toHaveText('強制')
-    await expect(page.getByTestId('order-csv-preview-forced')).toHaveCount(1)
-
-    const submit = page.getByTestId('order-csv-preview-submit')
-    await expect(submit).toHaveText(`${orders.length}件を受付する`)
-    await submit.click()
-    await expect(page).toHaveURL(new RegExp(`${COMPLETE_PATH}$`))
+    const error = page.getByTestId('order-csv-validate-error')
+    await expect(error).toContainText('CSVに廃止された列が含まれています')
+    await expect(error).toContainText(removedColumn)
+    await expect(page).toHaveURL(new RegExp(`${UPLOAD_PATH}$`))
   })
 
-  test('[OC-26] 強制区分の列が無い CSV もプレビューへ進み、どの行も強制にならない', async ({
+  test('[OC-28] 強制で救える NG 行には強制のチェックが出て、付けるまでは受付できない', async ({
     page,
   }) => {
-    const header = orderCsvColumnNames.filter((name) => name !== '強制区分')
-    await goToPreview(page, csvOf(orderCsvSampleOrders, header))
+    await goToPreview(page, cashShortCsv())
+
+    await expect(page.getByTestId('order-csv-preview-total')).toContainText('3')
+    await expect(page.getByTestId('order-csv-preview-valid')).toContainText('2')
+    await expect(page.getByTestId('order-csv-preview-invalid')).toContainText('1')
+    await expect(page.getByTestId('order-csv-preview-has-error')).toContainText(
+      'エラーがあります。',
+    )
 
     const rows = previewRowsOf(page)
-    await expect(rows).toHaveCount(orderCsvSampleOrders.length)
-    for (let index = 0; index < orderCsvSampleOrders.length; index += 1) {
+    await expect(rows).toHaveCount(3)
+    const cashShortRow = rows.nth(CASH_SHORT_INDEX)
+    await expect(cashShortRow.getByRole('cell').nth(1)).toHaveText('NG')
+    await expect(cashShortRow.getByTestId('order-csv-preview-error')).toContainText(
+      CASH_SHORT_ERROR,
+    )
+    await expect(forceCheckboxOf(page, CASH_SHORT_ROW_NUMBER)).not.toBeChecked()
+    await expect(page.getByTestId('order-csv-preview-force')).toHaveCount(1)
+
+    // 正常の行は強制が要らないので「—」
+    const forcedCell = await forcedCellIndexOf(page)
+    for (const index of [0, 2]) {
       await expect(rows.nth(index).getByRole('cell').nth(1)).toHaveText('OK')
+      await expect(rows.nth(index).getByRole('cell').nth(forcedCell)).toHaveText('—')
     }
-    await expect(page.getByTestId('order-csv-preview-forced')).toHaveCount(0)
-    await expect(page.getByTestId('order-csv-preview-submit')).toBeEnabled()
+
+    const submit = page.getByTestId('order-csv-preview-submit')
+    await expect(submit).toHaveText('エラーを修正してください')
+    await expect(submit).toBeDisabled()
+  })
+
+  test('[OC-29] 強制のチェックを付けると受付でき、外すと受付できない状態に戻る', async ({
+    page,
+  }) => {
+    await goToPreview(page, cashShortCsv())
+    const cashShortRow = previewRowsOf(page).nth(CASH_SHORT_INDEX)
+    const force = forceCheckboxOf(page, CASH_SHORT_ROW_NUMBER)
+    const submit = page.getByTestId('order-csv-preview-submit')
+    const total = orderCsvSampleOrders.length
+
+    await force.check()
+
+    await expect(cashShortRow.getByRole('cell').nth(1)).toHaveText('強制')
+    await expect(page.getByTestId('order-csv-preview-has-error')).toHaveCount(0)
+    await expect(page.getByTestId('order-csv-preview-forced-notice')).toContainText(
+      '1件を強制で受付します。',
+    )
+    await expect(submit).toHaveText(`${total}件を受付する（うち強制1件）`)
+    await expect(submit).toBeEnabled()
+
+    await force.uncheck()
+
+    await expect(cashShortRow.getByRole('cell').nth(1)).toHaveText('NG')
+    await expect(page.getByTestId('order-csv-preview-has-error')).toBeVisible()
+    await expect(page.getByTestId('order-csv-preview-forced-notice')).toHaveCount(0)
+    await expect(submit).toHaveText('エラーを修正してください')
+    await expect(submit).toBeDisabled()
+  })
+
+  test('[OC-30] 強制して受付すると受付完了に警告が CSV の行番号付きで出る', async ({ page }) => {
+    await goToPreview(page, cashShortCsv())
+    await forceCheckboxOf(page, CASH_SHORT_ROW_NUMBER).check()
+    await page.getByTestId('order-csv-preview-submit').click()
+
+    await expect(page).toHaveURL(new RegExp(`${COMPLETE_PATH}$`))
+    await expect(page.getByTestId('order-csv-complete-total')).toContainText(
+      String(orderCsvSampleOrders.length),
+    )
+    await expect(completeRowsOf(page)).toHaveCount(orderCsvSampleOrders.length)
+
+    // 受付の応答は送った順（2 行目）で返るが、画面は CSV の行番号（ヘッダーが 1 行目）で出す
+    const warnings = page
+      .getByTestId('order-csv-complete-warnings')
+      .getByTestId('order-csv-complete-warning')
+    await expect(warnings).toHaveCount(1)
+    await expect(warnings.first()).toContainText(`${CASH_SHORT_ROW_NUMBER}行目：`)
+    await expect(warnings.first()).toContainText(CASH_SHORT_FORCED_WARNING)
+  })
+
+  test('[OC-31] 強制でも救えない NG 行は「不可」で、残っていると受付できない', async ({
+    page,
+  }) => {
+    const [ok] = orderCsvSampleOrders
+    const cashShort = { ...ok, 数量: ORDER_CSV_CASH_SHORT_QUANTITY }
+    // 3 行目は買付余力不足（救える）に指値単価の欠落（救えない）が重なる
+    await goToPreview(page, csvOf([ok, cashShort, { ...cashShort, 指値単価: null }]))
+
+    const rows = previewRowsOf(page)
+    await expect(rows).toHaveCount(3)
+    const unforceableRow = rows.nth(2)
+    await expect(unforceableRow.getByRole('cell').nth(1)).toHaveText('NG')
+    await expect(unforceableRow.getByTestId('order-csv-preview-not-forceable')).toHaveText('不可')
+    await expect(unforceableRow.getByTestId('order-csv-preview-force')).toHaveCount(0)
+
+    // 2 行目（CSV の 3 行目）は救えるので強制する
+    await forceCheckboxOf(page, CASH_SHORT_ROW_NUMBER).check()
+    await expect(rows.nth(CASH_SHORT_INDEX).getByRole('cell').nth(1)).toHaveText('強制')
+
+    await expect(page.getByTestId('order-csv-preview-has-error')).toBeVisible()
+    await expect(page.getByTestId('order-csv-preview-forced-notice')).toHaveCount(0)
+    const submit = page.getByTestId('order-csv-preview-submit')
+    await expect(submit).toHaveText('エラーを修正してください')
+    await expect(submit).toBeDisabled()
   })
 })

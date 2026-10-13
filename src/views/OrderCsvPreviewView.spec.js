@@ -7,9 +7,12 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import {
+  ORDER_CSV_CASH_SHORT_QUANTITY,
+  orderCsvColumnNames,
   orderCsvColumns,
   orderCsvSampleOrders,
   orderCsvTemplateText,
+  orderCsvValidateForceableResponse,
   orderCsvValidateResponse,
   orderCsvValidateWithErrorsResponse,
 } from '@/mocks/fixtures/orderCsv'
@@ -48,7 +51,24 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const templateFile = () => new NodeFile([orderCsvTemplateText], 'orders.csv', { type: 'text/csv' })
+const csvFile = (text) => new NodeFile([text], 'orders.csv', { type: 'text/csv' })
+const templateFile = () => csvFile(orderCsvTemplateText)
+
+/** 注文の行（生の形）から CSV の本文を組む（null は空欄） */
+const csvOf = (orders) =>
+  [
+    orderCsvColumnNames.join(','),
+    ...orders.map((order) =>
+      orderCsvColumnNames.map((name) => (order[name] == null ? '' : String(order[name]))).join(','),
+    ),
+  ].join('\r\n') + '\r\n'
+
+/** 正常の行と、強制で救える行（MSW の仮規則で買付余力不足）だけの CSV */
+const FORCEABLE_ORDERS = [
+  orderCsvSampleOrders[0],
+  { ...orderCsvSampleOrders[0], 数量: ORDER_CSV_CASH_SHORT_QUANTITY },
+]
+const forceableFile = () => csvFile(csvOf(FORCEABLE_ORDERS))
 
 /** 売買区分のコード → 名前（フィクスチャの allowed_values） */
 const SIDE_NAMES = Object.fromEntries(
@@ -73,12 +93,12 @@ const Page = { render: () => h('div') }
  * ストアに前提を作る。response を渡せば事前検証の応答をそれにする。validate: false なら検証しない。
  * @returns {Promise<{ pinia: import('pinia').Pinia, store: ReturnType<typeof useOrderCsvStore> }>}
  */
-async function prepare({ response = null, validate = true } = {}) {
+async function prepare({ response = null, validate = true, file = templateFile } = {}) {
   const pinia = createPinia()
   setActivePinia(pinia)
   const store = useOrderCsvStore(pinia)
   if (response) server.use(http.post(VALIDATE_PATH, () => HttpResponse.json(response)))
-  if (validate) await store.validateFile(templateFile())
+  if (validate) await store.validateFile(file())
   return { pinia, store }
 }
 
@@ -113,6 +133,24 @@ const headers = (wrapper) => table(wrapper).findAll('th').map((th) => th.text())
 /** 行の中の、見出しが label の列のセル */
 const cell = (wrapper, row, label) => row.findAll('td')[headers(wrapper).indexOf(label)]
 const submitButton = (wrapper) => byTestid(wrapper, 'order-csv-preview-submit')
+
+/** 見本（orderCsvValidateForceableResponse）の、強制で救える NG の行と救えない NG の行の位置 */
+const FORCEABLE_INDEX = orderCsvValidateForceableResponse.rows.findIndex(
+  (raw) => raw.valid !== true && raw.forceable === true,
+)
+const NOT_FORCEABLE_INDEX = orderCsvValidateForceableResponse.rows.findIndex(
+  (raw) => raw.valid !== true && raw.forceable !== true,
+)
+
+/** 強制のチェックがある行の位置（MSW に検証させた CSV 用） */
+const forceableRowIndex = (wrapper) =>
+  rows(wrapper).findIndex((row) => row.find('[data-testid="order-csv-preview-force"]').exists())
+
+/** index 行目の強制のチェックを付ける / 外す */
+async function checkForce(wrapper, index, checked) {
+  await rows(wrapper)[index].find('[data-testid="order-csv-preview-force"]').setValue(checked)
+  await flushPromises()
+}
 
 /**
  * 一括受付の応答を握るハンドラ。release() を呼ぶまで応答せず、そのあと既定のハンドラに回す。
@@ -319,23 +357,113 @@ describe('OrderCsvPreviewView', () => {
     }
   })
 
-  it('[OCP-15] 強制区分が 1 の行にだけ「強制」のラベルが出る', async () => {
-    const response = {
-      ...orderCsvValidateResponse,
-      rows: orderCsvValidateResponse.rows.map((row, index) => ({
-        ...row,
-        data: { ...row.data, 強制区分: index === 1 ? 1 : 0 },
-      })),
-    }
-    const { pinia } = await prepare({ response })
+  it('[OCP-15] 救える NG の行にだけ強制のチェックを出し、救えない行は「不可」、正常の行は「—」', async () => {
+    const { pinia } = await prepare({ response: orderCsvValidateForceableResponse })
+    const { wrapper } = await mountView(pinia)
+    const raws = orderCsvValidateForceableResponse.rows
+    // 前提: 正常・救える・救えないの 3 種が見本にある
+    expect(FORCEABLE_INDEX).toBeGreaterThanOrEqual(0)
+    expect(NOT_FORCEABLE_INDEX).toBeGreaterThanOrEqual(0)
+    expect(raws.some((raw) => raw.valid)).toBe(true)
+
+    expect(rows(wrapper)).toHaveLength(raws.length)
+    rows(wrapper).forEach((row, index) => {
+      const raw = raws[index]
+      const forced = cell(wrapper, row, '強制')
+      const checkbox = forced.find('[data-testid="order-csv-preview-force"]')
+      const notForceable = forced.find('[data-testid="order-csv-preview-not-forceable"]')
+      if (index === FORCEABLE_INDEX) {
+        expect(checkbox.exists()).toBe(true)
+        expect(checkbox.attributes('type')).toBe('checkbox')
+        expect(checkbox.attributes('aria-label')).toBe(`${raw.row_number}行目を強制する`)
+        expect(checkbox.element.checked).toBe(false)
+        expect(forced.text()).toBe('強制')
+        expect(notForceable.exists()).toBe(false)
+      } else if (raw.valid) {
+        expect(checkbox.exists()).toBe(false)
+        expect(notForceable.exists()).toBe(false)
+        expect(forced.text()).toBe('—')
+      } else {
+        expect(checkbox.exists()).toBe(false)
+        expect(notForceable.text()).toBe('不可')
+      }
+    })
+  })
+
+  it('[OCP-16] チェックを付けると行が強制になり、救えない行は NG のまま', async () => {
+    const { pinia, store } = await prepare({ response: orderCsvValidateForceableResponse })
     const { wrapper } = await mountView(pinia)
 
-    rows(wrapper).forEach((row, index) => {
-      const forced = cell(wrapper, row, '強制')
-      const label = forced.find('[data-testid="order-csv-preview-forced"]')
-      expect(label.exists()).toBe(index === 1)
-      expect(forced.text()).toBe(index === 1 ? '強制' : '—')
-      expect(forced.find('button').exists()).toBe(false)
-    })
+    await checkForce(wrapper, FORCEABLE_INDEX, true)
+
+    expect(store.isForced(store.validation.rows[FORCEABLE_INDEX])).toBe(true)
+    const forcedRow = rows(wrapper)[FORCEABLE_INDEX]
+    expect(cell(wrapper, forcedRow, '状態').text()).toBe('強制')
+    expect(forcedRow.classes()).toContain('is-forced')
+    expect(forcedRow.classes()).not.toContain('is-invalid')
+    const ngRow = rows(wrapper)[NOT_FORCEABLE_INDEX]
+    expect(cell(wrapper, ngRow, '状態').text()).toBe('NG')
+    expect(ngRow.classes()).toContain('is-invalid')
+  })
+
+  it('[OCP-17] 救えない NG の行が残るとエラーの帯のままで受付できない', async () => {
+    const { pinia } = await prepare({ response: orderCsvValidateForceableResponse })
+    const { wrapper } = await mountView(pinia)
+
+    await checkForce(wrapper, FORCEABLE_INDEX, true)
+
+    expect(exists(wrapper, 'order-csv-preview-has-error')).toBe(true)
+    expect(exists(wrapper, 'order-csv-preview-forced-notice')).toBe(false)
+    expect(submitButton(wrapper).text()).toBe('エラーを修正してください')
+    expect(submitButton(wrapper).attributes('disabled')).toBeDefined()
+  })
+
+  it('[OCP-18] NG をすべて強制で救うと強制の帯が出て、強制の件数付きで受付できる', async () => {
+    const { pinia } = await prepare({ file: forceableFile })
+    const { wrapper } = await mountView(pinia)
+    const index = forceableRowIndex(wrapper)
+    // 前提: チェックを付ける前は受付できない
+    expect(exists(wrapper, 'order-csv-preview-has-error')).toBe(true)
+    expect(submitButton(wrapper).attributes('disabled')).toBeDefined()
+
+    await checkForce(wrapper, index, true)
+
+    expect(exists(wrapper, 'order-csv-preview-has-error')).toBe(false)
+    expect(byTestid(wrapper, 'order-csv-preview-forced-notice').text()).toContain(
+      '1件を強制で受付します。',
+    )
+    expect(submitButton(wrapper).text()).toBe(
+      `${FORCEABLE_ORDERS.length}件を受付する（うち強制1件）`,
+    )
+    expect(submitButton(wrapper).attributes('disabled')).toBeUndefined()
+  })
+
+  it('[OCP-19] 強制を付けて受付すると受付完了へ移り、警告に強制した行の行番号が入る', async () => {
+    const { pinia, store } = await prepare({ file: forceableFile })
+    const { wrapper, router } = await mountView(pinia)
+    const index = forceableRowIndex(wrapper)
+    const rowNumber = store.validation.rows[index].rowNumber
+    await checkForce(wrapper, index, true)
+
+    await submitButton(wrapper).trigger('click')
+    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('order-csv-complete'))
+
+    expect(store.completion.warnings.map((warning) => warning.rowNumber)).toEqual([rowNumber])
+  })
+
+  it('[OCP-20] チェックを外すと NG に戻り、受付できなくなる', async () => {
+    const { pinia } = await prepare({ file: forceableFile })
+    const { wrapper } = await mountView(pinia)
+    const index = forceableRowIndex(wrapper)
+    await checkForce(wrapper, index, true)
+
+    await checkForce(wrapper, index, false)
+
+    const row = rows(wrapper)[index]
+    expect(row.classes()).toContain('is-invalid')
+    expect(cell(wrapper, row, '状態').text()).toBe('NG')
+    expect(exists(wrapper, 'order-csv-preview-has-error')).toBe(true)
+    expect(submitButton(wrapper).text()).toBe('エラーを修正してください')
+    expect(submitButton(wrapper).attributes('disabled')).toBeDefined()
   })
 })

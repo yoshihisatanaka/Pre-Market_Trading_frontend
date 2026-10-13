@@ -36,3 +36,4 @@
 | OCU-18 | ヘッダーが足りない CSV | ドロップして「内容を確認する」を押す | 取込み画面に留まり、`order-csv-validate-error` に handler の detail が出る | 実装済 |
 | OCU-19 | 事前検証の応答を握ったまま | ドロップして「内容を確認する」を押す | 応答を待つ間は「内容を確認する」が押せない | 実装済 |
 | OCU-20 | ストアに前回のテンプレートと検証のエラーが残っている | マウントする | `order-csv-template-error` と `order-csv-validate-error` のどちらも出ない | 実装済 |
+| OCU-21 | 22 列のあとに廃止された `強制区分` の列を足した CSV（`ORDER_CSV_REMOVED_COLUMN_NAMES`。2026-10-13 の方針変更） | ドロップして「内容を確認する」を押す | 取込み画面に留まり、`order-csv-validate-error` に「CSVに廃止された列が含まれています: ['強制区分']」が出る。ストアの `validation` は null | 実装済 |

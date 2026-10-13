@@ -53,6 +53,9 @@ export const navSections = [
     defaultOpen: false,
     items: [
       { label: '顧客マスタ', to: '/masters/customers' },
+      // 公開モックで 2026-10-12 に追加（1797323）。並びはモックのサイドバーどおり顧客マスタの直後。
+      // モックは「ユーザ管理」権限で出し分けるが、仕様の権限に無いので区分の master に従う
+      { label: 'ユーザ管理マスタ', to: '/masters/users' },
       { label: '権限マスタ', to: '/masters/permissions' },
       { label: '銘柄マスタ', to: '/masters/symbols' },
       { label: '為替マスタ', to: '/masters/fx' },

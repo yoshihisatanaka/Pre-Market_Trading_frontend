@@ -115,7 +115,7 @@ import {
   validateFeePreference,
 } from './feePreferences'
 import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
-import { fetchUsers } from './users'
+import { fetchUsers, updateUser } from './users'
 import { fetchStalledOrders, importConfirmationCsv } from './stalledOrders'
 import { fetchPermissions, updateRolePermission } from './permissions'
 import { fetchCurrentOperator } from './auth'
@@ -279,6 +279,17 @@ const KNOWN_GAPS = [
    * 2026-09-30 の取り込みで仕様に入ったので、orderCsvValidateRows / orderCsvValidate /
    * orderCsvValidateWithErrors の 3 行をまとめて外した。
    */
+  /*
+   * ユーザ管理マスタの「メールアドレス・氏名」の検索（画面モックの keyword）。仕様にクエリが無く、
+   * 実 API は無視する（絞り込みが黙って効かない）。社員コード・氏名に当てるクエリとして依頼中
+   */
+  {
+    kind: 'query',
+    method: 'GET',
+    template: '/masters/users',
+    names: ['keyword'],
+    request: 67,
+  },
 ]
 
 function knownQueryGap(op, name) {
@@ -774,7 +785,26 @@ const PROBES = [
   {
     name: 'fetchUsers',
     run: () =>
-      fetchUsers({ role: 'sales', branchCode: '123', includeInactive: true, limit: 200, offset: 0 }),
+      fetchUsers({
+        role: 'sales',
+        branchCode: '123',
+        keyword: '山田',
+        includeInactive: true,
+        limit: 200,
+        offset: 0,
+      }),
+  },
+  {
+    name: 'updateUser',
+    run: () =>
+      updateUser({
+        code: '003',
+        name: '佐藤 一郎',
+        roleCode: 'manager',
+        branchCode: '456',
+        orderTakerCode: '9102',
+        active: true,
+      }),
   },
   {
     name: 'fetchStalledOrders',

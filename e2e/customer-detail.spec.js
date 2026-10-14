@@ -54,8 +54,8 @@ const CUSTOMER_QUERY = {
 
 /*
  * 預りの特定預り区分 → 注文の預り区分（URL の deposit）と、新規注文での表示名。
- * src/utils/orderEntryQuery.js の toDepositCategory と src/utils/orderEntryOptions.js の
- * DEPOSIT_CATEGORY_OPTIONS の再掲（向きが逆なので、実装をなぞらず期待値として書く）。
+ * src/utils/orderEntryQuery.js の toDepositCategory とコードマスタ `預り売買区分` の名称の
+ * 再掲（向きが逆なので、実装をなぞらず期待値として書く）。
  */
 const DEPOSIT_FOR = {
   1: { query: '0', label: '特定' }, // 特定 → 特定
@@ -500,7 +500,7 @@ test.describe('顧客詳細 外株預り', () => {
       deposit: deposit.query,
     })
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(AAPL.ティッカー)
-    await expect(toggleButton(page, 'order-entry-side', '買い')).toHaveAttribute(
+    await expect(toggleButton(page, 'order-entry-side', '買')).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -530,7 +530,7 @@ test.describe('顧客詳細 外株預り', () => {
     await expect(page.getByTestId('order-entry-quantity')).toHaveValue(
       TSLA.売却可能株数.toLocaleString('ja-JP'),
     )
-    await expect(toggleButton(page, 'order-entry-side', '売り')).toHaveAttribute(
+    await expect(toggleButton(page, 'order-entry-side', '売')).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -547,7 +547,7 @@ test.describe('顧客詳細 外株預り', () => {
     await expectOrderEntryCustomer(page)
     expect(queryOf(page)).toEqual({ ...CUSTOMER_QUERY, ticker: NVDA.ティッカー, side: 'buy' })
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(NVDA.ティッカー)
-    await expect(toggleButton(page, 'order-entry-side', '買い')).toHaveAttribute(
+    await expect(toggleButton(page, 'order-entry-side', '買')).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -611,7 +611,7 @@ test.describe('顧客詳細 外株預り', () => {
       specific_deposit: TSLA.預り売買区分,
     })
     await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(TSLA.ティッカー)
-    await expect(toggleButton(page, 'customer-calc-side', '売り')).toHaveAttribute(
+    await expect(toggleButton(page, 'customer-calc-side', '売')).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -630,7 +630,7 @@ test.describe('顧客詳細 外株預り', () => {
 
     await expect(page).toHaveURL(new RegExp(`${calculationsPath(YAMADA.ID)}$`))
     await expect(page.getByTestId('customer-calc-symbol')).toHaveValue('')
-    await expect(toggleButton(page, 'customer-calc-side', '買い')).toHaveAttribute(
+    await expect(toggleButton(page, 'customer-calc-side', '買')).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -762,7 +762,7 @@ test.describe('顧客詳細 仮計算', () => {
     await page.goto(calculationsPath(YAMADA.ID))
     await runCalculation(page, {
       symbol: MSFT.ティッカー,
-      side: '売り',
+      side: '売',
       deposit: '一般',
       quantity: CALC_QUANTITY,
       unitPrice: CALC_UNIT_PRICE,

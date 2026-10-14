@@ -114,7 +114,7 @@ async function fillOrder(
   {
     account = String(PLAIN.口座番号),
     ticker = AAPL.Ticker,
-    side = '買い',
+    side = '買',
     quantity = '10',
     orderPerson = ORDER_PERSON,
   } = {},
@@ -424,11 +424,11 @@ test.describe('新規注文 入力の不備とサーバの判定', () => {
       'プレ＋レギュラー',
       'レギュラー',
       'プレ＋レギュラー＋アフター（Ph.2予定）',
-      'アフター（時間内限り）（Ph.2予定）',
+      'アフター（Ph.2予定）',
     ])
     await expect(scope.locator('option:disabled')).toHaveText([
       'プレ＋レギュラー＋アフター（Ph.2予定）',
-      'アフター（時間内限り）（Ph.2予定）',
+      'アフター（Ph.2予定）',
     ])
 
     await fillOrder(page)
@@ -707,7 +707,7 @@ test.describe('新規注文 確定と次の注文', () => {
 
     // 1 件目と同じ銘柄・売買だと重複注文で止まる（NO-38）ので、2 件目は別の銘柄にする
     await page.getByTestId('order-entry-ticker').fill(ORCL.Ticker)
-    await sideButton(page, '買い').click()
+    await sideButton(page, '買').click()
     // 価格は既定の指値に戻っているので成行を押し直す
     await orderTypeButton(page, '成行').click()
     await page.getByTestId('order-entry-quantity').fill('10')
@@ -732,7 +732,7 @@ test.describe('新規注文 確定と次の注文', () => {
     await page.getByTestId('order-entry-new-same-customer').click()
     await expect(page.getByTestId('order-entry-form')).toBeVisible()
     await page.getByTestId('order-entry-ticker').fill(AAPL.Ticker)
-    await sideButton(page, '買い').click()
+    await sideButton(page, '買').click()
     await orderTypeButton(page, '成行').click()
     await page.getByTestId('order-entry-quantity').fill('10')
     await page.getByTestId('order-entry-order-person').fill(ORDER_PERSON)

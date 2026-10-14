@@ -160,7 +160,7 @@ test.describe('海外休場日マスタ（実 API 接続）', () => {
     await openList(page)
     const total = await countOf(page)
 
-    await page.getByTestId('market-holidays-holiday-type').selectOption({ label: '短縮取引日' })
+    await page.getByTestId('market-holidays-holiday-type').selectOption({ label: '短縮取引' })
     await page.getByTestId('market-holidays-search-submit').click()
 
     await expect(page).toHaveURL(/holiday_type=1/)

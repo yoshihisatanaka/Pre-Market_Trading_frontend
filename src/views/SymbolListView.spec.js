@@ -5,11 +5,19 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
+import { codeEntries } from '@/mocks/fixtures/codes'
 import { symbols } from '@/mocks/fixtures/symbols'
+import { useCodesStore } from '@/stores/codes'
 import { SYMBOLS_PAGE_SIZE } from '@/stores/symbols'
 import { formatQuantity, formatUsdUnit } from '@/utils/format'
-import { ORDER_ROUTE_OPTIONS, REGULATION_OPTIONS, VWAP_TARGET_OPTIONS } from '@/utils/symbolTypes'
+import { ORDER_ROUTE_OPTIONS, REGULATION_OPTIONS } from '@/utils/symbolTypes'
 import SymbolListView from './SymbolListView.vue'
+
+/** VWAP対象区分の名称はコードマスタ（GET /codes の VWAP対象区分）から来るので、その写しから引く */
+const VWAP_TARGET_OPTIONS = codeEntries('VWAP対象区分').map(({ code, label }) => ({
+  value: code,
+  label,
+}))
 
 /*
  * 画面テスト。実際の Pinia ストア + vue-router + MSW(node) を通し、
@@ -110,9 +118,13 @@ async function mountView(query = {}) {
   // mount 前に遷移を済ませておけば router.isReady() を待たなくてよい
   await router.push({ path: PATH, query })
 
+  // VWAP対象区分の選択肢はコードマスタから引く。本番と同じく読み終えてから画面を描く
+  const pinia = createPinia()
+  await useCodesStore(pinia).load()
+
   const wrapper = mount(SymbolListView, {
     global: {
-      plugins: [createPinia(), router],
+      plugins: [pinia, router],
       // teleport を stub して、ヘッダへ差し込むボタンを wrapper 内に描画させる
       stubs: { teleport: true },
     },
@@ -1059,7 +1071,7 @@ describe('SymbolListView', () => {
     expect(exists(wrapper, 'symbols-vwap-bulk-empty')).toBe(false)
   })
 
-  it('[STV-42] 対象外にするとダイアログが閉じ、件数入りのメッセージと全行「対象外」の表が出る', async () => {
+  it('[STV-42] 対象外にするとダイアログが閉じ、件数入りのメッセージと全行「非対象」の表が出る', async () => {
     const { wrapper, router } = await mountView()
     await settle()
     await openVwapBulk(wrapper)

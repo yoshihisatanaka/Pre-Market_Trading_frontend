@@ -152,4 +152,48 @@ describe('stores/codes', () => {
     expect(store.ready).toBe(true)
     expect(store.optionsFor('口座区分').length).toBeGreaterThan(0)
   })
+
+  it('[CDS-12] pickOptions は渡したコードの順に並べ、名称はコードマスタから引く', async () => {
+    const store = useCodesStore()
+    await store.load()
+
+    expect(store.pickOptions('売買区分', ['3', '1'])).toEqual([
+      { value: '3', label: codeMasters.売買区分['3'] },
+      { value: '1', label: codeMasters.売買区分['1'] },
+    ])
+  })
+
+  it('[CDS-13] pickOptions は渡したコードに絞り、コードマスタに無いコードは落とす', async () => {
+    const store = useCodesStore()
+    await store.load()
+
+    expect(store.pickOptions('預り売買区分', ['0', '1', '6', '99']).map((o) => o.value)).toEqual([
+      '0',
+      '1',
+      '6',
+    ])
+    expect(store.pickOptions(UNKNOWN_KEY, ['0'])).toEqual([])
+  })
+
+  it('[CDS-14] labelFor はコードの名称を返し、未知・空値・未取得は —', async () => {
+    const store = useCodesStore()
+    expect(store.labelFor('資金性格', '1')).toBe('—')
+
+    await store.load()
+
+    expect(store.labelFor('資金性格', '1')).toBe(codeMasters.資金性格['1'])
+    expect(store.labelFor('資金性格', '9')).toBe('—')
+    expect(store.labelFor('資金性格', '')).toBe('—')
+    expect(store.labelFor('資金性格', null)).toBe('—')
+  })
+
+  it('[CDS-15] hasCode はコードマスタにあるコードだけ true', async () => {
+    const store = useCodesStore()
+    await store.load()
+
+    expect(store.hasCode('CA種別', '110')).toBe(true)
+    expect(store.hasCode('CA種別', '999')).toBe(false)
+    expect(store.hasCode('CA種別', '')).toBe(false)
+    expect(store.hasCode('CA種別', undefined)).toBe(false)
+  })
 })

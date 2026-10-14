@@ -7,6 +7,7 @@ import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { caStocks, corporateActions } from '@/mocks/fixtures/ca'
 import { CA_PAGE_SIZE } from '@/stores/ca'
+import { useCodesStore } from '@/stores/codes'
 import CorporateActionListView from './CorporateActionListView.vue'
 
 /*
@@ -100,9 +101,13 @@ async function mountView(query = {}) {
   // mount 前に遷移を済ませておけば router.isReady() を待たなくてよい
   await router.push({ path: PATH, query })
 
+  // CA種別の選択肢はコードマスタから引く。本番と同じく読み終えてから画面を描く
+  const pinia = createPinia()
+  await useCodesStore(pinia).load()
+
   const wrapper = mount(CorporateActionListView, {
     global: {
-      plugins: [createPinia(), router],
+      plugins: [pinia, router],
       // teleport を stub して、ヘッダへ差し込むボタンを wrapper 内に描画させる
       stubs: { teleport: true },
     },

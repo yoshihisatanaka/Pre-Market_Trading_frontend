@@ -509,7 +509,7 @@ test.describe('預り検索', () => {
     await expect(page.getByTestId('customer-info-name')).toHaveText(firstRow.顧客名)
     await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(firstRow.ティッカー)
     await expect(
-      page.getByTestId('customer-calc-side').getByRole('button', { name: '売り', exact: true }),
+      page.getByTestId('customer-calc-side').getByRole('button', { name: '売', exact: true }),
     ).toHaveAttribute('aria-pressed', 'true')
   })
 

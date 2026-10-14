@@ -305,7 +305,7 @@ test.describe('銘柄マスタ（実 API 接続）', () => {
     await openList(page)
     const total = await countOf(page)
 
-    // src/utils/symbolTypes.js の ORDER_ROUTE_OPTIONS（0: みずほ証券）/ VWAP_TARGET_OPTIONS（0: 対象外）
+    // src/utils/symbolTypes.js の ORDER_ROUTE_OPTIONS（0: みずほ証券）/ コードマスタ VWAP対象区分（0: 非対象）
     await page.getByTestId('symbols-order-route').selectOption('0')
     await page.getByTestId('symbols-vwap-target').selectOption('0')
     await page.getByTestId('symbols-search-submit').click()

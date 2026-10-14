@@ -164,7 +164,7 @@ async function fillOrder(page, { ticker = stock.Ticker } = {}) {
   await page.getByTestId('order-entry-branch').fill(account.部店コード)
   await page.getByTestId('order-entry-account').fill(accountText(account))
   await page.getByTestId('order-entry-ticker').fill(ticker)
-  await sideButton(page, '買い').click()
+  await sideButton(page, '買').click()
   await toggleButton(page, 'order-entry-order-type', '成行').click()
   await toggleButton(page, 'order-entry-settlement-currency', '円決').click()
   await page.getByTestId('order-entry-quantity').fill('1')
@@ -385,7 +385,7 @@ test.describe('新規注文（実 API 接続）', () => {
     await expect(page.getByTestId('order-entry-branch')).toHaveValue(account.部店コード)
     await expect(page.getByTestId('order-entry-account')).toHaveValue(accountText(account))
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(stock.Ticker.toUpperCase())
-    await expect(sideButton(page, '買い')).toHaveAttribute('aria-pressed', 'true')
+    await expect(sideButton(page, '買')).toHaveAttribute('aria-pressed', 'true')
 
     await expect(page.getByTestId('order-entry-account-hint')).toHaveText(account.顧客名)
     await expect(page.getByTestId('order-entry-ticker-hint')).toHaveText(stockLabel(stock))

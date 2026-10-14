@@ -3,95 +3,46 @@ import { HOLIDAY_TYPE } from './apiEnums'
 import {
   MARKET_HOLIDAY_EARLY_CLOSE_LABEL,
   MARKET_HOLIDAY_TYPE_DEFAULT,
-  MARKET_HOLIDAY_TYPE_OPTIONS,
   formatMarketHolidayEarlyClose,
-  formatMarketHolidayType,
-  isMarketHolidayType,
   isShortTradingDay,
 } from './marketHolidayTypes'
 
 /*
- * 純関数のテスト。
- * 期待する表示名は選択肢の定義から引く（「終日休場」などを直接書かない）。
- * 選択肢が増えても、コードと表示名の対応そのものを検証し続けられるようにするため。
+ * 純関数のテスト。区分の表示名と選択肢はコードマスタ `海外休場区分` から来る（stores/codes.js）ので、
+ * ここは短縮取引日の判定と表示・既定値だけを見る。
  */
-const FULL_DAY = MARKET_HOLIDAY_TYPE_OPTIONS[0]
-const SHORTENED = MARKET_HOLIDAY_TYPE_OPTIONS[1]
+const FULL_DAY = HOLIDAY_TYPE.ALL_DAY
+const SHORTENED = HOLIDAY_TYPE.SHORTENED
 
 // 未知の値の表現。他の列の空値表現と同じ em dash
 const UNKNOWN_LABEL = '—'
-// 選択肢に無いコード（選択肢が増えても衝突しないものを選ぶ）
+// HolidayTypeEnum に無いコード（区分が増えても衝突しないものを選ぶ）
 const UNKNOWN_CODE = (() => {
   for (const code of ['9', '8', '7']) {
-    if (!MARKET_HOLIDAY_TYPE_OPTIONS.some((option) => option.value === code)) return code
+    if (!Object.values(HOLIDAY_TYPE).includes(code)) return code
   }
-  throw new Error('選択肢に無いコードが見つからなかった')
+  throw new Error('区分に無いコードが見つからなかった')
 })()
 
 // シナリオ: docs/unit/utils-market-holiday-types.md
-describe('formatMarketHolidayType', () => {
-  it('[MHT-01] 終日休場のコードを表示名に変換する', () => {
-    expect(formatMarketHolidayType(FULL_DAY.value)).toBe(FULL_DAY.label)
-  })
-
-  it('[MHT-02] 短縮取引のコードを表示名に変換する', () => {
-    expect(formatMarketHolidayType(SHORTENED.value)).toBe(SHORTENED.label)
-  })
-
-  it('[MHT-03] 選択肢に無いコードは em dash になる', () => {
-    expect(formatMarketHolidayType(UNKNOWN_CODE)).toBe(UNKNOWN_LABEL)
-  })
-
-  it('[MHT-04] 空値や型違いも em dash になる', () => {
-    // 実 API が値を返さない / 別の型で返す場合でも列が壊れないことを保証する
-    for (const value of ['', undefined, null, 0]) {
-      expect(formatMarketHolidayType(value)).toBe(UNKNOWN_LABEL)
-    }
-  })
-})
-
-describe('isMarketHolidayType', () => {
-  it('[MHT-05] 選択肢に定義された全コードを受け付ける', () => {
-    for (const option of MARKET_HOLIDAY_TYPE_OPTIONS) {
-      expect(isMarketHolidayType(option.value)).toBe(true)
-    }
-  })
-
-  it('[MHT-06] 選択肢に無い値・空値・型違いは受け付けない', () => {
-    // URL クエリ由来の値をそのまま検索条件にしないための番人
-    for (const value of [UNKNOWN_CODE, '', undefined, null, 0]) {
-      expect(isMarketHolidayType(value)).toBe(false)
-    }
-  })
-})
-
 describe('MARKET_HOLIDAY_TYPE_DEFAULT', () => {
-  it('[MHT-07] 既定値は選択肢の先頭のコードで、判定も通る', () => {
-    expect(MARKET_HOLIDAY_TYPE_DEFAULT).toBe(FULL_DAY.value)
-    expect(isMarketHolidayType(MARKET_HOLIDAY_TYPE_DEFAULT)).toBe(true)
+  it('[MHT-07] 既定値は終日休場のコード', () => {
+    expect(MARKET_HOLIDAY_TYPE_DEFAULT).toBe(FULL_DAY)
   })
 })
 
 describe('短縮取引日の判定と表示', () => {
   it('[MHT-09] 短縮取引のコードだけが短縮取引日になる', () => {
-    expect(isShortTradingDay(SHORTENED.value)).toBe(true)
-    for (const value of [FULL_DAY.value, UNKNOWN_CODE, '', undefined, null, 0, 1]) {
+    expect(isShortTradingDay(SHORTENED)).toBe(true)
+    for (const value of [FULL_DAY, UNKNOWN_CODE, '', undefined, null, 0, 1]) {
       expect(isShortTradingDay(value)).toBe(false)
     }
   })
 
   it('[MHT-10] 短縮取引日は終了時刻の文言、それ以外は em dash になる', () => {
-    expect(formatMarketHolidayEarlyClose(SHORTENED.value)).toBe(MARKET_HOLIDAY_EARLY_CLOSE_LABEL)
-    for (const value of [FULL_DAY.value, UNKNOWN_CODE, '', undefined, null, 0]) {
+    expect(formatMarketHolidayEarlyClose(SHORTENED)).toBe(MARKET_HOLIDAY_EARLY_CLOSE_LABEL)
+    for (const value of [FULL_DAY, UNKNOWN_CODE, '', undefined, null, 0]) {
       expect(formatMarketHolidayEarlyClose(value)).toBe(UNKNOWN_LABEL)
     }
-  })
-})
-
-describe('MARKET_HOLIDAY_TYPE_OPTIONS', () => {
-  it('[MHT-08] コードが HolidayTypeEnum と一致する（表示名だけがフロントの持ちもの）', () => {
-    expect(MARKET_HOLIDAY_TYPE_OPTIONS.map((option) => option.value)).toEqual(
-      Object.values(HOLIDAY_TYPE),
-    )
   })
 })

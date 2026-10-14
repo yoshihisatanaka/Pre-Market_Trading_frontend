@@ -262,7 +262,7 @@ describe('MizuhoOperationsView', () => {
     expect(rows(wrapper)).toHaveLength(TOTAL)
   })
 
-  it('[MZV-08] 売買区分「売り」で検索すると URL に side=1 が乗り、その条件で読み直す', async () => {
+  it('[MZV-08] 売買区分「売」で検索すると URL に side=1 が乗り、その条件で読み直す', async () => {
     const sentSides = []
     server.use(
       http.get(EXECUTIONS_PATH, ({ request }) => {
@@ -275,7 +275,7 @@ describe('MizuhoOperationsView', () => {
     await settle()
 
     const select = find(wrapper, 'mizuho-executions-side')
-    const sellOption = select.findAll('option').find((option) => option.text() === '売り')
+    const sellOption = select.findAll('option').find((option) => option.text() === '売')
     await select.setValue(sellOption.element.value)
     await find(wrapper, 'mizuho-executions-search').trigger('submit')
     await settle()

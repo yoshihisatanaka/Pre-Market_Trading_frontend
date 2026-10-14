@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import { codeName } from '@/mocks/fixtures/codes'
 import {
   ORDER_ROUTE_OPTIONS,
   REGULATION_OPTIONS,
-  VWAP_TARGET_OPTIONS,
+  VWAP_TARGET_CODES,
   formatOrderRoute,
   formatRegulation,
-  formatVwapTarget,
   isOrderRoute,
   isRegulation,
-  isVwapTarget,
 } from './symbolTypes'
 
 /*
@@ -20,18 +19,20 @@ import {
  * シナリオ: docs/unit/utils-symbol-types.md
  */
 
-/** [区分の名前, 選択肢, format 関数, is 関数] */
+/**
+ * [区分の名前, 選択肢, format 関数, is 関数]。
+ * VWAP対象区分は名称をコードマスタから引くので、ここには並び（VWAP_TARGET_CODES）しか無い（STT-06 で見る）
+ */
 const KINDS = [
   ['規制情報', REGULATION_OPTIONS, formatRegulation, isRegulation],
   ['注文ルート', ORDER_ROUTE_OPTIONS, formatOrderRoute, isOrderRoute],
-  ['VWAP対象区分', VWAP_TARGET_OPTIONS, formatVwapTarget, isVwapTarget],
 ]
 
 /** どの区分の選択肢にも無い値（未知のコードとして使う） */
 const UNKNOWN = '999'
 
 describe('symbolTypes', () => {
-  it('[STT-01] 3 つの区分が { value, label } の選択肢を重複なく持つ', () => {
+  it('[STT-01] 規制情報・注文ルートが { value, label } の選択肢を重複なく持つ', () => {
     for (const [name, options, ,] of KINDS) {
       expect(options.length, name).toBeGreaterThan(0)
 
@@ -86,6 +87,10 @@ describe('symbolTypes', () => {
   it('[STT-06] 預託先区分と VWAP対象区分は画面モックの順に並ぶ', () => {
     // コード順ではない（#42）。表示名で並びを固定する
     expect(ORDER_ROUTE_OPTIONS.map((option) => option.label)).toEqual(['IB証券', 'みずほ証券'])
-    expect(VWAP_TARGET_OPTIONS.map((option) => option.label)).toEqual(['対象', '対象外'])
+    // VWAP対象区分の名称はコードマスタのもの（画面モックの「対象外」ではなく「非対象」）
+    expect(VWAP_TARGET_CODES.map((code) => codeName('VWAP対象区分', code))).toEqual([
+      '対象',
+      '非対象',
+    ])
   })
 })

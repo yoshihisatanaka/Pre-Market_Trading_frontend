@@ -135,7 +135,7 @@ const HOLDINGS_LIST_KEY = 'holdings'
  */
 const DEPOSIT_QUERY_FOR = { 1: '0', 0: '1', 6: '6' }
 const GROWTH_DEPOSIT = '6'
-/** 注文の預り区分の値 → ラベル（src/utils/orderEntryOptions.js の DEPOSIT_CATEGORY_OPTIONS） */
+/** 注文の預り区分の値 → ラベル（コードマスタ `預り売買区分` の名称。新規注文で選べる 3 つ） */
 const DEPOSIT_LABELS = { 0: '特定', 1: '一般', 6: '成長投資枠' }
 
 /** 照会結果のヒントの文言（src/views/OrderEntryView.vue の customerHint / symbolHint） */
@@ -254,7 +254,7 @@ async function expectOrderEntryPrefilled(page, api, expected) {
   await expect(
     page
       .getByTestId('order-entry-side')
-      .getByRole('button', { name: expected.side === 'buy' ? '買い' : '売り', exact: true }),
+      .getByRole('button', { name: expected.side === 'buy' ? '買' : '売', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true')
   // 預り売買区分はセグメント（button の aria-pressed）なので、押されているラベルで比べる
   const deposit = page.getByTestId('order-entry-deposit-category')
@@ -302,7 +302,7 @@ async function expectOrderEntryPrefilled(page, api, expected) {
 
 const CALCULATIONS_API_PATH = '/api/calculations'
 /**
- * 仮計算で選べる預り区分（src/utils/calculationOptions.js の CALCULATION_DEPOSIT_OPTIONS の値）。
+ * 仮計算で選べる預り区分（src/utils/calculationOptions.js の CALCULATION_DEPOSIT_CODES）。
  * 預りの 預り売買区分 と同じ向きなので読み替えない。4 NISA / 8 継続管理勘定はクエリに載らない
  */
 const CALCULATION_DEPOSITS = ['1', '0', '6']
@@ -640,7 +640,7 @@ test.describe('預り検索（実 API 接続）', () => {
       (expected.symbol ?? '').toUpperCase(),
     )
     await expect(
-      page.getByTestId('customer-calc-side').getByRole('button', { name: '売り', exact: true }),
+      page.getByTestId('customer-calc-side').getByRole('button', { name: '売', exact: true }),
     ).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByTestId('customer-calc-deposit')).toHaveValue(
       expected.specific_deposit ?? DEFAULT_CALCULATION_DEPOSIT,

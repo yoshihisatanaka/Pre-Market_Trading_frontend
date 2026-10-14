@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { codeLabel } from '@/mocks/fixtures/codes'
 import {
   buildEstimateReadback,
   buildExpiryOptions,
@@ -34,6 +35,7 @@ function readbackOf(values, symbol = SYMBOL) {
     customer: { customerName: '高橋 みどり' },
     symbol,
     expiryOptions: buildExpiryOptions({ today: NOW }),
+    codeLabel,
   })
 }
 

@@ -33,20 +33,42 @@ const EDITOR_ROLE = 'supervisor'
 const baseURL = process.env.E2E_BASE_URL || 'http://frontend:5173'
 
 /*
- * 権限の 4 列。並びは src/utils/permissionTypes.js の PERMISSION_ITEMS と同じ
- * （utils は日本語キーを持たないので、応答のキーとの対応をここで持つ）。
- * cell は表の列位置（0: ロール / 1: 運用概要 / 2〜5: 権限）。testid は permissions.spec.js と同じ。
+ * 実 API に保存先がある権限の 3 列（応答のキーとの対応をここで持つ）。
+ * cell は表の列位置（0: ロール / 1: 説明 / 2〜9: 権限。並びは src/utils/permissionTypes.js の
+ * PERMISSION_ITEMS と同じ）。testid は permissions.spec.js と同じ。
+ * 全店参照権限 / 預託先参照権限 は画面に出さない（保存で変わらないことだけを PMR-06 で見る）。
  */
 const PERMISSIONS = [
-  { key: '発注権限', checkbox: 'permissions-edit-can-order', cell: 2 },
-  { key: 'マスタ更新権限', checkbox: 'permissions-edit-can-master-update', cell: 3 },
-  { key: '運用管理権限', checkbox: 'permissions-edit-can-operation', cell: 4 },
-  { key: '全店参照権限', checkbox: 'permissions-edit-can-branch-all', cell: 5 },
+  { key: '発注権限', checkbox: 'permissions-edit-can-order', cell: 3 },
+  { key: 'マスタ更新権限', checkbox: 'permissions-edit-can-master-update', cell: 6 },
+  { key: '運用管理権限', checkbox: 'permissions-edit-can-operation', cell: 7 },
 ]
-const [, , OPERATION, BRANCH_ALL] = PERMISSIONS
+const [, MASTER_UPDATE, OPERATION] = PERMISSIONS
+
+/*
+ * 実 API に保存先が無い契約提案の 4 列（docs/api/requests.md #75 / #76 / #81）。
+ * 応答にキーがあればバッジ、無ければ「—」でチェック不可になる
+ */
+const PROPOSED = [
+  { key: '参照権限', checkbox: 'permissions-edit-can-reference', cell: 2 },
+  { key: '強制発注権限', checkbox: 'permissions-edit-can-force-order', cell: 4 },
+  { key: 'CSV一括発注権限', checkbox: 'permissions-edit-can-csv-order', cell: 5 },
+  { key: 'ユーザ管理権限', checkbox: 'permissions-edit-can-user-management', cell: 9 },
+]
+
+/** 操作ログ閲覧の列（マスタ更新か運用管理から画面が導く） */
+const ACTIVITY_LOG_CELL = 8
+
+/** 画面に出さないが保存で変わってはいけない項目 */
+const HIDDEN_KEYS = ['全店参照権限', '預託先参照権限']
 
 /** 許可 / 不可のバッジの文言（src/utils/permissionTypes.js の permissionBadge と同じ） */
 const badge = (flag) => (flag === 1 ? '許可' : '不可')
+/** 契約提案の列の文言。キーが無ければ未対応の「—」 */
+const proposedBadge = (flag) => (flag === undefined || flag === null ? '—' : badge(flag))
+/** 操作ログ閲覧の列の文言 */
+const activityLogBadge = (row) =>
+  row.マスタ更新権限 === 1 || row.運用管理権限 === 1 ? '閲覧可' : '不可'
 
 const { settleList, countOf, rowsOf, expectListConsistent } = listHelpers({
   path: PATH,
@@ -137,7 +159,7 @@ async function saveFlags(page, role, values) {
   await expect(page.getByTestId('permissions-notice')).toBeVisible()
 }
 
-/** 4 権限だけを抜き出す（比較用） */
+/** 画面で保存する 3 権限だけを抜き出す（比較用） */
 function flagsOf(row) {
   return Object.fromEntries(PERMISSIONS.map((permission) => [permission.key, row[permission.key]]))
 }
@@ -198,32 +220,32 @@ test.describe('権限マスタ（実 API 接続）', () => {
     )
   })
 
-  test('[PMR-02] 全店参照権限を変えて保存すると実 API に反映され、元に戻せる', async ({
+  test('[PMR-02] マスタ更新権限を変えて保存すると実 API に反映され、元に戻せる', async ({
     page,
     playwright,
   }) => {
     const index = await indexOfTarget(playwright)
     const before = await readTarget(playwright)
-    const changed = flipped(before, BRANCH_ALL)
+    const changed = flipped(before, MASTER_UPDATE)
 
     await openList(page)
     await saveFlags(page, before, changed)
 
-    const cell = roleRow(page, index).getByRole('cell').nth(BRANCH_ALL.cell)
-    await expect(cell).toHaveText(badge(changed[BRANCH_ALL.key]))
-    // 全店参照権限は任意項目（未指定なら現在値維持）。送り忘れても 200 で通るので API の値で見る
-    expect((await readTarget(playwright))[BRANCH_ALL.key]).toBe(changed[BRANCH_ALL.key])
+    const cell = roleRow(page, index).getByRole('cell').nth(MASTER_UPDATE.cell)
+    await expect(cell).toHaveText(badge(changed[MASTER_UPDATE.key]))
+    // 画面の表示だけでなく、API の値で届いたことを見る
+    expect((await readTarget(playwright))[MASTER_UPDATE.key]).toBe(changed[MASTER_UPDATE.key])
 
     // 開き直しても保持される（保存後の画面表示だけが更新されているのではない）
     await openList(page)
-    await expect(roleRow(page, index).getByRole('cell').nth(BRANCH_ALL.cell)).toHaveText(
-      badge(changed[BRANCH_ALL.key]),
+    await expect(roleRow(page, index).getByRole('cell').nth(MASTER_UPDATE.cell)).toHaveText(
+      badge(changed[MASTER_UPDATE.key]),
     )
 
     // 元に戻す（スモークの後片付けもここで済ませる）
     await saveFlags(page, before, flagsOf(before))
-    await expect(roleRow(page, index).getByRole('cell').nth(BRANCH_ALL.cell)).toHaveText(
-      badge(before[BRANCH_ALL.key]),
+    await expect(roleRow(page, index).getByRole('cell').nth(MASTER_UPDATE.cell)).toHaveText(
+      badge(before[MASTER_UPDATE.key]),
     )
     expect(flagsOf(await readTarget(playwright))).toEqual(flagsOf(before))
   })
@@ -242,6 +264,10 @@ test.describe('権限マスタ（実 API 接続）', () => {
       for (const permission of PERMISSIONS) {
         await expect(cells.nth(permission.cell)).toHaveText(badge(role[permission.key]))
       }
+      for (const permission of PROPOSED) {
+        await expect(cells.nth(permission.cell)).toHaveText(proposedBadge(role[permission.key]))
+      }
+      await expect(cells.nth(ACTIVITY_LOG_CELL)).toHaveText(activityLogBadge(role))
     }
   })
 
@@ -282,6 +308,15 @@ test.describe('権限マスタ（実 API 接続）', () => {
         await expect(checkbox).not.toBeChecked()
       }
     }
+    // 提案の権限は、実 API が返していなければ押せない（返していれば押せる）
+    for (const permission of PROPOSED) {
+      const checkbox = dialog.getByTestId(permission.checkbox)
+      if (current[permission.key] === undefined || current[permission.key] === null) {
+        await expect(checkbox).toBeDisabled()
+      } else {
+        await expect(checkbox).toBeEnabled()
+      }
+    }
   })
 
   test('[PMR-06] 保存しても説明・触っていない権限・ほかのロールが変わらない', async ({
@@ -292,14 +327,17 @@ test.describe('権限マスタ（実 API 接続）', () => {
     const before = rolesBefore.find((item) => item.ロールコード === target.ロールコード)
 
     await openList(page)
-    await saveFlags(page, before, flipped(before, BRANCH_ALL))
+    await saveFlags(page, before, flipped(before, MASTER_UPDATE))
 
     const rolesAfter = await readRoles(playwright)
     const after = rolesAfter.find((item) => item.ロールコード === target.ロールコード)
-    expect(after[BRANCH_ALL.key], '保存自体が届いていない').not.toBe(before[BRANCH_ALL.key])
-    // 画面は 説明 を送らない。未指定なら現在値維持のはずで、消えていないかを見る
+    expect(after[MASTER_UPDATE.key], '保存自体が届いていない').not.toBe(before[MASTER_UPDATE.key])
+    // 画面は 説明 / 全店参照権限 / 預託先参照権限 を送らない。未指定なら現在値維持のはずで、変わっていないかを見る
     expect(after.説明).toBe(before.説明)
-    for (const permission of PERMISSIONS.filter((item) => item !== BRANCH_ALL)) {
+    for (const key of HIDDEN_KEYS) {
+      expect(after[key], `画面に出さない ${key} が変わった`).toBe(before[key])
+    }
+    for (const permission of PERMISSIONS.filter((item) => item !== MASTER_UPDATE)) {
       expect(after[permission.key], `${permission.key} が変わった`).toBe(before[permission.key])
     }
     for (const other of rolesBefore.filter((item) => item.ロールコード !== target.ロールコード)) {
@@ -341,7 +379,7 @@ test.describe('権限マスタ（実 API 接続）', () => {
     // 画面 B: 同じロールを先に保存して更新日時を進める（PUT は管理責任者のみなので画面経由で行う）
     const pageB = await page.context().newPage()
     await openList(pageB)
-    const external = flipped(before, BRANCH_ALL)
+    const external = flipped(before, MASTER_UPDATE)
     await saveFlags(pageB, before, external)
     await pageB.close()
 

@@ -13,12 +13,15 @@ import { usePermissionsStore } from './permissions'
 const TOTAL = rolePermissions.length
 const ROLE_CODES = rolePermissions.map((row) => row.ロールコード)
 
-/** 生の行の 4 権限 → save() に渡す真偽値 */
+/** 生の行の保存する 7 権限 → save() に渡す真偽値 */
 const flagsOf = (raw) => ({
+  canReference: raw.参照権限 === 1,
   canOrder: raw.発注権限 === 1,
+  canForceOrder: raw.強制発注権限 === 1,
+  canCsvOrder: raw.CSV一括発注権限 === 1,
   canMasterUpdate: raw.マスタ更新権限 === 1,
   canOperation: raw.運用管理権限 === 1,
-  canBranchAll: raw.全店参照権限 === 1,
+  canUserManagement: raw.ユーザ管理権限 === 1,
 })
 
 // 保存の対象。発注権限が不可で、合札（更新日時）を持っている行
@@ -161,7 +164,7 @@ describe('usePermissionsStore', () => {
 
     await store.save(NO_TIMESTAMP.ロールコード, {
       ...flagsOf(NO_TIMESTAMP),
-      canBranchAll: !flagsOf(NO_TIMESTAMP).canBranchAll,
+      canMasterUpdate: !flagsOf(NO_TIMESTAMP).canMasterUpdate,
     })
 
     expect(captured.bodies).toHaveLength(1)

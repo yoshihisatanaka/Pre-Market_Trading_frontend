@@ -1,6 +1,6 @@
 <script setup>
 /**
- * ロール 1 件の権限チェック 4 行（編集モーダルの中身）。
+ * ロール 1 件の権限チェックの並び（編集モーダルの中身）。
  *
  * `MasterFormDialog` の既定スロットに差す中身だけを持つ。枠・ボタン・エラーの出し先は
  * ダイアログ側の責務。項目そのものは utils/permissionTypes.js の PERMISSION_ITEMS が正で、
@@ -10,19 +10,24 @@
  * 行の間に細い区切り線。BaseCheckbox は「チェック → ラベル」の並びなので、
  * ここで row-reverse にして左右を入れ替える。
  *
+ * 項目の種類で出しかたを変える。
+ *   - 導出値（操作ログ閲覧。`derived`）… チェックを出さず、モックの `.derived-permission` 相当の
+ *     説明帯を末尾に置く（保存しないので触らせない）
+ *   - 値が null（実 API が返さない契約提案の項目）… チェックを押せなくし「未対応」を添える
+ *
  * BaseCheckbox は `inheritAttrs: false` でルート（<label>）ではなく <input> に属性を回すので、
  * **class を渡しても行そのものには効かない**。並びと区切り線は :deep(.base-checkbox) で当てる。
  * 文言は <label> の中に置いてあるので、説明文をクリックしても切り替わる（モックと同じ）。
  *
  * 出す data-testid（testidPrefix が 'permissions-edit' なら permissions-edit-can-order など）。
- * 上記のとおり **付くのは <input> 自身**なので、テストからは checked をそのまま読める:
- *   {prefix}-{ハイフン区切りにした権限名}
+ * 上記のとおり **付くのは <input> 自身**なので、テストからは checked / disabled をそのまま読める:
+ *   {prefix}-{ハイフン区切りにした権限名} / {prefix}-derived（導出値の説明帯）
  *
  * 単体テストは持たない。挙動は画面側の spec が編集ダイアログを通して担保する
  * （src/components/symbol/SymbolFormFields.vue と同じ扱い）。
  */
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
-import { PERMISSION_ITEMS } from '@/utils/permissionTypes'
+import { EDITABLE_PERMISSION_ITEMS, PERMISSION_ITEMS } from '@/utils/permissionTypes'
 
 defineProps({
   /** data-testid の接頭辞。'permissions-edit' のように操作まで含めて渡す */
@@ -33,31 +38,54 @@ defineProps({
 })
 
 /*
- * 権限の値。オブジェクトごと v-model する（項目が 4 つあり、
- * 1 項目 1 model にすると呼び出し側が 4 本の ref を並べることになるため）。
- * キーは PERMISSION_ITEMS と同じ。
+ * 権限の値。オブジェクトごと v-model する（項目が 7 つあり、
+ * 1 項目 1 model にすると呼び出し側が 7 本の ref を並べることになるため）。
+ * キーは EDITABLE_PERMISSION_ITEMS と同じ。値が null の項目は未対応。
  */
 const form = defineModel({ type: Object, required: true })
+
+const derivedItems = PERMISSION_ITEMS.filter((item) => item.derived)
 
 /** canOrder → can-order。data-testid をケバブケースに揃える */
 function testid(prefix, name) {
   return `${prefix}-${name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`)}`
+}
+
+/** 実 API が値を返さない項目か */
+function unsupported(key) {
+  return form.value[key] === null || form.value[key] === undefined
 }
 </script>
 
 <template>
   <div class="permission-check-list">
     <BaseCheckbox
-      v-for="item in PERMISSION_ITEMS"
+      v-for="item in EDITABLE_PERMISSION_ITEMS"
       :key="item.key"
       v-model="form[item.key]"
+      :disabled="unsupported(item.key)"
       :data-testid="testid(testidPrefix, item.key)"
     >
       <span class="permission-check-list__text">
-        <strong class="permission-check-list__label">{{ item.label }}</strong>
+        <strong class="permission-check-list__label">
+          {{ item.label }}
+          <span v-if="unsupported(item.key)" class="permission-check-list__unsupported">
+            （バックエンド未対応）
+          </span>
+        </strong>
         <span class="permission-check-list__description">{{ item.description }}</span>
       </span>
     </BaseCheckbox>
+
+    <div
+      v-for="item in derivedItems"
+      :key="item.key"
+      class="permission-check-list__derived"
+      :data-testid="`${testidPrefix}-derived`"
+    >
+      <strong>{{ item.label }}</strong>
+      <span>{{ item.description }}</span>
+    </div>
   </div>
 </template>
 
@@ -96,7 +124,26 @@ function testid(prefix, name) {
   font-weight: 600;
 }
 
+.permission-check-list__unsupported {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+}
+
 .permission-check-list__description {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* 自動付与の説明帯（モックの .derived-permission） */
+.permission-check-list__derived {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-muted);
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }

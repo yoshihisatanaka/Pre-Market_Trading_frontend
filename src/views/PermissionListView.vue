@@ -9,7 +9,13 @@ import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import PermissionCheckList from '@/components/permissions/PermissionCheckList.vue'
 import { usePermissionsStore } from '@/stores/permissions'
-import { PERMISSION_ITEMS, permissionBadge } from '@/utils/permissionTypes'
+import {
+  EDITABLE_PERMISSION_ITEMS,
+  PERMISSION_ITEMS,
+  UNSUPPORTED_LABEL,
+  permissionBadge,
+  validatePermissions,
+} from '@/utils/permissionTypes'
 
 /*
  * 権限マスタ（ロール別権限の一覧と編集）。
@@ -18,13 +24,15 @@ import { PERMISSION_ITEMS, permissionBadge } from '@/utils/permissionTypes'
  * 編集できるか（「操作」列を出すか）は GET /auth/me のロールが管理責任者かで決まる
  * （判定は src/stores/permissions.js）。
  *
- * 画面モック（https://uspreorder-vmbhej3k.manus.space/masters/permissions）からの
- * 意図的なずれがある。
- *   - 権限の列は仕様（RolePermissionItem）の 4 つ。モックの「操作ログ閲覧」「管理者機能」は
- *     仕様に無いので出さない（docs/api/requests.md #4）
- *   - 注記から「紙芝居モック」の暫定付与の説明を外す（実データを出すため）
+ * 権限の列は画面モック（../premarket-order-202609 の 7ee3ad9。2026-10-12）の 8 列。
+ * うち 4 列（参照 / 発注（強制） / CSV一括発注 / ユーザ管理）は実 API に保存先が無い契約提案で、
+ * 実 API が返さない間は「—」を出し、編集のチェックは押せない（src/utils/permissionTypes.js）。
+ *
+ * 画面モックからの意図的なずれがある。
+ *   - ロール追加・ロール名 / 説明の編集は作らない（API に POST も ロール名 の更新も無い）
  *   - 「閲覧のみ」への切替入口（モックの ?as_user= セレクタ）は作らない。操作者は
  *     /auth/me（SSO セッションか開発用の X-User-Code）で決まる
+ *   - 列見出しの改行（「発注<br>（強制）」）はせず 1 行で出す
  */
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
@@ -34,13 +42,13 @@ const { roles, canEdit, loading, error, isEmpty, saving, saveError } = storeToRe
 store.load()
 
 /*
- * 列は画面モックの並びどおり（ロール・運用概要・権限・操作）。権限の列は PERMISSION_ITEMS から
+ * 列は画面モックの並びどおり（ロール・説明・権限・操作）。権限の列は PERMISSION_ITEMS から
  * 生やすので、項目を足すときも一覧とモーダルがずれない。
  * 「操作」列は編集できるときだけ出す（モックも管理責任者以外では列ごと消える）。
  */
 const columns = computed(() => [
   { key: 'role', label: 'ロール' },
-  { key: 'description', label: '運用概要' },
+  { key: 'description', label: '説明' },
   ...PERMISSION_ITEMS.map((item) => ({ key: item.key, label: item.columnLabel })),
   ...(canEdit.value ? [{ key: 'actions', label: '操作' }] : []),
 ])
@@ -54,6 +62,8 @@ const permissionSlots = PERMISSION_ITEMS.map((item) => ({ ...item, slot: `cell-$
 /** 編集中のロール。null なら閉じている（開閉と対象を 1 つの ref で兼ねる） */
 const editTarget = ref(null)
 const editForm = ref({})
+/** 権限の組み合わせの不備（発注なしで強制を許可した等）。保存を押したときに検証する */
+const ruleErrors = ref([])
 
 const editTitle = computed(() => (editTarget.value ? `${editTarget.value.roleLabel}の権限設定` : ''))
 
@@ -64,10 +74,12 @@ function openEdit(row) {
   noticeMessage.value = ''
   // 前回の保存失敗の文言を持ち越さない
   store.clearSaveError()
+  ruleErrors.value = []
   editTarget.value = row
-  // 一覧の行をそのまま編むと、キャンセルしたときに戻せない。真偽値だけ写して持つ
+  // 一覧の行をそのまま編むと、キャンセルしたときに戻せない。保存する項目の値だけ写して持つ
+  // （null は未対応の印なので真偽値に寄せない。api 層が null の項目を送らない）
   editForm.value = Object.fromEntries(
-    PERMISSION_ITEMS.map((item) => [item.key, Boolean(row[item.key])]),
+    EDITABLE_PERMISSION_ITEMS.map((item) => [item.key, row[item.key] ?? null]),
   )
 }
 
@@ -80,6 +92,9 @@ function closeEdit() {
  * MasterFormDialog の error に出す（入力した内容は残る）。
  */
 async function submitEdit() {
+  ruleErrors.value = validatePermissions(editForm.value)
+  if (ruleErrors.value.length > 0) return
+
   const target = editTarget.value
   const result = await store.save(target.role, editForm.value)
   if (!result) return
@@ -100,7 +115,8 @@ function reload() {
     <!-- 画面の説明。4 状態に関わらず常時出す。見出しだけが編集可否で変わる -->
     <BaseAlert variant="info" data-testid="permissions-description">
       <strong>{{ canEdit ? '権限設定可能' : '閲覧のみ' }}</strong>
-      ロールごとに発注・マスタ更新・運用管理・全店参照の権限を設定します。
+      ユーザマスタでは、利用者ごとにこの一覧のロールを 1 つ割り当てます。
+      操作ログ閲覧は、マスタ更新または運用・障害管理を許可したロールへ自動付与されます。
       権限マスタ自体の変更は管理責任者のみ実行できます。
     </BaseAlert>
 
@@ -137,11 +153,18 @@ function reload() {
           <span class="permission-list__description">{{ row.description }}</span>
         </template>
 
-        <!-- 権限 4 列。許可 / 不可のバッジだけを置く -->
+        <!-- 権限 8 列。許可 / 不可（操作ログ閲覧は 閲覧可 / 不可）のバッジを置く。
+             実 API が返さない契約提案の列はバッジを出さず「—」 -->
         <template v-for="item in permissionSlots" #[item.slot]="{ value }" :key="item.key">
-          <BaseBadge :variant="permissionBadge(value).variant">
-            {{ permissionBadge(value).label }}
+          <BaseBadge
+            v-if="permissionBadge(value, item)"
+            :variant="permissionBadge(value, item).variant"
+          >
+            {{ permissionBadge(value, item).label }}
           </BaseBadge>
+          <span v-else class="permission-list__unsupported" title="バックエンド未対応">
+            {{ UNSUPPORTED_LABEL }}
+          </span>
         </template>
 
         <template #cell-actions="{ row }">
@@ -165,6 +188,7 @@ function reload() {
       :title="editTitle"
       :pending="saving"
       :error="saveError"
+      :validation-errors="ruleErrors"
       @close="closeEdit"
       @submit="submitEdit"
     >
@@ -198,8 +222,12 @@ function reload() {
   font-size: var(--font-size-sm);
 }
 
+.permission-list__unsupported {
+  color: var(--color-text-muted);
+}
+
 /*
- * 3 列目より後（権限 4 列と操作）は見出しもセルも中央寄せ。モックと同じ。
+ * 3 列目より後（権限 8 列と操作）は見出しもセルも中央寄せ。モックと同じ。
  * DataTable は右寄せ（numeric）しか持たないので、ここで列位置を指して当てる。
  * **列の並びを変えるときはこの指定も見直すこと。**
  */

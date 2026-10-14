@@ -19,8 +19,29 @@ export function resetPermissionRows() {
   permissionRows = rolePermissions.map((row) => ({ ...row }))
 }
 
-/** 更新の本文に載る 4 権限（RolePermissionUpdateRequest） */
-const PERMISSION_COLUMNS = ['発注権限', 'マスタ更新権限', '運用管理権限', '全店参照権限']
+/**
+ * 更新の本文に載る権限（RolePermissionUpdateRequest の 4 権限と、契約提案の 4 権限。
+ * 提案の側は fixtures/permissions.js のコメントを参照）
+ */
+const PERMISSION_COLUMNS = [
+  '発注権限',
+  'マスタ更新権限',
+  '運用管理権限',
+  '全店参照権限',
+  '参照権限',
+  '強制発注権限',
+  'CSV一括発注権限',
+  'ユーザ管理権限',
+]
+
+/**
+ * 発注を前提にする権限（契約提案）。画面モックはサーバ側でも検証するので、提案として同じ拒否を返す。
+ * 文言はモックの _validate_role_permissions と同じ
+ */
+const REQUIRES_ORDER = [
+  ['強制発注権限', '「発注（強制）」を許可するには「発注」も許可してください。'],
+  ['CSV一括発注権限', '「CSV一括発注」を許可するには「発注」も許可してください。'],
+]
 
 /** 楽観的ロックの競合。実 API が返すのと同じ文言 */
 const PERMISSION_CONFLICT_DETAIL =
@@ -42,10 +63,11 @@ export const permissionHandlers = [
    *
    *   404 ErrorResponse … ロールが存在しない
    *   409 ErrorResponse … 楽観的ロックの競合（更新日時 が現在値と違う）
+   *   422 ErrorResponse … 発注なしで強制発注 / CSV一括発注を許可した（契約提案。画面モックの検証）
    *
    * 403（管理責任者以外）は認可強制が有効なときだけ出るので、ここでは返さない
    * （実 API の既定も 認可強制 false）。
-   * 全店参照権限 は省略されたら現在値を保つ（実 API と同じ）。
+   * 送られなかった権限は現在値を保つ（実 API の 全店参照権限 と同じ扱いを提案の 4 権限にも当てる）。
    * 変更が無ければ更新日時を進めず「変更はありません。」を返す。
    */
   http.put('*/api/masters/permissions/:roleCode', async ({ params, request }) => {
@@ -62,6 +84,11 @@ export const permissionHandlers = [
         return [column, sent === undefined || sent === null ? current[column] : Number(Boolean(sent))]
       }),
     )
+
+    if (next.発注権限 !== 1) {
+      const violated = REQUIRES_ORDER.find(([column]) => next[column] === 1)
+      if (violated) return detailError(422, violated[1])
+    }
 
     const unchanged = PERMISSION_COLUMNS.every((column) => current[column] === next[column])
     if (unchanged) {

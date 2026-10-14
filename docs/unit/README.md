@@ -11,9 +11,9 @@ E2E の [docs/e2e/](../e2e/README.md) と同じ仕組み・同じ表形式。違
 
   | 対象 | 文書 |
   |---|---|
-  | `src/stores/orders.js` | `stores-orders.md` |
+  | `src/stores/customerSearch.js` | `stores-customer-search.md` |
   | `src/components/ui/DataTable.vue` | `components-ui-data-table.md` |
-  | `src/views/OrderListView.vue` | `views-order-list-view.md` |
+  | `src/views/CustomerSearchView.vue` | `views-customer-search-view.md` |
 
 - 冒頭で **略号** を宣言する。**3 文字**を推奨（E2E は 2 文字。衝突を避ける）
 
@@ -61,6 +61,6 @@ E2E と単体の両方を検査する。
 
 ## 見本
 
-- [stores-orders.md](stores-orders.md) ↔ `src/stores/orders.spec.js`（ストア）
+- [stores-customer-search.md](stores-customer-search.md) ↔ `src/stores/customerSearch.spec.js`（ストア）
 - [components-ui-data-table.md](components-ui-data-table.md) ↔ `src/components/ui/DataTable.spec.js`（汎用部品）
-- [views-order-list-view.md](views-order-list-view.md) ↔ `src/views/OrderListView.spec.js`（画面）
+- [views-customer-search-view.md](views-customer-search-view.md) ↔ `src/views/CustomerSearchView.spec.js`（画面）

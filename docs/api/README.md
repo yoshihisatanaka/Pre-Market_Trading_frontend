@@ -88,8 +88,8 @@ docker compose run --rm -p 8080:8080 redocly preview-docs openapi.json -h 0.0.0.
 | 仮仕様（現在） | 該当ファイル | 確認すること |
 |---|---|---|
 | `GET /api/orders` → `{ items: Order[], total: number }` | `src/api/orders.js`, `src/mocks/fixtures/orders.js` | **2026-09-15 の取り込みで実スキーマが付いた。** `OrderListResponse` は `{ total, orders: OrderItemResponse[] }` で、キーは日本語（`ID` / `銘柄コード` / `売買区分` / `数量` / `指値単価` / `処理状況` / `受注日` / `受注時刻`）。**銘柄名は含まれない。** `account_no` / `stock_code` / `status` / `limit` / `offset` での絞り込みも入った。列構成ごと作り直しになるため**別件**として残してある |
-| `Order.side` = `buy` / `sell` | `src/views/OrderListView.vue`（`sideLabels`） | 実際の売買区分の値 |
-| `Order.status` = `working` / `filled` / `canceled` / `rejected` | `src/views/OrderListView.vue`（`statusLabels`） | 実際の注文状態の値と表示名 |
+| `Order.side` = `buy` / `sell` | `src/mocks/fixtures/orders.js`（注文一覧の画面は 2026-10-14 に退役。残るのは api 層の参考実装だけ） | 実際の売買区分の値 |
+| `Order.status` = `working` / `filled` / `canceled` / `rejected` | 同上 | 実際の注文状態の値と表示名 |
 | `Order.ordered_at` = ISO 8601 (UTC) | `src/api/orders.js`（`toOrder`）, `src/utils/format.js` | 形式とタイムゾーン |
 | エラー応答 = `{ message, code }` | `src/api/client.js`（`normalizeError`） | 実 API は `{ detail: string }`（400 / 401 / 404 / 409 / 500）と `{ detail: ValidationError[] }`（422）の 2 形。どちらも読めるようにしてあるが、`message` を返すのは**まだ切り替えていないマスタのモックだけ** |
 

@@ -10,5 +10,5 @@ permissionGuard が回してくる行き先。一覧を持たない固定の画�
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
-| FBV-01 | `useCurrentOperatorStore` の `error` が無い | マウントする | `forbidden-message` に「この画面を開く権限がありません。」が出て、`/` へのリンク「注文一覧へ戻る」がある。`forbidden-check-failed` は出ない | 実装済 |
+| FBV-01 | `useCurrentOperatorStore` の `error` が無い | マウントする | `forbidden-message` に「この画面を開く権限がありません。」が出て、`/customers/search` へのリンク「顧客検索へ戻る」がある（初期画面。2026-10-14 に注文一覧から変えた）。`forbidden-check-failed` は出ない | 実装済 |
 | FBV-02 | `/auth/me` が 500 で `ensureLoaded()` を終えている | マウントする | `forbidden-check-failed` に「権限を確認できませんでした（<理由>）。時間をおいて開き直してください。」が出て、`forbidden-message` は出ない | 実装済 |

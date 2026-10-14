@@ -306,7 +306,7 @@ views / components  →  stores  →  api  →  (HTTP)
 - 新しいエンドポイントを使うときは、**先に `src/api/` に関数を1つ追加**してから呼ぶ
 - `docs/api/openapi.json` は**編集しない**（バックエンドの生成物。次の取り込みで消える）。lint と HTML 生成は `/api-spec-sync` が通す
 - 非同期は `src/composables/useAsync.js` を使い、各所で try-catch を書かない
-- 画面は **ローディング / エラー / 空 / データあり の4状態**を必ず出し分ける（参考: `src/views/OrderListView.vue`）
+- 画面は **ローディング / エラー / 空 / データあり の4状態**を必ず出し分ける（参考: `src/views/CustomerSearchView.vue`）
 
 ## ディレクトリ
 
@@ -420,4 +420,5 @@ headless なので**ブラウザ画面をリアルタイムには覗けない**�
   モックの配色・文字サイズに更新済み）。個別画面はまだ未着手
 - サイドメニューの 15 項目は大半が未実装のため「ページが見つかりません」に落ちる。
   画面を作ったら `router/index.js` に `navigation.js` と同じ path のルートを足す
-- `OrderListView` は縦串の参考実装。実仕様が来たら差し替える前提
+- ログイン後の初期画面は顧客検索（`/` は `/customers/search` へ redirect）。縦串の参考実装だった
+  `OrderListView`（注文一覧）は 2026-10-14 に退役した。`src/api/orders.js` だけ api 層の参考実装として残る

@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import OrderListView from '@/views/OrderListView.vue'
 import { permissionGuard } from './permissionGuard'
 import { trackRouteLoading } from '@/composables/useRouteLoading'
 
@@ -12,10 +11,14 @@ import { trackRouteLoading } from '@/composables/useRouteLoading'
  */
 const routes = [
   {
+    /*
+     * ログイン後の初期画面は顧客検索（仕様書 §6.1 画面 1。モックの routers/auth.py も `/` を
+     * `/customers/search` へ 302 で回す）。クエリとハッシュは vue-router が引き継ぐ。
+     * 縦串の参考実装だった注文一覧（OrderListView）は 2026-10-14 に退役した
+     */
     path: '/',
-    name: 'order-list',
-    component: OrderListView,
-    meta: { title: '注文一覧' },
+    name: 'home',
+    redirect: { name: 'customer-search' },
   },
   {
     // 開発用。components/ui/ の部品を実物で見比べるための一覧。

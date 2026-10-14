@@ -93,7 +93,7 @@ views / components  →  stores  →  api  →  (HTTP)
 
 `loading` / `error` の管理は [`useAsync`](../src/composables/useAsync.js) を使い、各所で try-catch を書かない。
 画面は **ローディング / エラー / 空 / データあり の4状態**を必ず出し分ける
-（参考実装: [src/views/OrderListView.vue](../src/views/OrderListView.vue)）。
+（参考実装: [src/views/CustomerSearchView.vue](../src/views/CustomerSearchView.vue)）。
 
 ---
 
@@ -156,9 +156,9 @@ views / components  →  stores  →  api  →  (HTTP)
 - 個別のテストでレスポンスを変えたい時は `server.use()` で上書きする（`afterEach` で自動的に戻る）
 - **単体テストも先に [docs/unit/<対象>.md](unit/README.md) にシナリオを書く。** `it('[OST-01] …')` のようにタイトル先頭に ID を付ける
 - 単体テストの見本（シナリオ文書 ↔ テスト）:
-  - ストア: [docs/unit/stores-orders.md](unit/stores-orders.md) ↔ [orders.spec.js](../src/stores/orders.spec.js)
+  - ストア: [docs/unit/stores-customer-search.md](unit/stores-customer-search.md) ↔ [customerSearch.spec.js](../src/stores/customerSearch.spec.js)
   - 汎用部品（props / slots の入出力のみ）: [docs/unit/components-ui-data-table.md](unit/components-ui-data-table.md) ↔ [DataTable.spec.js](../src/components/ui/DataTable.spec.js)
-  - 画面（実 Pinia + MSW で4状態を検証）: [docs/unit/views-order-list-view.md](unit/views-order-list-view.md) ↔ [OrderListView.spec.js](../src/views/OrderListView.spec.js)
+  - 画面（実 Pinia + MSW で4状態を検証）: [docs/unit/views-customer-search-view.md](unit/views-customer-search-view.md) ↔ [CustomerSearchView.spec.js](../src/views/CustomerSearchView.spec.js)
 - E2E の要素特定は `data-testid` か `getByRole` を使う。CSS クラス名に依存しない
 - E2E でシナリオ別に API 応答を変えるときは [e2e/helpers/mockApi.js](../e2e/helpers/mockApi.js) の `mockApi()` を **`page.goto()` より前に**呼ぶ
   （見本: [e2e/orders.spec.js](../e2e/orders.spec.js)）。
@@ -231,7 +231,7 @@ const order = toOrder(res.data)
 ### パスの書きかた
 
 **文書内のパスはリポジトリルート相対で、接頭辞を付けずに書く。**
-`src/api/orders.js` / `e2e/orders.spec.js` / `docs/unit/stores-orders.md` のように書く
+`src/api/orders.js` / `e2e/customer-search.spec.js` / `docs/unit/stores-customer-search.md` のように書く
 （`./` を付けない。かつてフロントエンドが `frontend/` 配下にあった名残の接頭辞も付けない）。
 Markdown のリンクは相対パスにする — `docs/` 直下からは `../src/...`、`docs/api/` からは `../../src/...`。
 

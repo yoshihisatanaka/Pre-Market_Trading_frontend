@@ -25,6 +25,7 @@ PMG-05 が見ている。
 `orders`、空パスは `summary` へ redirect）は 2026-10-01 に、預り検索（`/customers/holdings`）は 2026-10-02 に入った。
 いずれも権限を要求しない（RTR-04 / RTR-06）。
 顧客詳細はメニューに載らないので RTR-04 の走査には入らず、RTR-06 で別に見る。
+`/` は 2026-10-14 から顧客検索への redirect（注文一覧の参考実装は退役）。メニューに載らないので RTR-08 で別に見る。
 
 | ID | 前提 | 操作 | 期待結果 | 状態 |
 |---|---|---|---|---|
@@ -35,3 +36,4 @@ PMG-05 が見ている。
 | RTR-05 | — | `routes` から `forbidden` と NotFound（`/:pathMatch(.*)*`）を引く | どちらも存在し、`requiredPermission` を持たない（回し先が自分を弾いて回り続けない） | 実装済 |
 | RTR-06 | — | `routes` から顧客詳細（`/customers/:customerId(\d+)`）を引き、子ルートと空パスの redirect を見る | 親と子（`summary` / `orders` / `order-entry`）のどれも `requiredPermission` を持たない。空パスの子は同じ `customerId` のまま `customer-summary` へ回す | 実装済 |
 | RTR-07 | — | `routes` から `/orders/new` を引き、`beforeEnter` にクエリなし・部店だけ・部店と口座番号を渡す | 口座番号（`account_number`）が無ければ `customer-search` へ回し、あれば `true`（通す）を返す（モックの「顧客の指定が無ければ顧客検索へ」と同じ） | 実装済 |
+| RTR-08 | — | `routes` から `/` を引く | 画面を持たず `customer-search` へ redirect する（初期画面は顧客検索。仕様書 §6.1 画面 1 とモックの `routers/auth.py` のとおり）。`requiredPermission` を持たず、回し先 `customer-search` の path は `/customers/search` | 実装済 |

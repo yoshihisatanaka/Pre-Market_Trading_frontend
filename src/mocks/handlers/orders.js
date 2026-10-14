@@ -4,11 +4,12 @@ import { orderInquiryFxRate, orderInquiryRows } from '../fixtures/orderInquiry'
 import { detailError, nowIsoTimestamp, toNonNegativeInt, toStatusList } from './_shared'
 
 /*
- * `GET /orders` は 2 つの画面が叩いている。
- *   - 注文一覧（`/`）… 縦串の参考実装。実仕様が来る前の仮の形 `items` を読む
+ * `GET /orders` は 2 つの形で読まれている。
+ *   - `src/api/orders.js`（`fetchOrders` / `toOrder`。api 層の参考実装）… 実仕様が来る前の仮の形 `items` を読む。
+ *     画面（注文一覧 `/`）は 2026-10-14 に退役し、いまは api 層の単体テストと契約テストだけが使う
  *   - 注文照会（`/orders/inquiry`）… 実仕様の `OrderListResponse`（`orders` / `total` …）を読む
  * 1 本のハンドラで両方の形を 1 つの応答に載せて返す（同じパスにハンドラを 2 本置くと先の 1 本しか効かない）。
- * 参考実装を退役させるときに `items` を外し、実 API に切り替えるときはこのハンドラごと消す。
+ * `src/api/orders.js` を退役させるときに `items` を外し、実 API に切り替えるときはこのハンドラごと消す。
  * 滞留注文抽出（`/operations/stalled-orders`）も同じ `orders` を処理状況（101,103 / 003）で絞って読む。
  *
  * 注文照会から入る訂正・取消の画面のために、1 件の詳細（GET /orders/{order_id}）・訂正・取消も持つ。

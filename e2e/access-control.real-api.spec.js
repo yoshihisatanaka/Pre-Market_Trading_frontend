@@ -92,9 +92,9 @@ test.describe('アクセス制御（実 API 接続）', () => {
     expect(typeof body.登録済).toBe('boolean')
     expect(typeof body.認可強制).toBe('boolean')
 
-    // 権限の要らない画面は応答の中身に関わらず開ける
-    await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    // 権限の要らない画面は応答の中身に関わらず開ける（/ は初期画面の顧客検索へ回る）
+    await expect(page).toHaveURL(/\/customers\/search$/)
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
     await expect(page.getByTestId('forbidden')).toHaveCount(0)
   })
 

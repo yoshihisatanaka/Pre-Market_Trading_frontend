@@ -89,7 +89,7 @@ function createTestRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/', component: Page, meta: { title: '注文一覧' } },
+      { path: '/', component: Page, meta: { title: '顧客検索' } },
       { path: '/:pathMatch(.*)*', component: Page, meta: { title: 'ページが見つかりません' } },
     ],
   })
@@ -130,7 +130,7 @@ describe('AppHeader', () => {
   it('[AHD-01] ルートの meta.title を見出しに表示する', async () => {
     const { wrapper } = await mountAt('/')
 
-    expect(wrapper.find('h1').text()).toBe('注文一覧')
+    expect(wrapper.find('h1').text()).toBe('顧客検索')
   })
 
   it('[AHD-02] 遷移すると見出しが遷移先のタイトルに変わる', async () => {
@@ -232,7 +232,7 @@ describe('AppHeader', () => {
     expect(marketEt(wrapper).exists()).toBe(false)
 
     // 見出しとメニューボタンは通常どおり
-    expect(wrapper.find('h1').text()).toBe('注文一覧')
+    expect(wrapper.find('h1').text()).toBe('顧客検索')
     await toggleButton(wrapper).trigger('click')
     expect(wrapper.emitted('toggle-sidebar')).toHaveLength(1)
   })

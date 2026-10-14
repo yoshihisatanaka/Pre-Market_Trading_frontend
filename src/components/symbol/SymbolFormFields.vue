@@ -34,9 +34,6 @@ import FormGrid from '@/components/ui/FormGrid.vue'
 import { useCodesStore } from '@/stores/codes'
 import { ORDER_ROUTE_OPTIONS, REGULATION_OPTIONS, VWAP_TARGET_CODES } from '@/utils/symbolTypes'
 
-/** VWAP対象区分の選択肢はコードマスタ `VWAP対象区分` から（App.vue が読み終えてから画面を描く） */
-const vwapTargetOptions = useCodesStore().pickOptions('VWAP対象区分', VWAP_TARGET_CODES)
-
 defineProps({
   /** data-testid の接頭辞。'symbols-add' / 'symbols-edit' のように操作まで含めて渡す */
   testidPrefix: {
@@ -68,6 +65,9 @@ defineProps({
     default: () => ({}),
   },
 })
+
+/** VWAP対象区分の選択肢はコードマスタ `VWAP対象区分` から（App.vue が読み終えてから画面を描く） */
+const vwapTargetOptions = useCodesStore().pickOptions('VWAP対象区分', VWAP_TARGET_CODES)
 
 /*
  * フォームの値。オブジェクトごと v-model する（項目が 10 あり、

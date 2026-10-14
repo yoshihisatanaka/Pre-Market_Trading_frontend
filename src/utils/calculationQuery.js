@@ -1,4 +1,4 @@
-import { CALCULATION_DEPOSIT_OPTIONS } from './calculationOptions'
+import { CALCULATION_DEPOSIT_CODES } from './calculationOptions'
 import { SIDE } from './orderEntryOptions'
 
 /*
@@ -18,7 +18,7 @@ import { SIDE } from './orderEntryOptions'
 
 const SIDES_BY_NAME = Object.freeze({ buy: SIDE.BUY, sell: SIDE.SELL })
 const SIDE_NAMES = Object.freeze({ [SIDE.BUY]: 'buy', [SIDE.SELL]: 'sell' })
-const DEPOSIT_VALUES = CALCULATION_DEPOSIT_OPTIONS.map((option) => option.value)
+const DEPOSIT_VALUES = CALCULATION_DEPOSIT_CODES
 
 /**
  * 引き継ぐ値 → URL クエリ。空の値と仮計算で選べない預り区分はクエリに載せない。

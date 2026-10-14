@@ -62,6 +62,46 @@ export const useCodesStore = defineStore('codes', () => {
     return []
   }
 
+  /**
+   * 画面が決めた並び・絞り込みでの選択肢。名称はコードマスタから引く。
+   *
+   * コードマスタの並びはコード順だが、画面モックの並び（買 → 売 など。#42 の回答でフロント固定）や
+   * 「その画面で選べる値」の絞り込み（NISA を出さない など。#73）は画面が決める。
+   * コードマスタに無いコードは落とす（名称の無い選択肢を出さない）。
+   *
+   * @param {string} name コードマスタ名
+   * @param {string[]} codes 並べたいコードの列
+   * @returns {Array<{ value: string, label: string }>}
+   */
+  function pickOptions(name, codes) {
+    const options = optionsFor(name)
+    return codes
+      .map((code) => options.find((option) => option.value === code))
+      .filter(Boolean)
+  }
+
+  /**
+   * コード → 名称。確認画面の読み上げや、一覧セルで名称が来ないときの補いに使う。
+   *
+   * @param {string} name コードマスタ名
+   * @param {string|null|undefined} code
+   * @returns {string} 名称。未知の値・空値は '—'（他の列の空値表現とそろえる）
+   */
+  function labelFor(name, code) {
+    return optionsFor(name).find((option) => option.value === code)?.label ?? '—'
+  }
+
+  /**
+   * コードマスタにあるコードか。URL クエリのような外から来る値を検索条件に使う前に通す。
+   *
+   * @param {string} name コードマスタ名
+   * @param {unknown} code
+   * @returns {boolean}
+   */
+  function hasCode(name, code) {
+    return optionsFor(name).some((option) => option.value === code)
+  }
+
   return {
     codes: data,
     error,
@@ -69,5 +109,8 @@ export const useCodesStore = defineStore('codes', () => {
     ready,
     load,
     optionsFor,
+    pickOptions,
+    labelFor,
+    hasCode,
   }
 })

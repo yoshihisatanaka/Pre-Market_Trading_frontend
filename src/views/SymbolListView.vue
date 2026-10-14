@@ -14,22 +14,28 @@ import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import SymbolFormFields from '@/components/symbol/SymbolFormFields.vue'
 import VwapBulkDisableDialog from '@/components/symbol/VwapBulkDisableDialog.vue'
 import { useListQuery } from '@/composables/useListQuery'
+import { useCodesStore } from '@/stores/codes'
 import { SYMBOLS_PAGE_SIZE, useSymbolsStore } from '@/stores/symbols'
 import { formatQuantity, formatUsdUnit } from '@/utils/format'
 import {
   ORDER_ROUTE_OPTIONS,
   REGULATION_OPTIONS,
-  VWAP_TARGET_OPTIONS,
+  VWAP_TARGET_CODES,
   formatOrderRoute,
   formatRegulation,
-  formatVwapTarget,
   isOrderRoute,
   isRegulation,
-  isVwapTarget,
 } from '@/utils/symbolTypes'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する
 const store = useSymbolsStore()
+
+/*
+ * VWAP対象区分の選択肢と名称はコードマスタ `VWAP対象区分` から（並びは utils の VWAP_TARGET_CODES）。
+ * App.vue が読み終えてから画面を描くので、setup の時点で揃っている（URL クエリの検査にもそのまま使える）。
+ */
+const codes = useCodesStore()
+const vwapTargetOptions = codes.pickOptions('VWAP対象区分', VWAP_TARGET_CODES)
 const {
   items,
   total,
@@ -106,7 +112,7 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
     {
       key: 'vwapTarget',
       query: 'vwap_target',
-      parse: (value) => (isVwapTarget(value) ? value : ''),
+      parse: (value) => (codes.hasCode('VWAP対象区分', value) ? value : ''),
     },
   ],
   load: (params) => store.load(params),
@@ -125,7 +131,7 @@ function orderRouteLabel(row) {
 }
 
 function vwapTargetLabel(row) {
-  return row.vwapTargetName || formatVwapTarget(row.vwapTarget)
+  return row.vwapTargetName || codes.labelFor('VWAP対象区分', row.vwapTarget)
 }
 
 /**
@@ -171,7 +177,7 @@ function emptyForm() {
      */
     regulation: REGULATION_OPTIONS[0].value,
     orderRoute: ORDER_ROUTE_OPTIONS[0].value,
-    vwapTarget: VWAP_TARGET_OPTIONS[0].value,
+    vwapTarget: VWAP_TARGET_CODES[0],
     // 数値 2 つは入力欄が文字列を持つ。数値への変換は api 層に任せる
     previousClose: '',
     averageVolume: '',
@@ -498,7 +504,7 @@ function symbolLabel(symbol) {
         <BaseSelect
           v-bind="field"
           v-model="inputs.vwapTarget"
-          :options="VWAP_TARGET_OPTIONS"
+          :options="vwapTargetOptions"
           placeholder="-- すべて --"
           data-testid="symbols-vwap-target"
         />

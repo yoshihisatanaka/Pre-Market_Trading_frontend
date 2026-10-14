@@ -31,7 +31,11 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
-import { ORDER_ROUTE_OPTIONS, REGULATION_OPTIONS, VWAP_TARGET_OPTIONS } from '@/utils/symbolTypes'
+import { useCodesStore } from '@/stores/codes'
+import { ORDER_ROUTE_OPTIONS, REGULATION_OPTIONS, VWAP_TARGET_CODES } from '@/utils/symbolTypes'
+
+/** VWAP対象区分の選択肢はコードマスタ `VWAP対象区分` から（App.vue が読み終えてから画面を描く） */
+const vwapTargetOptions = useCodesStore().pickOptions('VWAP対象区分', VWAP_TARGET_CODES)
 
 defineProps({
   /** data-testid の接頭辞。'symbols-add' / 'symbols-edit' のように操作まで含めて渡す */
@@ -140,7 +144,7 @@ const form = defineModel({ type: Object, required: true })
       <BaseSelect
         v-bind="field"
         v-model="form.vwapTarget"
-        :options="VWAP_TARGET_OPTIONS"
+        :options="vwapTargetOptions"
         :data-testid="`${testidPrefix}-vwap-target`"
       />
     </FormField>

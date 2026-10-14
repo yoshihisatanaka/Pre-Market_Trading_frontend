@@ -27,8 +27,8 @@ import {
  *   label        … 画面の見出し
  *   control      … 'text' | 'integer' | 'decimal' | 'select'
  *   required     … 必須か
- *   options      … select の選択肢（固定。区分の意味が spec の description にあるもの）
- *   codes        … select の選択肢をコードマスタ（GET /codes）から引くときの名前
+ *   codes        … select の選択肢を引くコードマスタ（GET /codes）の名前。区分の select はすべてこれで引く
+ *   options      … select の選択肢を固定で持つとき（コードマスタに取得先が無いものだけ。いまは無い）
  *   codesContext … 2 段のカテゴリ（投資方針）の 1 段目に使う、同じフォームの項目の key
  *   initial      … 新規追加で開いたときの値（未指定は ''）。区分は実 API の既定から始める
  *   lockedOnEdit … 編集で読み取り専用にする（業務キー。CustomerUpdateRequest に無い）
@@ -36,36 +36,6 @@ import {
  *                    CustomerRequest.NISA契約 の description が「法人は '0' 固定。0 のとき NISA買付可能額は 0」
  *   min / max    … 数値の範囲。pattern / patternMessage … 文字列の書式
  */
-
-/** 書類の受入区分。CustomerItem の description「(0: 未受入, 1: 受入済)」 */
-const DOCUMENT_OPTIONS = [
-  { value: '0', label: '未受入' },
-  { value: '1', label: '受入済' },
-]
-
-/** 取引停止区分。CustomerItem の description「(0: 通常, 1: 停止)」 */
-const SUSPENSION_OPTIONS = [
-  { value: '0', label: '通常' },
-  { value: '1', label: '停止' },
-]
-
-const NISA_CONTRACT_OPTIONS = [
-  { value: NISA_CONTRACT.NONE, label: '未契約' },
-  { value: NISA_CONTRACT.CONTRACTED, label: '契約' },
-  { value: NISA_CONTRACT.TERMINATED, label: '解約済' },
-]
-
-const SPECIFIC_ACCOUNT_OPTIONS = [
-  { value: SPECIFIC_ACCOUNT_TYPE.UNREGISTERED, label: '未登録' },
-  { value: SPECIFIC_ACCOUNT_TYPE.WITH_WITHHOLDING, label: '源泉あり' },
-  { value: SPECIFIC_ACCOUNT_TYPE.WITHOUT_WITHHOLDING, label: '源泉なし' },
-  { value: SPECIFIC_ACCOUNT_TYPE.NON_SPECIFIC, label: '非特定' },
-]
-
-const ACCIDENT_ACCOUNT_OPTIONS = [
-  { value: ACCIDENT_ACCOUNT_TYPE.NORMAL, label: '通常' },
-  { value: ACCIDENT_ACCOUNT_TYPE.ACCIDENT, label: '事故処理' },
-]
 
 export const CUSTOMER_FIELD_GROUPS = [
   {
@@ -141,7 +111,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         testid: 'accident-account-type',
         label: '事故処理口座区分',
         control: 'select',
-        options: ACCIDENT_ACCOUNT_OPTIONS,
+        codes: '事故処理口座区分',
         initial: ACCIDENT_ACCOUNT_TYPE.NORMAL,
       },
     ],
@@ -172,7 +142,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         label: '特定口座区分',
         control: 'select',
         required: true,
-        options: SPECIFIC_ACCOUNT_OPTIONS,
+        codes: '特定口座区分',
         initial: SPECIFIC_ACCOUNT_TYPE.UNREGISTERED,
       },
       {
@@ -181,7 +151,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         label: 'VWAP書類',
         control: 'select',
         required: true,
-        options: DOCUMENT_OPTIONS,
+        codes: 'VWAP書類受入',
         initial: '0',
       },
       {
@@ -190,7 +160,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         label: 'リスク外株書類',
         control: 'select',
         required: true,
-        options: DOCUMENT_OPTIONS,
+        codes: 'リスク外株書類受入',
         initial: '0',
       },
       {
@@ -199,7 +169,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         label: '外国証券同意書',
         control: 'select',
         required: true,
-        options: DOCUMENT_OPTIONS,
+        codes: '外国証券同意書受入',
         initial: '0',
       },
     ],
@@ -238,7 +208,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         label: 'NISA契約',
         control: 'select',
         required: true,
-        options: NISA_CONTRACT_OPTIONS,
+        codes: 'NISA契約',
         initial: NISA_CONTRACT.NONE,
         corporateValue: NISA_CONTRACT.NONE,
       },
@@ -271,7 +241,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         label: '全取引',
         control: 'select',
         required: true,
-        options: SUSPENSION_OPTIONS,
+        codes: '取引停止区分_全取引',
         initial: '0',
       },
       {
@@ -280,7 +250,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         label: 'エクイティ商品 売買',
         control: 'select',
         required: true,
-        options: SUSPENSION_OPTIONS,
+        codes: '取引停止区分_エクイティ商品取引_売買',
         initial: '0',
       },
       {
@@ -289,7 +259,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         label: 'リスク商品 売買',
         control: 'select',
         required: true,
-        options: SUSPENSION_OPTIONS,
+        codes: '取引停止区分_リスク商品取引_売買',
         initial: '0',
       },
       {
@@ -298,7 +268,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         label: 'エクイティ商品 買',
         control: 'select',
         required: true,
-        options: SUSPENSION_OPTIONS,
+        codes: '取引停止区分_エクイティ商品取引_買',
         initial: '0',
       },
       {
@@ -307,7 +277,7 @@ export const CUSTOMER_FIELD_GROUPS = [
         label: 'リスク商品 買',
         control: 'select',
         required: true,
-        options: SUSPENSION_OPTIONS,
+        codes: '取引停止区分_リスク商品取引_買',
         initial: '0',
       },
     ],

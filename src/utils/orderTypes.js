@@ -2,7 +2,8 @@
  * 注文の区分（発注範囲・処理状況）のコードと名前（純関数と定数）。
  *
  * 名前は OpenAPI に載っていないため、バックエンドのコードマスタ（app/config/codes.json の
- * 「発注範囲」「処理状況」）から写した（CA種別の src/utils/caTypes.js と同じ扱い）。
+ * 「発注範囲」「処理状況」）から写した。一覧のセルと注文詳細の表示に使う写しで、入力欄の選択肢は
+ * コードマスタ（GET /codes。stores/codes.js）から引く。
  * **コードを増やすときは両方を突き合わせる。** 発注範囲のコードの集合が
  * src/utils/apiEnums.js の EXECUTION_SCOPE_VALUES と一致することは spec が固定する。
  *
@@ -12,12 +13,6 @@
  * 数値ではなく文字列で扱うのは、実 API の値がゼロ埋めされた文字列であることに合わせるため。
  */
 import { formatUsdUnit } from '@/utils/format'
-
-/** 指成区分の選択肢（訂正画面の「価格」）。並びは画面モックのとおり 成行 → 指値 */
-export const ORDER_TYPE_OPTIONS = [
-  { value: 'MO', label: '成行' },
-  { value: 'LO', label: '指値' },
-]
 
 /** 発注範囲（画面の「市場区分」）の選択肢。BaseSelect の options にそのまま渡せる形（コード順） */
 export const MARKET_SCOPE_OPTIONS = [
@@ -29,19 +24,21 @@ export const MARKET_SCOPE_OPTIONS = [
 ]
 
 /*
- * 訂正画面の市場区分のボタン（BaseSegmentedControl の options）。並び・表示名は画面モック
+ * 訂正画面の市場区分のボタン（BaseSegmentedControl の options）。表示名はコードマスタ `発注範囲` から引き
+ * （views/OrderAmendView.vue）、ここは並びと注記・押せるかだけを持つ。並びは画面モック
  * （order_amend.html）のとおり。フェーズ 1 で受け付けるのは 02 / 03 だけで、アフターを含む 04 / 06 は
  * 「Ph.2予定」を添えて**見せるが押せない**（業務回答 2026-10-08。docs/api/requests.md #50 ②。
  * 新規注文の注文区分と同じ扱い）。フェーズ 2 でアフターに対応したら disabled と note を外す。
  */
 const PHASE2_NOTE = '（Ph.2予定）'
 
-export const AMEND_MARKET_SCOPE_OPTIONS = [
-  { value: '02', label: 'プレ＋レギュラー' },
-  { value: '03', label: 'レギュラー' },
-  { value: '04', label: 'プレ＋レギュラー＋アフター', note: PHASE2_NOTE, disabled: true },
-  { value: '06', label: 'アフター（時間内限り）', note: PHASE2_NOTE, disabled: true },
-]
+export const AMEND_MARKET_SCOPE_CODES = ['02', '03', '04', '06']
+
+/** utils/orderEntryOptions.js の decorateOptions に渡す */
+export const AMEND_MARKET_SCOPE_EXTRAS = Object.freeze({
+  '04': { note: PHASE2_NOTE, disabled: true },
+  '06': { note: PHASE2_NOTE, disabled: true },
+})
 
 /*
  * 処理状況の名前。コードマスタの並び（000 から順に、失敗・訂正系が後ろ）のまま写してある。

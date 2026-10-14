@@ -17,7 +17,7 @@
 
 /*
  * セッションコード → 表示。api/ の *Enum の写しではなく画面側の対応表なので
- * utils に置く（utils/caTypes.js / utils/marketHolidayTypes.js と同じ枠）。
+ * utils に置く（utils/symbolTypes.js / utils/marketHolidayTypes.js と同じ枠）。
  * **utils/apiEnums.js には置けない** — あれは openapi の *Enum の機械的な写し専用で、
  * 手書きを混ぜると AEN-01 が落ちる。そもそも `現在のセッション` に enum 宣言が無い。
  *

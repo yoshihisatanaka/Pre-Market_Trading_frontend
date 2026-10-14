@@ -11,13 +11,14 @@ import BaseSegmentedControl from '@/components/ui/BaseSegmentedControl.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import FormField from '@/components/ui/FormField.vue'
+import { useCodesStore } from '@/stores/codes'
 import { useOrderActionStore } from '@/stores/orderAction'
 import { formatMonthDayTime, formatQuantity } from '@/utils/format'
 import { formatQuantityInput } from '@/utils/orderEntryForm'
-import { DEPOSIT_CATEGORY_OPTIONS } from '@/utils/orderEntryOptions'
+import { ORDER_TYPE_CODES, decorateOptions } from '@/utils/orderEntryOptions'
 import {
-  AMEND_MARKET_SCOPE_OPTIONS,
-  ORDER_TYPE_OPTIONS,
+  AMEND_MARKET_SCOPE_CODES,
+  AMEND_MARKET_SCOPE_EXTRAS,
   orderPriceLabel,
   orderStatusLabel,
 } from '@/utils/orderTypes'
@@ -43,6 +44,8 @@ const store = useOrderActionStore()
 const { order, loading, error, amendResult, amending, amendError } = storeToRefs(store)
 const route = useRoute()
 const router = useRouter()
+// 区分の名称はコードマスタ（GET /codes）から引く
+const codes = useCodesStore()
 
 // ルートの注文 ID が変わるたびに読み直す。画面を離れるときの undefined は読まない
 watch(
@@ -65,7 +68,7 @@ const sideLabels = { buy: '買', sell: '売' }
 const depositLabel = computed(() => {
   const code = order.value?.depositCategory
   if (!code) return ''
-  return DEPOSIT_CATEGORY_OPTIONS.find((option) => option.value === code)?.label ?? code
+  return codes.hasCode('預り売買区分', code) ? codes.labelFor('預り売買区分', code) : code
 })
 
 const originalLabel = computed(() => {
@@ -144,12 +147,17 @@ const quantityHint = computed(() => {
  * （足さないとどれも選ばれていない表示になり、何も変えていないのに区分が消えたように見える）。
  */
 const marketScopeOptions = computed(() => {
+  const options = decorateOptions(
+    codes.pickOptions('発注範囲', AMEND_MARKET_SCOPE_CODES),
+    AMEND_MARKET_SCOPE_EXTRAS,
+  )
   const current = order.value?.marketScope
-  if (!current || AMEND_MARKET_SCOPE_OPTIONS.some((option) => option.value === current)) {
-    return AMEND_MARKET_SCOPE_OPTIONS
-  }
-  return [...AMEND_MARKET_SCOPE_OPTIONS, { value: current, label: current }]
+  if (!current || options.some((option) => option.value === current)) return options
+  return [...options, { value: current, label: current }]
 })
+
+/** 価格（指成区分）のボタン。並びは画面モックのとおり 成行 → 指値 */
+const orderTypeOptions = computed(() => codes.pickOptions('指成区分', ORDER_TYPE_CODES))
 
 /** 処理状況の名前。サーバの 処理状況名 を使い、無い応答のときだけコードの写しで引く */
 const statusLabel = computed(() => order.value?.statusName || orderStatusLabel(order.value?.status))
@@ -427,7 +435,7 @@ function goBack() {
             <FormField v-slot="{ field }" label="価格" required :error="errors.limitPrice">
               <BaseSegmentedControl
                 :model-value="orderTypeInput"
-                :options="ORDER_TYPE_OPTIONS"
+                :options="orderTypeOptions"
                 aria-label="価格"
                 data-testid="order-amend-order-type"
                 @update:model-value="selectOrderType"

@@ -17,6 +17,7 @@ import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useExecutionsStore } from '@/stores/executions'
 import { downloadBlob } from '@/utils/download'
 import { formatJpyUnit, formatMonthDayTime, formatQuantity, formatUsd } from '@/utils/format'
+import { SIDE } from '@/utils/orderEntryOptions'
 
 /*
  * 約定照会。一部出来 / 全部出来 / 取消済（出来有）の約定を検索する（読むだけの一覧）。
@@ -50,18 +51,25 @@ const currentOperator = useCurrentOperatorStore()
 currentOperator.ensureLoaded()
 const canViewRoute = computed(() => currentOperator.can('depositary'))
 
-/** 売買区分。値はアプリ内の向きで、コードへの変換は api 層が行う */
-const SIDE_OPTIONS = [
-  { value: 'buy', label: '買い' },
-  { value: 'sell', label: '売り' },
-]
-
 /*
- * 出来状況。選択肢はコードマスタ `約定出来状況` から来て、値は処理状況コード。
- * App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で揃っている
- * （URL クエリの検査にもそのまま使える）。取消済（034）は api 層が 032,034 に広げて送る。
+ * App.vue がコードマスタを読み終えてから画面を描くので、setup の時点で選択肢は揃っている
+ * （URL クエリの検査にもそのまま使える）。
  */
 const codes = useCodesStore()
+
+/**
+ * 売買区分。値はアプリ内の向き（buy / sell）で、コードへの変換は api 層が行う。
+ * 名称はコードマスタ `売買区分` から引く（並びは買 → 売）
+ */
+const SIDE_OPTIONS = [
+  { value: 'buy', label: codes.labelFor('売買区分', SIDE.BUY) },
+  { value: 'sell', label: codes.labelFor('売買区分', SIDE.SELL) },
+]
+
+/**
+ * 出来状況。選択肢はコードマスタ `約定出来状況` から来て、値は処理状況コード。
+ * 取消済（034）は api 層が 032,034 に広げて送る。
+ */
 const STATUS_OPTIONS = codes.optionsFor('約定出来状況')
 
 /** 預託先区分。値は注文ルートのコード（0:みずほ / 1:IB） */

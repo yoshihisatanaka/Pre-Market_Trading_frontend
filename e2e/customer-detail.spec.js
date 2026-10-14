@@ -2,8 +2,10 @@ import { expect, test } from '@playwright/test'
 import { calculationMessages, FEE_PATTERNS } from '../src/mocks/fixtures/calculations'
 import { noOperationOperator } from '../src/mocks/fixtures/currentOperator'
 import { customers } from '../src/mocks/fixtures/customers'
+import { fxRates } from '../src/mocks/fixtures/fxRates'
 import { holdings } from '../src/mocks/fixtures/holdings'
 import { orderInquiryRows } from '../src/mocks/fixtures/orderInquiry'
+import { symbols } from '../src/mocks/fixtures/symbols'
 import { formatJpyUnit, formatUsdUnit } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
 import { COLUMNS as INQUIRY_COLUMNS, expectedRowIds } from './helpers/orderInquiry'
@@ -171,6 +173,13 @@ async function expectOrderEntryCustomer(page) {
 const CALC_QUANTITY = 10
 const CALC_UNIT_PRICE = '230.5'
 
+/**
+ * 仮計算の為替欄に自動セットされる為替マスタの現在レート（既定モックの基準日が最新の行。150.25）と、
+ * 銘柄だけ引き継いだときに単価欄へ入る銘柄マスタの前日終値（src/stores/calculation.js の loadDefaults）
+ */
+const LATEST_FX_RATE = String([...fxRates].sort((a, b) => b.基準日 - a.基準日)[0].為替レート)
+const symbolClose = (ticker) => String(symbols.find((row) => row.Ticker === ticker).前日終値)
+
 /** 入力不備の文言（src/utils/calculationForm.js の MESSAGES と numberFieldError の再掲） */
 const CALC_MESSAGES = {
   symbolRequired: '銘柄コード／ティッカーを入力してください。',
@@ -244,6 +253,10 @@ test.beforeAll(() => {
   expect(NVDA.預り売買区分).toBe('6')
   expect(TSLA.預り売買区分).toBe('0')
   expect(AAPL.預り売買区分).toBe('1')
+  expect(LATEST_FX_RATE).toBe('150.25')
+  expect(TSLA.売却可能株数).toBe(30)
+  expect(String(TSLA.前日終値)).toBe('248.98')
+  expect(symbolClose('NVDA')).toBe('127.25')
 })
 
 test.describe('顧客詳細 顧客カードとタブ', () => {
@@ -599,16 +612,21 @@ test.describe('顧客詳細 外株預り', () => {
     await expect(page.getByTestId('customer-holdings-calculation-entry')).toBeVisible()
   })
 
-  test('[CDT-37] 行の「仮計算」は銘柄・売り・預り区分を仮計算タブへ引き継ぐ', async ({ page }) => {
+  test('[CDT-37] 行の「仮計算」は銘柄・売り・預り区分・数量・単価を仮計算タブへ引き継ぐ', async ({
+    page,
+  }) => {
     await openSummary(page)
     await holdingRow(page, TSLA).getByTestId('customer-holdings-calculation').click()
 
     await expect(page).toHaveURL(new RegExp(`${calculationsPath(YAMADA.ID)}\\?`))
-    // 仮計算は特定預り区分のまま渡す（新規注文の deposit と違い、向きを読み替えない）
+    // 仮計算は特定預り区分のまま渡す（新規注文の deposit と違い、向きを読み替えない）。
+    // 数量は売却可能株数、単価は預りの前日終値（モックの calculations.py の初期値と同じ）
     expect(queryOf(page)).toEqual({
       symbol: TSLA.ティッカー,
       side: 'sell',
       specific_deposit: TSLA.預り売買区分,
+      quantity: String(TSLA.売却可能株数),
+      unit_price: String(TSLA.前日終値),
     })
     await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(TSLA.ティッカー)
     await expect(toggleButton(page, 'customer-calc-side', '売')).toHaveAttribute(
@@ -618,6 +636,12 @@ test.describe('顧客詳細 外株預り', () => {
     await expect(page.getByTestId('customer-calc-deposit').locator('option:checked')).toHaveText(
       '一般',
     )
+    await expect(page.getByTestId('customer-calc-quantity')).toHaveValue(
+      String(TSLA.売却可能株数),
+    )
+    await expect(page.getByTestId('customer-calc-unit-price')).toHaveValue(String(TSLA.前日終値))
+    // 為替は為替マスタの現在レートが自動セットされる
+    await expect(page.getByTestId('customer-calc-fx-rate')).toHaveValue(LATEST_FX_RATE)
     await expect(page.getByTestId('customer-detail-tab-calculations')).toHaveAttribute(
       'class',
       /is-active/,
@@ -637,6 +661,10 @@ test.describe('顧客詳細 外株預り', () => {
     await expect(page.getByTestId('customer-calc-deposit').locator('option:checked')).toHaveText(
       '特定',
     )
+    // 銘柄が無いので数量・単価は空のまま。為替だけ自動セットされる
+    await expect(page.getByTestId('customer-calc-fx-rate')).toHaveValue(LATEST_FX_RATE)
+    await expect(page.getByTestId('customer-calc-quantity')).toHaveValue('')
+    await expect(page.getByTestId('customer-calc-unit-price')).toHaveValue('')
   })
 })
 
@@ -683,6 +711,8 @@ test.describe('顧客詳細 仮計算', () => {
     await openSummary(page)
     await holdingRow(page, AAPL).getByTestId('customer-holdings-calculation').click()
     await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(AAPL.ティッカー)
+    // 為替は自動セットのまま触らない。自動セットのままの為替は本文に送らないので、金額は為替 ± スプレッドのまま
+    await expect(page.getByTestId('customer-calc-fx-rate')).toHaveValue(LATEST_FX_RATE)
 
     await runCalculation(page, { quantity: CALC_QUANTITY, unitPrice: CALC_UNIT_PRICE })
 
@@ -818,6 +848,43 @@ test.describe('顧客詳細 仮計算', () => {
       timeout: 10_000,
     })
     await expect(submit).toBeEnabled()
+  })
+
+  test('[CDT-45] 銘柄だけ引き継ぐと単価に銘柄マスタの前日終値が入る', async ({ page }) => {
+    await page.goto(
+      `${calculationsPath(YAMADA.ID)}?symbol=${NVDA.ティッカー}&side=sell&specific_deposit=${NVDA.預り売買区分}`,
+    )
+
+    await expect(page.getByTestId('customer-calc-symbol')).toHaveValue(NVDA.ティッカー)
+    await expect(page.getByTestId('customer-calc-unit-price')).toHaveValue(
+      symbolClose(NVDA.ティッカー),
+    )
+    await expect(page.getByTestId('customer-calc-quantity')).toHaveValue('')
+    await expect(page.getByTestId('customer-calc-fx-rate')).toHaveValue(LATEST_FX_RATE)
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText('売却概算 ／ 未実行')
+  })
+
+  test('[CDT-46] 為替を取れなくても空のままで、エラーは出さず実行できる', async ({ page }) => {
+    await mockApi(page, [
+      { path: '*/api/masters/fx/latest', status: 500, body: { detail: SERVER_ERROR } },
+    ])
+    await page.goto(calculationsPath(YAMADA.ID))
+    await expect(page.getByTestId('customer-calc-form')).toBeVisible()
+
+    await expect(page.getByTestId('customer-calc-fx-rate')).toHaveValue('')
+    await expect(page.getByTestId('customer-calc-error')).toHaveCount(0)
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText('買付概算 ／ 未実行')
+
+    await runCalculation(page, {
+      symbol: AAPL.ティッカー,
+      quantity: CALC_QUANTITY,
+      unitPrice: CALC_UNIT_PRICE,
+    })
+
+    await expect(page.getByTestId('customer-calc-result-caption')).toHaveText(
+      `買付概算 ／ ${AAPL.ティッカー} ${CALC_QUANTITY}株`,
+    )
+    await expect(page.getByTestId('customer-calc-error')).toHaveCount(0)
   })
 })
 

@@ -6,6 +6,7 @@ import {
   buildCalculationSummary,
   buildPendingSummary,
   createCalculationForm,
+  fillCalculationDefaults,
   hasCalculationFormErrors,
   validateCalculationForm,
 } from './calculationForm'
@@ -492,5 +493,45 @@ describe('utils/calculationForm', () => {
     expect(
       valueOf(buildCalculationSummary(sellResult({ yen: { tradeFxRate: 150.123456 } })), 'tradeFxRate'),
     ).toBe('150.123456 円/USD')
+  })
+
+  it('[TCF-25] 引き継いだ数量・単価・為替はそのまま入る', () => {
+    const carried = createCalculationForm({
+      now: NOW,
+      quantity: '80',
+      unitPrice: '227.16',
+      fxRate: '150.25',
+    })
+
+    expect(carried.quantity).toBe('80')
+    expect(carried.unitPrice).toBe('227.16')
+    expect(carried.fxRate).toBe('150.25')
+  })
+
+  it('[TCF-26] 自動セットは空の欄にだけ入り、入力済みの欄と null の項目は変えない', () => {
+    const empty = createCalculationForm({ now: NOW, symbol: 'AAPL' })
+    const filled = fillCalculationDefaults(empty, { unitPrice: 227.16, fxRate: 150.25 })
+
+    expect(filled).toEqual({ ...empty, unitPrice: '227.16', fxRate: '150.25' })
+    expect(empty.unitPrice).toBe('')
+    expect(empty.fxRate).toBe('')
+
+    const typed = createCalculationForm({ now: NOW, unitPrice: '230.5', fxRate: '149' })
+    expect(fillCalculationDefaults(typed, { unitPrice: 227.16, fxRate: 150.25 })).toEqual(typed)
+
+    expect(fillCalculationDefaults(empty, { unitPrice: null, fxRate: null })).toEqual(empty)
+    expect(fillCalculationDefaults(empty)).toEqual(empty)
+  })
+
+  it('[TCF-27] 為替は自動セットのままなら送らず、書き換えた値だけを手入力として送る', () => {
+    const context = { accountNumber: '1230001', autoFxRate: '150.25' }
+
+    expect(buildCalculationInput(filledForm({ fxRate: '150.25' }), context).fxRate).toBeNull()
+    expect(buildCalculationInput(filledForm({ fxRate: '１５０．２５' }), context).fxRate).toBeNull()
+    expect(buildCalculationInput(filledForm({ fxRate: '151' }), context).fxRate).toBe(151)
+    expect(buildCalculationInput(filledForm({ fxRate: '' }), context).fxRate).toBeNull()
+    expect(
+      buildCalculationInput(filledForm({ fxRate: '150.25' }), { accountNumber: '1230001' }).fxRate,
+    ).toBe(150.25)
   })
 })

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { SPECIFIC_DEPOSIT_NAMES } from '../src/mocks/fixtures/codes'
 import { noOperationOperator } from '../src/mocks/fixtures/currentOperator'
 import { customers } from '../src/mocks/fixtures/customers'
+import { fxRates } from '../src/mocks/fixtures/fxRates'
 import { holdings } from '../src/mocks/fixtures/holdings'
 import { formatJpyUnit } from '../src/utils/format'
 import { mockApi } from './helpers/mockApi'
@@ -53,6 +54,9 @@ const firstRow = holdings[0]
 
 /** 先頭行の顧客（顧客マスタ側の行。ID を顧客詳細の URL に使う） */
 const FIRST_CUSTOMER = customers.find((row) => row.口座番号 === firstRow.口座番号)
+
+/** 仮計算の為替欄に自動セットされる為替マスタの現在レート（既定モックの基準日が最新の行。HSE-23） */
+const LATEST_FX_RATE = String([...fxRates].sort((a, b) => b.基準日 - a.基準日)[0].為替レート)
 
 /** 先頭行とは別の部店（HSE-04） */
 const BRANCH_CODE = [...new Set(holdings.map((row) => row.部店コード))][1]
@@ -500,10 +504,13 @@ test.describe('預り検索', () => {
     await rowsOf(page).first().getByTestId('holding-search-calculation').click()
 
     await expect(page).toHaveURL(new RegExp(`/customers/${FIRST_CUSTOMER.ID}/calculations\\?`))
+    // 数量は売却可能株数（保有数量ではない）、単価は預りの前日終値
     expect(queryOf(page)).toEqual({
       symbol: firstRow.ティッカー,
       side: 'sell',
       specific_deposit: firstRow.預り売買区分,
+      quantity: String(firstRow.売却可能株数),
+      unit_price: String(firstRow.前日終値),
     })
     await expect(pageHeading(page, '顧客詳細')).toBeVisible()
     await expect(page.getByTestId('customer-info-name')).toHaveText(firstRow.顧客名)
@@ -511,6 +518,13 @@ test.describe('預り検索', () => {
     await expect(
       page.getByTestId('customer-calc-side').getByRole('button', { name: '売', exact: true }),
     ).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('customer-calc-quantity')).toHaveValue(
+      String(firstRow.売却可能株数),
+    )
+    await expect(page.getByTestId('customer-calc-unit-price')).toHaveValue(
+      String(firstRow.前日終値),
+    )
+    await expect(page.getByTestId('customer-calc-fx-rate')).toHaveValue(LATEST_FX_RATE)
   })
 
   test('[HSE-20] ブラウザバックで 1 ページ目に戻る', async ({ page }) => {

@@ -14,6 +14,9 @@ export default [
       'coverage/**',
       'playwright-report/**',
       'test-results/**',
+      // Playwright MCP の出力先（.gitignore 済み）。調査用に置いた使い捨てのスクリプトまで
+      // 拾うと verify が lint で止まる（2026-10-14 の朝の点検で pdf/*.mjs が no-undef で落ちた）。
+      '.playwright-mcp/**',
       'public/mockServiceWorker.js',
       // 別セッションが repo 内に切った worktree（.git/info/exclude で git からは除外済み）。
       // ESLint は git の除外を見ないため、ここで明示しないと他 worktree の作業中コードまで

@@ -108,6 +108,16 @@ const STATUS_NAMES = {
   141: '訂正中断',
 }
 
+/*
+ * 出来状況の選択肢のコード → 実 API の `status` に載せる値（src/api/orderInquiry.js の STATUS_QUERY の写し。
+ * 2026-10-07 の追随で、取消済と注文エラーは処理状況 2 つずつに広げて送る）。ほかのコードはそのまま送る。
+ * 画面の URL には選んだコードのまま載る（広げるのは api 層だけ）
+ */
+const STATUS_QUERY = { '034': '032,034', 101: '101,103' }
+
+/** 出来状況のコードを、実 API へ送る `status` の値に広げる */
+const statusQueryOf = (code) => STATUS_QUERY[code] ?? code
+
 /** 指成区分 → 訂正画面の「価格」のボタン名（src/utils/orderTypes.js の ORDER_TYPE_OPTIONS） */
 const ORDER_TYPE_LABELS = { MO: '成行', LO: '指値' }
 
@@ -135,6 +145,17 @@ function cellOf(row, column) {
 /** 表の 1 列ぶんのセル（全行） */
 function columnOf(page, column) {
   return rowsOf(page).locator(`td:nth-child(${COLUMNS.indexOf(column) + 1})`)
+}
+
+/**
+ * 定義リスト（dl）の中で、見出し（dt）が label と一致する項目の値（直後の dd）。
+ * 並び順に依存させない（2026-10-09 に訂正画面の概要の並びが変わり、位置で引いていた OIR-10 が落ちた）。
+ */
+function definitionOf(list, label) {
+  return list
+    .getByRole('term')
+    .filter({ hasText: new RegExp(`^\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`) })
+    .locator('xpath=following-sibling::dd[1]')
 }
 
 /** 行の 処理状況（文字列。無ければ空） */
@@ -655,12 +676,20 @@ test.describe('注文照会・注文訂正・注文取消（実 API 接続）', 
     test.skip(code === '' || !options.includes(code), `出来状況のプルダウンに ${code} が無い`)
 
     await select.selectOption(code)
-    const body = await submit(page, waitForList(page, 'status', code))
+    // 実 API へは広げた値（034 → 032,034 / 101 → 101,103）で送られ、応答の行もその集合に入る
+    const sent = statusQueryOf(code)
+    const accepted = new Set(sent.split(','))
+    const body = await submit(page, waitForList(page, 'status', sent))
 
+    // 画面の URL は選んだコードのまま
     expect(urlQuery(page, 'status')).toBe(code)
     await expectNarrowed(page, total)
     // 絞り込みは行単位（最新の版ではない）。当たった行だけが元注文ごとにまとめ直される
-    for (const raw of body.orders) expect(statusOf(raw), `応答に ${code} 以外の行がある`).toBe(code)
+    for (const raw of body.orders) {
+      expect(accepted.has(statusOf(raw)), `応答に ${sent} 以外の行がある（${statusOf(raw)}）`).toBe(
+        true,
+      )
+    }
     await expectRowsMatch(page, groupsOf(body.orders))
   })
 
@@ -760,12 +789,30 @@ test.describe('注文照会・注文訂正・注文取消（実 API 接続）', 
     const status = statusOf(order)
 
     await expect(page.getByTestId('order-amend-status')).toHaveText(STATUS_NAMES[status] ?? status)
-    await expect(page.getByTestId('order-amend-summary').getByRole('definition').first()).toHaveText(
-      `#${id}`,
+    // 訂正対象注文の概要（src/views/OrderAmendView.vue の 4 枠: 顧客 / 銘柄 / 売買・預り / 原注文）。
+    // 注文 ID は概要に出なくなった（2026-10-09 の 53f9752）ので、ID は上の URL で確かめる。
+    // 値は dt の見出しで引く（並びに依存しない）。表記は src/api/orderInquiry.js の詳細の変換に合わせる
+    const summary = page.getByTestId('order-amend-summary')
+    await expect(definitionOf(summary, '顧客')).toHaveCount(1)
+    await expect(definitionOf(summary, '顧客').getByTestId('order-amend-customer')).toHaveText(
+      String(order.顧客名 || EMPTY_CELL),
     )
-    // 入力欄は対象注文の現在値で洗い替えられる（数量は integer、指値単価は decimal の文字列で来うる）
-    await expect(page.getByTestId('order-amend-quantity')).toHaveValue(String(toNumber(order.数量)))
-    await expect(page.getByTestId('order-amend-market-scope')).toHaveValue(String(order.発注範囲 ?? ''))
+    await expect(definitionOf(summary, '顧客').getByTestId('order-amend-account')).toHaveText(
+      `部店 ${order.部店 || EMPTY_CELL} ／ 口座 ${String(order.口座番号 ?? '') || EMPTY_CELL}`,
+    )
+    await expect(definitionOf(summary, '銘柄').getByTestId('order-amend-symbol')).toHaveText(
+      String(order.Ticker || order.銘柄コード || EMPTY_CELL),
+    )
+    // 入力欄は対象注文の現在値で洗い替えられる（数量は integer、指値単価は decimal の文字列で来うる）。
+    // 数量欄は 3 桁ごとにカンマを入れて見せる（OrderAmendView.vue の formatQuantity）
+    const amendQuantity = toNumber(order.数量)
+    await expect(page.getByTestId('order-amend-quantity')).toHaveValue(
+      amendQuantity === null ? '' : formatQuantity(amendQuantity),
+    )
+    // 市場区分はボタンの並び（BaseSegmentedControl）。押下中のボタンの data-value が 発注範囲
+    await expect(
+      page.getByTestId('order-amend-market-scope').getByRole('button', { pressed: true }),
+    ).toHaveAttribute('data-value', String(order.発注範囲 ?? ''))
     const orderType = String(order.指成区分 ?? '')
     expect(ORDER_TYPE_LABELS[orderType], `指成区分が LO / MO でない（${orderType}）`).toBeTruthy()
     await expect(
@@ -815,11 +862,11 @@ test.describe('注文照会・注文訂正・注文取消（実 API 接続）', 
 
     await expect(page.getByTestId('order-cancel-order-id')).toHaveText(`注文ID #${id}`)
     await expect(page.getByTestId('order-cancel-status')).toHaveText(STATUS_NAMES[status] ?? status)
-    // 要約の並び（src/views/OrderCancelView.vue の summaryItems）: 銘柄 / 売買 / 口座番号 / 注文数量 / 約定済数量 / 取消対象 / 価格 / 市場区分
-    const definitions = page.getByTestId('order-cancel-summary').getByRole('definition')
-    await expect(definitions.nth(2)).toHaveText(String(order.口座番号 ?? ''))
-    await expect(definitions.nth(3)).toHaveText(`${formatQuantity(quantity)}株`)
-    await expect(definitions.nth(4)).toHaveText(`${formatQuantity(filled)}株`)
+    // 要約の項目（src/views/OrderCancelView.vue の summaryItems）は dt の見出しで引く（並びに依存しない）
+    const summary = page.getByTestId('order-cancel-summary')
+    await expect(definitionOf(summary, '口座番号')).toHaveText(String(order.口座番号 ?? ''))
+    await expect(definitionOf(summary, '注文数量')).toHaveText(`${formatQuantity(quantity)}株`)
+    await expect(definitionOf(summary, '約定済数量')).toHaveText(`${formatQuantity(filled)}株`)
     await expect(page.getByTestId('order-cancel-quantity')).toHaveText(
       `${formatQuantity(Math.max(quantity - filled, 0))}株`,
     )
@@ -928,7 +975,7 @@ test.describe('注文照会・注文訂正・注文取消（実 API 接続）', 
         expect(quantity, `GET /orders/${id} の 数量 が数値でない`).not.toBeNull()
         const nextQuantity = quantity + 1
 
-        await expect(page.getByTestId('order-amend-quantity')).toHaveValue(String(quantity))
+        await expect(page.getByTestId('order-amend-quantity')).toHaveValue(formatQuantity(quantity))
         await page.getByTestId('order-amend-quantity').fill(String(nextQuantity))
         const amended = waitForPost(page, `${API_PATH}/${id}/amend`)
         await page.getByTestId('order-amend-submit').click()

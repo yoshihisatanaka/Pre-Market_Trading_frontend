@@ -49,12 +49,23 @@ const toModel = (raw) => ({
   role: raw.ロールコード,
   roleLabel: raw.ロール名,
   description: raw.説明 ?? '',
+  canReference: raw.参照権限 === 1,
   canOrder: raw.発注権限 === 1,
+  canForceOrder: raw.強制発注権限 === 1,
+  canCsvOrder: raw.CSV一括発注権限 === 1,
   canMasterUpdate: raw.マスタ更新権限 === 1,
   canOperation: raw.運用管理権限 === 1,
-  canBranchAll: raw.全店参照権限 === 1,
+  canActivityLogView: raw.マスタ更新権限 === 1 || raw.運用管理権限 === 1,
+  canUserManagement: raw.ユーザ管理権限 === 1,
   updatedAt: raw.更新日時 ?? '',
 })
+
+/** 契約提案の 4 権限のキー（仕様に無い。docs/api/requests.md #75 / #76 / #81） */
+const PROPOSED_KEYS = ['参照権限', '強制発注権限', 'CSV一括発注権限', 'ユーザ管理権限']
+
+/** 生の行から指定のキーを落とす */
+const without = (raw, keys) =>
+  Object.fromEntries(Object.entries(raw).filter(([key]) => !keys.includes(key)))
 
 // 合札を持っている行（更新日時 を送る経路）と、持っていない行（送らない経路）
 const WITH_TIMESTAMP = rolePermissions.find((row) => row.更新日時 !== null)
@@ -62,10 +73,13 @@ const WITHOUT_TIMESTAMP = rolePermissions.find((row) => row.更新日時 === nul
 
 /** updateRolePermission() に渡す値。0 / 1 の両方が本文に出るよう混ぜる */
 const updateArgs = {
+  canReference: true,
   canOrder: true,
+  canForceOrder: false,
+  canCsvOrder: true,
   canMasterUpdate: false,
   canOperation: true,
-  canBranchAll: false,
+  canUserManagement: false,
   updatedAt: WITH_TIMESTAMP.更新日時,
 }
 
@@ -100,13 +114,13 @@ describe('api/permissions', () => {
   })
 
   it('[PMA-04] 欠けている権限は false と読む', async () => {
-    // 全部許可の行から 4 権限のキーだけを落とす（値が 1 のまま残っていれば true になってしまう行）
-    const allowed = rolePermissions.find((row) => row.発注権限 === 1 && row.全店参照権限 === 1)
-    const flagKeys = ['発注権限', 'マスタ更新権限', '運用管理権限', '全店参照権限']
-    const missing = Object.fromEntries(
-      Object.entries(allowed).filter(([key]) => !flagKeys.includes(key)),
+    // 全部許可の行から仕様の 3 権限のキーだけを落とす（値が 1 のまま残っていれば true になってしまう行）
+    const allowed = rolePermissions.find(
+      (row) => row.発注権限 === 1 && row.マスタ更新権限 === 1 && row.運用管理権限 === 1,
     )
-    record('get', LIST_PATH, { roles: [missing] })
+    record('get', LIST_PATH, {
+      roles: [without(allowed, ['発注権限', 'マスタ更新権限', '運用管理権限'])],
+    })
 
     const [role] = await fetchPermissions()
 
@@ -114,7 +128,6 @@ describe('api/permissions', () => {
       canOrder: false,
       canMasterUpdate: false,
       canOperation: false,
-      canBranchAll: false,
     })
   })
 
@@ -124,7 +137,7 @@ describe('api/permissions', () => {
     await expect(fetchPermissions()).resolves.toEqual([])
   })
 
-  it('[PMA-06] 更新の本文が 4 権限の 0/1 と更新日時になり説明は送らない', async () => {
+  it('[PMA-06] 更新の本文が 7 権限の 0/1 と更新日時になり説明と全店参照権限は送らない', async () => {
     record('put', ITEM_PATH, itemBody(WITH_TIMESTAMP))
 
     await updateRolePermission(WITH_TIMESTAMP.ロールコード, updateArgs)
@@ -136,7 +149,10 @@ describe('api/permissions', () => {
       発注権限: 1,
       マスタ更新権限: 0,
       運用管理権限: 1,
-      全店参照権限: 0,
+      参照権限: 1,
+      強制発注権限: 0,
+      CSV一括発注権限: 1,
+      ユーザ管理権限: 0,
       更新日時: updateArgs.updatedAt,
     })
   })
@@ -184,5 +200,60 @@ describe('api/permissions', () => {
     await updateRolePermission(WITH_TIMESTAMP.ロールコード, updateArgs)
 
     expect(lastRequest.headers.get('X-User-Code')).toBeTruthy()
+  })
+
+  it('[PMA-12] 契約提案の 4 権限が応答に無ければ null（未対応）と読む', async () => {
+    // いまの実 API の形（仕様に無いキーを返さない）。null で返った場合も同じ扱い
+    record('get', LIST_PATH, {
+      roles: [
+        without(WITH_TIMESTAMP, PROPOSED_KEYS),
+        { ...WITH_TIMESTAMP, ...Object.fromEntries(PROPOSED_KEYS.map((key) => [key, null])) },
+      ],
+    })
+
+    const roles = await fetchPermissions()
+
+    roles.forEach((role) => {
+      expect(role).toMatchObject({
+        canReference: null,
+        canForceOrder: null,
+        canCsvOrder: null,
+        canUserManagement: null,
+      })
+    })
+  })
+
+  it('[PMA-13] 操作ログ閲覧はマスタ更新か運用管理のどちらかが許可なら true になる', async () => {
+    const flags = (master, operation) => ({
+      ...WITH_TIMESTAMP,
+      マスタ更新権限: master,
+      運用管理権限: operation,
+    })
+    record('get', LIST_PATH, { roles: [flags(0, 0), flags(1, 0), flags(0, 1), flags(1, 1)] })
+
+    const roles = await fetchPermissions()
+
+    expect(roles.map((role) => role.canActivityLogView)).toEqual([false, true, true, true])
+  })
+
+  it('[PMA-14] 契約提案の権限が null のものは更新の本文に載せない', async () => {
+    record('put', ITEM_PATH, itemBody(WITH_TIMESTAMP))
+
+    await updateRolePermission(WITH_TIMESTAMP.ロールコード, {
+      ...updateArgs,
+      canReference: null,
+      canForceOrder: null,
+      canCsvOrder: null,
+      canUserManagement: null,
+      // 導出値を渡されても送らない
+      canActivityLogView: true,
+    })
+
+    expect(lastRequest.body).toEqual({
+      発注権限: 1,
+      マスタ更新権限: 0,
+      運用管理権限: 1,
+      更新日時: updateArgs.updatedAt,
+    })
   })
 })

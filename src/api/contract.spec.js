@@ -253,7 +253,29 @@ const KNOWN_GAPS = [
   /*
    * 権限マスタは 2026-09-25 に RolePermissionItem の形（日本語キー・4 権限）へ張り替えた。
    * 画面モック由来の英語キー・5 権限の食い違い（#4）は解消したので行を外した。
+   *
+   * 2026-10-14、画面モック（10-12）の 8 権限に合わせ、仕様に保存先の無い 4 権限をフィクスチャに
+   * 契約提案として載せた。発注（強制）は #75、CSV一括発注は #76、参照・ユーザ管理は #81。
+   * 実 API が返さない間、src/api/permissions.js は null（未対応）と読み、更新でも送らない
    */
+  {
+    kind: 'fixture',
+    fixture: 'permissions',
+    keys: ['強制発注権限'],
+    request: 75,
+  },
+  {
+    kind: 'fixture',
+    fixture: 'permissions',
+    keys: ['CSV一括発注権限'],
+    request: 76,
+  },
+  {
+    kind: 'fixture',
+    fixture: 'permissions',
+    keys: ['参照権限', 'ユーザ管理権限'],
+    request: 81,
+  },
   /*
    * 顧客マスタの検索クエリ（handler_code / restriction / account_type / corporate_type。#8）は
    * 2026-09-30 の取り込みで仕様に入ったので行を外した。
@@ -845,7 +867,6 @@ const PROBES = [
         canOrder: true,
         canMasterUpdate: false,
         canOperation: false,
-        canBranchAll: false,
         updatedAt: '',
       }),
   },

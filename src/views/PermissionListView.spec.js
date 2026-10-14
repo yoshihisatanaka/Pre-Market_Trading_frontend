@@ -7,7 +7,12 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { rolePermissions } from '@/mocks/fixtures/permissions'
 import { viewerOperator } from '@/mocks/fixtures/currentOperator'
-import { PERMISSION_ITEMS, permissionBadge } from '@/utils/permissionTypes'
+import {
+  EDITABLE_PERMISSION_ITEMS,
+  PERMISSION_ITEMS,
+  UNSUPPORTED_LABEL,
+  permissionBadge,
+} from '@/utils/permissionTypes'
 import PermissionListView from './PermissionListView.vue'
 
 /*
@@ -24,10 +29,14 @@ const toRow = (raw) => ({
   role: raw.ロールコード,
   roleLabel: raw.ロール名,
   description: raw.説明 ?? '',
+  canReference: raw.参照権限 === 1,
   canOrder: raw.発注権限 === 1,
+  canForceOrder: raw.強制発注権限 === 1,
+  canCsvOrder: raw.CSV一括発注権限 === 1,
   canMasterUpdate: raw.マスタ更新権限 === 1,
   canOperation: raw.運用管理権限 === 1,
-  canBranchAll: raw.全店参照権限 === 1,
+  canActivityLogView: raw.マスタ更新権限 === 1 || raw.運用管理権限 === 1,
+  canUserManagement: raw.ユーザ管理権限 === 1,
 })
 const allRows = rolePermissions.map(toRow)
 const TOTAL = allRows.length
@@ -38,11 +47,18 @@ const EDIT_TARGET = allRows.find((row) => !row.canOrder)
 const ORDER_INDEX = PERMISSION_ITEMS.findIndex((item) => item.key === 'canOrder')
 const PERMISSION_COLUMN_OFFSET = 2
 
+/** 契約提案の 4 権限（実 API に保存先が無い）と、その生のキー */
+const PROPOSED_ITEMS = PERMISSION_ITEMS.filter((item) => item.proposed)
+const PROPOSED_RAW_KEYS = ['参照権限', '強制発注権限', 'CSV一括発注権限', 'ユーザ管理権限']
+const DERIVED_ITEM = PERMISSION_ITEMS.find((item) => item.derived)
+
 const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
 const CONFLICT_MESSAGE = '他のユーザーによって更新されています。'
 
 const ALLOWED_LABEL = permissionBadge(true).label
 const DENIED_LABEL = permissionBadge(false).label
+/** セルの文言。未対応（null）はバッジを出さず「—」 */
+const cellLabel = (value, item) => permissionBadge(value, item)?.label ?? UNSUPPORTED_LABEL
 
 const Page = { render: () => h('div') }
 
@@ -80,13 +96,13 @@ const countText = (wrapper) => wrapper.find('[data-testid="permissions-count"]')
 const descriptionHeading = (wrapper) =>
   wrapper.find('[data-testid="permissions-description"] strong').text()
 const rowOf = (wrapper, role) => rows(wrapper)[allRows.findIndex((row) => row.role === role)]
-/** 行の権限 4 列のバッジ文言 */
+/** 行の権限 8 列のバッジ文言 */
 const badgeTexts = (row) =>
   row
     .findAll('td')
     .slice(PERMISSION_COLUMN_OFFSET, PERMISSION_COLUMN_OFFSET + PERMISSION_ITEMS.length)
     .map((td) => td.text())
-const expectedBadges = (row) => PERMISSION_ITEMS.map((item) => permissionBadge(row[item.key]).label)
+const expectedBadges = (row) => PERMISSION_ITEMS.map((item) => cellLabel(row[item.key], item))
 
 const editButton = (wrapper, role) => wrapper.find(`[data-testid="permissions-edit-${role}"]`)
 const editForm = (wrapper) => wrapper.find('[data-testid="permissions-edit-form"]')
@@ -211,7 +227,7 @@ describe('PermissionListView', () => {
 
     expect(headers(wrapper)).toEqual([
       'ロール',
-      '運用概要',
+      '説明',
       ...PERMISSION_ITEMS.map((item) => item.columnLabel),
       '操作',
     ])
@@ -254,7 +270,7 @@ describe('PermissionListView', () => {
 
     expect(editForm(wrapper).exists()).toBe(true)
     expect(dialog(wrapper).attributes('aria-label')).toBe(`${EDIT_TARGET.roleLabel}の権限設定`)
-    PERMISSION_ITEMS.forEach((item) => {
+    EDITABLE_PERMISSION_ITEMS.forEach((item) => {
       expect(checkbox(wrapper, item.key).element.checked).toBe(EDIT_TARGET[item.key])
     })
   })
@@ -384,5 +400,97 @@ describe('PermissionListView', () => {
     await settle()
     expect(exists(emptyView.wrapper, 'permissions-empty')).toBe(true)
     expect(exists(emptyView.wrapper, 'permissions-description')).toBe(true)
+  })
+
+  it('[PMV-18] 実 API が契約提案の権限を返さないと「—」になり編集のチェックは押せず送らない', async () => {
+    // いまの実 API の形。仕様に無い 4 権限のキーを落とした行を返す
+    server.use(
+      http.get('*/api/masters/permissions', () =>
+        HttpResponse.json({
+          roles: rolePermissions.map((raw) =>
+            Object.fromEntries(
+              Object.entries(raw).filter(([key]) => !PROPOSED_RAW_KEYS.includes(key)),
+            ),
+          ),
+        }),
+      ),
+    )
+    const bodies = []
+    server.use(
+      http.put('*/api/masters/permissions/:role', async ({ request }) => {
+        bodies.push(await request.clone().json())
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+
+    const unsupportedRow = { ...EDIT_TARGET }
+    PROPOSED_ITEMS.forEach((item) => {
+      unsupportedRow[item.key] = null
+    })
+    // 提案の 4 列は「—」、ほかの列は従来どおりのバッジ
+    expect(badgeTexts(rowOf(wrapper, EDIT_TARGET.role))).toEqual(expectedBadges(unsupportedRow))
+
+    await openEdit(wrapper, EDIT_TARGET.role)
+    PROPOSED_ITEMS.forEach((item) => {
+      expect(checkbox(wrapper, item.key).attributes('disabled')).toBeDefined()
+    })
+    expect(checkbox(wrapper, 'canOrder').attributes('disabled')).toBeUndefined()
+
+    await checkbox(wrapper, 'canOrder').setValue(true)
+    await editSubmit(wrapper).trigger('click')
+    await settle()
+
+    expect(bodies).toHaveLength(1)
+    PROPOSED_RAW_KEYS.forEach((key) => {
+      expect(bodies[0]).not.toHaveProperty(key)
+    })
+  })
+
+  it('[PMV-19] 発注なしで発注（強制）を許可して保存するとダイアログ内に不備が出て送らない', async () => {
+    const bodies = []
+    server.use(
+      http.put('*/api/masters/permissions/:role', async ({ request }) => {
+        bodies.push(await request.clone().json())
+      }),
+    )
+    const { wrapper } = await mountView()
+    await settle()
+    await openEdit(wrapper, EDIT_TARGET.role)
+
+    await checkbox(wrapper, 'canForceOrder').setValue(true)
+    await editSubmit(wrapper).trigger('click')
+    await settle()
+
+    expect(editForm(wrapper).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="permissions-edit-validation-error"]').text()).toContain(
+      '「発注（強制）」を許可するには「発注」も許可してください。',
+    )
+    expect(bodies).toHaveLength(0)
+
+    // 発注も許可すれば保存できる
+    await checkbox(wrapper, 'canOrder').setValue(true)
+    await editSubmit(wrapper).trigger('click')
+    await settle()
+
+    expect(editForm(wrapper).exists()).toBe(false)
+    expect(bodies).toHaveLength(1)
+  })
+
+  it('[PMV-20] 操作ログ閲覧は閲覧可 / 不可で出し、編集ダイアログにはチェックを置かない', async () => {
+    const { wrapper } = await mountView()
+    await settle()
+    const derivedIndex = PERMISSION_ITEMS.indexOf(DERIVED_ITEM)
+
+    allRows.forEach((row) => {
+      expect(badgeTexts(rowOf(wrapper, row.role))[derivedIndex]).toBe(
+        row.canActivityLogView ? '閲覧可' : DENIED_LABEL,
+      )
+    })
+
+    await openEdit(wrapper, EDIT_TARGET.role)
+
+    expect(checkbox(wrapper, DERIVED_ITEM.key).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="permissions-edit-derived"]').text()).toContain('操作ログ閲覧')
   })
 })

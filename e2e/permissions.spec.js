@@ -13,22 +13,54 @@ import { mockApi } from './helpers/mockApi'
 const PATH = '/masters/permissions'
 
 /*
- * 権限の 4 列。並びは src/utils/permissionTypes.js の PERMISSION_ITEMS と同じ
+ * 編集できる権限の 7 列。並びは src/utils/permissionTypes.js の PERMISSION_ITEMS と同じ
  * （utils は import できるが、フィクスチャの日本語キーとの対応をここで持ちたいので再掲する）。
- * cell は表の列位置（0: ロール / 1: 運用概要 / 2〜5: 権限）。
+ * column は列見出し、key はフィクスチャのキー。cell は表の列位置
+ * （0: ロール / 1: 説明 / 2〜9: 権限。8 は操作ログ閲覧で、保存しない導出値なので下に分けて持つ）。
+ * 参照 / 発注（強制） / CSV一括発注 / ユーザ管理 は仕様に無い契約提案のキー（docs/api/requests.md #75 / #76 / #81）。
  */
 const PERMISSIONS = [
-  { column: '発注権限', checkbox: 'permissions-edit-can-order', cell: 2 },
-  { column: 'マスタ更新権限', checkbox: 'permissions-edit-can-master-update', cell: 3 },
-  { column: '運用管理権限', checkbox: 'permissions-edit-can-operation', cell: 4 },
-  { column: '全店参照権限', checkbox: 'permissions-edit-can-branch-all', cell: 5 },
+  { column: '参照', key: '参照権限', checkbox: 'permissions-edit-can-reference', cell: 2 },
+  { column: '発注', key: '発注権限', checkbox: 'permissions-edit-can-order', cell: 3 },
+  {
+    column: '発注（強制）',
+    key: '強制発注権限',
+    checkbox: 'permissions-edit-can-force-order',
+    cell: 4,
+  },
+  { column: 'CSV一括発注', key: 'CSV一括発注権限', checkbox: 'permissions-edit-can-csv-order', cell: 5 },
+  { column: 'マスタ更新', key: 'マスタ更新権限', checkbox: 'permissions-edit-can-master-update', cell: 6 },
+  { column: '運用・障害管理', key: '運用管理権限', checkbox: 'permissions-edit-can-operation', cell: 7 },
+  {
+    column: 'ユーザ管理',
+    key: 'ユーザ管理権限',
+    checkbox: 'permissions-edit-can-user-management',
+    cell: 9,
+  },
 ]
-const [ORDER, MASTER_UPDATE, , BRANCH_ALL] = PERMISSIONS
+const [, ORDER, FORCE_ORDER, , MASTER_UPDATE, , USER_MANAGEMENT] = PERMISSIONS
+const PROPOSED = PERMISSIONS.filter((permission) =>
+  ['参照権限', '強制発注権限', 'CSV一括発注権限', 'ユーザ管理権限'].includes(permission.key),
+)
+
+/** 操作ログ閲覧の列。マスタ更新か運用・障害管理を許可したロールに自動で付く */
+const ACTIVITY_LOG = { column: '操作ログ閲覧', cell: 8 }
+
+/** 列見出しの並び（権限の部分） */
+const PERMISSION_COLUMNS = [
+  ...PERMISSIONS.slice(0, 6).map((permission) => permission.column),
+  ACTIVITY_LOG.column,
+  USER_MANAGEMENT.column,
+]
 
 /** 許可 / 不可のバッジの文言（src/utils/permissionTypes.js の permissionBadge と同じ） */
 const badge = (flag) => (flag === 1 ? '許可' : '不可')
+/** 操作ログ閲覧のバッジの文言 */
+const activityLogBadge = (row) =>
+  row.マスタ更新権限 === 1 || row.運用管理権限 === 1 ? '閲覧可' : '不可'
 
 const byRole = (code) => rolePermissions.find((row) => row.ロールコード === code)
+const IFA = byRole('ifa')
 const SALES = byRole('sales')
 const SUPERVISOR = byRole('supervisor')
 
@@ -51,21 +83,22 @@ function permissionCell(page, row, permission) {
   return roleRow(page, row).getByRole('cell').nth(permission.cell)
 }
 
-/** 4 ロール × 4 権限のバッジがフィクスチャどおりに出ていることを確かめる */
+/** 4 ロール × 8 権限のバッジがフィクスチャどおりに出ていることを確かめる */
 async function expectFixtureBadges(page) {
   for (const row of rolePermissions) {
     const cells = roleRow(page, row).getByRole('cell')
     for (const permission of PERMISSIONS) {
-      await expect(cells.nth(permission.cell)).toHaveText(badge(row[permission.column]))
+      await expect(cells.nth(permission.cell)).toHaveText(badge(row[permission.key]))
     }
+    await expect(cells.nth(ACTIVITY_LOG.cell)).toHaveText(activityLogBadge(row))
   }
 }
 
-/** 編集ダイアログの 4 つのチェックがその行の現在値どおりかを確かめる */
+/** 編集ダイアログの 7 つのチェックがその行の現在値どおりかを確かめる */
 async function expectChecks(dialog, row) {
   for (const permission of PERMISSIONS) {
     const checkbox = dialog.getByTestId(permission.checkbox)
-    if (row[permission.column] === 1) {
+    if (row[permission.key] === 1) {
       await expect(checkbox).toBeChecked()
     } else {
       await expect(checkbox).not.toBeChecked()
@@ -105,8 +138,8 @@ test.describe('権限マスタ', () => {
     await expect(rowsOf(page)).toHaveCount(rolePermissions.length)
     await expect(table.getByRole('columnheader')).toHaveText([
       'ロール',
-      '運用概要',
-      ...PERMISSIONS.map((permission) => permission.column),
+      '説明',
+      ...PERMISSION_COLUMNS,
       '操作',
     ])
     await expect(page.getByTestId('permissions-pagination')).toHaveCount(0)
@@ -195,6 +228,9 @@ test.describe('権限マスタ', () => {
 
     const dialog = await openEdit(page, SALES)
     await expectChecks(dialog, SALES)
+    // 操作ログ閲覧は保存しない導出値なので、チェックではなく自動付与の説明が出る
+    await expect(dialog.getByRole('checkbox')).toHaveCount(PERMISSIONS.length)
+    await expect(dialog.getByTestId('permissions-edit-derived')).toContainText('操作ログ閲覧')
   })
 
   test('[PM-10] 権限を変えて保存すると一覧のバッジが変わる', async ({ page }) => {
@@ -209,12 +245,14 @@ test.describe('権限マスタ', () => {
       `${SALES.ロール名}の権限設定を更新しました。`,
     )
     await expect(permissionCell(page, SALES, MASTER_UPDATE)).toHaveText('許可')
+    // マスタ更新を許可したので操作ログ閲覧が自動で付く
+    await expect(permissionCell(page, SALES, ACTIVITY_LOG)).toHaveText('閲覧可')
     // 触っていない権限・ほかのロール・件数は変わらない
     await expect(permissionCell(page, SALES, ORDER)).toHaveText(badge(SALES.発注権限))
     await expect(page.getByTestId('permissions-count')).toHaveText(`${rolePermissions.length} ロール`)
     for (const row of rolePermissions.filter((item) => item !== SALES)) {
       for (const permission of PERMISSIONS) {
-        await expect(permissionCell(page, row, permission)).toHaveText(badge(row[permission.column]))
+        await expect(permissionCell(page, row, permission)).toHaveText(badge(row[permission.key]))
       }
     }
   })
@@ -228,7 +266,7 @@ test.describe('権限マスタ', () => {
     await expect(dialog).toHaveCount(0)
     await expect(page.getByTestId('permissions-notice')).toHaveText('変更はありません。')
     for (const permission of PERMISSIONS) {
-      await expect(permissionCell(page, SALES, permission)).toHaveText(badge(SALES[permission.column]))
+      await expect(permissionCell(page, SALES, permission)).toHaveText(badge(SALES[permission.key]))
     }
   })
 
@@ -277,14 +315,14 @@ test.describe('権限マスタ', () => {
     await page.goto(PATH)
 
     const dialog = await openEdit(page, SUPERVISOR)
-    await dialog.getByTestId(BRANCH_ALL.checkbox).uncheck()
+    await dialog.getByTestId(USER_MANAGEMENT.checkbox).uncheck()
     await dialog.getByTestId('permissions-edit-submit').click()
 
     await expect(dialog).toHaveCount(0)
     await expect(page.getByTestId('permissions-notice')).toHaveText(
       `${SUPERVISOR.ロール名}の権限設定を更新しました。`,
     )
-    await expect(permissionCell(page, SUPERVISOR, BRANCH_ALL)).toHaveText('不可')
+    await expect(permissionCell(page, SUPERVISOR, USER_MANAGEMENT)).toHaveText('不可')
   })
 
   test('[PM-16] 競合で弾かれたあと開き直すとエラーが消えて現在値に戻る', async ({ page }) => {
@@ -309,5 +347,54 @@ test.describe('権限マスタ', () => {
     const reopened = await openEdit(page, SALES)
     await expect(reopened.getByTestId('permissions-edit-error')).toHaveCount(0)
     await expectChecks(reopened, SALES)
+  })
+
+  test('[PM-17] 発注なしで発注（強制）を許可すると保存できず理由が出る', async ({ page }) => {
+    await page.goto(PATH)
+
+    const dialog = await openEdit(page, IFA)
+    await dialog.getByTestId(FORCE_ORDER.checkbox).check()
+    await dialog.getByTestId('permissions-edit-submit').click()
+
+    await expect(dialog.getByTestId('permissions-edit-validation-error')).toHaveText(
+      '「発注（強制）」を許可するには「発注」も許可してください。',
+    )
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('permissions-notice')).toHaveCount(0)
+    await expect(permissionCell(page, IFA, FORCE_ORDER)).toHaveText(badge(IFA.強制発注権限))
+
+    // 発注も許可すれば保存できる
+    await dialog.getByTestId(ORDER.checkbox).check()
+    await dialog.getByTestId('permissions-edit-submit').click()
+
+    await expect(dialog).toHaveCount(0)
+    await expect(permissionCell(page, IFA, ORDER)).toHaveText('許可')
+    await expect(permissionCell(page, IFA, FORCE_ORDER)).toHaveText('許可')
+  })
+
+  test('[PM-18] 実 API が提案の権限を返さないとその列は「—」でチェックできない', async ({
+    page,
+  }) => {
+    // いまの実 API の形（仕様に無い 4 権限のキーが無い）
+    const proposedKeys = PROPOSED.map((permission) => permission.key)
+    const roles = rolePermissions.map((row) =>
+      Object.fromEntries(Object.entries(row).filter(([key]) => !proposedKeys.includes(key))),
+    )
+    await mockApi(page, [{ path: '*/api/masters/permissions', body: { roles } }])
+    await page.goto(PATH)
+
+    await expect(rowsOf(page)).toHaveCount(rolePermissions.length)
+    for (const row of rolePermissions) {
+      for (const permission of PROPOSED) {
+        await expect(permissionCell(page, row, permission)).toHaveText('—')
+      }
+      await expect(permissionCell(page, row, ORDER)).toHaveText(badge(row.発注権限))
+    }
+
+    const dialog = await openEdit(page, SALES)
+    for (const permission of PROPOSED) {
+      await expect(dialog.getByTestId(permission.checkbox)).toBeDisabled()
+    }
+    await expect(dialog.getByTestId(ORDER.checkbox)).toBeEnabled()
   })
 })

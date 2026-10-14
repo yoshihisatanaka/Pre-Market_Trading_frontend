@@ -3,10 +3,12 @@ import { h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { RouterView, createMemoryHistory, createRouter } from 'vue-router'
-import { http } from 'msw'
+import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { buildCalculationResponse, calculationMessages } from '@/mocks/fixtures/calculations'
 import { customers } from '@/mocks/fixtures/customers'
+import { fxRates } from '@/mocks/fixtures/fxRates'
+import { symbols } from '@/mocks/fixtures/symbols'
 import { currentCalculationSetting } from '@/mocks/handlers/calculationSettings'
 import { useCodesStore } from '@/stores/codes'
 import { SPECIFIC_DEPOSIT } from '@/utils/apiEnums'
@@ -23,9 +25,15 @@ import CustomerDetailView from './CustomerDetailView.vue'
  * 結果の期待値は既定モックの計算（fixtures/calculations.js）に同じ本文を渡して導く。
  */
 const CALCULATIONS = '*/api/calculations'
+const FX_LATEST = '*/api/masters/fx/latest'
+const SYMBOLS = '*/api/masters/symbols'
 const PATH = '/customers/1/calculations'
 
 const CUSTOMER = customers.find((row) => row.ID === 1)
+
+/** 既定モックの現在レート（基準日が最新の行）と AAPL の前日終値。自動セットの期待値 */
+const LATEST_FX_RATE = String([...fxRates].sort((a, b) => b.基準日 - a.基準日)[0].為替レート)
+const AAPL_CLOSE = String(symbols.find((row) => row.Ticker === 'AAPL').前日終値)
 
 /** 国内約定日の既定（今日）を固定する日 */
 const TODAY = new Date(2026, 9, 6, 9, 0, 0)
@@ -117,6 +125,26 @@ function recordBodies() {
     }),
   )
   return bodies
+}
+
+/** 銘柄マスタの照会が何回飛んだかを記録する（応答は既定のハンドラに任せる） */
+function recordSymbolLookups() {
+  const urls = []
+  server.use(
+    http.get(SYMBOLS, ({ request }) => {
+      urls.push(request.url)
+      return undefined
+    }),
+  )
+  return urls
+}
+
+/** 初期値の取得先を落とす */
+function failDefaults() {
+  server.use(
+    http.get(FX_LATEST, () => HttpResponse.json({ detail: 'down' }, { status: 500 })),
+    http.get(SYMBOLS, () => HttpResponse.json({ detail: 'down' }, { status: 500 })),
+  )
 }
 
 /** 既定モックが同じ本文に返す応答（期待値の導出元） */
@@ -413,9 +441,10 @@ describe('CustomerCalculationView', () => {
     expect(find(wrapper, 'customer-calc-result').attributes('aria-busy')).toBeUndefined()
   })
 
-  it('[CCV-13] 口座番号は integer、空欄の任意項目は null で送り、国内約定日は送らない', async () => {
+  it('[CCV-13] 口座番号は integer、空欄の任意項目と自動セットのままの為替は null で送り、国内約定日は送らない', async () => {
     const bodies = recordBodies()
     const { wrapper } = await mountView()
+    expect(valueOf(wrapper, 'customer-calc-fx-rate')).toBe(LATEST_FX_RATE)
 
     await fillAndSubmit(wrapper, { symbol: 'aapl', quantity: 10, unitPrice: 230.5 })
     await settle()
@@ -456,6 +485,75 @@ describe('CustomerCalculationView', () => {
     // 現地費用の区画そのものは残っている（現地手数料①②は入力できる）
     expect(exists(wrapper, 'customer-calc-local-fee-1')).toBe(true)
     expect(exists(wrapper, 'customer-calc-local-fee-2')).toBe(true)
+  })
+
+  it('[CCV-16] 預りから引き継いだ数量・単価が入り、為替は現在レートが自動セットされる', async () => {
+    const lookups = recordSymbolLookups()
+    const { wrapper } = await mountView({
+      symbol: 'TSLA',
+      side: 'sell',
+      specific_deposit: '0',
+      quantity: '30',
+      unit_price: '248.98',
+    })
+
+    expect(valueOf(wrapper, 'customer-calc-quantity')).toBe('30')
+    expect(valueOf(wrapper, 'customer-calc-unit-price')).toBe('248.98')
+    expect(valueOf(wrapper, 'customer-calc-fx-rate')).toBe(LATEST_FX_RATE)
+    expect(lookups).toHaveLength(0)
+  })
+
+  it('[CCV-17] タブを直接開くと銘柄・数量・単価は空で、為替だけ自動セットされる', async () => {
+    const lookups = recordSymbolLookups()
+    const { wrapper } = await mountView()
+
+    expect(valueOf(wrapper, 'customer-calc-symbol')).toBe('')
+    expect(valueOf(wrapper, 'customer-calc-quantity')).toBe('')
+    expect(valueOf(wrapper, 'customer-calc-unit-price')).toBe('')
+    expect(valueOf(wrapper, 'customer-calc-fx-rate')).toBe(LATEST_FX_RATE)
+    expect(lookups).toHaveLength(0)
+  })
+
+  it('[CCV-18] 銘柄だけ引き継ぐと単価に銘柄マスタの前日終値が入る', async () => {
+    const { wrapper } = await mountView({ symbol: 'aapl' })
+
+    expect(valueOf(wrapper, 'customer-calc-symbol')).toBe('AAPL')
+    expect(valueOf(wrapper, 'customer-calc-unit-price')).toBe(AAPL_CLOSE)
+    expect(valueOf(wrapper, 'customer-calc-quantity')).toBe('')
+    expect(valueOf(wrapper, 'customer-calc-fx-rate')).toBe(LATEST_FX_RATE)
+  })
+
+  it('[CCV-19] 初期値を取れなくても空のままで、エラーは出さない', async () => {
+    failDefaults()
+    const { wrapper } = await mountView({ symbol: 'AAPL' })
+
+    expect(valueOf(wrapper, 'customer-calc-unit-price')).toBe('')
+    expect(valueOf(wrapper, 'customer-calc-fx-rate')).toBe('')
+    expect(exists(wrapper, 'customer-calc-error')).toBe(false)
+    expect(textOf(wrapper, 'customer-calc-result-caption')).toBe('買付概算 ／ 未実行')
+
+    await fillAndSubmit(wrapper, { quantity: 10, unitPrice: 230.5 })
+    await settle()
+    expect(textOf(wrapper, 'customer-calc-result-caption')).toBe('買付概算 ／ AAPL 10株')
+  })
+
+  it('[CCV-20] 自動セットのままの為替は null で送り、書き換えたら送る', async () => {
+    const bodies = recordBodies()
+    const { wrapper } = await mountView({ symbol: 'AAPL' })
+    expect(valueOf(wrapper, 'customer-calc-fx-rate')).toBe(LATEST_FX_RATE)
+
+    await fillAndSubmit(wrapper, { quantity: 10 })
+    await settle()
+
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).toMatchObject({ 単価: Number(AAPL_CLOSE), 為替レート: null })
+
+    await find(wrapper, 'customer-calc-fx-rate').setValue('151')
+    await find(wrapper, 'customer-calc-form').trigger('submit')
+    await settle()
+
+    expect(bodies).toHaveLength(2)
+    expect(bodies[1].為替レート).toBe(151)
   })
 
   it('[CCV-14] タブを開き直すと前回の結果は消える', async () => {

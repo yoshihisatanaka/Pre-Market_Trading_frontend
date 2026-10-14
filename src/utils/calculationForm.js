@@ -4,8 +4,8 @@ import { SIDE } from './orderEntryOptions'
 import { formatSignedJpyUnit, profitLossTone } from './profitLoss'
 
 /*
- * 仮計算（顧客詳細の仮計算タブ）のフォームと結果の表示の純関数。入力値の初期値・画面での検証・送る値の
- * 組み立てと、結果のカードに出す文字列をここに置き、画面（views/CustomerCalculationView.vue）は状態だけを持つ。
+ * 仮計算（顧客詳細の仮計算タブ）のフォームと結果の表示の純関数。入力値の初期値（引き継ぎと自動セット）・
+ * 画面での検証・送る値の組み立てと、結果のカードに出す文字列をここに置き、画面（views/CustomerCalculationView.vue）は状態だけを持つ。
  *
  * 検証の桁数と文言はモックリポジトリの routers/calculations.py（_validate_input）の原文。
  * 画面で止めるのは必須と形式だけで、口座・銘柄の有無や金額帯は `POST /calculations` に任せる。
@@ -56,23 +56,28 @@ function toCompactDate(date) {
 /**
  * 入力画面の初期値。手数料条件と現地費用は空（サーバが顧客属性・仮計算マスタで補完する）。
  *
- * @param {{ now?: Date, symbol?: string, side?: string, specificDeposit?: string }} [options]
- *   symbol / side / specificDeposit は外株預り・預り検索の「仮計算」から引き継いだ値
- *   （utils/calculationQuery.js の parseCalculationQuery の結果）。空なら既定（買い・特定）
+ * @param {{ now?: Date, symbol?: string, side?: string, specificDeposit?: string,
+ *   quantity?: string, unitPrice?: string, fxRate?: string }} [options]
+ *   symbol / side / specificDeposit / quantity / unitPrice は外株預り・預り検索の「仮計算」から引き継いだ値
+ *   （utils/calculationQuery.js の parseCalculationQuery の結果）。空なら既定（買い・特定、数量・単価は空）。
+ *   fxRate は為替マスタの現在レート（画面が開いたあとに fillCalculationDefaults で入れるのが通常の経路）
  */
 export function createCalculationForm({
   now = new Date(),
   symbol = '',
   side = '',
   specificDeposit = '',
+  quantity = '',
+  unitPrice = '',
+  fxRate = '',
 } = {}) {
   return {
     symbol,
     side: side || SIDE.BUY,
     specificDeposit: specificDeposit || SPECIFIC_DEPOSIT.SPECIFIC,
-    quantity: '',
-    fxRate: '',
-    unitPrice: '',
+    quantity,
+    fxRate,
+    unitPrice,
     domesticTradeDate: toCompactDate(now),
     localFee1: '',
     localFee2: '',
@@ -87,6 +92,26 @@ export function createCalculationForm({
     basisPoints: '',
     feeFrom: '',
     feeTo: '',
+  }
+}
+
+/**
+ * 画面が開いたあとに取れた初期値（単価・為替）を、まだ空の欄にだけ入れる。
+ * 値の意味はモックの calculations.py（_default_input）と同じ:
+ *   単価 … 預りの現在値、無ければ銘柄マスタの前日終値（クエリで来なかったときに画面が引く）
+ *   為替 … 為替マスタの現在レート
+ * 利用者が先に入力した欄は上書きしない。取れなかった項目（null）は空のまま。
+ *
+ * @param {ReturnType<typeof createCalculationForm>} form
+ * @param {{ unitPrice?: number|null, fxRate?: number|null }} defaults 取れた値（数値）。無ければ null
+ * @returns {ReturnType<typeof createCalculationForm>} 新しいフォーム（form は変えない）
+ */
+export function fillCalculationDefaults(form, { unitPrice = null, fxRate = null } = {}) {
+  const fill = (current, value) => (current.trim() || !isNumber(value) ? current : String(value))
+  return {
+    ...form,
+    unitPrice: fill(form.unitPrice, unitPrice),
+    fxRate: fill(form.fxRate, fxRate),
   }
 }
 
@@ -159,16 +184,35 @@ function optionalNumber(text) {
 }
 
 /**
+ * 為替欄が自動セットした現在レートのままか（数値として同じなら同じとみなす。全角・カンマは正規化する）。
+ * 自動セットが無かった（autoFxRate が ''）ときは常に false
+ */
+function isAutoFxRate(text, autoFxRate) {
+  const auto = normalizeNumberText(autoFxRate)
+  if (!auto) return false
+  const value = normalizeNumberText(text)
+  return Boolean(value) && Number(value) === Number(auto)
+}
+
+/**
  * 送る条件（src/api/calculations.js の CalculationInput）を組み立てる。
  * validateCalculationForm を通ったフォームにだけ使う（数量・単価は変換できる前提）。
  *
  * 国内約定日は送らない（docs/api/requests.md #47。`約定日` として送れるようになったが、繋ぐかは業務確認の回答待ち）。
  *
+ * **為替は、自動セットした現在レートのままなら送らない（null）。** `CalculationRequest.為替レート` は
+ * 「指定時はスプレッド 0。未指定時は m_為替 の直近有効レート＋仮計算マスタのスプレッド」なので、
+ * 画面が入れた値をそのまま送ると手入力扱いになり標準スプレッドが落ちる。モックの calculations.py は
+ * 為替欄を現在レートで埋めたうえでスプレッドを別に乗せていたので、その見え方（欄には現在レート、
+ * 結果は為替 ± スプレッド）を実 API の契約の上で再現する。利用者が書き換えた値だけを手入力として送る。
+ *
  * @param {ReturnType<typeof createCalculationForm>} form
- * @param {{ accountNumber: string }} context 顧客詳細で開いている顧客の口座番号
+ * @param {{ accountNumber: string, autoFxRate?: string }} context
+ *   accountNumber は顧客詳細で開いている顧客の口座番号。
+ *   autoFxRate は画面が為替欄に自動セットした値（fillCalculationDefaults で入れた文字列）。無ければ ''
  * @returns {import('@/api/calculations').CalculationInput}
  */
-export function buildCalculationInput(form, { accountNumber }) {
+export function buildCalculationInput(form, { accountNumber, autoFxRate = '' }) {
   return {
     accountNumber,
     symbol: form.symbol.trim().toUpperCase(),
@@ -176,7 +220,7 @@ export function buildCalculationInput(form, { accountNumber }) {
     quantity: Number(normalizeNumberText(form.quantity)),
     unitPrice: Number(normalizeNumberText(form.unitPrice)),
     specificDeposit: form.specificDeposit,
-    fxRate: optionalNumber(form.fxRate),
+    fxRate: isAutoFxRate(form.fxRate, autoFxRate) ? null : optionalNumber(form.fxRate),
     localFee1: optionalNumber(form.localFee1),
     localFee2: optionalNumber(form.localFee2),
     localTax1: optionalNumber(form.localTax1),

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { http } from 'msw'
+import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { customers } from '@/mocks/fixtures/customers'
+import { fxRates } from '@/mocks/fixtures/fxRates'
 import { symbols } from '@/mocks/fixtures/symbols'
 import { calculationMessages } from '@/mocks/fixtures/calculations'
 import { useCalculationStore } from './calculation'
@@ -10,13 +11,33 @@ import { useCalculationStore } from './calculation'
 /*
  * ストアのテスト。MSW の既定ハンドラ（POST /calculations）に当てて、実行・失敗・やり直し・reset の状態を確かめる。
  * 応答の待ちは、本文の銘柄で選んだ要求だけを握り、解放後は既定ハンドラへ落として再現する。
+ * loadDefaults は既定ハンドラの GET /masters/fx/latest と GET /masters/symbols に当てる。
  */
 const PATH = '*/api/calculations'
+const FX_LATEST = '*/api/masters/fx/latest'
+const SYMBOLS = '*/api/masters/symbols'
 const MISSING_SYMBOL = 'ZZZZ'
 
 const yamada = customers.find((row) => row.口座番号 === 1230001)
 const aapl = symbols.find((row) => row.Ticker === 'AAPL')
 const msft = symbols.find((row) => row.Ticker === 'MSFT')
+
+/** 既定モックの現在レート（取消区分 0 の中で基準日が最新の行） */
+const LATEST_FX_RATE = [...fxRates].sort((a, b) => b.基準日 - a.基準日)[0].為替レート
+
+/** 応答を握る GET ハンドラ。解放すると既定のハンドラに流れる */
+function gateGet(path) {
+  let release
+  const promise = new Promise((resolve) => {
+    release = resolve
+  })
+  server.use(
+    http.get(path, async () => {
+      await promise
+    }),
+  )
+  return release
+}
 
 /** 送る条件（アプリ内モデル）。既定は AAPL を特定で 10 株売り、任意項目は空 */
 function input(overrides = {}) {
@@ -217,5 +238,71 @@ describe('useCalculationStore', () => {
     await newer
     expect(store.loading).toBe(false)
     expect(store.result.symbolCode).toBe(msft.銘柄コード)
+  })
+
+  it('[TCS-12] loadDefaults は銘柄マスタの前日終値と為替マスタの現在レートを返す', async () => {
+    expect(aapl.前日終値).toBe(227.16)
+    expect(LATEST_FX_RATE).toBe(150.25)
+    const symbolRequests = []
+    server.use(
+      http.get(SYMBOLS, ({ request }) => {
+        symbolRequests.push(request.url)
+      }),
+    )
+    const store = useCalculationStore()
+
+    expect(await store.loadDefaults({ symbol: 'aapl' })).toEqual({
+      unitPrice: aapl.前日終値,
+      fxRate: LATEST_FX_RATE,
+    })
+    expect(await store.loadDefaults({ symbol: aapl.銘柄コード })).toEqual({
+      unitPrice: aapl.前日終値,
+      fxRate: LATEST_FX_RATE,
+    })
+    expect(symbolRequests).toHaveLength(2)
+
+    expect(await store.loadDefaults()).toEqual({ unitPrice: null, fxRate: LATEST_FX_RATE })
+    expect(symbolRequests).toHaveLength(2)
+    expect(await store.loadDefaults({ symbol: MISSING_SYMBOL })).toEqual({
+      unitPrice: null,
+      fxRate: LATEST_FX_RATE,
+    })
+  })
+
+  it('[TCS-13] 取れなかった項目だけ null で、例外にしない', async () => {
+    const store = useCalculationStore()
+
+    server.use(http.get(FX_LATEST, () => HttpResponse.json({ detail: 'none' }, { status: 404 })))
+    expect(await store.loadDefaults({ symbol: aapl.Ticker })).toEqual({
+      unitPrice: aapl.前日終値,
+      fxRate: null,
+    })
+
+    server.use(http.get(FX_LATEST, () => HttpResponse.json({ detail: 'down' }, { status: 500 })))
+    expect(await store.loadDefaults({ symbol: aapl.Ticker })).toEqual({
+      unitPrice: aapl.前日終値,
+      fxRate: null,
+    })
+
+    server.resetHandlers()
+    server.use(http.get(SYMBOLS, () => HttpResponse.json({ detail: 'down' }, { status: 500 })))
+    expect(await store.loadDefaults({ symbol: aapl.Ticker })).toEqual({
+      unitPrice: null,
+      fxRate: LATEST_FX_RATE,
+    })
+    expect(store.error).toBeNull()
+  })
+
+  it('[TCS-14] reset のあとに届いた初期値は捨てる', async () => {
+    const releaseFx = gateGet(FX_LATEST)
+    const releaseSymbols = gateGet(SYMBOLS)
+    const store = useCalculationStore()
+
+    const pending = store.loadDefaults({ symbol: aapl.Ticker })
+    store.reset()
+    releaseFx()
+    releaseSymbols()
+
+    expect(await pending).toEqual({ unitPrice: null, fxRate: null })
   })
 })

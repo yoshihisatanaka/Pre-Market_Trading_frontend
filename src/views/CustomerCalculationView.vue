@@ -18,6 +18,7 @@ import {
   buildCalculationSummary,
   buildPendingSummary,
   createCalculationForm,
+  fillCalculationDefaults,
   hasCalculationFormErrors,
   validateCalculationForm,
 } from '@/utils/calculationForm'
@@ -39,16 +40,24 @@ import { SIDE_CODES, SIDE_EXTRAS, decorateOptions } from '@/utils/orderEntryOpti
  *   結果あり … 応答の金額。サーバの warnings（残高を超える売り数量など）は注意の帯に出す
  * 入力の不備は項目の直下に出し、API は呼ばない（新規注文の画面と同じ）。
  *
- * 外株預り・預り検索の行の「仮計算」からは、銘柄・売買・預り区分が URL クエリで引き継がれる
- * （utils/calculationQuery.js）。タブと外株預りの見出しの「仮計算」から入ったときは買いで始まる（モックと同じ）。
+ * 外株預り・預り検索の行の「仮計算」からは、銘柄・売買・預り区分・数量（売却可能数量）・単価（預りの現在値）が
+ * URL クエリで引き継がれる（utils/calculationQuery.js）。タブと外株預りの見出しの「仮計算」から入ったときは
+ * 買いで始まり、銘柄・数量・単価は空（モックと同じ）。
+ *
+ * 初期値の自動セット（意味はモックの calculations.py の _default_input と同じ。stores/calculation.js の loadDefaults）:
+ *   単価 … クエリに無く銘柄があれば、銘柄マスタの前日終値
+ *   為替 … 為替マスタの現在レート
+ * 開いたときに 1 回だけ引き、まだ空の欄にだけ入れる（utils/calculationForm.js の fillCalculationDefaults）。
+ * 取れなかった項目は空のままで、エラーは出さない（空欄はサーバが補完する）。どの欄も手で直せる。
+ * 為替は自動セットのままなら送らない（手入力扱いになると標準スプレッドが落ちる。buildCalculationInput を参照）。
  *
  * モックとの差:
  *   - 国内約定日は送らない（docs/api/requests.md #47。業務確認の回答待ち）。形式だけは画面で見る
  *   - 現地手数料区分（通常 / ネゴレート / NET）は置かない（2026-10-09 に削除。モックリポジトリも 18ed9d1 で削除済み）
  *   - 結果の行はモックの並びに応答の値を当てる。応答に無い円換算の内訳（約定金額・現地費用・スプレッド）の 3 行は
  *     「円換算精算金額」と「適用為替」に、NISA の上乗せ額の行は「NISA使用予定額」に置き換えた
- *   - 為替・単価・数量・手数料条件に既定値を入れない（モックは顧客属性のモック設定と時価で埋めていた）。
- *     空欄はサーバが為替マスタ・手数料優遇マスタ・仮計算マスタで補完する
+ *   - 手数料条件に既定値を入れない（モックは顧客属性のモック設定で埋めていた）。空欄はサーバが手数料優遇マスタ・
+ *     仮計算マスタで補完する
  *   - 預りから売りで入ったときに預り区分をその明細に固定する（モックのスクリプト）のは、預りの明細を引けるようになってから
  */
 
@@ -72,8 +81,24 @@ const depositOptions = computed(() =>
 // 引き継ぎは開いたときに 1 回だけ読む（入力を始めたあとで URL に合わせて書き換えない）
 const form = ref(createCalculationForm(parseCalculationQuery(route.query)))
 
+/** 為替欄に自動セットした現在レート（文字列）。送るときに「手入力か自動セットのままか」を見分ける */
+const autoFxRate = ref('')
+
 /** 項目ごとの入力の不備 */
 const fieldErrors = ref({})
+
+/**
+ * 単価・為替の初期値を引いて、まだ空の欄にだけ入れる。
+ * 単価は預りの現在値がクエリで来ていれば引かない（銘柄だけ来たときに銘柄マスタの前日終値を引く）。
+ * 応答が返るまでに利用者が入力した欄は fillCalculationDefaults が守る
+ */
+async function applyDefaults() {
+  const { symbol, unitPrice } = form.value
+  const defaults = await store.loadDefaults({ symbol: unitPrice ? '' : symbol })
+  const before = form.value
+  form.value = fillCalculationDefaults(before, defaults)
+  if (!before.fxRate.trim() && form.value.fxRate) autoFxRate.value = form.value.fxRate
+}
 
 /** 結果が無いあいだの見出しの状態 */
 const pendingStatus = computed(() => {
@@ -102,7 +127,10 @@ async function submit() {
   if (hasCalculationFormErrors(fieldErrors.value)) return
 
   await store.run(
-    buildCalculationInput(form.value, { accountNumber: customer.value?.accountNumber ?? '' }),
+    buildCalculationInput(form.value, {
+      accountNumber: customer.value?.accountNumber ?? '',
+      autoFxRate: autoFxRate.value,
+    }),
   )
 }
 
@@ -111,8 +139,9 @@ const backRoute = computed(() => ({
   params: { customerId: String(route.params.customerId ?? '') },
 }))
 
-// 前回この画面で出した結果やエラーを持ち越さない（Pinia は画面をまたいで残る）
+// 前回この画面で出した結果やエラーを持ち越さない（Pinia は画面をまたいで残る）。初期値はそのあとに引く
 store.reset()
+applyDefaults()
 </script>
 
 <template>

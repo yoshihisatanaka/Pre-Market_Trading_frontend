@@ -91,6 +91,12 @@ const FALLBACK_ROW = {
 const fixture = {
   /** csv-spec の列名（index 順） */
   columnNames: [],
+  /**
+   * csv-spec で required が true の列のうち最後のもの（OCR-04 が見出しから抜く）。
+   * #58 で任意の 強制区分 が最後の列だった時期がある（2026-10-13 に廃止）。任意の列が足されても
+   * ヘッダー不足を作れるよう、最終列ではなく必須の最後の列を抜く
+   */
+  lastRequiredColumn: '',
   /** テンプレートの本文（BOM 付き）と Content-Disposition */
   template: { text: '', disposition: '' },
   /** 顧客マスタの先頭の有効な行 */
@@ -274,10 +280,9 @@ test.describe('CSV一括注文（実 API 接続）', () => {
 
     const spec = await api.get(SPEC_API_PATH)
     expect(spec.ok(), `実 API から ${SPEC_API_PATH} を取得できない: ${spec.status()}`).toBe(true)
-    fixture.columnNames = ((await spec.json()).columns ?? [])
-      .slice()
-      .sort((a, b) => a.index - b.index)
-      .map((column) => column.name)
+    const columns = ((await spec.json()).columns ?? []).slice().sort((a, b) => a.index - b.index)
+    fixture.columnNames = columns.map((column) => column.name)
+    fixture.lastRequiredColumn = columns.filter((column) => column.required).at(-1)?.name ?? ''
     expect(fixture.columnNames.length, 'csv-spec の列が 0 件').toBeGreaterThan(0)
 
     const template = await api.get(TEMPLATE_API_PATH)
@@ -298,7 +303,7 @@ test.describe('CSV一括注文（実 API 接続）', () => {
     await api.dispose()
 
     console.log(
-      `[beforeAll] 列 ${fixture.columnNames.length} / 口座 ${fixture.customer?.部店コード}-${fixture.customer?.口座番号} / 銘柄 ${fixture.symbol?.銘柄コード}`,
+      `[beforeAll] 列 ${fixture.columnNames.length}（必須の最後 ${fixture.lastRequiredColumn}） / 口座 ${fixture.customer?.部店コード}-${fixture.customer?.口座番号} / 銘柄 ${fixture.symbol?.銘柄コード}`,
     )
   })
 
@@ -398,7 +403,8 @@ test.describe('CSV一括注文（実 API 接続）', () => {
   test('[OCR-04] 見出しの列が足りない CSV は 400 になり、取込み画面に留まって理由が出る', async ({
     page,
   }) => {
-    const header = fixture.columnNames.slice(0, -1)
+    expect(fixture.lastRequiredColumn, 'csv-spec に required の列が無い').toBeTruthy()
+    const header = fixture.columnNames.filter((name) => name !== fixture.lastRequiredColumn)
     const res = await confirm(page, csvOf([], header), 'OCR-04')
     expect(res.status()).toBe(400)
 

@@ -4,14 +4,18 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import {
   bulkOrderCreateResponse,
+  ORDER_CSV_CASH_SHORT_QUANTITY,
+  ORDER_CSV_REMOVED_COLUMN_NAMES,
   ORDER_CSV_TEMPLATE_FILENAME,
+  orderCsvCashShortForcedWarning,
+  orderCsvCashShortMessage,
   orderCsvColumnNames,
   orderCsvColumns,
   orderCsvCustomerNameOf,
   orderCsvDetailsOf,
-  orderCsvRequiredHeaderNames,
   orderCsvSampleOrders,
   orderCsvTemplateText,
+  orderCsvValidateForceableResponse,
   orderCsvValidateResponse,
   orderCsvValidateWithErrorsResponse,
 } from '@/mocks/fixtures/orderCsv'
@@ -121,8 +125,16 @@ const toExpectedOrder = (raw) => ({
   receiver: raw.受注者,
   vwap: raw.VWAP区分 === 1,
   marketScope: raw.発注範囲,
-  forced: raw.強制区分 === 1,
+  // CSV では強制を指定できない（2026-10-13 の方針変更）。事前検証の注文は常に強制なし
+  forced: false,
 })
+
+/** 生の行の forced_overrides から、アプリ内の形に期待するものを作る */
+const toExpectedOverrides = (raw) =>
+  (raw.forced_overrides ?? []).map((item) => ({ check: item.チェック, content: item.内容 }))
+
+/** 買付余力不足になる注文（MSW の仮規則。買いで数量が ORDER_CSV_CASH_SHORT_QUANTITY 以上） */
+const cashShortOrder = { ...orderCsvSampleOrders[0], 数量: ORDER_CSV_CASH_SHORT_QUANTITY }
 
 /** 列の並び（既定は全列）と注文の行から CSV の本文を組む（null は空欄） */
 const csvOf = (orders, header = orderCsvColumnNames) =>
@@ -136,7 +148,7 @@ const csvOf = (orders, header = orderCsvColumnNames) =>
 /** ヘッダーの列が足りない CSV（先頭 2 列だけ）と、そのとき handler が返す detail */
 const SHORT_HEADER = orderCsvColumnNames.slice(0, 2)
 const SHORT_HEADER_CSV = `${SHORT_HEADER.join(',')}\r\n`
-const SHORT_HEADER_DETAIL = `CSVヘッダーに不足があります: 不足項目=[${orderCsvRequiredHeaderNames
+const SHORT_HEADER_DETAIL = `CSVヘッダーに不足があります: 不足項目=[${orderCsvColumnNames
   .filter((name) => !SHORT_HEADER.includes(name))
   .map((name) => `'${name}'`)
   .join(', ')}]`
@@ -420,11 +432,12 @@ describe('api/orderCsv', () => {
 
     expect(bodies).toHaveLength(1)
     expect(bodies[0].orders).toEqual(
-      orderCsvSampleOrders.map((order) => ({ ...order, 作成者: CREATED_BY })),
+      orderCsvSampleOrders.map((order) => ({ ...order, 強制区分: 0, 作成者: CREATED_BY })),
     )
     expect(result.orderIds).toEqual(bulkOrderCreateResponse.order_ids.map(String))
     expect(result.totalOrders).toBe(bulkOrderCreateResponse.total_orders)
     expect(result.message).toBe(bulkOrderCreateResponse.message)
+    expect(result.warnings).toEqual(bulkOrderCreateResponse.warnings)
   })
 
   it('[OCA-19] createdBy を渡さなければ作成者は空文字で届き、422 にならない', async () => {
@@ -463,43 +476,183 @@ describe('api/orderCsv', () => {
     expect(error.status).toBe(422)
   })
 
-  it('[OCA-22] 強制区分が 1 の行だけ forced が true になる', async () => {
-    const [base] = orderCsvValidateResponse.rows
-    const withForced = (value) => ({ ...base, data: { ...base.data, 強制区分: value } })
-    const withoutForced = { ...base, data: { ...base.data } }
-    delete withoutForced.data.強制区分
+  it('[OCA-22] forceable は NG で true の行だけ true になる', async () => {
+    const invalid = orderCsvValidateWithErrorsResponse.rows.find((row) => row.valid === false)
+    const [valid] = orderCsvValidateResponse.rows
+    const withForceable = (base, value) => ({ ...base, forceable: value })
+    const withoutForceable = { ...invalid }
+    delete withoutForceable.forceable
     respondValidate({
-      ...orderCsvValidateResponse,
-      rows: [withForced(1), withForced(0), withForced('1'), withForced(null), withoutForced],
+      ...orderCsvValidateWithErrorsResponse,
+      rows: [
+        withForceable(invalid, true),
+        withForceable(invalid, false),
+        withForceable(invalid, null),
+        withoutForceable,
+        withForceable(invalid, 'true'),
+        withForceable(valid, true),
+      ],
     })
 
     const result = await validateOrderCsv(csvFile('x'))
 
-    expect(result.rows.map((row) => row.order.forced)).toEqual([true, false, false, false, false])
+    expect(result.rows.map((row) => row.forceable)).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ])
   })
 
-  it('[OCA-23] 強制区分を付けた行だけ 強制区分 1 で一括受付に送る', async () => {
-    const orders = orderCsvSampleOrders.map((order, index) => ({
-      ...order,
-      強制区分: index === 1 ? 1 : 0,
+  it('[OCA-23] forced を true にした注文だけ 強制区分 1 で一括受付に送る', async () => {
+    const FORCED_INDEX = 1
+    const validation = await validateOrderCsv(csvFile(orderCsvTemplateText))
+    const orders = validation.rows.map((row, index) => ({
+      ...row.order,
+      forced: index === FORCED_INDEX,
     }))
-    const validation = await validateOrderCsv(csvFile(csvOf(orders)))
     const bodies = recordBulk()
 
-    await bulkCreateOrders(validation.rows.map((row) => row.order))
+    await bulkCreateOrders(orders)
 
-    expect(bodies[0].orders.map((order) => order.強制区分)).toEqual(orders.map((o) => o.強制区分))
+    expect(bodies[0].orders.map((order) => order.強制区分)).toEqual(
+      orders.map((_, index) => (index === FORCED_INDEX ? 1 : 0)),
+    )
   })
 
-  it('[OCA-24] 強制区分の列が無い CSV も通り、どの行も強制にならない', async () => {
-    const header = orderCsvColumnNames.filter((name) => name !== '強制区分')
-    // 前提: 強制区分を外すと必須のヘッダーだけが残る
-    expect(header).toEqual(orderCsvRequiredHeaderNames)
+  it('[OCA-24] 廃止された強制区分の列がある CSV は 400 の ApiError になる', async () => {
+    const header = [...orderCsvColumnNames, ...ORDER_CSV_REMOVED_COLUMN_NAMES]
+    const removedList = `[${ORDER_CSV_REMOVED_COLUMN_NAMES.map((name) => `'${name}'`).join(', ')}]`
 
-    const result = await validateOrderCsv(csvFile(csvOf(orderCsvSampleOrders, header)))
+    const error = await caught(validateOrderCsv(csvFile(csvOf(orderCsvSampleOrders, header))))
 
-    expect(result.allValid).toBe(true)
-    expect(result.rows).toHaveLength(orderCsvSampleOrders.length)
-    expect(result.rows.every((row) => row.order.forced === false)).toBe(true)
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.status).toBe(400)
+    expect(error.message.startsWith(`CSVに廃止された列が含まれています: ${removedList}`)).toBe(true)
+    expect(error.message).toContain('強制区分は CSV では指定できません')
+  })
+
+  it('[OCA-25] 強制で救える行の errorsIfForced と forcedOverrides をアプリ内の形で返す', async () => {
+    respondValidate(orderCsvValidateForceableResponse)
+
+    const result = await validateOrderCsv(csvFile('x'))
+
+    const raws = orderCsvValidateForceableResponse.rows
+    expect(result.rows).toHaveLength(raws.length)
+    result.rows.forEach((row, index) => {
+      const raw = raws[index]
+      expect(row.errorsIfForced).toEqual(raw.errors_if_forced)
+      expect(row.forcedOverrides).toEqual(toExpectedOverrides(raw))
+    })
+    // 救えるのは見本で forceable が true の NG の行だけ（前提: そういう行が見本にある）
+    const forceable = raws.filter((raw) => raw.valid !== true && raw.forceable === true)
+    expect(forceable.length).toBeGreaterThan(0)
+    expect(result.rows.filter((row) => row.forceable).map((row) => row.rowNumber)).toEqual(
+      forceable.map((raw) => raw.row_number),
+    )
+  })
+
+  it('[OCA-26] 救済の項目が無い行は空配列、data の強制区分は読まない', async () => {
+    const [base] = orderCsvValidateResponse.rows
+    const legacy = { ...base, data: { ...base.data, 強制区分: 1 } }
+    delete legacy.errors_if_forced
+    delete legacy.forced_overrides
+    respondValidate({ ...orderCsvValidateResponse, rows: [legacy] })
+
+    const result = await validateOrderCsv(csvFile('x'))
+
+    const [row] = result.rows
+    expect(row.errorsIfForced).toEqual([])
+    expect(row.forcedOverrides).toEqual([])
+    expect(row.order.forced).toBe(false)
+  })
+
+  it('[OCA-27] MSW は買付余力不足だけの行を救え、指値単価の欠落が残る行を救えないと返す', async () => {
+    const raws = orderCsvValidateForceableResponse.rows
+    // 前提: 買付余力不足の行が見本にある（仮規則の境界の数量）
+    expect(raws.some((raw) => raw.data.数量 >= ORDER_CSV_CASH_SHORT_QUANTITY)).toBe(true)
+
+    const result = await validateOrderCsv(csvFile(csvOf(raws.map((raw) => raw.data))))
+
+    expect(result.rows).toHaveLength(raws.length)
+    result.rows.forEach((row, index) => {
+      const raw = raws[index]
+      expect(row.rowNumber).toBe(raw.row_number)
+      expect(row.valid).toBe(raw.valid)
+      expect(row.errors).toEqual(raw.errors)
+      expect(row.forceable).toBe(raw.valid !== true && raw.forceable === true)
+      expect(row.errorsIfForced).toEqual(raw.errors_if_forced)
+      expect(row.forcedOverrides).toEqual(toExpectedOverrides(raw))
+    })
+  })
+
+  it('[OCA-28] 値の変換で止まる行は NG で、強制でも救えない', async () => {
+    const result = await validateOrderCsv(
+      csvFile(csvOf([{ ...orderCsvSampleOrders[0], 口座番号: 'abc' }])),
+    )
+
+    const [row] = result.rows
+    expect(row.valid).toBe(false)
+    expect(row.forceable).toBe(false)
+    expect(row.errorsIfForced).toEqual([])
+    expect(row.forcedOverrides).toEqual([])
+  })
+
+  it('[OCA-29] 買付余力不足の注文を強制なしで送ると 400 の ApiError になる', async () => {
+    const validation = await validateOrderCsv(
+      csvFile(csvOf([orderCsvSampleOrders[0], cashShortOrder])),
+    )
+
+    const error = await caught(bulkCreateOrders(validation.rows.map((row) => row.order)))
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({
+      status: 400,
+      message: `注文検証エラーが存在するため一括登録を中止しました: 2行目: ${orderCsvCashShortMessage(
+        cashShortOrder.数量,
+      )}`,
+    })
+  })
+
+  it('[OCA-30] 買付余力不足の注文を強制で送ると受け付けられ、警告を位置付きで返す', async () => {
+    const validation = await validateOrderCsv(
+      csvFile(csvOf([orderCsvSampleOrders[0], cashShortOrder])),
+    )
+    const orders = validation.rows.map((row, index) => ({ ...row.order, forced: index === 1 }))
+
+    const result = await bulkCreateOrders(orders)
+
+    expect(result.totalOrders).toBe(orders.length)
+    expect(result.warnings).toEqual([
+      { index: 1, message: orderCsvCashShortForcedWarning(cashShortOrder.数量) },
+    ])
+  })
+
+  it('[OCA-31] 警告の「N行目: 」を 0 始まりの index に分け、形が違えば index は null', async () => {
+    const validation = await validateOrderCsv(csvFile(orderCsvTemplateText))
+    const orders = validation.rows.map((row) => row.order)
+    const NO_ROW = '大口取引の確認が必要です'
+    const NO_SPACE = '3行目:空白なし'
+    server.use(
+      http.post(BULK_PATH, () =>
+        HttpResponse.json({ ...bulkOrderCreateResponse, warnings: ['3行目: X', NO_ROW, NO_SPACE] }),
+      ),
+    )
+
+    const result = await bulkCreateOrders(orders)
+
+    expect(result.warnings).toEqual([
+      { index: 2, message: 'X' },
+      { index: null, message: NO_ROW },
+      { index: null, message: NO_SPACE },
+    ])
+
+    const withoutWarnings = { ...bulkOrderCreateResponse }
+    delete withoutWarnings.warnings
+    server.use(http.post(BULK_PATH, () => HttpResponse.json(withoutWarnings)))
+
+    await expect(bulkCreateOrders(orders)).resolves.toMatchObject({ warnings: [] })
   })
 })

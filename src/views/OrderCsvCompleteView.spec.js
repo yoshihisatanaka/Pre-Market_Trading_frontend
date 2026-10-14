@@ -8,7 +8,10 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import {
   BULK_ORDER_FIRST_ID,
+  ORDER_CSV_CASH_SHORT_QUANTITY,
   bulkOrderCreateResponse,
+  orderCsvCashShortForcedWarning,
+  orderCsvColumnNames,
   orderCsvSampleOrders,
   orderCsvTemplateText,
 } from '@/mocks/fixtures/orderCsv'
@@ -43,7 +46,37 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const templateFile = () => new NodeFile([orderCsvTemplateText], 'orders.csv', { type: 'text/csv' })
+const csvFile = (text) => new NodeFile([text], 'orders.csv', { type: 'text/csv' })
+const templateFile = () => csvFile(orderCsvTemplateText)
+
+/** 買付余力不足になる注文（MSW の仮規則。買いで数量が ORDER_CSV_CASH_SHORT_QUANTITY 以上） */
+const cashShortOrder = { ...orderCsvSampleOrders[0], 数量: ORDER_CSV_CASH_SHORT_QUANTITY }
+
+/** 正常の行と、強制で救える行（買付余力不足）だけの CSV */
+const forceableFile = () =>
+  csvFile(
+    [
+      orderCsvColumnNames.join(','),
+      ...[orderCsvSampleOrders[0], cashShortOrder].map((order) =>
+        orderCsvColumnNames.map((name) => (order[name] == null ? '' : String(order[name]))).join(','),
+      ),
+    ].join('\r\n') + '\r\n',
+  )
+
+/**
+ * 救える行を強制にして受け付けた前提を作る。
+ * @returns {Promise<{ pinia: import('pinia').Pinia, forcedRowNumber: number }>}
+ */
+async function prepareForced() {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const store = useOrderCsvStore(pinia)
+  await store.validateFile(forceableFile())
+  const forceable = store.validation.rows.find((row) => row.forceable)
+  store.setForced(forceable, true)
+  await store.submitOrders()
+  return { pinia, forcedRowNumber: forceable.rowNumber }
+}
 
 const Page = { render: () => h('div') }
 
@@ -182,5 +215,41 @@ describe('OrderCsvCompleteView', () => {
     await flushPromises()
 
     expect(router.currentRoute.value.name).toBe('dream-status-list')
+  })
+
+  it('[OCC-09] 強制で受け付けた行の警告を CSV の行番号付きで出す', async () => {
+    const { pinia, forcedRowNumber } = await prepareForced()
+    const { wrapper } = await mountView(pinia)
+
+    expect(exists(wrapper, 'order-csv-complete-warnings')).toBe(true)
+    const items = wrapper.findAll('[data-testid="order-csv-complete-warning"]')
+    expect(items).toHaveLength(1)
+    expect(items[0].text()).toContain(`${forcedRowNumber}行目：`)
+    expect(items[0].text()).toContain(orderCsvCashShortForcedWarning(cashShortOrder.数量))
+  })
+
+  it('[OCC-10] 行番号の無い警告は「行目：」を付けずに出す', async () => {
+    const MESSAGE = '大口取引の確認が必要です'
+    server.use(
+      http.post(BULK_PATH, () =>
+        HttpResponse.json({ ...bulkOrderCreateResponse, warnings: [MESSAGE] }),
+      ),
+    )
+    const { pinia } = await prepare()
+    const { wrapper } = await mountView(pinia)
+
+    const items = wrapper.findAll('[data-testid="order-csv-complete-warning"]')
+    expect(items).toHaveLength(1)
+    expect(items[0].text().trim()).toBe(MESSAGE)
+    expect(items[0].text()).not.toContain('行目：')
+  })
+
+  it('[OCC-11] 警告が無ければ警告の帯は出ない', async () => {
+    const { pinia, store } = await prepare()
+    // 前提: 既定モックの受付は警告を返さない
+    expect(store.completion.warnings).toEqual([])
+    const { wrapper } = await mountView(pinia)
+
+    expect(exists(wrapper, 'order-csv-complete-warnings')).toBe(false)
   })
 })

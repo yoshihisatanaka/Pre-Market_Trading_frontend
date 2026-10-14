@@ -52,6 +52,7 @@ import { dreamOrders, dreamStatusCodes } from '../mocks/fixtures/dreamStatus'
 import {
   bulkOrderCreateResponse,
   orderCsvSpecResponse,
+  orderCsvValidateForceableResponse,
   orderCsvValidateResponse,
   orderCsvValidateWithErrorsResponse,
 } from '../mocks/fixtures/orderCsv'
@@ -114,7 +115,7 @@ import {
   validateFeePreference,
 } from './feePreferences'
 import { fetchActivityLogTargets, fetchActivityLogs } from './activityLogs'
-import { fetchUsers } from './users'
+import { fetchUsers, updateUser } from './users'
 import { fetchStalledOrders, importConfirmationCsv } from './stalledOrders'
 import { fetchPermissions, updateRolePermission } from './permissions'
 import { fetchCurrentOperator } from './auth'
@@ -241,17 +242,9 @@ const KNOWN_GAPS = [
    * 載せていたが、2026-10-08 の取り込みで仕様に入ったので行を外した。
    */
   /*
-   * 注文照会の自動分割の明細（適用上限 / 適用理由 / 5営業日平均出来高 / 参照価格）は発注時のスライス判定の
-   * 結果で、バックエンドは保存も返却もしていない。親（SLICE_PARENT）の行に載せる 4 項目をフィクスチャに
-   * 契約提案として載せている（src/api/orderInquiry.js は あれば読む）。仕様に入った日に CON-07 が落ちて気づける。
+   * 注文照会の自動分割の明細（適用上限 / 適用理由 / 5営業日平均出来高 / 参照価格。#57）は、
+   * フィクスチャに契約提案として載せていたが、2026-10-13 の取り込みで OrderItemResponse に入ったので行を外した。
    */
-  {
-    kind: 'fixture',
-    fixture: 'orderInquiry',
-    keys: ['スライス適用上限数量', 'スライス適用理由', 'スライス平均出来高', 'スライス参照価格'],
-    reason: '画面モックの自動分割の明細に要る発注時の判定結果。OrderItemResponse に無い',
-    request: '#57',
-  },
   /*
    * 一覧の *Item が ID を返すようになった（2026-09-18 の取り込み）。フロントが先行して
    * 主キーを id に寄せていた間はここに keys: ['ID'] の行を置いていたが、仕様に入ったので外した。
@@ -286,6 +279,17 @@ const KNOWN_GAPS = [
    * 2026-09-30 の取り込みで仕様に入ったので、orderCsvValidateRows / orderCsvValidate /
    * orderCsvValidateWithErrors の 3 行をまとめて外した。
    */
+  /*
+   * ユーザ管理マスタの「メールアドレス・氏名」の検索（画面モックの keyword）。仕様にクエリが無く、
+   * 実 API は無視する（絞り込みが黙って効かない）。社員コード・氏名に当てるクエリとして依頼中
+   */
+  {
+    kind: 'query',
+    method: 'GET',
+    template: '/masters/users',
+    names: ['keyword'],
+    request: 67,
+  },
 ]
 
 function knownQueryGap(op, name) {
@@ -414,11 +418,20 @@ const FIXTURES = [
     schema: 'CsvOrderValidateResponse',
     rows: [orderCsvValidateWithErrorsResponse],
   },
+  {
+    name: 'orderCsvValidateForceable',
+    schema: 'CsvOrderValidateResponse',
+    rows: [orderCsvValidateForceableResponse],
+  },
   // 行だけを直に写したもの。入れ子の rows[] の中の項目を CsvOrderRowResult と直に突き合わせる
   {
     name: 'orderCsvValidateRows',
     schema: 'CsvOrderRowResult',
-    rows: [...orderCsvValidateResponse.rows, ...orderCsvValidateWithErrorsResponse.rows],
+    rows: [
+      ...orderCsvValidateResponse.rows,
+      ...orderCsvValidateWithErrorsResponse.rows,
+      ...orderCsvValidateForceableResponse.rows,
+    ],
   },
   { name: 'bulkOrderCreate', schema: 'BulkOrderCreateResponse', rows: [bulkOrderCreateResponse] },
   /*
@@ -772,7 +785,26 @@ const PROBES = [
   {
     name: 'fetchUsers',
     run: () =>
-      fetchUsers({ role: 'sales', branchCode: '123', includeInactive: true, limit: 200, offset: 0 }),
+      fetchUsers({
+        role: 'sales',
+        branchCode: '123',
+        keyword: '山田',
+        includeInactive: true,
+        limit: 200,
+        offset: 0,
+      }),
+  },
+  {
+    name: 'updateUser',
+    run: () =>
+      updateUser({
+        code: '003',
+        name: '佐藤 一郎',
+        roleCode: 'manager',
+        branchCode: '456',
+        orderTakerCode: '9102',
+        active: true,
+      }),
   },
   {
     name: 'fetchStalledOrders',

@@ -142,6 +142,12 @@ const routes = [
     meta: { title: '顧客マスタ', requiredPermission: 'master' },
   },
   {
+    path: '/masters/users',
+    name: 'user-list',
+    component: () => import('@/views/UserListView.vue'),
+    meta: { title: 'ユーザ管理マスタ', requiredPermission: 'master' },
+  },
+  {
     path: '/masters/permissions',
     name: 'permission-list',
     component: () => import('@/views/PermissionListView.vue'),

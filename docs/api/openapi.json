@@ -756,7 +756,7 @@
           "Orders"
         ],
         "summary": "Create Order Endpoint",
-        "description": "注文受付・DB登録API（確定時）\n\n- 事前検証を通過した注文をDB(d_注文)へ登録 (処理状況=000)\n- VWAP引合番号の自動採番\n- 業務エラー（残高不足・売買規制・発注停止中など）は 400。`強制区分=1` で警告に格下げされる項目は受付される\n- `作成者` はセッション／`X-User-Code` の操作者で上書きする（Phase 62）。`受注者` は本文必須",
+        "description": "注文受付・DB登録API（確定時）\n\n- 事前検証を通過した注文をDB(d_注文)へ登録 (処理状況=000)\n- VWAP引合番号の自動採番\n- 業務エラー（残高不足・売買規制・発注停止中など）は 400。`強制区分=1` で警告に格下げされる項目は受付される\n- `作成者` はセッション／`X-User-Code` の操作者で上書きする（Phase 62）。`受注者` は本文必須\n- `受注日`・`受注時刻` は**本文の入力値を採用**する（サーバ上書きは廃止。2026-10-13 決定。\n  いずれも必須。正規化後の値は応答の `受注日` / `受注時刻` で返す）",
         "operationId": "create_order_endpoint_orders_post",
         "parameters": [
           {
@@ -1107,7 +1107,7 @@
           "Orders"
         ],
         "summary": "Validate Order Endpoint",
-        "description": "注文事前検証API（確認画面用・DB登録なし）\n\n- 入力項目・マスタ・コード値検証\n- 保有残高 / 買付余力チェック（強制区分考慮）\n- 注文ルート判定\n- 発注可能日時算出",
+        "description": "注文事前検証API（確認画面用・DB登録なし）\n\n- 入力項目・マスタ・コード値検証\n- 保有残高 / 買付余力チェック（強制区分考慮）\n- 注文ルート判定\n- 発注可能日時算出\n- `受注日`・`受注時刻` は**本文の入力値を採用**する（サーバ上書きは廃止。2026-10-13 決定）。\n  受注日は MMDD/YYYYMMDD、受注時刻は HH:MM/HHMM/HHMMSS を受け付けて正規化し、\n  未到来日・7日以上前・時刻として不正な値はエラー。正規化後の値は `details.受注日` / `details.受注時刻` で返す",
         "operationId": "validate_order_endpoint_orders_validate_post",
         "parameters": [
           {
@@ -1187,7 +1187,7 @@
           "Orders"
         ],
         "summary": "Get Bulk Orders Csv Spec Endpoint",
-        "description": "IFA向け注文CSVヘッダー仕様照会API\n\n- CSV一括発注における全22項目の定義（列名、必須フラグ、データ型、説明、サンプル例、許容コード値一覧）を返却\n- フロントエンド画面での入力ガイド・フォーマット説明の表示や仕様確認に利用可能",
+        "description": "IFA向け注文CSVヘッダー仕様照会API\n\n- CSV一括発注における全22項目の定義（列名、必須フラグ、データ型、説明、サンプル例、許容コード値一覧）を返却\n- 強制区分列は廃止（2026-10-13 方針変更。検証結果画面で行ごとに指定し bulk-create で送る）\n- フロントエンド画面での入力ガイド・フォーマット説明の表示や仕様確認に利用可能",
         "operationId": "get_bulk_orders_csv_spec_endpoint_orders_csv_spec_get",
         "parameters": [
           {
@@ -1267,7 +1267,7 @@
           "Orders"
         ],
         "summary": "Get Bulk Orders Csv Template Endpoint",
-        "description": "IFA向け注文CSV入力用テンプレートダウンロードAPI\n\n- UTF-8 with BOM 形式（Excel対応）\n- 全22列のヘッダー定義\n- 代表的な3パターン（レギュラー買付、プレマーケット買付、レギュラー売付）のサンプル行付き",
+        "description": "IFA向け注文CSV入力用テンプレートダウンロードAPI\n\n- UTF-8 with BOM 形式（Excel対応）\n- 全22列のヘッダー定義（強制区分列は 2026-10-13 の方針変更で廃止）\n- 代表的な3パターン（レギュラー買付、プレマーケット買付、レギュラー売付）のサンプル行付き",
         "operationId": "get_bulk_orders_csv_template_endpoint_orders_csv_template_get",
         "parameters": [
           {
@@ -1351,7 +1351,7 @@
           "Orders"
         ],
         "summary": "Validate Bulk Orders Csv Endpoint",
-        "description": "IFA向けCSV一括注文事前検証API（確認画面プレビュー用・DB登録なし）\n\n- CSVヘッダー（全22項目）の網羅性チェック\n- 各行の既存注文検証（validate_order_data）の実走\n- 各行のCSV内容、エラー一覧、警告一覧、概算詳細を返却\n- 1件でもエラーがある場合は all_valid=false",
+        "description": "IFA向けCSV一括注文事前検証API（確認画面プレビュー用・DB登録なし）\n\n- CSVヘッダー（必須22項目）の網羅性チェック。**強制区分列は廃止**（2026-10-13 方針変更。\n  含まれていると 400。チェック無しで素通りできてしまうため、CSV では指定できない）\n- 各行の既存注文検証（validate_order_data）の実走\n- 各行のCSV内容、エラー一覧、警告一覧、概算詳細を返却\n- エラー行には `forceable`（強制区分=1 なら受付可能か）・`errors_if_forced`（強制でも残るエラー）・\n  `forced_overrides`（強制で警告に格下げされる項目一覧）を返す。画面はこれを見せて\n  行ごとに強制区分を立て、bulk-create の各注文の `強制区分=1` で送る\n- 1件でもエラーがある場合は all_valid=false",
         "operationId": "validate_bulk_orders_csv_endpoint_orders_validate_csv_post",
         "parameters": [
           {
@@ -1473,7 +1473,7 @@
           "Orders"
         ],
         "summary": "Bulk Create Orders Endpoint",
-        "description": "一括発注受付API（全行トランザクション実行）\n\n- リクエスト内の全注文を一括検証\n- 1件でもエラーがあれば全件ロールバック（DB登録件数0件）\n- 全件正常時のみ d_注文 へ一括登録・自動採番",
+        "description": "一括発注受付API（全行トランザクション実行）\n\n- リクエスト内の全注文を一括検証\n- 1件でもエラーがあれば全件ロールバック（DB登録件数0件）\n- 全件正常時のみ d_注文 へ一括登録・自動採番\n- 各注文の `強制区分=1` で検証エラーを警告に格下げして受付できる（validate-csv の\n  `forceable=true` の行が対象。格下げ内容は FORCED_OVERRIDE イベントに記録され、\n  応答の `warnings` に「N行目: …」形式で返る）",
         "operationId": "bulk_create_orders_endpoint_orders_bulk_create_post",
         "parameters": [
           {
@@ -1995,7 +1995,7 @@
           "Orders"
         ],
         "summary": "Correct Dream Order Endpoint",
-        "description": "Dreamエラー注文属性補正 & 再送信API\n\n- 補正可能項目: 部店, 口座番号, 受注者, 引合番号, 注文チャネル, 金銭受渡方法, 証券受渡方法, メモ\n- Dream登録状況/取消状況を '9' -> '0' (再送待ち) へリセット\n- 即時再送信=true の場合は即座にDream連携JSONを出力して '1' (送信中) へ遷移\n- d_注文イベントに 'DREAM_CORRECT_RETRY' を記録",
+        "description": "Dreamエラー注文属性補正 & 再送信API\n\n- 補正可能項目: 部店, 口座番号, 受注者, 引合番号, 注文チャネル, 金銭受渡方法, 証券受渡方法, メモ\n- Dream登録状況/取消状況を '9' -> '0' (再送待ち) へリセット\n- 即時再送信=true の場合は即座にDream連携JSONを出力して '1' (送信中) へ遷移\n- Dream連携開始時刻（m_時刻設定。既定 12:00）前は即時再送をスキップし、定期連携に委ねる\n  （補正とリセットは行う。message に明記）。`force=true` で窓の外でも即時再送する\n- d_注文イベントに 'DREAM_CORRECT_RETRY' を記録",
         "operationId": "correct_dream_order_endpoint_orders__order_id__dream_correct_put",
         "parameters": [
           {
@@ -2006,6 +2006,18 @@
               "type": "integer",
               "title": "Order Id"
             }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "true: Dream連携開始時刻（既定 12:00）前でも即時再送する（開発・緊急時用）",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "true: Dream連携開始時刻（既定 12:00）前でも即時再送する（開発・緊急時用）"
           },
           {
             "name": "X-User-Code",
@@ -7766,6 +7778,16 @@
               }
             }
           },
+          "503": {
+            "description": "仮計算マスタ未初期化（サーバ側の構成不備）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -7866,6 +7888,16 @@
           },
           "500": {
             "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "仮計算マスタ未初期化（サーバ側の構成不備）",
             "content": {
               "application/json": {
                 "schema": {
@@ -14410,7 +14442,7 @@
           "MasterFeePreferences"
         ],
         "summary": "Create Fee Preference Endpoint",
-        "description": "手数料優遇新規登録API（1口座1レコード）。",
+        "description": "手数料優遇新規登録API（1口座1レコード。取消済みの行が残る口座は再有効化する）。",
         "operationId": "create_fee_preference_endpoint_masters_fee_preferences_post",
         "parameters": [
           {
@@ -14491,6 +14523,16 @@
               }
             }
           },
+          "409": {
+            "description": "口座番号の重複（同時登録の競合）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal Server Error",
             "content": {
@@ -14520,7 +14562,7 @@
           "MasterFeePreferences"
         ],
         "summary": "Validate Fee Preference Endpoint",
-        "description": "手数料優遇事前検証API（DB更新なし）\n\n- 口座の存在確認、1口座1レコードの重複チェック、掛目・ベイシス・金額の範囲検証\n- 参照先の手数料パターンがマスタ未登録の場合は警告（仮計算ではデフォルトパターンを使用）\n- ベイシス方式・パターン方式で使用されない項目が入力されている場合は警告",
+        "description": "手数料優遇事前検証API（DB更新なし）\n\n- 口座の存在確認、1口座1レコードの重複チェック、掛目・ベイシス・金額の範囲検証\n- 取消済みの行が残る口座への新規登録は警告（登録すると再有効化。フロント依頼 #63）\n- 参照先の手数料パターンがマスタ未登録の場合は警告（仮計算ではデフォルトパターンを使用）\n- ベイシス方式・パターン方式で使用されない項目が入力されている場合は警告",
         "operationId": "validate_fee_preference_endpoint_masters_fee_preferences_validate_post",
         "parameters": [
           {
@@ -15144,6 +15186,16 @@
           },
           "500": {
             "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "仮計算マスタ未初期化（サーバ側の構成不備。入力誤りの 400 と区別）",
             "content": {
               "application/json": {
                 "schema": {
@@ -17416,6 +17468,76 @@
         }
       }
     },
+    "/auth/csrf": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Issue Csrf Token Endpoint",
+        "description": "CSRF トークン発行 API（Phase 72）\n\n- ログイン後に取得し、全更新系リクエスト（POST/PUT/DELETE）の `X-CSRF-Token` ヘッダーに載せる。\n- 有効期間は `expires_in` 秒（既定 1 日）。期限切れ・403 時は再取得する。\n- 検証は `session` Cookie を使うリクエストのみ対象（`CSRF_ENFORCE=false` の間はログのみ）。",
+        "operationId": "issue_csrf_token_endpoint_auth_csrf_get",
+        "parameters": [
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/masters/permissions": {
       "get": {
         "tags": [
@@ -18612,6 +18734,94 @@
         }
       }
     },
+    "/batch/prev-symbol-export": {
+      "post": {
+        "tags": [
+          "Batch"
+        ],
+        "summary": "Morning Batch Prev Symbol Export Endpoint",
+        "description": "朝バッチ②': 銘柄マスタ前日分 CSV 出力 API（個別再実行用。フロント追加要望 2026-10-12）\n\n- m_銘柄情報 の全件（取消済み含む）を blob 出力フォルダ（環境変数 BLOB_EXPORT_DIR、\n  既定: <project>/blob）へ prev_meigara.csv（上書き）と prev_meigara_{基準日}.csv の 2 本で出力する。\n- 朝バッチ一括実行では SYMBOL 取込の直前に自動実行される（出力失敗でも後続は中断しない）。\n- **注意**: SYMBOL 取込後に再実行すると「前日分」ではなく当日取込後の内容で上書きされる。",
+        "operationId": "morning_batch_prev_symbol_export_endpoint_batch_prev_symbol_export_post",
+        "parameters": [
+          {
+            "name": "base_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "基準日 (YYYYMMDD形式、省略時はシステム基準日)",
+              "title": "Base Date"
+            },
+            "description": "基準日 (YYYYMMDD形式、省略時はシステム基準日)"
+          },
+          {
+            "name": "X-User-Code",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "操作者社員コード（Swagger/開発テスト用）",
+              "title": "X-User-Code"
+            },
+            "description": "操作者社員コード（Swagger/開発テスト用）"
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Onegate SSOセッションCookie",
+              "title": "Session"
+            },
+            "description": "Onegate SSOセッションCookie"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrevSymbolExportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/batch/import-fx": {
       "post": {
         "tags": [
@@ -19422,7 +19632,7 @@
           "Batch"
         ],
         "summary": "Dream Batch Sync Endpoint",
-        "description": "夜間20:00 IB締後 Dream連携一括実行 API\n\n- 未連携の新規注文 (Dream登録状況='0') および 取消注文 (Dream登録状況='2'かつDream取消状況='0') を取得。\n- '1' (送信中) へクレーム更新。\n- プレ(P_*.json) / レギュラー(R_*.json) 別にJSONファイルを出力。\n- d_注文イベントに 'DREAM_SEND' を記録。",
+        "description": "夜間20:00 IB締後 Dream連携一括実行 API\n\n- 未連携の新規注文 (Dream登録状況='0') および 取消注文 (Dream登録状況='2'かつDream取消状況='0') を取得。\n- '1' (送信中) へクレーム更新。\n- プレ(P_*.json) / レギュラー(R_*.json) 別にJSONファイルを出力。\n- d_注文イベントに 'DREAM_SEND' を記録。\n- Dream連携開始時刻（m_時刻設定。既定 12:00）より前は 400 で拒否（Dream 側の前日分処理完了前の\n  誤連携防止）。`force=true` で強制送信できる。",
         "operationId": "dream_batch_sync_endpoint_batch_dream_sync_post",
         "parameters": [
           {
@@ -19442,6 +19652,18 @@
               "title": "Base Date"
             },
             "description": "基準日 (YYYYMMDD形式、省略時はシステム基準日)"
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "true: Dream連携開始時刻（既定 12:00）前でも強制送信する（開発・緊急時用）",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "true: Dream連携開始時刻（既定 12:00）前でも強制送信する（開発・緊急時用）"
           },
           {
             "name": "X-User-Code",
@@ -22591,6 +22813,14 @@
             "type": "array",
             "title": "Errors",
             "default": []
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "登録時の警告（強制発注の格下げ・大口取引基準超過等）。「N行目: …」形式"
           }
         },
         "type": "object",
@@ -25012,6 +25242,27 @@
         ],
         "title": "CorporateTypeEnum"
       },
+      "CsrfTokenResponse": {
+        "properties": {
+          "csrf_token": {
+            "type": "string",
+            "title": "Csrf Token",
+            "description": "更新系リクエストの X-CSRF-Token ヘッダーに載せるトークン"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In",
+            "description": "有効期間（秒）。期限切れ・403 時は再取得する"
+          }
+        },
+        "type": "object",
+        "required": [
+          "csrf_token",
+          "expires_in"
+        ],
+        "title": "CsrfTokenResponse",
+        "description": "CSRF トークン発行（GET /auth/csrf。Phase 72）"
+      },
       "CsvAllowedValue": {
         "properties": {
           "code": {
@@ -25240,6 +25491,37 @@
             "title": "Warnings",
             "default": []
           },
+          "forceable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forceable",
+            "description": "エラー行のみ: 強制区分=1 で再検証した結果、受付可能になるか。true なら bulk-create で 強制区分=1 を付けて送れば登録できる。同一ファイル内の重複エラーは対象外（duplicate_confirmed で格下げする）。正常行は null"
+          },
+          "errors_if_forced": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors If Forced",
+            "description": "エラー行のみ: 強制区分=1 でも残るエラー（発注停止・指値乖離・休場日・形式不正等）"
+          },
+          "forced_overrides": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Forced Overrides",
+            "description": "エラー行のみ: 強制区分=1 にしたとき警告に格下げされる項目の一覧 [{\"チェック\": 分類名, \"内容\": 本来のエラー文言}, ...]"
+          },
           "details": {
             "anyOf": [
               {
@@ -25258,7 +25540,7 @@
           "data"
         ],
         "title": "CsvOrderRowResult",
-        "description": "CSV一括注文の各行検証結果モデル"
+        "description": "CSV 一括検証の 1 行分の結果。\n\nエラー行には「強制区分で救済できるか」の情報を付ける（2026-10-13 方針変更:\nCSV の強制区分列は廃止。画面でエラー内容を確認し、行ごとに強制区分を立てて\nbulk-create の各注文の `強制区分` で送る）。"
       },
       "CsvOrderValidateResponse": {
         "properties": {
@@ -25376,6 +25658,11 @@
             "type": "boolean",
             "title": "認可強制",
             "description": "AUTHZ_ENFORCE の状態。false なら権限不足でも拒否されない"
+          },
+          "CSRF強制": {
+            "type": "boolean",
+            "title": "Csrf強制",
+            "description": "CSRF_ENFORCE の状態。false なら X-CSRF-Token が無くても拒否されない（ログのみ。Phase 72）"
           }
         },
         "type": "object",
@@ -25383,7 +25670,8 @@
           "操作者コード",
           "登録済",
           "権限",
-          "認可強制"
+          "認可強制",
+          "CSRF強制"
         ],
         "title": "CurrentOperatorResponse",
         "description": "ログイン中操作者の情報と権限（画面の出し分け用）"
@@ -26583,8 +26871,7 @@
           "円貨預り金": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -26595,8 +26882,7 @@
           "外貨預り金": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -26607,8 +26893,7 @@
           "NISA買付可能額_当年": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -26619,8 +26904,7 @@
           "NISA買付可能額_翌年": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -28331,6 +28615,12 @@
           "受付開始時刻": {
             "type": "string",
             "title": "受付開始時刻"
+          },
+          "Dream連携開始時刻": {
+            "type": "string",
+            "title": "Dream連携開始時刻",
+            "description": "Dream 先行登録・手動送信の開始時刻（HH:MM）",
+            "default": "12:00"
           },
           "朝バッチ開始時刻": {
             "type": "string",
@@ -33536,6 +33826,28 @@
             ],
             "title": "Dream登録状況名",
             "description": "Dream登録状況の表示名"
+          },
+          "受注日": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注日"
+          },
+          "受注時刻": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注時刻"
           }
         },
         "type": "object",
@@ -33674,7 +33986,7 @@
               }
             ],
             "title": "イベント種別",
-            "description": "EXECUTION / EXPIRED / DREAM_SEND / MIZUHO_EXPORTED 等"
+            "description": "EXECUTION / EXPIRED / DREAM_SEND / MIZUHO_EXPORTED / FORCED_OVERRIDE 等"
           },
           "前処理状況": {
             "anyOf": [
@@ -33708,6 +34020,16 @@
               }
             ],
             "title": "内容"
+          },
+          "詳細": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "詳細",
+            "description": "イベントの構造化詳細（Phase 70）。FORCED_OVERRIDE では格下げ一覧 [{\"チェック\": 分類名, \"内容\": 本来のエラー文言}, ...]"
           },
           "実行者": {
             "anyOf": [
@@ -33776,8 +34098,7 @@
           "約定単価": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -33811,8 +34132,7 @@
           "手数料": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -34505,6 +34825,50 @@
             ],
             "title": "約定代金 Jpy",
             "description": "約定代金 × 適用為替レート（円未満四捨五入・概算）"
+          },
+          "スライス適用上限数量": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スライス適用上限数量",
+            "description": "発注時の適用上限（株／スライス）。SLICE_PARENT のみ。判定保存前の既存注文は null"
+          },
+          "スライス適用理由": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "スライス適用理由",
+            "description": "発注時の適用理由（文言のまま）。SLICE_PARENT 以外は空配列"
+          },
+          "スライス平均出来高": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スライス平均出来高",
+            "description": "発注時の 5 営業日平均出来高（取込値）。SLICE_PARENT のみ"
+          },
+          "スライス参照価格": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スライス参照価格",
+            "description": "発注時の参照価格（USD。指値は指値単価、成行は前日終値）。SLICE_PARENT のみ"
           }
         },
         "type": "object",
@@ -34774,8 +35138,7 @@
           "指値単価": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -35338,6 +35701,50 @@
               }
             ],
             "title": "約定代金 Jpy"
+          },
+          "スライス適用上限数量": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スライス適用上限数量",
+            "description": "発注時のスライス判定: 適用上限（株／スライス）。SLICE_PARENT のみ（フロント依頼 #57）"
+          },
+          "スライス適用理由": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "スライス適用理由",
+            "description": "発注時のスライス判定: 適用理由。SLICE_PARENT 以外は空配列"
+          },
+          "スライス平均出来高": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スライス平均出来高",
+            "description": "発注時のスライス判定: 5 営業日平均出来高（取込値）"
+          },
+          "スライス参照価格": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "スライス参照価格",
+            "description": "発注時のスライス判定: 参照価格（USD）"
           }
         },
         "type": "object",
@@ -35448,12 +35855,28 @@
             "$ref": "#/components/schemas/CashDeliveryEnum"
           },
           "受注日": {
-            "type": "string",
-            "title": "受注日"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注日",
+            "description": "必須。MMDD または YYYYMMDD。未到来日・7日以上前はエラー（YYYYMMDD に正規化して保存）"
           },
           "受注時刻": {
-            "type": "string",
-            "title": "受注時刻"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注時刻",
+            "description": "必須。HH:MM / HHMM / HHMMSS。時刻として不正な値はエラー（HHMMSS に正規化して保存）"
           },
           "受注者": {
             "type": "string",
@@ -35523,8 +35946,6 @@
           "資金性格",
           "注文チャネル",
           "金銭受渡方法",
-          "受注日",
-          "受注時刻",
           "受注者",
           "発注範囲"
         ],
@@ -35559,6 +35980,17 @@
             },
             "type": "array",
             "title": "Warnings",
+            "default": []
+          },
+          "forced_overrides": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Forced Overrides",
             "default": []
           },
           "details": {
@@ -35617,6 +36049,59 @@
         ],
         "title": "PermissionFlags",
         "description": "権限フラグ（英語キー。API の権限指定・/auth/me の出し分けに使う）"
+      },
+      "PrevSymbolExportResponse": {
+        "properties": {
+          "batch_type": {
+            "type": "string",
+            "title": "Batch Type",
+            "description": "バッチ種別（BACKUP / FX / SYMBOL / CUSTOMER / INITIAL_BALANCE / EXPIRE_ORDERS / MIZUHO_CONFIRM / CARRYOVER_IMPORT）"
+          },
+          "batch_status": {
+            "type": "string",
+            "title": "Batch Status",
+            "description": "d_バッチ実行管理 の実行状態（2: 正常終了 / 9: 異常終了）"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "処理成否（CSV 取込系はエラー行があると false）"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "処理結果メッセージ"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "出力した銘柄件数（取消済み含む）"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "出力ファイルパス（prev_meigara.csv / prev_meigara_{基準日}.csv）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_type",
+          "batch_status",
+          "success",
+          "total_count"
+        ],
+        "title": "PrevSymbolExportResponse",
+        "description": "朝バッチ②': 銘柄マスタ前日分 CSV 出力（blob。フロント追加要望 2026-10-12）"
       },
       "ResumeRequest": {
         "properties": {
@@ -36131,7 +36616,13 @@
           "受付開始時刻": {
             "type": "string",
             "title": "受付開始時刻",
-            "description": "Dream 先行登録の開始時刻（HH:MM）"
+            "description": "注文受付の開始時刻（HH:MM。朝バッチ完了の目安）"
+          },
+          "Dream連携開始時刻": {
+            "type": "string",
+            "title": "Dream連携開始時刻",
+            "description": "Dream へのデータ連携（先行登録・手動送信）の開始時刻（HH:MM）。Dream 側の前日分処理完了前の誤連携防止",
+            "default": "12:00"
           },
           "Dream先行登録周期分": {
             "type": "integer",
@@ -36303,6 +36794,18 @@
             ],
             "title": "受付開始時刻",
             "description": "HH:MM"
+          },
+          "Dream連携開始時刻": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dream連携開始時刻",
+            "description": "HH:MM。Dream 先行登録・手動送信の開始時刻"
           },
           "Dream先行登録周期分": {
             "anyOf": [
@@ -36543,6 +37046,16 @@
             "title": "大口金額閾値",
             "description": "大口注文金額上限 (USD)"
           },
+          "指値乖離倍率": {
+            "type": "number",
+            "title": "指値乖離倍率",
+            "description": "指値乖離チェックの許容倍率（前日終値×倍率 超／÷倍率 未満でエラー）"
+          },
+          "ハードリミット金額_円": {
+            "type": "number",
+            "title": "ハードリミット金額 円",
+            "description": "大口取引ワーニングの閾値（概算約定金額の円換算）"
+          },
           "スライス有効フラグ": {
             "type": "integer",
             "title": "スライス有効フラグ",
@@ -36622,6 +37135,8 @@
           "市場関与率",
           "大口数量閾値",
           "大口金額閾値",
+          "指値乖離倍率",
+          "ハードリミット金額_円",
           "スライス有効フラグ",
           "ユーザー操作フラグ"
         ],
@@ -36647,6 +37162,32 @@
             "minimum": 1.0,
             "title": "大口金額閾値",
             "description": "大口注文金額上限 (USD)"
+          },
+          "指値乖離倍率": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "指値乖離倍率",
+            "description": "指値乖離チェックの許容倍率（未指定時は既存値を維持）"
+          },
+          "ハードリミット金額_円": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "ハードリミット金額 円",
+            "description": "大口取引ワーニングの閾値・円（未指定時は既存値を維持）"
           },
           "スライス有効フラグ": {
             "type": "integer",
@@ -38572,6 +39113,52 @@
               }
             ],
             "title": "Calculation Estimate"
+          },
+          "受注日": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注日"
+          },
+          "受注時刻": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "受注時刻"
+          },
+          "estimated_amount_jpy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Amount Jpy",
+            "description": "概算約定金額の円換算（estimated_cost × 直近USDレート。為替未登録時は null）"
+          },
+          "hard_limit_exceeded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hard Limit Exceeded",
+            "description": "概算約定金額（円）がハードリミット金額_円を超えているか（警告のみ・受付可）"
           }
         },
         "type": "object",
@@ -38885,7 +39472,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-CSRF-Token",
-        "description": "更新系操作（POST/PUT/DELETE）用のダブルサブミットCSRFトークンヘッダー。"
+        "description": "更新系操作（POST/PUT/DELETE）用の CSRF トークンヘッダー。GET /auth/csrf で発行（バックエンド発行・検証方式）。session Cookie 利用時のみ検証対象で、CSRF_ENFORCE=false の間は未送付でも拒否されない（ログのみ）。"
       }
     }
   },

@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import BaseAlert from '@/components/ui/BaseAlert.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { useOrderCsvStore } from '@/stores/orderCsv'
 import { formatCompactMonthDay, formatCompactTime, formatQuantity } from '@/utils/format'
@@ -20,7 +21,12 @@ import {
 
 /*
  * CSV取込みプレビュー。取込み画面で事前検証した結果（ストアの validation）を行ごとに見せ、
- * 全行が正常なときだけ一括受付へ進める。
+ * NG の行が無くなったら一括受付へ進める。
+ *
+ * NG の行のうち強制区分=1 なら受け付けられる行（余力不足など。サーバが forceable で返す）は、
+ * 「強制」欄のチェックで強制を指定できる。CSV に強制区分の列は書けない（2026-10-13 の方針変更で廃止。
+ * docs/api/requests.md #58）ので、エラー内容を画面で確かめてから行ごとに決めてもらう。
+ * NG の行がすべて強制で救われたら受付でき、その行は強制区分=1 で送る。
  *
  * 検証そのものは取込み画面で済んでいて、この画面は読み込みを持たない。4 状態は次のとおり:
  *   ローディング … 取込み画面の「内容を確認する」が受け持つ（この画面に来た時点で結果がある）
@@ -28,11 +34,13 @@ import {
  *   空           … 結果が無い（URL を直接開いた・再読み込みした・受付を済ませた）/ CSV にデータ行が無い
  *   データあり   … 件数・表・受付ボタン
  *
- * 顧客名は事前検証の応答にまだ無い（バックエンドに追加予定。docs/api/requests.md #27）。来るまでは「—」。
+ * 顧客名はサーバが口座から引いた名前（docs/api/requests.md #27）。引けなかった行は「—」。
  */
 
 const store = useOrderCsvStore()
-const { validation, submitting, submitError, canSubmit } = storeToRefs(store)
+const { validation, submitting, submitError, canSubmit, forcedCount, unresolvedCount } =
+  storeToRefs(store)
+const { isForced, setForced } = store
 const router = useRouter()
 
 /** 列の並びは画面モック（order_csv_preview）どおり。値は行の order から slot で描く */
@@ -51,7 +59,7 @@ const COLUMNS = [
   { key: 'settlementCurrency', label: '決済' },
   { key: 'depositCategory', label: '預り売買区分' },
   { key: 'received', label: '受注情報' },
-  // 画面モックのプレビューには無い。CSV の強制区分で警告を押し切る行を、受付の前に見落とさせないため
+  // 画面モックのプレビューには無い。CSV に強制区分の列が無いので、強制はここで行ごとに指定する
   { key: 'forced', label: '強制' },
   { key: 'messages', label: 'エラー内容' },
 ]
@@ -75,14 +83,16 @@ const stats = computed(() => {
 /** 受付ボタンの文言。押せないときは理由を出す */
 const submitLabel = computed(() => {
   const current = validation.value
-  if (current?.allValid) return `${current.totalCount}件を受付する`
-  if (current?.hasError) return 'エラーを修正してください'
-  return '受付できる注文がありません'
+  if (!current || current.rows.length === 0) return '受付できる注文がありません'
+  if (unresolvedCount.value > 0) return 'エラーを修正してください'
+  if (forcedCount.value > 0) return `${current.totalCount}件を受付する（うち強制${forcedCount.value}件）`
+  return `${current.totalCount}件を受付する`
 })
 
-/** NG の行は赤背景（画面モックの .row-error） */
+/** NG の行は赤背景（画面モックの .row-error）。強制を指定した行は警告の色に変える */
 function rowClass(row) {
-  return row.valid ? null : 'is-invalid'
+  if (row.valid) return null
+  return isForced(row) ? 'is-forced' : 'is-invalid'
 }
 
 /** 口座番号は「部店-口座番号」（画面モックの branch-account） */
@@ -128,13 +138,18 @@ store.clearSubmitError()
         </BaseCard>
       </div>
 
-      <BaseAlert
-        v-if="validation.hasError"
-        variant="error"
-        data-testid="order-csv-preview-has-error"
-      >
+      <BaseAlert v-if="unresolvedCount > 0" variant="error" data-testid="order-csv-preview-has-error">
         <strong>エラーがあります。</strong>
-        全行のエラーを修正してから受付してください。エラー行（赤背景）の内容を確認してCSVを修正し、再取込みしてください。
+        エラー行（赤背景）の内容を確認してCSVを修正し、再取込みしてください。
+        「強制」欄にチェックを付けられる行は、エラー内容を確認のうえ強制すると受付できます。
+      </BaseAlert>
+      <BaseAlert
+        v-else-if="forcedCount > 0"
+        variant="warning"
+        data-testid="order-csv-preview-forced-notice"
+      >
+        <strong>{{ forcedCount }}件を強制で受付します。</strong>
+        エラー内容は警告として受け付けられます。内容を確認してから受付してください。
       </BaseAlert>
 
       <BaseCard title="注文内容プレビュー" flush>
@@ -167,9 +182,9 @@ store.clearSubmitError()
           data-testid="order-csv-preview-table"
         >
           <template #cell-state="{ row }">
-            <span :class="['order-csv-preview__state', row.valid ? 'is-ok' : 'is-ng']">
-              {{ row.valid ? 'OK' : 'NG' }}
-            </span>
+            <span v-if="row.valid" class="order-csv-preview__state is-ok">OK</span>
+            <span v-else-if="isForced(row)" class="order-csv-preview__state is-forced">強制</span>
+            <span v-else class="order-csv-preview__state is-ng">NG</span>
           </template>
 
           <template #cell-account="{ row }">{{ accountLabel(row.order) }}</template>
@@ -214,14 +229,25 @@ store.clearSubmitError()
             <span class="order-csv-preview__sub">受注者：{{ row.order.receiver || '—' }}</span>
           </template>
 
-          <!-- 注文照会の「強制」ラベル（OrderInquiryCells）と同じ見た目。操作は持たない -->
+          <!--
+            強制で救える NG の行だけチェックを出す。強制でも残るエラーがある NG の行は「不可」
+            （CSV を直すしかない）、正常の行は強制が要らないので「—」
+          -->
           <template #cell-forced="{ row }">
+            <BaseCheckbox
+              v-if="!row.valid && row.forceable"
+              :model-value="isForced(row)"
+              label="強制"
+              :aria-label="`${row.rowNumber}行目を強制する`"
+              data-testid="order-csv-preview-force"
+              @update:model-value="setForced(row, $event)"
+            />
             <span
-              v-if="row.order.forced"
-              class="order-csv-preview__forced"
-              data-testid="order-csv-preview-forced"
+              v-else-if="!row.valid"
+              class="order-csv-preview__sub"
+              data-testid="order-csv-preview-not-forceable"
             >
-              強制
+              不可
             </span>
             <template v-else>—</template>
           </template>
@@ -346,6 +372,15 @@ store.clearSubmitError()
   background-color: var(--color-danger-border);
 }
 
+/* 強制を指定した NG の行。赤（受付できない）と見分けられるよう警告の色にする */
+.order-csv-preview :deep(tr.is-forced) {
+  background-color: var(--color-warning-bg);
+}
+
+.order-csv-preview :deep(tr.is-forced:hover td) {
+  background-color: var(--color-warning-border);
+}
+
 .order-csv-preview__state {
   font-weight: 600;
 }
@@ -356,6 +391,10 @@ store.clearSubmitError()
 
 .order-csv-preview__state.is-ng {
   color: var(--color-danger-text);
+}
+
+.order-csv-preview__state.is-forced {
+  color: var(--color-warning);
 }
 
 .order-csv-preview__symbol {
@@ -381,19 +420,6 @@ store.clearSubmitError()
 
 .order-csv-preview__at {
   font-variant-numeric: tabular-nums;
-}
-
-.order-csv-preview__forced {
-  display: inline-block;
-  padding: 2px var(--space-2);
-  color: var(--color-danger-text);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  line-height: 1.2;
-  white-space: nowrap;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-danger-text);
-  border-radius: var(--radius-sm);
 }
 
 /*

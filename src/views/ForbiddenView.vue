@@ -20,7 +20,8 @@ const { error } = storeToRefs(useCurrentOperatorStore())
       権限を確認できませんでした（{{ error.message }}）。時間をおいて開き直してください。
     </p>
     <p v-else data-testid="forbidden-message">この画面を開く権限がありません。</p>
-    <RouterLink to="/">注文一覧へ戻る</RouterLink>
+    <!-- 戻り先は初期画面（顧客検索）。`/` の redirect を経由せず直接指す -->
+    <RouterLink to="/customers/search">顧客検索へ戻る</RouterLink>
   </section>
 </template>
 

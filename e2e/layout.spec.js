@@ -11,7 +11,8 @@ import { sectionToggle } from './helpers/sideMenu'
 
 // シナリオ: docs/e2e/layout.md（タイトル先頭の [LAY-xx] が対応 ID）
 // 画面固有の要素はここでは検証しない（各画面のシナリオで扱う）。
-// getByRole の name は既定で部分一致のため、「注文」が「注文一覧」に当たらないよう exact: true を付ける。
+// getByRole の name は既定で部分一致のため、「顧客」が「顧客検索」に当たらないよう exact: true を付ける。
+// `/` は初期画面の顧客検索（/customers/search）へ回る（2026-10-14。注文一覧の参考実装は退役）。
 //
 // サイドメニューの初期状態はアプリ起動時に 1 度だけ決まり、以後のリサイズには追従しない。
 // 幅を変えるテストは必ず page.goto() より前に setViewportSize すること（後から縮めても何も起きない）。
@@ -20,7 +21,7 @@ const toggleButton = (page) => page.getByTestId('sidebar-toggle')
 const contentLeft = async (page) => (await page.getByRole('main').boundingBox()).x
 
 /*
- * LAY-03 で遷移に使うメニュー項目。既定の画面（注文一覧）ではない項目なら何でもよい。
+ * LAY-03 で遷移に使うメニュー項目。既定の画面（顧客検索）ではない項目なら何でもよい。
  * navigation.js から引いて、名前や path が変わったときに黙って空振りしないようにする。
  * 2026-10-02 に預り検索が実装されてメニューの未実装の項目が無くなったので、「見つからない」は
  * メニューに無い URL（LAY-04）で見る形に分けた。
@@ -65,7 +66,7 @@ test.describe('共通レイアウト', () => {
   test('[LAY-02] ヘッダに画面タイトルと市場ステータスが表示される', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
     await expect(page.getByTestId('market-status')).toHaveText(
       /^(Pre-Market|Regular|After-Hours|Closed)$/,
     )
@@ -187,9 +188,10 @@ test.describe('共通レイアウト', () => {
     await expect(loading).toBeVisible()
     await expect(loading).toContainText('読み込んでいます')
 
-    // 読み終えれば覆いが外れ、下に組み上がっていた画面が現れる
+    // 読み終えれば覆いが外れ、下に組み上がっていた画面が現れる（/ は顧客検索へ回る。クエリは引き継がれる）
     await expect(loading).toBeHidden()
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(page).toHaveURL(/\/customers\/search\?mockDelay=2000$/)
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
   })
 
   test('[LAY-11] コードマスタの取得に失敗すると理由と再試行が覆いの中に出る', async ({ page }) => {
@@ -264,7 +266,7 @@ test.describe('共通レイアウト', () => {
     // 推定を出さない。覆いは codes の取得だけで外れる（市場状況は起動の条件ではない）
     await expect(page.getByTestId('market-status')).toHaveText('—')
     await expect(page.getByTestId('market-jst')).toHaveText('市場状況を取得できません')
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
 
     const nav = page.getByRole('navigation', { name: 'メインメニュー' })
     await nav.getByRole('link', { name: '顧客検索', exact: true }).click()
@@ -317,7 +319,7 @@ test.describe('共通レイアウト', () => {
     await page.goto('/')
 
     await expectGuardedSectionsHidden(page)
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
   })
 
   test('[LAY-18] マスタ更新権限だけが無いとマスタメンテの区分だけが出ない', async ({ page }) => {
@@ -417,11 +419,19 @@ test.describe('共通レイアウト', () => {
     })
   }
 
+  /*
+   * 起点は預り検索（/customers/holdings）。/ は顧客検索へ回るので、顧客検索のモジュールを
+   * 遅らせて遷移を見るには、顧客検索以外の画面から始める必要がある
+   */
+  const START_PATH = '/customers/holdings'
+  const START_URL = /\/customers\/holdings$/
+  const START_TITLE = '預り検索'
+
   test('[LAY-21] 画面の読み込み中はバーと押した項目の回転マークが出て、読み終えると消える', async ({
     page,
   }) => {
-    await page.goto('/')
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await page.goto(START_PATH)
+    await expect(page.getByRole('heading', { name: START_TITLE, exact: true })).toBeVisible()
 
     await delayCustomerSearchModule(page, 1500)
 
@@ -435,9 +445,11 @@ test.describe('共通レイアウト', () => {
     await expect(loading).toContainText('画面を読み込んでいます')
     await expect(link.locator('.base-spinner')).toBeVisible()
     await expect(page.getByRole('main')).toHaveAttribute('aria-busy', 'true')
-    await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
-    await expect(nav.locator('[aria-current="page"]')).toHaveCount(0)
+    await expect(page).toHaveURL(START_URL)
+    await expect(page.getByRole('heading', { name: START_TITLE, exact: true })).toBeVisible()
+    // 現在ページは起点（預り検索）のまま。押した顧客検索はまだ現在ページにならない
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
+    await expect(link).not.toHaveAttribute('aria-current', 'page')
 
     // 読み終えると遷移が確定し、読み込み中の表示が全部消える
     await expect(page).toHaveURL(/\/customers\/search$/)
@@ -449,8 +461,8 @@ test.describe('共通レイアウト', () => {
   })
 
   test('[LAY-22] 読み込み中に別の項目を押すと後から押した方が勝つ', async ({ page }) => {
-    await page.goto('/')
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await page.goto(START_PATH)
+    await expect(page.getByRole('heading', { name: START_TITLE, exact: true })).toBeVisible()
 
     await delayCustomerSearchModule(page, 1500)
     // 遅れていたチャンクが届いたことを「本体の応答が返った」で知る（固定 sleep の代わり）
@@ -483,8 +495,8 @@ test.describe('共通レイアウト', () => {
   })
 
   test('[LAY-23] メニューの項目にマウスを載せると画面を先読みする', async ({ page }) => {
-    await page.goto('/')
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await page.goto(START_PATH)
+    await expect(page.getByRole('heading', { name: START_TITLE, exact: true })).toBeVisible()
 
     // hover より前に仕掛ける（後からだと取り逃す）
     const prefetched = page.waitForRequest((request) =>
@@ -496,9 +508,25 @@ test.describe('共通レイアウト', () => {
 
     await prefetched
     // 先読みだけで遷移はしない
-    await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
-    await expect(nav.locator('[aria-current="page"]')).toHaveCount(0)
+    await expect(page).toHaveURL(START_URL)
+    await expect(page.getByRole('heading', { name: START_TITLE, exact: true })).toBeVisible()
+    await expect(nav.getByRole('link', { name: '顧客検索', exact: true })).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+  })
+
+  test('[LAY-31] / を開くと初期画面の顧客検索へ回る', async ({ page }) => {
+    await page.goto('/')
+
+    await expect(page).toHaveURL(/\/customers\/search$/)
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
+    const nav = page.getByRole('navigation', { name: 'メインメニュー' })
+    await expect(nav.getByRole('link', { name: '顧客検索', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
   })
 
   /*
@@ -533,7 +561,7 @@ test.describe('共通レイアウト', () => {
     await page.reload()
 
     // 再読み込み後に画面が組み上がってから「無い」を見る（読み込み前の空振りで通らないように）
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
     await expect(bannerOf(page)).toHaveCount(0)
   })
 
@@ -559,7 +587,7 @@ test.describe('共通レイアウト', () => {
     await mockApi(page, [{ path: '*/api/operations/banner', body: noneBannerResponse }])
     await page.goto('/')
 
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'メインメニュー' })).toBeVisible()
     await expect(bannerOf(page)).toHaveCount(0)
   })

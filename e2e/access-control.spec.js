@@ -78,15 +78,15 @@ test.describe('アクセス制御', () => {
     }
   })
 
-  test('[AC-02] 権限なしの画面から注文一覧へ戻れる', async ({ page }) => {
+  test('[AC-02] 権限なしの画面から顧客検索へ戻れる', async ({ page }) => {
     await mockApi(page, [{ path: AUTH_ME_PATH, body: noOperationOperator }])
     await page.goto('/operations/stalled-orders')
     await expect(page).toHaveURL(/\/forbidden$/)
 
-    await page.getByRole('link', { name: '注文一覧へ戻る' }).click()
+    await page.getByRole('link', { name: '顧客検索へ戻る' }).click()
 
-    await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByRole('heading', { name: '注文一覧', exact: true })).toBeVisible()
+    await expect(page).toHaveURL(/\/customers\/search$/)
+    await expect(page.getByRole('heading', { name: '顧客検索', exact: true })).toBeVisible()
   })
 
   test('[AC-03] 操作者を取得できないときは確認できなかったことを出す', async ({ page }) => {

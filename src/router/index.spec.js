@@ -89,6 +89,15 @@ describe('router/index の routes', () => {
     expect(children.find((child) => child.path === 'summary')?.name).toBe('customer-summary')
   })
 
+  it('[RTR-08] / は顧客検索へ回し、権限を要求しない', () => {
+    const home = routeAt('/')
+
+    expect(home?.redirect).toEqual({ name: 'customer-search' })
+    expect(home.component).toBeUndefined()
+    expect(home.meta?.requiredPermission).toBeUndefined()
+    expect(routes.find((route) => route.name === 'customer-search')?.path).toBe('/customers/search')
+  })
+
   it('[RTR-07] /orders/new は口座番号のクエリが無ければ顧客検索へ回し、あれば通す', () => {
     const orderNew = routeAt('/orders/new')
     expect(orderNew?.name).toBe('order-new')

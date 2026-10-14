@@ -68,7 +68,7 @@ docker compose run --rm frontend npm run msw:init
 docker compose up frontend
 ```
 
-→ http://localhost:5173 で注文一覧（MSW のモックデータ3件）が表示される。
+→ http://localhost:5173 で初期画面の顧客検索（MSW のモックデータ）が表示される（`/` は `/customers/search` へ回る）。
 
 > ポートは本体リポジトリが 5173。git worktree では `scripts/worktree.sh add` が
 > `.env` の `FRONTEND_PORT` に 5174〜 を割り当てるので、URL は
@@ -126,7 +126,7 @@ docker pull mcr.microsoft.com/playwright/mcp
 docker compose up -d frontend
 ```
 
-3. Claude Code に **「注文一覧の画面を見て」** のように日本語で頼む。専用コマンドは無い。
+3. Claude Code に **「顧客検索の画面を見て」** のように日本語で頼む。専用コマンドは無い。
    初回だけ `.mcp.json` の承認ダイアログが出るので許可する（接続状態は `/mcp` で確認）
 
 ### 確認方法
@@ -176,7 +176,7 @@ docker build -t us-stock-order-chrome-devtools-mcp docker/chrome-devtools-mcp
 docker compose up -d frontend
 ```
 
-3. Claude Code に **「注文一覧の初期表示のパフォーマンストレースを取って」** のように頼む。
+3. Claude Code に **「顧客検索の初期表示のパフォーマンストレースを取って」** のように頼む。
    接続状態は `/mcp` で確認する
 
 イメージが無い状態で Claude Code を起動すると、`docker run` が失敗して
@@ -210,8 +210,8 @@ docker compose up -d frontend
 | 単体 | Vitest | `src/**/*.spec.js`（対象ファイルの隣） | `docs/unit/<src 相対パスのケバブケース>.md` | ストア・composable・utils・コンポーネント |
 | E2E | Playwright | `e2e/*.spec.js` | `docs/e2e/<画面のケバブケース>.md` | 画面の主要導線 |
 
-例: `src/stores/orders.js` → テスト `src/stores/orders.spec.js` / 文書 [docs/unit/stores-orders.md](docs/unit/stores-orders.md)
-　　注文一覧画面 → テスト `e2e/orders.spec.js` / 文書 [docs/e2e/order-list.md](docs/e2e/order-list.md)
+例: `src/stores/customerSearch.js` → テスト `src/stores/customerSearch.spec.js` / 文書 [docs/unit/stores-customer-search.md](docs/unit/stores-customer-search.md)
+　　顧客検索画面 → テスト `e2e/customer-search.spec.js` / 文書 [docs/e2e/customer-search.md](docs/e2e/customer-search.md)
 
 ### シナリオ文書とテストの対応づけ
 
@@ -318,7 +318,7 @@ docker compose run --rm -p 9323:9323 e2e npx playwright show-report --host 0.0.0
 
 ```powershell
 docker compose run --rm -p 9323:9323 e2e npx playwright show-trace --host 0.0.0.0 --port 9323 `
-  "test-results/orders-注文一覧-OL-01-注文が-3-件あるとき一覧に表示される-chromium/trace.zip"
+  "test-results/customer-search-顧客検索-CSE-01-…-chromium/trace.zip"
 ```
 
 > Playwright MCP（上記）は headless のため、ブラウザ画面をリアルタイムに覗くことはできない。

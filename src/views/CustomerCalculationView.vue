@@ -11,6 +11,7 @@ import BaseSegmentedControl from '@/components/ui/BaseSegmentedControl.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import FormField from '@/components/ui/FormField.vue'
 import { useCalculationStore } from '@/stores/calculation'
+import { useCodesStore } from '@/stores/codes'
 import { useCustomerDetailStore } from '@/stores/customerDetail'
 import {
   buildCalculationInput,
@@ -20,9 +21,9 @@ import {
   hasCalculationFormErrors,
   validateCalculationForm,
 } from '@/utils/calculationForm'
-import { CALCULATION_DEPOSIT_OPTIONS, FEE_PATTERN_OPTIONS } from '@/utils/calculationOptions'
+import { CALCULATION_DEPOSIT_CODES, FEE_PATTERN_OPTIONS } from '@/utils/calculationOptions'
 import { parseCalculationQuery } from '@/utils/calculationQuery'
-import { SIDE_OPTIONS } from '@/utils/orderEntryOptions'
+import { SIDE_CODES, SIDE_EXTRAS, decorateOptions } from '@/utils/orderEntryOptions'
 
 /*
  * 顧客詳細の仮計算タブ（画面モック provisional_calculation.html）。
@@ -58,6 +59,15 @@ const store = useCalculationStore()
 const { result, error, loading } = storeToRefs(store)
 
 const { customer } = storeToRefs(useCustomerDetailStore())
+
+// 売買・預り区分の選択肢はコードマスタから。並びと絞り込みは utils が決める
+const codes = useCodesStore()
+const sideOptions = computed(() =>
+  decorateOptions(codes.pickOptions('売買区分', SIDE_CODES), SIDE_EXTRAS),
+)
+const depositOptions = computed(() =>
+  codes.pickOptions('特定預り区分', CALCULATION_DEPOSIT_CODES),
+)
 
 // 引き継ぎは開いたときに 1 回だけ読む（入力を始めたあとで URL に合わせて書き換えない）
 const form = ref(createCalculationForm(parseCalculationQuery(route.query)))
@@ -141,7 +151,7 @@ store.reset()
           <FormField label="売買" required>
             <BaseSegmentedControl
               v-model="form.side"
-              :options="SIDE_OPTIONS"
+              :options="sideOptions"
               aria-label="売買"
               data-testid="customer-calc-side"
             />
@@ -151,7 +161,7 @@ store.reset()
             <BaseSelect
               v-bind="field"
               v-model="form.specificDeposit"
-              :options="CALCULATION_DEPOSIT_OPTIONS"
+              :options="depositOptions"
               data-testid="customer-calc-deposit"
             />
           </FormField>

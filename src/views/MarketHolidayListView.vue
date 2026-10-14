@@ -14,18 +14,24 @@ import MasterFormDialog from '@/components/masters/MasterFormDialog.vue'
 import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
+import { useCodesStore } from '@/stores/codes'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from '@/stores/marketHolidays'
 import {
   MARKET_HOLIDAY_EARLY_CLOSE_LABEL,
-  MARKET_HOLIDAY_TYPE_OPTIONS,
   formatMarketHolidayEarlyClose,
-  isMarketHolidayType,
   isShortTradingDay,
 } from '@/utils/marketHolidayTypes'
 import { HOLIDAY_TYPE } from '@/utils/apiEnums'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useMarketHolidaysStore()
+
+/*
+ * 休場区分の選択肢はコードマスタ `海外休場区分` から。App.vue が読み終えてから画面を描くので、
+ * setup の時点で揃っている（URL クエリの検査にもそのまま使える）。
+ */
+const codes = useCodesStore()
+const holidayTypeOptions = codes.optionsFor('海外休場区分')
 const {
   items,
   total,
@@ -64,7 +70,7 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
     {
       key: 'holidayType',
       query: 'holiday_type',
-      parse: (value) => (isMarketHolidayType(value) ? value : ''),
+      parse: (value) => (codes.hasCode('海外休場区分', value) ? value : ''),
     },
   ],
   load: (params) => store.load(params),
@@ -221,7 +227,7 @@ async function submitDelete() {
         <BaseSelect
           v-bind="field"
           v-model="inputs.holidayType"
-          :options="MARKET_HOLIDAY_TYPE_OPTIONS"
+          :options="holidayTypeOptions"
           placeholder="-- すべて --"
           data-testid="market-holidays-holiday-type"
         />

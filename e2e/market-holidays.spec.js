@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { clickSideMenuLink } from './helpers/sideMenu'
+import { codeName } from '../src/mocks/fixtures/codes'
 import { canceledMarketHolidays, marketHolidays } from '../src/mocks/fixtures/marketHolidays'
 import { mockApi } from './helpers/mockApi'
 
@@ -36,9 +37,10 @@ const SEARCH_DATE = toIsoDate(SEARCH_TARGET.休場日)
 
 const firstHoliday = marketHolidays[0]
 
-// 休場区分（画面では「短縮取引日」）。画面に出る表示名で書く（コード '0' / '1' は利用者に見えない）
+// 休場区分（画面では「短縮取引日」）。画面に出る表示名で書く（コード '0' / '1' は利用者に見えない）。
+// 検索セレクトの選択肢はコードマスタ `海外休場区分` の名称（短縮取引）
 const TYPE_ALL_LABEL = '-- すべて --'
-const TYPE_SHORT_LABEL = '短縮取引日'
+const TYPE_SHORT_LABEL = codeName('海外休場区分', '1')
 // 一覧の「短縮取引日」列。短縮取引日の行は終了時刻のバッジ、終日休場の行は —（画面モックと同じ）
 const EARLY_CLOSE_LABEL = '13:00 ET 終了'
 const NOT_SHORT_LABEL = '—'

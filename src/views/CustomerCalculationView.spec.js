@@ -170,7 +170,7 @@ async function fillAndSubmit(
   { symbol, side, specificDeposit, quantity, unitPrice, feePattern },
 ) {
   if (symbol !== undefined) await find(wrapper, 'customer-calc-symbol').setValue(symbol)
-  if (side === SIDE.SELL) await chooseSide(wrapper, '売り')
+  if (side === SIDE.SELL) await chooseSide(wrapper, '売')
   if (specificDeposit !== undefined) {
     await find(wrapper, 'customer-calc-deposit').setValue(specificDeposit)
   }
@@ -214,7 +214,7 @@ describe('CustomerCalculationView', () => {
     const { wrapper } = await mountView()
 
     expect(valueOf(wrapper, 'customer-calc-symbol')).toBe('')
-    expect(selectedSide(wrapper).text()).toBe('買い')
+    expect(selectedSide(wrapper).text()).toBe('買')
     expect(selectedLabel(wrapper, 'customer-calc-deposit')).toBe('特定')
     expect(valueOf(wrapper, 'customer-calc-trade-date')).toBe('20261006')
     expect(selectedLabel(wrapper, 'customer-calc-fee-pattern')).toBe('顧客属性を適用')
@@ -240,7 +240,7 @@ describe('CustomerCalculationView', () => {
     const { wrapper } = await mountView({ symbol: 'nvda', side: 'sell', specific_deposit: '6' })
 
     expect(valueOf(wrapper, 'customer-calc-symbol')).toBe('NVDA')
-    expect(selectedSide(wrapper).text()).toBe('売り')
+    expect(selectedSide(wrapper).text()).toBe('売')
     expect(selectedLabel(wrapper, 'customer-calc-deposit')).toBe('成長投資枠')
     expect(textOf(wrapper, 'customer-calc-result-caption')).toBe('売却概算 ／ 未実行')
     expect(textOf(wrapper, 'customer-calc-total-label')).toBe('概算受取金額')
@@ -251,7 +251,7 @@ describe('CustomerCalculationView', () => {
   it('[CCV-04] 読めないクエリは既定のまま', async () => {
     const { wrapper } = await mountView({ side: 'hold', specific_deposit: '4' })
 
-    expect(selectedSide(wrapper).text()).toBe('買い')
+    expect(selectedSide(wrapper).text()).toBe('買')
     expect(selectedLabel(wrapper, 'customer-calc-deposit')).toBe('特定')
   })
 
@@ -261,7 +261,7 @@ describe('CustomerCalculationView', () => {
     await find(wrapper, 'customer-calc-deposit').setValue(SPECIFIC_DEPOSIT.GROWTH_QUOTA)
     expect(resultRows(wrapper)).toEqual(WITH_NISA_ROWS)
 
-    await chooseSide(wrapper, '売り')
+    await chooseSide(wrapper, '売')
     expect(resultRows(wrapper)).toEqual(BASE_ROWS)
   })
 

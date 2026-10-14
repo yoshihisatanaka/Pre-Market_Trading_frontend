@@ -14,10 +14,17 @@ import MasterListCard from '@/components/masters/MasterListCard.vue'
 import MasterSearchCard from '@/components/masters/MasterSearchCard.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { CA_PAGE_SIZE, useCaStore } from '@/stores/ca'
-import { CA_TYPE_OPTIONS, formatCaType, isCaType } from '@/utils/caTypes'
+import { useCodesStore } from '@/stores/codes'
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useCaStore()
+
+/*
+ * CA種別の選択肢と名称はコードマスタ `CA種別` から。App.vue が読み終えてから画面を描くので、
+ * setup の時点で揃っている（URL クエリの検査にもそのまま使える）。
+ */
+const codes = useCodesStore()
+const caTypeOptions = codes.optionsFor('CA種別')
 const {
   items,
   total,
@@ -69,7 +76,7 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
     {
       key: 'caType',
       query: 'ca_type',
-      parse: (value) => (isCaType(value) ? value : ''),
+      parse: (value) => (codes.hasCode('CA種別', value) ? value : ''),
     },
   ],
   load: (params) => store.load(params),
@@ -80,7 +87,7 @@ const { inputs, submitSearch, clearSearch, goToOffset } = useListQuery({
  * 欠けているときだけコードから補う（どちらも無ければ '—'）。
  */
 function caTypeLabel(row) {
-  return row.caTypeName || formatCaType(row.caType)
+  return row.caTypeName || codes.labelFor('CA種別', row.caType)
 }
 
 /**
@@ -392,7 +399,7 @@ function caLabel(ca) {
         <BaseSelect
           v-bind="field"
           v-model="inputs.caType"
-          :options="CA_TYPE_OPTIONS"
+          :options="caTypeOptions"
           placeholder="-- すべて --"
           data-testid="ca-type"
         />

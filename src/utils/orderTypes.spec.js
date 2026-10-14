@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { EXECUTION_SCOPE_VALUES } from '@/utils/apiEnums'
 import { formatUsdUnit } from '@/utils/format'
 import {
-  AMEND_MARKET_SCOPE_OPTIONS,
+  AMEND_MARKET_SCOPE_CODES,
+  AMEND_MARKET_SCOPE_EXTRAS,
   MARKET_SCOPE_OPTIONS,
-  ORDER_TYPE_OPTIONS,
   marketScopeLabel,
   orderPriceLabel,
   orderStatusLabel,
@@ -50,22 +50,13 @@ describe('utils/orderTypes', () => {
     expect(orderPriceLabel('', 410)).toBe('—')
   })
 
-  it('[ORT-07] 指成区分の選択肢は成行 → 指値の順', () => {
-    expect(ORDER_TYPE_OPTIONS).toEqual([
-      { value: 'MO', label: '成行' },
-      { value: 'LO', label: '指値' },
-    ])
-  })
-
   it('[ORT-08] 訂正画面の市場区分は enum の 4 値で、押せるのは 02 / 03 だけ', () => {
-    expect(AMEND_MARKET_SCOPE_OPTIONS.map((option) => option.value)).toEqual([
-      ...EXECUTION_SCOPE_VALUES,
-    ])
+    expect(AMEND_MARKET_SCOPE_CODES).toEqual([...EXECUTION_SCOPE_VALUES])
     expect(
-      AMEND_MARKET_SCOPE_OPTIONS.filter((option) => !option.disabled).map((option) => option.value),
+      AMEND_MARKET_SCOPE_CODES.filter((code) => !AMEND_MARKET_SCOPE_EXTRAS[code]?.disabled),
     ).toEqual(['02', '03'])
-    for (const option of AMEND_MARKET_SCOPE_OPTIONS.filter((item) => item.disabled)) {
-      expect(option.note).toBe('（Ph.2予定）')
+    for (const code of ['04', '06']) {
+      expect(AMEND_MARKET_SCOPE_EXTRAS[code]).toEqual({ note: '（Ph.2予定）', disabled: true })
     }
   })
 })

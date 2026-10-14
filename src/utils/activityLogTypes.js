@@ -82,7 +82,7 @@ export const ACTIVITY_SORT_OPTIONS = [
 /**
  * 選択肢に含まれる値かを判定する述語を作る。
  * URL クエリのような外から来る値を検索条件に使う前に通す
- * （手で書き換えられた値を空に落とす。MarketHolidayListView の isMarketHolidayType と同じ用途）。
+ * （手で書き換えられた値を空に落とす。stores/codes.js の hasCode と同じ用途）。
  */
 function memberOf(options) {
   return (value) => options.some((option) => option.value === value)

@@ -2,11 +2,11 @@
  * バックエンドの区分値（`docs/api/openapi.json` の `components.schemas.*Enum` の写し）。
  *
  * ここは**仕様の機械的な写し**で、フロントの判断は入れない。ラベルも持たない。
- * ラベルの出どころは従来どおり次の 3 つ。
- *   1. `GET /codes`（`src/stores/codes.js` の `optionsFor()`）。部店 / 扱者 / 口座区分 など
- *   2. `src/utils/{caTypes,marketHolidayTypes,stockTypes}.js`。データが 0 件でも
- *      検索セレクトを描く必要がある区分だけ、フロントにも対応表を持つ
- *   3. サーバが行ごとに付けて返す `*名` フィールド（`CA種別名` / `口座区分名` …）
+ * ラベルの出どころは次の 2 つ。
+ *   1. `GET /codes`（`src/stores/codes.js` の `optionsFor()` / `labelFor()`）。部店 / 扱者 / 口座区分 /
+ *      CA種別 / 売買区分 など。起動時に読み終えてから画面を描くので、データが 0 件でも選択肢は出せる
+ *   2. サーバが行ごとに付けて返す `*名` フィールド（`CA種別名` / `口座区分名` …）
+ * 画面が名称を引く区分は、enum の全値にコードマスタの名称があることを apiEnums.spec.js（AEN-06）が見る。
  *
  * export は 2 系統に分かれる。**spec に意味が書かれているかどうかで形が変わる。**
  *   - 意味付きの凍結オブジェクト … 参照元フィールドの description に意味がある（9 種）
@@ -106,7 +106,7 @@ export const SPECIFIC_DEPOSIT = Object.freeze({
  * 表示名が要るときは `GET /codes` かサーバが返す `*名` を使う。
  * ------------------------------------------------------------------ */
 
-/** CA種別。`CATypeEnum`。表示名は `src/utils/caTypes.js`（codes.json 由来）が持つ */
+/** CA種別。`CATypeEnum`。表示名は `GET /codes` の「CA種別」 */
 export const CA_TYPE_VALUES = Object.freeze([
   '110',
   '112',

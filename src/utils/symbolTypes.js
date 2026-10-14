@@ -2,10 +2,11 @@
  * 銘柄マスタの区分（純関数と定数）。
  *
  * `規制情報`（取引可否）・`注文ルート`（預託先区分）・`VWAP対象区分` の 3 つを持つ。
- * 実 API は表示名も `規制情報名` / `注文ルート名` / `VWAP対象区分名` として返すが、
- * 検索セレクトの選択肢はデータが 1 件も無くても出せる必要があるので、対応表はフロントにも持つ
- * （CA種別・海外休場区分と同じ考えかた）。一覧セルは実 API の名称を優先し、
- * 欠けているときだけここで補う。
+ * 実 API は表示名も `規制情報名` / `注文ルート名` / `VWAP対象区分名` として返す。一覧セルは実 API の名称を
+ * 優先し、欠けているときだけ補う。
+ *
+ * 規制情報と預託先区分は、選べる値と名称の取得先がコードマスタに無い（docs/api/requests.md #69 / #70）ので
+ * 対応表をここに持つ。VWAP対象区分は名称をコードマスタ `VWAP対象区分` から引き、ここは並びだけを持つ。
  *
  * 値は数値ではなく文字列で扱う。実 API の値がゼロ埋めされた文字列であることに合わせるため。
  *
@@ -14,8 +15,6 @@
  * description に 0 / 1 の意味が書かれている）。ここの 0:取引可 / 1:取引不可 は
  * 画面モックの「取引可 / 取引不可」に合わせた**仮置き**で、バックエンドの対応表
  * （`GET /codes` か app/config/codes.json）が確認できたらこの定数だけ差し替える。
- *
- * @see src/utils/caTypes.js 同じ形をした CA種別
  */
 
 /** 取引可否（規制情報）。値は仮置き（上のコメント参照） */
@@ -25,7 +24,7 @@ export const REGULATION_OPTIONS = [
 ]
 
 /*
- * 預託先区分と VWAP対象区分の**並びはコード順ではなく画面モックの順**（IB → みずほ / 対象 → 対象外）。
+ * 預託先区分と VWAP対象区分の**並びはコード順ではなく画面モックの順**（IB → みずほ / 対象 → 非対象）。
  * docs/api/requests.md #42 の回答で、この順に固定すると決まった（`GET /codes` の形は変わらない）。
  * 新規追加の初期値は各定数の先頭（IB / 対象）で、並びを変えると初期値も一緒に変わる
  * （src/views/SymbolListView.vue の emptyForm）。
@@ -38,13 +37,11 @@ export const ORDER_ROUTE_OPTIONS = [
 ]
 
 /**
- * VWAP対象区分。SymbolItem の description は 0:非対象 / 1:対象 だが、
- * ラベルは画面モックの文言（対象外 / 対象）に寄せる。
+ * VWAP対象区分のコードの並び（対象 → 非対象）。先頭が新規追加の初期値。
+ * **表示名はコードマスタ `VWAP対象区分` から引く**（views/SymbolListView.vue / components/symbol/SymbolFormFields.vue）。
+ * 画面モックの文言は「対象外」だが、コードマスタの名称（非対象）を正とする（docs/api/requests.md の #69 の節）。
  */
-export const VWAP_TARGET_OPTIONS = [
-  { value: '1', label: '対象' },
-  { value: '0', label: '対象外' },
-]
+export const VWAP_TARGET_CODES = ['1', '0']
 
 /**
  * 取引可否（規制情報）コードを表示名に変換する。
@@ -67,16 +64,6 @@ export function formatOrderRoute(value) {
 }
 
 /**
- * VWAP対象区分コードを表示名に変換する。
- *
- * @param {string} value VWAP対象区分コード（'0' / '1'）
- * @returns {string} 表示名。未知の値・空値・未設定は '—'
- */
-export function formatVwapTarget(value) {
-  return labelOf(VWAP_TARGET_OPTIONS, value)
-}
-
-/**
  * 取引可否（規制情報）コードとして受け付けられる値かを判定する。
  * URL クエリのような外から来る値を検索条件に使う前に通す。
  *
@@ -95,16 +82,6 @@ export function isRegulation(value) {
  */
 export function isOrderRoute(value) {
   return hasValue(ORDER_ROUTE_OPTIONS, value)
-}
-
-/**
- * VWAP対象区分コードとして受け付けられる値かを判定する。
- *
- * @param {unknown} value
- * @returns {boolean}
- */
-export function isVwapTarget(value) {
-  return hasValue(VWAP_TARGET_OPTIONS, value)
 }
 
 function labelOf(options, value) {

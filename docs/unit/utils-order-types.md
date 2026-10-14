@@ -16,5 +16,4 @@
 | ORT-04 | — | `orderStatusLabel('003')` / `'141'` / `'101'` / `'040'` | 「注文中」/「訂正中断」/「Dream発注失敗」/「訂正待ち」 | 実装済 |
 | ORT-05 | — | `orderStatusLabel('999')` / `''` / `null` | 知らないコードはそのまま `'999'`、空値は「—」 | 実装済 |
 | ORT-06 | — | `orderPriceLabel('MO', 410)` / `('LO', 410)` / `('', 410)` | 「成行」/ `指値 ` + `formatUsdUnit(410)`（「指値 410.00 ドル」）/「—」 | 実装済 |
-| ORT-07 | — | `ORDER_TYPE_OPTIONS` を読む | 成行（`MO`）→ 指値（`LO`）の順に 2 つ | 実装済 |
-| ORT-08 | — | `AMEND_MARKET_SCOPE_OPTIONS` を読む | 値は `EXECUTION_SCOPE_VALUES` と同じ 4 つが同じ順に並び、`disabled` でないのは `02` / `03` だけ。`disabled` の選択肢は note「（Ph.2予定）」を持つ | 実装済 |
+| ORT-08 | — | `AMEND_MARKET_SCOPE_CODES` と `AMEND_MARKET_SCOPE_EXTRAS` を読む（表示名はコードマスタ `発注範囲` から引くので、ここは並びと飾りだけ） | コードは `EXECUTION_SCOPE_VALUES` と同じ 4 つが同じ順に並び、`disabled` でないのは `02` / `03` だけ。`04` / `06` は note「（Ph.2予定）」と `disabled` を持つ | 実装済 |

@@ -27,3 +27,4 @@
 | CFF-10 | 必須をすべて埋めたフォーム | `validateCustomerForm()` → `hasCustomerFormErrors()` | 全項目が `''` で、`hasCustomerFormErrors()` が false。1 項目でもエラーがあれば true | 実装済 |
 | CFF-11 | 法人区分が法人（`CORPORATE_TYPE.CORPORATE`）/ 個人のフォーム、フォームが `null` / `undefined` | 全項目について `isLockedByCorporateType(field, form)` を呼ぶ | `corporateValue` を宣言しているのは NISA契約・NISA買付可能額 当年・翌年 の 3 項目で値はどれも `'0'`。法人ならこの 3 項目だけ true、個人は全項目 false。フォームが無くても false | 実装済 |
 | CFF-12 | 法人で NISA の 3 項目が固定値と違う / 1 項目だけ違う / すべて固定値、個人で NISA を使っている | `corporateFixedValues(form)` を呼ぶ | 法人は固定値と違う項目だけを `{ key: corporateValue }` で返す（3 項目違えば 3 つ、1 項目なら 1 つ、揃っていれば `{}`）。個人は `{}` | 実装済 |
+| CFF-13 | — | `control: 'select'` の全項目を、コードマスタの写し（`src/mocks/fixtures/codes.js` の `codeEntries()`。部店・扱者も含む）と突き合わせる | どれも固定の `options` を持たず `codes` で引く。そのカテゴリが実在して選択肢が 1 つ以上あり、`initial` / `corporateValue` を宣言していればそのカテゴリのコードに含まれる（投資方針は個人の段で見る） | 実装済 |

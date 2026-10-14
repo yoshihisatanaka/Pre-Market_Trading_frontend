@@ -18,18 +18,18 @@ import BaseSegmentedControl from '@/components/ui/BaseSegmentedControl.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import FormField from '@/components/ui/FormField.vue'
 import {
-  DEPOSIT_CATEGORY_OPTIONS,
-  FUND_NATURE_OPTIONS,
-  ORDER_CHANNEL_OPTIONS,
-  ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS,
-  ORDER_METHOD_OPTIONS,
+  DEPOSIT_CATEGORY_CODES,
+  ORDER_CHANNEL_CODES,
+  ORDER_ENTRY_EXECUTION_SCOPE_CODES,
+  ORDER_ENTRY_EXECUTION_SCOPE_EXTRAS,
+  ORDER_METHOD_CODES,
   ORDER_PERSON_MAX_LENGTH,
   ORDER_TYPE,
-  ORDER_TYPE_OPTIONS,
-  SETTLEMENT_CURRENCY_OPTIONS,
+  ORDER_TYPE_CODES,
   SIDE,
-  SIDE_OPTIONS,
-  SOLICITATION_OPTIONS,
+  SIDE_CODES,
+  SIDE_EXTRAS,
+  decorateOptions,
 } from '@/utils/orderEntryOptions'
 import { useCodesStore } from '@/stores/codes'
 import {
@@ -97,10 +97,28 @@ const form = defineModel({ type: Object, required: true })
 const isLimit = computed(() => form.value.orderType === ORDER_TYPE.LIMIT)
 
 /*
- * 注文種別（VWAP区分）の選択肢はコードマスタ `VWAP区分` から。
- * 読み込みは main.js が起動時に行い、App.vue は読み終えてから画面を描く。
+ * 区分の選択肢はコードマスタ（GET /codes）から。並び・絞り込み・配色・見出しだけを
+ * utils/orderEntryOptions.js が決める。読み込みは main.js が起動時に行い、App.vue は読み終えてから画面を描く。
  */
 const codes = useCodesStore()
+const sideOptions = computed(() =>
+  decorateOptions(codes.pickOptions('売買区分', SIDE_CODES), SIDE_EXTRAS),
+)
+const executionScopeOptions = computed(() =>
+  decorateOptions(
+    codes.pickOptions('発注範囲', ORDER_ENTRY_EXECUTION_SCOPE_CODES),
+    ORDER_ENTRY_EXECUTION_SCOPE_EXTRAS,
+  ),
+)
+const orderTypeOptions = computed(() => codes.pickOptions('指成区分', ORDER_TYPE_CODES))
+const settlementCurrencyOptions = computed(() => codes.optionsFor('決済通貨区分'))
+const depositCategoryOptions = computed(() =>
+  codes.pickOptions('預り売買区分', DEPOSIT_CATEGORY_CODES),
+)
+const solicitationOptions = computed(() => codes.optionsFor('勧誘区分'))
+const fundNatureOptions = computed(() => codes.optionsFor('資金性格'))
+const orderMethodOptions = computed(() => codes.pickOptions('受注方法', ORDER_METHOD_CODES))
+const orderChannelOptions = computed(() => codes.pickOptions('注文チャネル', ORDER_CHANNEL_CODES))
 const vwapOptions = computed(() => codes.optionsFor('VWAP区分'))
 
 const themeClass = computed(() => {
@@ -226,7 +244,7 @@ function selectOrderType(value) {
         <FormField label="売買区分（委託）" layout="inline" required :error="errors.side">
           <BaseSegmentedControl
             v-model="form.side"
-            :options="SIDE_OPTIONS"
+            :options="sideOptions"
             class="order-entry-form__toggle"
             aria-label="売買区分（委託）"
             data-testid="order-entry-side"
@@ -238,7 +256,7 @@ function selectOrderType(value) {
           <BaseSelect
             v-bind="field"
             v-model="form.executionScope"
-            :options="ORDER_ENTRY_EXECUTION_SCOPE_OPTIONS"
+            :options="executionScopeOptions"
             variant="underline"
             class="order-entry-form__market"
             data-testid="order-entry-execution-scope"
@@ -274,7 +292,7 @@ function selectOrderType(value) {
         >
           <BaseSegmentedControl
             :model-value="form.orderType"
-            :options="ORDER_TYPE_OPTIONS"
+            :options="orderTypeOptions"
             class="order-entry-form__toggle"
             aria-label="価格"
             data-testid="order-entry-order-type"
@@ -299,7 +317,7 @@ function selectOrderType(value) {
         <FormField label="決済通貨区分" layout="inline" required>
           <BaseSegmentedControl
             v-model="form.settlementCurrency"
-            :options="SETTLEMENT_CURRENCY_OPTIONS"
+            :options="settlementCurrencyOptions"
             class="order-entry-form__toggle"
             aria-label="決済通貨区分"
             data-testid="order-entry-settlement-currency"
@@ -326,7 +344,7 @@ function selectOrderType(value) {
         >
           <BaseSegmentedControl
             v-model="form.depositCategory"
-            :options="DEPOSIT_CATEGORY_OPTIONS"
+            :options="depositCategoryOptions"
             class="order-entry-form__toggle"
             aria-label="預り売買区分"
             data-testid="order-entry-deposit-category"
@@ -360,7 +378,7 @@ function selectOrderType(value) {
         <FormField label="勧誘区分" layout="inline">
           <BaseSegmentedControl
             v-model="form.solicitation"
-            :options="SOLICITATION_OPTIONS"
+            :options="solicitationOptions"
             class="order-entry-form__toggle"
             aria-label="勧誘区分"
             data-testid="order-entry-solicitation"
@@ -370,7 +388,7 @@ function selectOrderType(value) {
         <FormField label="資金性格" layout="inline">
           <BaseSegmentedControl
             v-model="form.fundNature"
-            :options="FUND_NATURE_OPTIONS"
+            :options="fundNatureOptions"
             class="order-entry-form__toggle"
             aria-label="資金性格"
             data-testid="order-entry-fund-nature"
@@ -380,7 +398,7 @@ function selectOrderType(value) {
         <FormField label="受注方法" layout="inline">
           <BaseSegmentedControl
             v-model="form.orderMethod"
-            :options="ORDER_METHOD_OPTIONS"
+            :options="orderMethodOptions"
             class="order-entry-form__toggle"
             aria-label="受注方法"
             data-testid="order-entry-order-method"
@@ -390,7 +408,7 @@ function selectOrderType(value) {
         <FormField label="注文チャネル" layout="inline">
           <BaseSegmentedControl
             v-model="form.orderChannel"
-            :options="ORDER_CHANNEL_OPTIONS"
+            :options="orderChannelOptions"
             class="order-entry-form__toggle"
             aria-label="注文チャネル"
             data-testid="order-entry-order-channel"

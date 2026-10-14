@@ -3,10 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { canceledMarketHolidays, marketHolidays } from '@/mocks/fixtures/marketHolidays'
-import {
-  MARKET_HOLIDAY_TYPE_DEFAULT,
-  MARKET_HOLIDAY_TYPE_OPTIONS,
-} from '@/utils/marketHolidayTypes'
+import { HOLIDAY_TYPE } from '@/utils/apiEnums'
+import { MARKET_HOLIDAY_TYPE_DEFAULT } from '@/utils/marketHolidayTypes'
 import { MARKET_HOLIDAYS_PAGE_SIZE, useMarketHolidaysStore } from './marketHolidays'
 import { useMarketStatusStore } from './marketStatus'
 
@@ -51,10 +49,10 @@ const NEW_DATE = (() => {
 const NEW_REASON = 'テスト休場日'
 
 /*
- * 休場区分。コードは選択肢の定義から引き、件数はフィクスチャを数えて出す
+ * 休場区分。コードは HolidayTypeEnum の写しから引き、件数はフィクスチャを数えて出す
  * （'1' が 7 件、といった内訳を直接書かない）。
  */
-const SHORTENED_TYPE = MARKET_HOLIDAY_TYPE_OPTIONS[1].value
+const SHORTENED_TYPE = HOLIDAY_TYPE.SHORTENED
 const shortenedHolidays = marketHolidays.filter((holiday) => holiday.休場区分 === SHORTENED_TYPE)
 const NEW_TYPE = MARKET_HOLIDAY_TYPE_DEFAULT
 

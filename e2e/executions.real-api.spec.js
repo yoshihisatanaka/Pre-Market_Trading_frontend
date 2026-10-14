@@ -46,8 +46,8 @@ const FILTER_QUERIES = [
 
 /** 売買区分。画面の値（URL）・実 API のコード（openapi.json の side: 1:売 / 3:買）・表示 */
 const SIDES = {
-  sell: { code: '1', option: '売り', cell: '売', card: 'executions-summary-sell', label: '売り約定' },
-  buy: { code: '3', option: '買い', cell: '買', card: 'executions-summary-buy', label: '買い約定' },
+  sell: { code: '1', option: '売', cell: '売', card: 'executions-summary-sell', label: '売り約定' },
+  buy: { code: '3', option: '買', cell: '買', card: 'executions-summary-buy', label: '買い約定' },
 }
 
 /** 列の並び（src/views/ExecutionListView.vue の BASE_COLUMNS と、預託先参照権限があるときだけの「預託先」） */

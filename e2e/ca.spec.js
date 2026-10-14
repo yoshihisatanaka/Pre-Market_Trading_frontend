@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { clickSideMenuLink } from './helpers/sideMenu'
 import { caStocks, corporateActions } from '../src/mocks/fixtures/ca'
-import { CA_TYPE_OPTIONS } from '../src/utils/caTypes'
+import { codeEntries } from '../src/mocks/fixtures/codes'
 import { mockApi } from './helpers/mockApi'
 
 // シナリオ: docs/e2e/ca.md（タイトル先頭の [CA-xx] が対応 ID）
@@ -62,7 +62,10 @@ const ERROR_MESSAGE = 'サーバーでエラーが発生しました。'
  * サーバの事前検証で弾かれるので、フィクスチャの先頭から採る。
  */
 const NEW_STOCK = caStocks[0]
-const NEW_CA_TYPE = CA_TYPE_OPTIONS.find((option) => option.label === '株式分割')
+// CA種別の選択肢はコードマスタ（GET /codes の CA種別）から来るので、その写しから引く
+const NEW_CA_TYPE = codeEntries('CA種別')
+  .map(({ code, label }) => ({ value: code, label }))
+  .find((option) => option.label === '株式分割')
 // 比率は 分母:分子 をサーバが組んだ表示項目（src/mocks/fixtures/ca.js の formatRatio）
 const NEW_DENOMINATOR = '1'
 const NEW_NUMERATOR = '2'

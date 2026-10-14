@@ -6,10 +6,12 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { canceledMarketHolidays, marketHolidays } from '@/mocks/fixtures/marketHolidays'
+import { codeEntries } from '@/mocks/fixtures/codes'
+import { useCodesStore } from '@/stores/codes'
 import { MARKET_HOLIDAYS_PAGE_SIZE } from '@/stores/marketHolidays'
+import { HOLIDAY_TYPE } from '@/utils/apiEnums'
 import {
   MARKET_HOLIDAY_EARLY_CLOSE_LABEL,
-  MARKET_HOLIDAY_TYPE_OPTIONS,
   formatMarketHolidayEarlyClose,
 } from '@/utils/marketHolidayTypes'
 import MarketHolidayListView from './MarketHolidayListView.vue'
@@ -64,15 +66,16 @@ const NEW_DATE = (() => {
 const NEW_REASON = 'テスト休場日'
 
 /*
- * 休場区分。コードと表示名は選択肢の定義から引き、件数はフィクスチャを数えて出す
- * （「短縮取引が 7 件」といった内訳を直接書かない）。
+ * 休場区分。選択肢はコードマスタ `海外休場区分` から来るので、コードはその写しから引き、
+ * 件数はフィクスチャを数えて出す（「短縮取引が 7 件」といった内訳を直接書かない）。
  */
-const SHORTENED = MARKET_HOLIDAY_TYPE_OPTIONS[1]
+const HOLIDAY_TYPE_CODES = codeEntries('海外休場区分').map((entry) => entry.code)
+const SHORTENED = { value: HOLIDAY_TYPE.SHORTENED }
 const shortenedHolidays = marketHolidays.filter((holiday) => holiday.休場区分 === SHORTENED.value)
 // 選択肢に無いコード（?holiday_type=9 のような外から来た値の再現用）
 const UNKNOWN_TYPE = (() => {
   for (const code of ['9', '8', '7']) {
-    if (!MARKET_HOLIDAY_TYPE_OPTIONS.some((option) => option.value === code)) return code
+    if (!HOLIDAY_TYPE_CODES.includes(code)) return code
   }
   throw new Error('選択肢に無いコードが見つからなかった')
 })()
@@ -113,9 +116,13 @@ async function mountView(query = {}) {
   // mount 前に遷移を済ませておけば router.isReady() を待たなくてよい
   await router.push({ path: PATH, query })
 
+  // 休場区分の選択肢はコードマスタから引く。本番と同じく読み終えてから画面を描く
+  const pinia = createPinia()
+  await useCodesStore(pinia).load()
+
   const wrapper = mount(MarketHolidayListView, {
     global: {
-      plugins: [createPinia(), router],
+      plugins: [pinia, router],
       // teleport を stub して、ヘッダへ差し込むボタンを wrapper 内に描画させる
       stubs: { teleport: true },
     },

@@ -244,7 +244,7 @@ test.describe('約定照会', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(PAGE_SIZE)
 
-    await page.getByTestId('executions-side').selectOption({ label: '売り' })
+    await page.getByTestId('executions-side').selectOption({ label: '売' })
     await search(page)
 
     await expect(page).toHaveURL(/side=sell/)
@@ -290,7 +290,7 @@ test.describe('約定照会', () => {
     await page.goto(PATH)
 
     await page.getByTestId('executions-symbol').fill(SYMBOL)
-    await page.getByTestId('executions-side').selectOption({ label: '売り' })
+    await page.getByTestId('executions-side').selectOption({ label: '売' })
     await search(page)
     await expect(rowsOf(page)).toHaveCount(bySellAndSymbol.length)
 

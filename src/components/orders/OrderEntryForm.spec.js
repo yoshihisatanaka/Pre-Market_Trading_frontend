@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { h, reactive } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
+import { useCodesStore } from '@/stores/codes'
 import { buildExpiryOptions, createOrderForm } from '@/utils/orderEntryForm'
 import {
   DEPOSIT_CATEGORY,
@@ -18,6 +19,17 @@ import OrderEntryForm from './OrderEntryForm.vue'
 const NOW = new Date(2026, 8, 29, 10, 30)
 const EXPIRY_OPTIONS = buildExpiryOptions({ today: NOW })
 
+/*
+ * 区分の選択肢はコードマスタのストアから引く。本番では App.vue が読み終えてから画面を描くので、
+ * テストも読み込み済みの Pinia で描く（既定の MSW の /codes）。
+ */
+let pinia
+
+beforeEach(async () => {
+  pinia = createPinia()
+  await useCodesStore(pinia).load()
+})
+
 function mountForm({ props = {}, slots } = {}) {
   const form = reactive(createOrderForm({ now: NOW }))
   const wrapper = mount(OrderEntryForm, {
@@ -28,9 +40,7 @@ function mountForm({ props = {}, slots } = {}) {
       ...props,
     },
     slots,
-    // 注文種別の選択肢をコードマスタのストアから引くので Pinia を渡す（ここでは読み込まない。
-    // 選択肢の中身は views/OrderEntryView.spec.js の NOV-21 が見る）
-    global: { plugins: [createPinia()] },
+    global: { plugins: [pinia] },
   })
   return { wrapper, form }
 }
@@ -257,7 +267,7 @@ describe('OrderEntryForm', () => {
         label: 'Ph.2（将来対応）',
         options: [
           { text: 'プレ＋レギュラー＋アフター（Ph.2予定）', disabled: true },
-          { text: 'アフター（時間内限り）（Ph.2予定）', disabled: true },
+          { text: 'アフター（Ph.2予定）', disabled: true },
         ],
       },
     ])

@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/mocks/server'
 import { orderInquiryRows } from '@/mocks/fixtures/orderInquiry'
+import { useCodesStore } from '@/stores/codes'
 import { formatMonthDayTime, formatQuantity } from '@/utils/format'
 import { orderPriceLabel, orderStatusLabel } from '@/utils/orderTypes'
 import OrderAmendView from './OrderAmendView.vue'
@@ -53,7 +54,10 @@ async function mountView(id, { from } = {}) {
   if (from) await router.push(from)
   await router.push(`/orders/${id}/amend`)
 
-  const wrapper = mount(OrderAmendView, { global: { plugins: [createPinia(), router] } })
+  // 区分の名称はコードマスタから引く。本番と同じく読み終えてから画面を描く
+  const pinia = createPinia()
+  await useCodesStore(pinia).load()
+  const wrapper = mount(OrderAmendView, { global: { plugins: [pinia, router] } })
   return { wrapper, router }
 }
 
@@ -278,7 +282,7 @@ describe('OrderAmendView', () => {
     ])
     expect(buttons.map((button) => button.element.disabled)).toEqual([false, false, true, true])
     expect(buttons[2].text()).toBe('プレ＋レギュラー＋アフター（Ph.2予定）')
-    expect(buttons[3].text()).toBe('アフター（時間内限り）（Ph.2予定）')
+    expect(buttons[3].text()).toBe('アフター（Ph.2予定）')
 
     // Ph.2 の区分で出した注文（#35 は 04）は、押せないボタンが選ばれた状態で開く
     const partial = await mountView(PARTIAL.ID)

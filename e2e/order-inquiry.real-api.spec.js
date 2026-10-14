@@ -118,7 +118,7 @@ const STATUS_QUERY = { '034': '032,034', 101: '101,103' }
 /** 出来状況のコードを、実 API へ送る `status` の値に広げる */
 const statusQueryOf = (code) => STATUS_QUERY[code] ?? code
 
-/** 指成区分 → 訂正画面の「価格」のボタン名（src/utils/orderTypes.js の ORDER_TYPE_OPTIONS） */
+/** 指成区分 → 訂正画面の「価格」のボタン名（コードマスタ `指成区分` の名称） */
 const ORDER_TYPE_LABELS = { MO: '成行', LO: '指値' }
 
 // スライス子注文を表す 注文種別（src/api/orderInquiry.js の SLICE_CHILD）
@@ -490,7 +490,7 @@ async function createTestOrder(page) {
   await page.getByTestId('order-entry-account').fill(String(account.口座番号))
   await page.getByTestId('order-entry-ticker').fill(stock.Ticker)
   await expect(page.getByTestId('order-entry-ticker-hint')).toHaveText(stockLabel(stock))
-  await page.getByTestId('order-entry-side').getByRole('button', { name: '買い', exact: true }).click()
+  await page.getByTestId('order-entry-side').getByRole('button', { name: '買', exact: true }).click()
   // 画面の既定は指値・外決（画面モックの 2026-09-30 版）。単価を要らなくし外貨の余力に左右されないよう成行・円決にする
   await page.getByTestId('order-entry-order-type').getByRole('button', { name: '成行', exact: true }).click()
   await page

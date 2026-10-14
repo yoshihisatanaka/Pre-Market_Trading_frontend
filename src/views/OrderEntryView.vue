@@ -10,6 +10,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
+import { useCodesStore } from '@/stores/codes'
 import { useCurrentOperatorStore } from '@/stores/currentOperator'
 import { useOrderEntryStore } from '@/stores/orderEntry'
 import { CORPORATE_TYPE } from '@/utils/apiEnums'
@@ -64,6 +65,8 @@ const router = useRouter()
 
 // view は api/ を直接呼ばない。必ずストア（または composable）を経由する。
 const store = useOrderEntryStore()
+// 区分の表示名（検証の文言と確認の読み上げ）はコードマスタから引く
+const codes = useCodesStore()
 const {
   context,
   contextError,
@@ -315,6 +318,7 @@ async function submitInput() {
     symbol: symbol.value,
     symbolLookupFailed: !currentSymbolLookup.value && Boolean(symbolError.value),
     today,
+    codeLabel: codes.labelFor,
   })
   if (hasOrderFormErrors(fieldErrors.value)) return
 
@@ -353,6 +357,7 @@ async function submitInput() {
       customer: customer.value,
       symbol: symbol.value,
       expiryOptions: expiryOptions.value,
+      codeLabel: codes.labelFor,
     }),
   }
   finalChecked.value = false

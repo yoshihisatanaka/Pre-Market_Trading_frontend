@@ -18,6 +18,7 @@ import { useCodesStore } from '@/stores/codes'
 import { useMizuhoClosingStore } from '@/stores/mizuhoClosing'
 import { useMizuhoExecutionsStore } from '@/stores/mizuhoExecutions'
 import { downloadBlob } from '@/utils/download'
+import { SIDE_CODES } from '@/utils/orderEntryOptions'
 
 /*
  * みずほ注文締（公開モック /executions/mizuho-operations）。
@@ -44,12 +45,6 @@ const {
   saveError,
 } = storeToRefs(closingStore)
 
-/** 売買区分。値は実 API の SideEnum（1:売 / 3:買）で、URL にもこのまま載る */
-const SIDE_OPTIONS = [
-  { value: '3', label: '買い' },
-  { value: '1', label: '売り' },
-]
-
 /*
  * ページ位置と検索条件は URL クエリを正とする単方向フローで扱う（詳細は useListQuery）。
  * URL 上のクエリ名（branch_code / side / status / date_from など）はこの filters 定義にだけ現れる。
@@ -59,6 +54,8 @@ const SIDE_OPTIONS = [
  * 選択肢に無い値（手で書き換えられた URL）は条件なしに落とす（api 層はそのまま送るため）。
  */
 const codes = useCodesStore()
+/** 売買区分。値は実 API の SideEnum（1:売 / 3:買）で、URL にもこのまま載る。並びは買 → 売 */
+const sideOptions = codes.pickOptions('売買区分', SIDE_CODES)
 const FILL_STATUS_OPTIONS = codes.optionsFor('約定出来状況')
 const parseFillStatus = (value) =>
   FILL_STATUS_OPTIONS.some((option) => option.value === value) ? value : ''
@@ -252,7 +249,7 @@ executionsStore.clearExportError()
         <BaseSelect
           v-bind="field"
           v-model="inputs.side"
-          :options="SIDE_OPTIONS"
+          :options="sideOptions"
           placeholder="-- 全て --"
           data-testid="mizuho-executions-side"
         />

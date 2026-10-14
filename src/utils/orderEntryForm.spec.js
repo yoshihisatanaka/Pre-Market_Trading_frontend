@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { codeLabel } from '@/mocks/fixtures/codes'
 import {
   CASH_DELIVERY_DEFAULT,
   DEPOSIT_CATEGORY,
@@ -97,7 +98,7 @@ function validForm(overrides = {}) {
 }
 
 const validate = (form, context = {}) =>
-  validateOrderForm(form, { symbol: SYMBOL, today: TODAY, ...context })
+  validateOrderForm(form, { symbol: SYMBOL, today: TODAY, codeLabel, ...context })
 
 /** 今日から days 日前の 'MM/DD' */
 function monthDayBefore(days) {
@@ -447,6 +448,7 @@ describe('orderEntryForm', () => {
       customer: { customerName: '山田 太郎' },
       symbol: SYMBOL,
       expiryOptions: buildExpiryOptions({ today: TODAY }),
+      codeLabel,
     })
 
     expect(readback).toEqual({
@@ -466,7 +468,7 @@ describe('orderEntryForm', () => {
       orderDateTime: '09/29 10:30',
       orderPerson: ORDER_PERSON,
       solicitationMethod: '勧誘あり ／ 電話他',
-      fundChannel: '余裕資金 ／ 営業店',
+      fundChannel: '余裕資金等 ／ 営業店',
     })
   })
 
@@ -476,6 +478,7 @@ describe('orderEntryForm', () => {
       customer: null,
       symbol: SYMBOL,
       expiryOptions: buildExpiryOptions({ today: TODAY }),
+      codeLabel,
     })
 
     expect(readback.tone).toBe('sell')
@@ -493,6 +496,7 @@ describe('orderEntryForm', () => {
       customer: null,
       symbol: SYMBOL,
       expiryOptions: buildExpiryOptions({ today: TODAY }),
+      codeLabel,
     })
     const input = buildOrderInput(form, { symbol: SYMBOL, today: TODAY, createdBy: 'creator' })
 

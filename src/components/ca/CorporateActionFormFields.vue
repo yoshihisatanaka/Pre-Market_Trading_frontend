@@ -23,7 +23,10 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import FormField from '@/components/ui/FormField.vue'
 import FormGrid from '@/components/ui/FormGrid.vue'
-import { CA_TYPE_OPTIONS } from '@/utils/caTypes'
+import { useCodesStore } from '@/stores/codes'
+
+/** CA種別の選択肢はコードマスタ `CA種別` から（App.vue が読み終えてから画面を描く） */
+const caTypeOptions = useCodesStore().optionsFor('CA種別')
 
 defineProps({
   /** data-testid の接頭辞。'ca-add' / 'ca-edit' のように操作まで含めて渡す */
@@ -80,7 +83,7 @@ const form = defineModel({ type: Object, required: true })
       <BaseSelect
         v-bind="field"
         v-model="form.caType"
-        :options="CA_TYPE_OPTIONS"
+        :options="caTypeOptions"
         placeholder="-- 選択してください --"
         :data-testid="`${testidPrefix}-type`"
       />

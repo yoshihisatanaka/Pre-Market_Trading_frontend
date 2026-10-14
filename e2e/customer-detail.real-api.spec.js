@@ -54,7 +54,7 @@ const ORDERS_PAGE_SIZE = 50
 
 /*
  * 新規注文の預り売買区分（URL の deposit の値 → 切り替えボタンの表示名）。
- * src/utils/orderEntryOptions.js の DEPOSIT_CATEGORY_OPTIONS の再掲（Playwright から import できない）
+ * コードマスタ `預り売買区分` の名称の再掲（新規注文で選べる 3 つ。src/utils/orderEntryOptions.js の DEPOSIT_CATEGORY_CODES）
  */
 const DEPOSIT_LABELS = { 0: '特定', 1: '一般', 6: '成長投資枠' }
 
@@ -472,7 +472,7 @@ test.describe('顧客詳細（実 API 接続）', () => {
     if (deposit !== undefined) expect(deposit).not.toBe('6')
 
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(ticker)
-    await expectTradeToggles(page, query, '買い')
+    await expectTradeToggles(page, query, '買')
   })
 
   test('[CDTR-06] 預りの行の「売り」で、その行の銘柄と「売り」を引き継いで新規注文へ移る', async ({
@@ -496,7 +496,7 @@ test.describe('顧客詳細（実 API 接続）', () => {
     if (quantity !== undefined) expect(quantity).toMatch(/^[1-9]\d*$/)
 
     await expect(page.getByTestId('order-entry-ticker')).toHaveValue(ticker)
-    await expectTradeToggles(page, query, '売り')
+    await expectTradeToggles(page, query, '売')
   })
 
   test('[CDTR-07] 「＋ 新規注文」は部店と口座番号だけを引き継ぐ', async ({ page }) => {
@@ -659,7 +659,7 @@ test.describe('顧客詳細（実 API 接続）', () => {
 
     await fillCalculation(page, {
       symbol,
-      side: '売り',
+      side: '売',
       quantity: CALC_QUANTITY,
       unitPrice: CALC_UNIT_PRICE,
     })

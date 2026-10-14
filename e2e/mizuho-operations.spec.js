@@ -300,7 +300,7 @@ test.describe('みずほ注文締', () => {
     await page.goto(PATH)
     await expect(rowsOf(page)).toHaveCount(mizuhoExecutions.length)
 
-    await page.getByTestId('mizuho-executions-side').selectOption({ label: '売り' })
+    await page.getByTestId('mizuho-executions-side').selectOption({ label: '売' })
     await submitSearch(page)
 
     await expect(page).toHaveURL(/[?&]side=1(&|$)/)

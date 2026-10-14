@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw'
+import { codeMasters } from '../fixtures/codes'
 import { canceledSymbols, symbols } from '../fixtures/symbols'
 import {
   detailError,
@@ -14,10 +15,13 @@ import {
  */
 let symbolRows = [...symbols, ...canceledSymbols]
 
-/** コード → 表示名。src/utils/symbolTypes.js と同じ対応表（規制情報は仮置きの値） */
+/**
+ * コード → 表示名。規制情報・注文ルートは src/utils/symbolTypes.js と同じ対応表（規制情報は仮置きの値）。
+ * VWAP対象区分はコードマスタ `VWAP対象区分` の名称（fixtures/symbols.js と同じ）
+ */
 const REGULATION_NAMES = { 0: '取引可', 1: '取引不可' }
 const ORDER_ROUTE_NAMES = { 0: 'みずほ証券', 1: 'IB証券' }
-const VWAP_TARGET_NAMES = { 0: '対象外', 1: '対象' }
+const VWAP_TARGET_NAMES = codeMasters.VWAP対象区分
 
 /** モックの可変状態をフィクスチャの内容に戻す */
 export function resetSymbolRows() {

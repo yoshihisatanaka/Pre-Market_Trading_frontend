@@ -2,24 +2,14 @@ import { formatJpyUnit, formatQuantity, formatUsdUnit } from './format'
 import {
   CASH_DELIVERY_DEFAULT,
   DEPOSIT_CATEGORY,
-  DEPOSIT_CATEGORY_OPTIONS,
-  EXECUTION_SCOPE_OPTIONS,
-  FUND_NATURE_OPTIONS,
   LIMIT_ONLY_EXECUTION_SCOPES,
-  ORDER_CHANNEL_OPTIONS,
   ORDER_FORM_DEFAULTS,
-  ORDER_METHOD_OPTIONS,
   ORDER_TYPE,
-  optionLabel,
   ORDER_PERSON_MAX_LENGTH,
   SECURITIES_DELIVERY_DEFAULT,
-  SETTLEMENT_CURRENCY_OPTIONS,
   SIDE,
-  SIDE_SHORT_LABELS,
-  SOLICITATION_OPTIONS,
   TRANSACTION_TYPE_CONSIGNMENT,
   VWAP,
-  VWAP_OPTIONS,
 } from './orderEntryOptions'
 
 /*
@@ -275,11 +265,12 @@ function tickerError(text, { symbol, symbolLookupFailed }) {
  * 画面で止められる不備を項目ごとに返す（FormField の error に渡す）。
  *
  * @param {ReturnType<typeof createOrderForm>} form
- * @param {{ symbol: { vwapTarget: string } | null, symbolLookupFailed?: boolean, today: Date }} context
- *   symbol はティッカーの照会で見つかった銘柄（見つからなければ null）
+ * @param {{ symbol: { vwapTarget: string } | null, symbolLookupFailed?: boolean, today: Date, codeLabel: (name: string, code: string) => string }} context
+ *   symbol はティッカーの照会で見つかった銘柄（見つからなければ null）。
+ *   codeLabel はコード → 名称（stores/codes.js の labelFor）。文言に注文区分の名前を入れるのに使う
  * @returns {Record<string, string>} キーは form の項目名。不備の無い項目は ''
  */
-export function validateOrderForm(form, { symbol, symbolLookupFailed = false, today }) {
+export function validateOrderForm(form, { symbol, symbolLookupFailed = false, today, codeLabel }) {
   const orderDate = resolveOrderDate(form.orderDate, today)
   const isBuy = form.side === SIDE.BUY
 
@@ -292,7 +283,7 @@ export function validateOrderForm(form, { symbol, symbolLookupFailed = false, to
     orderType:
       form.orderType === ORDER_TYPE.MARKET &&
       LIMIT_ONLY_EXECUTION_SCOPES.includes(form.executionScope)
-        ? MESSAGES.marketNotAllowed(optionLabel(EXECUTION_SCOPE_OPTIONS, form.executionScope))
+        ? MESSAGES.marketNotAllowed(codeLabel('発注範囲', form.executionScope))
         : '',
     limitPrice: form.orderType === ORDER_TYPE.LIMIT ? limitPriceError(form.limitPrice) : '',
     expiryDate: form.expiryDate ? '' : MESSAGES.expiryRequired,
@@ -454,12 +445,15 @@ export function formatLimitPrice(value) {
  * 入力画面で選んだ文言と同じもので読み上げたほうが突き合わせやすい。
  * 預り売買区分は選んだときだけ出す（未選択なら ''。画面は行ごと出さない。モックと同じ）。
  * 金銭受渡方法は出さない（当社固定。画面モックの 2026-09-30 版で行が外れた）。
+ * 区分の表示名はコードマスタの名称（売買区分なら「買」「売」。モックの「買（委託）」「買注文」と同じ）。
  *
  * @param {ReturnType<typeof createOrderForm>} form
- * @param {{ customer: object|null, symbol: object|null, expiryOptions: { value: string, label: string }[] }} context
+ * @param {{ customer: object|null, symbol: object|null, expiryOptions: { value: string, label: string }[], codeLabel: (name: string, code: string) => string }} context
+ *   codeLabel はコード → 名称（stores/codes.js の labelFor）
  */
-export function buildOrderReadback(form, { customer, symbol, expiryOptions }) {
-  const side = SIDE_SHORT_LABELS[form.side] ?? '—'
+export function buildOrderReadback(form, { customer, symbol, expiryOptions, codeLabel }) {
+  const side = codeLabel('売買区分', form.side)
+  const orderType = codeLabel('指成区分', form.orderType)
   const expiry = expiryOptions.find((option) => option.value === form.expiryDate)
 
   return {
@@ -474,19 +468,17 @@ export function buildOrderReadback(form, { customer, symbol, expiryOptions }) {
     side: `${side}（委託）`,
     price:
       form.orderType === ORDER_TYPE.LIMIT
-        ? `指値 ${formatLimitPrice(Number(form.limitPrice))}`
-        : '成行',
+        ? `${orderType} ${formatLimitPrice(Number(form.limitPrice))}`
+        : orderType,
     quantity: `${formatQuantity(parseQuantity(form.quantity))} 株`,
-    marketExpiry: `${optionLabel(EXECUTION_SCOPE_OPTIONS, form.executionScope)} ／ ${expiry?.label ?? '—'}`,
-    vwap: optionLabel(VWAP_OPTIONS, form.vwap),
-    settlementCurrency: optionLabel(SETTLEMENT_CURRENCY_OPTIONS, form.settlementCurrency),
-    depositCategory: form.depositCategory
-      ? optionLabel(DEPOSIT_CATEGORY_OPTIONS, form.depositCategory)
-      : '',
+    marketExpiry: `${codeLabel('発注範囲', form.executionScope)} ／ ${expiry?.label ?? '—'}`,
+    vwap: codeLabel('VWAP区分', form.vwap),
+    settlementCurrency: codeLabel('決済通貨区分', form.settlementCurrency),
+    depositCategory: form.depositCategory ? codeLabel('預り売買区分', form.depositCategory) : '',
     orderDateTime: `${form.orderDate} ${form.orderTime}`,
     orderPerson: form.orderPerson || '—',
-    solicitationMethod: `${optionLabel(SOLICITATION_OPTIONS, form.solicitation)} ／ ${optionLabel(ORDER_METHOD_OPTIONS, form.orderMethod)}`,
-    fundChannel: `${optionLabel(FUND_NATURE_OPTIONS, form.fundNature)} ／ ${optionLabel(ORDER_CHANNEL_OPTIONS, form.orderChannel)}`,
+    solicitationMethod: `${codeLabel('勧誘区分', form.solicitation)} ／ ${codeLabel('受注方法', form.orderMethod)}`,
+    fundChannel: `${codeLabel('資金性格', form.fundNature)} ／ ${codeLabel('注文チャネル', form.orderChannel)}`,
   }
 }
 

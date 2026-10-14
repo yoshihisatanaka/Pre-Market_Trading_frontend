@@ -237,5 +237,16 @@ export function codeName(name, code, context) {
   return code == null ? null : (table?.[String(code)] ?? null)
 }
 
+/**
+ * stores/codes.js の labelFor と同じ規則のコード → 名称（知らないコード・空値は '—'）。
+ * 純関数に codeLabel を渡すテスト（utils/orderEntryForm.spec.js など）が、ストアを立てずに使う。
+ *
+ * @param {string} name コードマスタ名
+ * @param {string|null|undefined} code
+ */
+export function codeLabel(name, code) {
+  return codeName(name, code) ?? '—'
+}
+
 /** 特定預り区分のコード → 名前。残高マスタの行を組み立てるときに引く */
 export const SPECIFIC_DEPOSIT_NAMES = codeMasters.特定預り区分

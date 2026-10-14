@@ -58,7 +58,7 @@ const byRegulation = allRows.filter((row) => row.regulation === CLOSED.regulatio
 
 // 預託先区分と VWAP対象区分の複合条件（AND で効くことを SM-05 で見る）
 const ORDER_ROUTE = '0' // src/utils/symbolTypes.js の ORDER_ROUTE_OPTIONS（0: みずほ証券）
-const VWAP_TARGET = '0' // 同 VWAP_TARGET_OPTIONS（0: 対象外）
+const VWAP_TARGET = '0' // コードマスタ VWAP対象区分（0: 非対象）
 const byRouteAndVwap = allRows.filter(
   (row) => row.orderRoute === ORDER_ROUTE && row.vwapTarget === VWAP_TARGET,
 )
@@ -85,7 +85,7 @@ const byNameEn = allRows.filter((row) => row.nameEn.toUpperCase().includes(NAME_
  * 一括対象外化の対象 = VWAP対象区分が「対象」の有効な銘柄（母数は有効な全件）。
  * ダイアログの一覧は既定ハンドラがフィクスチャの順（= 銘柄コードの昇順）で返す。
  */
-const VWAP_TARGET_ON = '1' // src/utils/symbolTypes.js の VWAP_TARGET_OPTIONS（1: 対象）
+const VWAP_TARGET_ON = '1' // コードマスタ VWAP対象区分（1: 対象）
 const vwapTargets = allRows.filter((row) => row.vwapTarget === VWAP_TARGET_ON)
 const successMessageOf = (count) => `VWAP対象の銘柄 ${count} 件を対象外にしました。`
 
@@ -615,7 +615,7 @@ test.describe('銘柄マスタ 新規追加', () => {
     await expect(row).toContainText('Test Inc.')
     await expect(row).toContainText('取引不可')
     await expect(row).toContainText('みずほ証券')
-    await expect(row).toContainText('対象外')
+    await expect(row).toContainText('非対象')
     await expect(row).toContainText(formatUsdUnit(123.45))
     await expect(row).toContainText(formatQuantity(1_000_000))
     await expect(row).toContainText('追加した銘柄')
@@ -717,7 +717,7 @@ test.describe('銘柄マスタ 編集', () => {
 
     const row = rowsOf(page).first()
     await expect(row).toContainText('取引不可')
-    await expect(row).toContainText('対象外')
+    await expect(row).toContainText('非対象')
   })
 
   test('[SM-24] 必須を空にして更新すると項目の直下にエラーが出る', async ({ page }) => {
@@ -985,13 +985,13 @@ test.describe('銘柄マスタ VWAP対象の一括対象外化', () => {
       successMessageOf(vwapTargets.length),
     )
 
-    // 件数は変わらず、1 ページ目の全行が「対象外」になる
+    // 件数は変わらず、1 ページ目の全行が「非対象」（コードマスタの名称）になる
     const rows = rowsOf(page)
     await expect(page.getByTestId('symbols-count')).toHaveText(`${TOTAL} 件`)
     await expect(rows).toHaveCount(PAGE_SIZE)
-    // VWAP対象区分 のセルが「対象外」でない行が 1 つも残らない（has の中の locator は行を起点に探す）
+    // VWAP対象区分 のセルが「非対象」でない行が 1 つも残らない（has の中の locator は行を起点に探す）
     const stillTargeted = rows.filter({
-      hasNot: page.locator('td').nth(COLUMN_INDEX.vwapTarget).filter({ hasText: /^対象外$/ }),
+      hasNot: page.locator('td').nth(COLUMN_INDEX.vwapTarget).filter({ hasText: /^非対象$/ }),
     })
     await expect(stillTargeted).toHaveCount(0)
 

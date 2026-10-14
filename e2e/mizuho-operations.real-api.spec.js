@@ -47,10 +47,10 @@ const CSV_LIMIT = 10000
 /** 絞り込みのクエリ名（実 API 側。src/api/mizuhoExecutions.js の toSearchParams。route は固定なので含めない） */
 const FILTER_QUERIES = ['branch_code', 'symbol', 'side', 'status', 'start_date', 'end_date']
 
-/** 売買区分。URL も実 API も同じコード（MizuhoOperationsView の SIDE_OPTIONS / openapi.json の 1:売 / 3:買） */
+/** 売買区分。URL も実 API も同じコード（openapi.json の 1:売 / 3:買）。選択肢の名前はコードマスタ `売買区分` */
 const SIDES = {
-  sell: { code: '1', option: '売り', cell: '売', card: 'mizuho-summary-sell' },
-  buy: { code: '3', option: '買い', cell: '買', card: 'mizuho-summary-buy' },
+  sell: { code: '1', option: '売', cell: '売', card: 'mizuho-summary-sell' },
+  buy: { code: '3', option: '買', cell: '買', card: 'mizuho-summary-buy' },
 }
 
 /** 列の並び（src/components/mizuho/MizuhoExecutionTable.vue の COLUMNS） */

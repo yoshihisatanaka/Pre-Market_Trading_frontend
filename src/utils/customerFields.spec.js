@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { codeEntries } from '@/mocks/fixtures/codes'
 import { CORPORATE_TYPE, NISA_CONTRACT } from './apiEnums'
 import {
   CUSTOMER_FIELD_GROUPS,
@@ -74,6 +75,22 @@ describe('utils/customerFields', () => {
 
     for (const field of CUSTOMER_FIELDS) {
       expect(CONTROLS, field.key).toContain(field.control)
+    }
+  })
+
+  it('[CFF-13] 選択欄はすべてコードマスタから引き、初期値・法人の固定値はそのカテゴリのコード', () => {
+    const selects = CUSTOMER_FIELDS.filter((field) => field.control === 'select')
+    expect(selects.length).toBeGreaterThan(0)
+
+    for (const field of selects) {
+      expect(field.options, field.key).toBeUndefined()
+      // codeEntries は部店・扱者（/branches・/handlers 由来）も引ける。投資方針は個人の段で見る
+      const entries = codeEntries(field.codes, field.codesContext ? CORPORATE_TYPE.INDIVIDUAL : undefined)
+      expect(entries.length, field.key).toBeGreaterThan(0)
+      const codes = entries.map((entry) => entry.code)
+      for (const value of [field.initial, field.corporateValue].filter((v) => v !== undefined)) {
+        expect(codes, field.key).toContain(value)
+      }
     }
   })
 
